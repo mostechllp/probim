@@ -24,12 +24,22 @@ const ProjectDropdown = ({ projects, selectedIds, onChange, disabled }) => {
   const ref = useRef(null);
 
   useEffect(() => {
+    let timeoutId;
     const handler = (e) => {
-      if (ref.current && !ref.current.contains(e.target)) setOpen(false);
+      if (ref.current && !ref.current.contains(e.target)) {
+        // Delay closing slightly so that click events on the main form buttons
+        // (Save Changes, Cancel, Reset) have time to register before the dropdown collapses.
+        timeoutId = setTimeout(() => {
+          setOpen(false);
+        }, 150);
+      }
     };
     // Use pointerdown so we catch touch + mouse reliably
     document.addEventListener("pointerdown", handler);
-    return () => document.removeEventListener("pointerdown", handler);
+    return () => {
+      document.removeEventListener("pointerdown", handler);
+      if (timeoutId) clearTimeout(timeoutId);
+    };
   }, []);
 
   const sel = useMemo(() => (selectedIds || []).map(String), [selectedIds]);
@@ -72,7 +82,7 @@ const ProjectDropdown = ({ projects, selectedIds, onChange, disabled }) => {
       <div
         onClick={() => !disabled && setOpen((v) => !v)}
         className={`relative min-h-[46px] w-full px-3.5 py-2.5 pr-10 rounded-xl border bg-white dark:bg-gray-800 flex flex-wrap items-center gap-1.5 transition-all select-none
-          ${disabled ? "opacity-60 cursor-not-allowed border-gray-200 dark:border-gray-700" : "cursor-pointer border-gray-200 dark:border-gray-650 hover:border-green-400 dark:hover:border-green-500"}
+          ${disabled ? "opacity-60 cursor-not-allowed border-gray-200 dark:border-gray-700" : "cursor-pointer border-gray-200 dark:border-gray-655 hover:border-green-400 dark:hover:border-green-500"}
           ${open ? "border-green-500 ring-2 ring-green-500/20" : ""}
         `}
       >
@@ -128,7 +138,7 @@ const ProjectDropdown = ({ projects, selectedIds, onChange, disabled }) => {
               value={search}
               onChange={(e) => setSearch(e.target.value)}
               onPointerDown={(e) => e.stopPropagation()}
-              className="w-full pl-8 pr-3 py-2 text-xs rounded-xl border border-gray-200 dark:border-gray-650 bg-gray-50 dark:bg-gray-750 text-gray-800 dark:text-gray-200 focus:outline-none focus:ring-2 focus:ring-green-500/20 focus:border-green-500 transition-all placeholder:text-gray-400"
+              className="w-full pl-8 pr-3 py-2 text-xs rounded-xl border border-gray-200 dark:border-gray-655 bg-gray-50 dark:bg-gray-750 text-gray-800 dark:text-gray-200 focus:outline-none focus:ring-2 focus:ring-green-500/20 focus:border-green-500 transition-all placeholder:text-gray-400"
             />
           </div>
 
@@ -180,20 +190,35 @@ const ProjectDropdown = ({ projects, selectedIds, onChange, disabled }) => {
           </div>
 
           {/* footer */}
-          {sel.length > 0 && (
-            <div className="px-4 py-2.5 border-t border-gray-100 dark:border-gray-700 bg-gray-50/60 dark:bg-gray-750/40 flex items-center justify-between">
-              <span className="text-[10px] font-semibold text-gray-400">
-                {sel.length} selected
-              </span>
+          <div className="px-4 py-2 bg-gray-50/60 dark:bg-gray-750/40 border-t border-gray-100 dark:border-gray-700 flex items-center justify-between">
+            <span className="text-[10px] font-semibold text-gray-400">
+              {sel.length} selected
+            </span>
+            <div className="flex items-center gap-2">
+              {sel.length > 0 && (
+                <button
+                  type="button"
+                  onClick={(e) => {
+                    e.stopPropagation();
+                    onChange([]);
+                  }}
+                  className="text-[10px] font-bold text-red-500 hover:text-red-600 transition-colors px-2 py-1 rounded hover:bg-red-50 dark:hover:bg-red-950/20"
+                >
+                  Clear all
+                </button>
+              )}
               <button
                 type="button"
-                onClick={() => onChange([])}
-                className="text-[10px] font-bold text-red-400 hover:text-red-600 transition-colors"
+                onClick={(e) => {
+                  e.stopPropagation();
+                  setOpen(false);
+                }}
+                className="text-[10px] font-bold text-green-600 dark:text-green-400 hover:text-green-700 dark:hover:text-green-300 transition-colors px-3 py-1.5 rounded-lg bg-green-500/10 hover:bg-green-500/20"
               >
-                Clear all
+                OK
               </button>
             </div>
-          )}
+          </div>
         </div>
       )}
     </div>
