@@ -19,6 +19,8 @@ const EmployeeLayout = lazy(() => import("./shared/layouts/EmployeeLayout"));
 
 // Lazy load pages - Admin
 const AdminDashboard = lazy(() => import("./admin/pages/Dashboard"));
+const Projects = lazy(() => import("./admin/pages/Projects"));
+const ProjectAssignments = lazy(() => import("./admin/pages/ProjectAssignments"));
 const Employees = lazy(() => import("./admin/pages/Employees"));
 const AddEmployee = lazy(() => import("./admin/pages/AddEmployee"));
 const EditEmployee = lazy(() => import("./admin/pages/EditEmployee"));
@@ -147,6 +149,8 @@ function App() {
           <Route index element={<Navigate to="/admin/dashboard" replace />} />
           <Route path="dashboard" element={<AdminDashboard />} />
           <Route path="employees" element={<Employees />} />
+          <Route path="projects" element={<Projects />} />
+          <Route path="project-assignments" element={<ProjectAssignments />} />
           <Route path="employees/add-employee" element={<AddEmployee />} />
           <Route path="employees/onboarding" element={<Onboarding />} />
           <Route path="employees/edit/:id" element={<EditEmployee />} />

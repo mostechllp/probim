@@ -11,7 +11,7 @@ const ConfirmModal = ({
   if (!isOpen) return null;
 
   return (
-    <div className="fixed inset-0 bg-black/50 backdrop-blur-sm flex items-center justify-center z-[1000] p-4">
+    <div className="fixed inset-0 bg-black/10 backdrop-blur-sm flex items-center justify-center z-[1000] p-4">
       <div className="bg-white dark:bg-gray-800 rounded-2xl w-full max-w-md p-6 shadow-soft-lg border border-gray-200 dark:border-gray-700">
 
         {/* Header */}
