@@ -15,8 +15,7 @@ import { fetchProjects } from "../store/slices/projectSlice";
 
 // Components
 import AssignmentTable from "../components/project-assignments/AssignmentTable";
-import AssignmentDrawer from "../components/project-assignments/AssignmentDrawer";
-import AssignmentForm from "../components/project-assignments/AssignmentForm";
+import AssignmentModal from "../components/project-assignments/AssignmentModal";
 import ConfirmModal from "../components/common/ConfirmModal";
 
 const ProjectAssignments = () => {
@@ -30,7 +29,7 @@ const ProjectAssignments = () => {
   const { projects } = useSelector((state) => state.projects);
 
   // Local UI States
-  const [isDrawerOpen, setIsDrawerOpen] = useState(false);
+  const [isModalOpen, setIsModalOpen] = useState(false);
   const [isDeleteOpen, setIsDeleteOpen] = useState(false);
   const [selectedAssignment, setSelectedAssignment] = useState(null);
 
@@ -51,12 +50,12 @@ const ProjectAssignments = () => {
 
   const handleAddNew = () => {
     setSelectedAssignment(null);
-    setIsDrawerOpen(true);
+    setIsModalOpen(true);
   };
 
   const handleEdit = (assign) => {
     setSelectedAssignment(assign);
-    setIsDrawerOpen(true);
+    setIsModalOpen(true);
   };
 
   const handleDeleteTrigger = (assign) => {
@@ -64,13 +63,17 @@ const ProjectAssignments = () => {
     setIsDeleteOpen(true);
   };
 
+  const handleCloseModal = () => {
+    setIsModalOpen(false);
+    setSelectedAssignment(null);
+  };
+
   // Submit operations
   const handleSaveForm = async ({ employeeId, projectIds }) => {
     try {
       await dispatch(saveAssignment({ employeeId, projectIds })).unwrap();
       showToast("Project assignments saved successfully!", "success");
-      setIsDrawerOpen(false);
-      setSelectedAssignment(null);
+      handleCloseModal();
     } catch (e) {
       // Handled by error listener
     }
@@ -122,28 +125,17 @@ const ProjectAssignments = () => {
         onAddNew={handleAddNew}
       />
 
-      {/* Assignment Slide-out side drawer */}
-      <AssignmentDrawer
-        isOpen={isDrawerOpen}
-        onClose={() => {
-          setIsDrawerOpen(false);
-          setSelectedAssignment(null);
-        }}
-        isEditMode={!!selectedAssignment}
-      >
-        <AssignmentForm
-          employees={employees}
-          projects={projects}
-          existingAssignments={assignments}
-          selectedAssignment={selectedAssignment}
-          onSave={handleSaveForm}
-          onCancel={() => {
-            setIsDrawerOpen(false);
-            setSelectedAssignment(null);
-          }}
-          actionLoading={actionLoading}
-        />
-      </AssignmentDrawer>
+      {/* Centered Assignment Modal */}
+      <AssignmentModal
+        isOpen={isModalOpen}
+        onClose={handleCloseModal}
+        employees={employees}
+        projects={projects}
+        existingAssignments={assignments}
+        selectedAssignment={selectedAssignment}
+        onSave={handleSaveForm}
+        actionLoading={actionLoading}
+      />
 
       {/* Deletion confirmation dialog */}
       <ConfirmModal
