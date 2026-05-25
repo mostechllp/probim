@@ -16,6 +16,8 @@ import wfhReducer from "../admin/store/slices/wfhSlice";
 import onboardingReducer from "../admin/store/slices/onboardingSlice";
 import roleReducer from "../admin/store/slices/roleSlice";
 import settingsReducer from "../admin/store/slices/settingsSlice";
+import projectReducer from "../admin/store/slices/projectSlice";
+import projectAssignmentReducer from "../admin/store/slices/projectAssignmentSlice";
 
 // Employee reducers
 import leavesReducer from "../employee/store/slices/leavesSlice";
@@ -46,6 +48,8 @@ export const store = configureStore({
     onboarding: onboardingReducer,
     roles: roleReducer,
     settings: settingsReducer,
+    projects: projectReducer,
+    projectAssignments: projectAssignmentReducer,
 
     // Employee
     EmpLeaves: leavesReducer,

@@ -311,7 +311,7 @@
 .text-green-600,
 i.text-green-500,
 i.text-green-600 {
-  color: var(--primary-text) !important;
+  color: var(--primary-text);
 }
 
 .text-green-500.hover\:text-green-600:hover {

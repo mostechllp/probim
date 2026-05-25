@@ -1,0 +1,329 @@
+import React, { useState, useMemo } from "react";
+import { PROJECT_MODULE_NAME } from "../../utils/constants";
+import EmptyState from "./EmptyState";
+
+const ProjectTable = ({
+  projects,
+  loading,
+  onEdit,
+  onDelete,
+  onAddNew
+}) => {
+  const [searchTerm, setSearchTerm] = useState("");
+  const [sortField, setSortField] = useState("name");
+  const [sortDirection, setSortDirection] = useState("asc");
+  const [currentPage, setCurrentPage] = useState(1);
+  const [itemsPerPage, setItemsPerPage] = useState(10);
+
+  // Sorting Handler
+  const handleSort = (field) => {
+    if (sortField === field) {
+      setSortDirection(sortDirection === "asc" ? "desc" : "asc");
+    } else {
+      setSortField(field);
+      setSortDirection("asc");
+    }
+  };
+
+  // Filter & Search Logic
+  const filteredProjects = useMemo(() => {
+    return projects.filter((project) => {
+      const nameMatch = project.name.toLowerCase().includes(searchTerm.toLowerCase());
+      const descMatch = (project.description || "").toLowerCase().includes(searchTerm.toLowerCase());
+      return nameMatch || descMatch;
+    });
+  }, [projects, searchTerm]);
+
+  // Sorting Logic
+  const sortedProjects = useMemo(() => {
+    const sorted = [...filteredProjects];
+    sorted.sort((a, b) => {
+      let valA = a[sortField];
+      let valB = b[sortField];
+
+      // Handle special column checks
+      if (sortField === "employeeCount") {
+        valA = a.taggedEmployees?.length || 0;
+        valB = b.taggedEmployees?.length || 0;
+      }
+
+      if (typeof valA === "string") {
+        return sortDirection === "asc"
+          ? valA.localeCompare(valB)
+          : valB.localeCompare(valA);
+      } else {
+        return sortDirection === "asc" ? valA - valB : valB - valA;
+      }
+    });
+    return sorted;
+  }, [filteredProjects, sortField, sortDirection]);
+
+  // Pagination Logic
+  const totalItems = sortedProjects.length;
+  const totalPages = Math.ceil(totalItems / itemsPerPage) || 1;
+  const paginatedProjects = useMemo(() => {
+    const start = (currentPage - 1) * itemsPerPage;
+    return sortedProjects.slice(start, start + itemsPerPage);
+  }, [sortedProjects, currentPage, itemsPerPage]);
+
+  const handlePageChange = (page) => {
+    if (page >= 1 && page <= totalPages) {
+      setCurrentPage(page);
+    }
+  };
+
+  // Reset page when search changes
+  React.useEffect(() => {
+    setCurrentPage(1);
+  }, [searchTerm, itemsPerPage]);
+
+  return (
+    <div className="bg-white dark:bg-gray-800 rounded-2xl border border-gray-100 dark:border-gray-700/60 shadow-soft overflow-hidden">
+      {/* Header Utilities */}
+      <div className="p-5 border-b border-gray-100 dark:border-gray-700/60 flex flex-col md:flex-row md:items-center justify-between gap-4">
+        {/* Entries select & Search */}
+        <div className="flex items-center gap-3 w-full md:w-auto">
+          <span className="text-xs text-gray-500 dark:text-gray-400 font-semibold whitespace-nowrap">
+            Show
+          </span>
+          <select
+            value={itemsPerPage}
+            onChange={(e) => setItemsPerPage(Number(e.target.value))}
+            className="px-3 py-1.5 rounded-lg border border-gray-200 dark:border-gray-600 bg-transparent text-gray-700 dark:text-gray-300 text-xs font-semibold focus:outline-none focus:border-green-500 transition-colors"
+          >
+            <option value={5}>5</option>
+            <option value={10}>10</option>
+            <option value={20}>20</option>
+            <option value={50}>50</option>
+          </select>
+          <span className="text-xs text-gray-500 dark:text-gray-400 font-semibold whitespace-nowrap">
+            entries
+          </span>
+        </div>
+
+        <div className="relative w-full md:w-72">
+          <input
+            type="text"
+            placeholder={`Search projects...`}
+            value={searchTerm}
+            onChange={(e) => setSearchTerm(e.target.value)}
+            className="w-full pl-9 pr-4 py-2 text-xs rounded-xl border border-gray-200 dark:border-gray-600 bg-gray-50 dark:bg-gray-700/30 text-gray-800 dark:text-gray-200 placeholder-gray-400 focus:outline-none focus:ring-2 focus:ring-green-500/20 focus:border-green-500 focus:bg-white dark:focus:bg-gray-800 transition-all"
+          />
+          <i className="fas fa-search absolute left-3 top-3 text-gray-400 text-xs"></i>
+          {searchTerm && (
+            <button
+              onClick={() => setSearchTerm("")}
+              className="absolute right-3 top-2.5 text-gray-400 hover:text-red-500"
+            >
+              <i className="fas fa-times text-xs"></i>
+            </button>
+          )}
+        </div>
+      </div>
+
+      {/* Table Container */}
+      <div className="overflow-x-auto">
+        <table className="w-full text-left border-collapse">
+          <thead>
+            <tr className="bg-gray-50/55 dark:bg-gray-700/20 border-b border-gray-100 dark:border-gray-700/60">
+              <th
+                onClick={() => handleSort("name")}
+                className="px-6 py-4 text-xs font-bold text-gray-500 dark:text-gray-400 uppercase tracking-wider cursor-pointer hover:bg-gray-100/50 dark:hover:bg-gray-700/30 select-none whitespace-nowrap transition-colors"
+              >
+                Project Name{" "}
+                {sortField === "name" && (
+                  <i className={`fas fa-sort-amount-${sortDirection === "asc" ? "up" : "down"} text-green-500 ml-1.5`}></i>
+                )}
+              </th>
+              <th className="px-6 py-4 text-xs font-bold text-gray-500 dark:text-gray-400 uppercase tracking-wider select-none whitespace-nowrap">
+                Description
+              </th>
+              <th
+                onClick={() => handleSort("employeeCount")}
+                className="px-6 py-4 text-xs font-bold text-gray-500 dark:text-gray-400 uppercase tracking-wider cursor-pointer hover:bg-gray-100/50 dark:hover:bg-gray-700/30 select-none text-center whitespace-nowrap transition-colors"
+              >
+                Employee Count{" "}
+                {sortField === "employeeCount" && (
+                  <i className={`fas fa-sort-amount-${sortDirection === "asc" ? "up" : "down"} text-green-500 ml-1.5`}></i>
+                )}
+              </th>
+              <th
+                onClick={() => handleSort("createdDate")}
+                className="px-6 py-4 text-xs font-bold text-gray-500 dark:text-gray-400 uppercase tracking-wider cursor-pointer hover:bg-gray-100/50 dark:hover:bg-gray-700/30 select-none whitespace-nowrap transition-colors"
+              >
+                Created Date{" "}
+                {sortField === "createdDate" && (
+                  <i className={`fas fa-sort-amount-${sortDirection === "asc" ? "up" : "down"} text-green-500 ml-1.5`}></i>
+                )}
+              </th>
+              <th className="px-6 py-4 text-xs font-bold text-gray-500 dark:text-gray-400 uppercase tracking-wider select-none whitespace-nowrap text-center">
+                Status
+              </th>
+              <th className="px-6 py-4 text-xs font-bold text-gray-500 dark:text-gray-400 uppercase tracking-wider select-none text-right whitespace-nowrap">
+                Actions
+              </th>
+            </tr>
+          </thead>
+          <tbody className="divide-y divide-gray-100 dark:divide-gray-700/60">
+            {loading ? (
+              // Loading Skeleton Rows
+              Array.from({ length: 5 }).map((_, idx) => (
+                <tr key={idx} className="animate-pulse">
+                  <td className="px-6 py-4">
+                    <div className="h-4 bg-gray-200 dark:bg-gray-700 rounded w-40 mb-1"></div>
+                    <div className="h-3 bg-gray-150 dark:bg-gray-700/60 rounded w-20"></div>
+                  </td>
+                  <td className="px-6 py-4">
+                    <div className="h-3 bg-gray-200 dark:bg-gray-700 rounded w-64"></div>
+                  </td>
+                  <td className="px-6 py-4">
+                    <div className="h-6 w-12 bg-gray-200 dark:bg-gray-700 rounded-full mx-auto"></div>
+                  </td>
+                  <td className="px-6 py-4">
+                    <div className="h-3.5 bg-gray-200 dark:bg-gray-700 rounded w-24"></div>
+                  </td>
+                  <td className="px-6 py-4">
+                    <div className="h-5 w-16 bg-gray-200 dark:bg-gray-700 rounded-full mx-auto"></div>
+                  </td>
+                  <td className="px-6 py-4">
+                    <div className="flex gap-2 justify-end">
+                      <div className="h-8 w-8 bg-gray-200 dark:bg-gray-700 rounded-full"></div>
+                      <div className="h-8 w-8 bg-gray-200 dark:bg-gray-700 rounded-full"></div>
+                    </div>
+                  </td>
+                </tr>
+              ))
+            ) : paginatedProjects.length === 0 ? (
+              <tr>
+                <td colSpan={6} className="px-6 py-10">
+                  <EmptyState
+                    message={searchTerm ? "No Match Found" : `No ${PROJECT_MODULE_NAME} Defined`}
+                    description={
+                      searchTerm
+                        ? "We couldn't find any results matching your search queries. Try modifying your filter term."
+                        : `Start by building your first project directory so employees can be assigned.`
+                    }
+                    onAction={searchTerm ? null : onAddNew}
+                    actionText={searchTerm ? null : `Create ${PROJECT_MODULE_NAME}`}
+                  />
+                </td>
+              </tr>
+            ) : (
+              paginatedProjects.map((project) => (
+                <tr
+                  key={project.id}
+                  className="hover:bg-gray-50/50 dark:hover:bg-gray-700/10 transition-colors group"
+                >
+                  <td className="px-6 py-4 whitespace-nowrap">
+                    <span className="text-sm font-bold text-gray-800 dark:text-gray-200 group-hover:text-green-500 transition-colors">
+                      {project.name}
+                    </span>
+                  </td>
+                  <td className="px-6 py-4 max-w-sm">
+                    <p className="text-xs text-gray-500 dark:text-gray-400 line-clamp-2 leading-relaxed">
+                      {project.description || (
+                        <span className="italic text-gray-300 dark:text-gray-600">No description provided</span>
+                      )}
+                    </p>
+                  </td>
+                  <td className="px-6 py-4 whitespace-nowrap text-center">
+                    <span className="inline-flex items-center justify-center px-2.5 py-1 text-xs font-bold leading-none text-green-700 bg-green-500/10 dark:text-green-300 rounded-full min-w-[28px]">
+                      {project.taggedEmployees?.length || 0}
+                    </span>
+                  </td>
+                  <td className="px-6 py-4 whitespace-nowrap">
+                    <span className="text-xs text-gray-500 dark:text-gray-400 font-semibold">
+                      <i className="far fa-calendar-alt text-gray-400 mr-1.5"></i>
+                      {project.createdDate}
+                    </span>
+                  </td>
+                  <td className="px-6 py-4 whitespace-nowrap text-center">
+                    <span
+                      className={`inline-block px-3 py-1 rounded-full text-[10px] font-bold tracking-wide uppercase ${project.status === "Active"
+                          ? "bg-green-500/10 text-green-600 dark:text-green-400"
+                          : "bg-gray-200/50 dark:bg-gray-700/50 text-gray-500 dark:text-gray-400"
+                        }`}
+                    >
+                      {project.status}
+                    </span>
+                  </td>
+                  <td className="px-6 py-4 whitespace-nowrap text-right text-sm">
+                    <div className="flex justify-end items-center gap-2">
+                      {/* Edit Button */}
+                      <button
+                        onClick={() => onEdit(project)}
+                        title="Edit Project"
+                        className="w-8 h-8 rounded-lg bg-green-500/10 hover:bg-green-500 text-green-500 hover:text-white flex items-center justify-center transition-all shadow-sm hover:shadow-soft"
+                      >
+                        <i className="fas fa-pencil-alt text-xs"></i>
+                      </button>
+
+                      {/* Delete Button */}
+                      <button
+                        onClick={() => onDelete(project)}
+                        title="Delete Project"
+                        className="w-8 h-8 rounded-lg bg-red-500/10 hover:bg-red-500 text-red-500 hover:text-white flex items-center justify-center transition-all shadow-sm hover:shadow-soft"
+                      >
+                        <i className="fas fa-trash-alt text-xs"></i>
+                      </button>
+                    </div>
+                  </td>
+                </tr>
+              ))
+            )}
+          </tbody>
+        </table>
+      </div>
+
+      {/* Pagination Footer */}
+      {!loading && totalItems > 0 && (
+        <div className="px-6 py-4 bg-gray-55 dark:bg-gray-800/40 border-t border-gray-150 dark:border-gray-700/60 flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4">
+          <span className="text-xs text-gray-500 dark:text-gray-400 font-semibold text-center sm:text-left">
+            Showing <span className="font-bold text-gray-700 dark:text-gray-200">{Math.min((currentPage - 1) * itemsPerPage + 1, totalItems)}</span> to{" "}
+            <span className="font-bold text-gray-700 dark:text-gray-200">{Math.min(currentPage * itemsPerPage, totalItems)}</span> of{" "}
+            <span className="font-bold text-gray-700 dark:text-gray-200">{totalItems}</span> entries
+          </span>
+
+          <div className="flex justify-center gap-1.5">
+            {/* Previous */}
+            <button
+              onClick={() => handlePageChange(currentPage - 1)}
+              disabled={currentPage === 1}
+              className="w-8 h-8 rounded-lg border border-gray-200 dark:border-gray-600 flex items-center justify-center text-xs font-semibold text-gray-500 dark:text-gray-400 bg-transparent hover:bg-green-500 hover:text-white hover:border-green-500 disabled:opacity-50 disabled:hover:bg-transparent disabled:hover:text-gray-500 disabled:hover:border-gray-200 dark:disabled:hover:border-gray-600 transition-all select-none"
+            >
+              <i className="fas fa-angle-left"></i>
+            </button>
+
+            {/* Pages list */}
+            {Array.from({ length: totalPages }).map((_, idx) => {
+              const pageNo = idx + 1;
+              return (
+                <button
+                  key={pageNo}
+                  onClick={() => handlePageChange(pageNo)}
+                  className={`w-8 h-8 rounded-lg text-xs font-bold flex items-center justify-center transition-all select-none ${currentPage === pageNo
+                      ? "bg-green-500 text-white shadow-soft"
+                      : "border border-gray-200 dark:border-gray-600 text-gray-600 dark:text-gray-400 bg-transparent hover:bg-green-500/10 hover:border-green-500 hover:text-green-500"
+                    }`}
+                >
+                  {pageNo}
+                </button>
+              );
+            })}
+
+            {/* Next */}
+            <button
+              onClick={() => handlePageChange(currentPage + 1)}
+              disabled={currentPage === totalPages}
+              className="w-8 h-8 rounded-lg border border-gray-200 dark:border-gray-600 flex items-center justify-center text-xs font-semibold text-gray-500 dark:text-gray-400 bg-transparent hover:bg-green-500 hover:text-white hover:border-green-500 disabled:opacity-50 disabled:hover:bg-transparent disabled:hover:text-gray-500 disabled:hover:border-gray-200 dark:disabled:hover:border-gray-600 transition-all select-none"
+            >
+              <i className="fas fa-angle-right"></i>
+            </button>
+          </div>
+        </div>
+      )}
+    </div>
+  );
+};
+
+export default ProjectTable;

@@ -1,5 +1,6 @@
 import { useState, useEffect } from "react";
 import { NavLink, useLocation } from "react-router-dom";
+import { PROJECT_MODULE_NAME } from "../../utils/constants";
 
 const Sidebar = ({ isOpen, setIsOpen }) => {
   const [isMobile, setIsMobile] = useState(false);
@@ -32,6 +33,8 @@ const Sidebar = ({ isOpen, setIsOpen }) => {
       label: "Onboarding",
     },
     { path: "/admin/employees", icon: "fas fa-users", label: "Employees" },
+    { path: "/admin/projects", icon: "fas fa-briefcase", label: PROJECT_MODULE_NAME },
+    { path: "/admin/project-assignments", icon: "fas fa-user-gear", label: "Project Assignments" },
     { path: "/admin/attendances", icon: "fas fa-fingerprint", label: "Attendance" },
     { path: "/admin/agreements", icon: "fas fa-file-signature", label: "Agreements" },
     { path: "/admin/leaves", icon: "fas fa-calendar-check", label: "Leaves" },
