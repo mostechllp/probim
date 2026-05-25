@@ -9,6 +9,8 @@ const ProjectStatsCards = ({ stats, loading }) => {
       icon: "fas fa-briefcase",
       color: "from-blue-500 to-indigo-600",
       lightColor: "bg-blue-500/10 text-blue-500",
+      textColor: "text-blue-600 dark:text-blue-400",
+      indicatorColor: "text-blue-500 dark:text-blue-400",
       indicator: "Grand Total",
       indicatorIcon: "fas fa-list-check"
     },
@@ -18,6 +20,8 @@ const ProjectStatsCards = ({ stats, loading }) => {
       icon: "fas fa-circle-check",
       color: "from-emerald-500 to-green-600",
       lightColor: "bg-green-500/10 text-green-500",
+      textColor: "text-emerald-600 dark:text-emerald-400",
+      indicatorColor: "text-emerald-500 dark:text-emerald-400",
       indicator: `${stats?.totalProjects ? Math.round(((stats.activeProjects) / stats.totalProjects) * 100) : 0}% Active`,
       indicatorIcon: "fas fa-arrow-trend-up"
     },
@@ -27,6 +31,8 @@ const ProjectStatsCards = ({ stats, loading }) => {
       icon: "fas fa-users-gear",
       color: "from-amber-500 to-orange-600",
       lightColor: "bg-amber-500/10 text-amber-500",
+      textColor: "text-amber-600 dark:text-amber-400",
+      indicatorColor: "text-amber-500 dark:text-amber-400",
       indicator: "Allocated Resources",
       indicatorIcon: "fas fa-user-check"
     },
@@ -36,6 +42,8 @@ const ProjectStatsCards = ({ stats, loading }) => {
       icon: "fas fa-calendar-plus",
       color: "from-rose-500 to-pink-600",
       lightColor: "bg-rose-500/10 text-rose-500",
+      textColor: "text-rose-600 dark:text-rose-400",
+      indicatorColor: "text-rose-500 dark:text-rose-400",
       indicator: "Past 30 days",
       indicatorIcon: "fas fa-clock"
     }
@@ -72,11 +80,11 @@ const ProjectStatsCards = ({ stats, loading }) => {
               </div>
 
               <div>
-                <h3 className="text-3xl font-extrabold text-gray-800 dark:text-gray-100 tracking-tight mb-2">
+                <h3 className={`text-3xl font-extrabold tracking-tight mb-2 ${card.textColor}`}>
                   {card.value}
                 </h3>
                 <div className="flex items-center gap-1.5 text-xs font-semibold text-gray-400 dark:text-gray-400">
-                  <i className={`${card.indicatorIcon} text-[10px] text-green-500`}></i>
+                  <i className={`${card.indicatorIcon} text-[10px] ${card.indicatorColor}`}></i>
                   <span>{card.indicator}</span>
                 </div>
               </div>
