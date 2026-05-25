@@ -215,7 +215,7 @@ const ProjectTable = ({
                   className="hover:bg-gray-50/50 dark:hover:bg-gray-700/10 transition-colors group"
                 >
                   <td className="px-6 py-4 whitespace-nowrap">
-                    <span className="text-sm font-bold text-gray-800 dark:text-gray-200 group-hover:text-green-500 transition-colors">
+                    <span className="text-sm font-bold text-gray-800 dark:text-gray-200">
                       {project.name}
                     </span>
                   </td>

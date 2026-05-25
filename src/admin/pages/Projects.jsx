@@ -29,7 +29,7 @@ const Projects = () => {
   // Local UI States
   const [isAddOpen, setIsAddOpen] = useState(false);
   const [isDeleteOpen, setIsDeleteOpen] = useState(false);
-  
+
   const [selectedProject, setSelectedProject] = useState(null);
 
   // Load Initial Data on Mount
@@ -97,7 +97,7 @@ const Projects = () => {
       {/* Header Panel */}
       <div className="flex flex-col md:flex-row md:items-center justify-between gap-4 mb-2">
         <div>
-          <h2 className="text-xl md:text-2xl font-black text-gray-800 dark:text-gray-100 flex items-center gap-2 tracking-tight">
+          <h2 className="text-lg md:text-2xl font-bold gradient-heading bg-clip-text text-transparent tracking-tight">
             {PROJECT_MODULE_NAME}
           </h2>
           <p className="text-xs text-gray-500 dark:text-gray-400 mt-1 font-medium">

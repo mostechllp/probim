@@ -268,7 +268,7 @@ const AssignmentTable = ({
 
                       {/* Details */}
                       <div className="min-w-0">
-                        <span className="text-sm font-bold text-gray-800 dark:text-gray-200 group-hover:text-green-500 transition-colors block">
+                        <span className="text-sm font-bold text-gray-800 dark:text-gray-200 block">
                           {assign.employeeName}
                         </span>
                         <span className="text-[10px] text-gray-400 dark:text-gray-500 block leading-none mt-1 font-semibold">
