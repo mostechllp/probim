@@ -5,6 +5,7 @@ import { FiCheck } from "react-icons/fi";
 import { resetOnboarding, restoreDraft } from "../store/slices/onboardingSlice";
 import ResumeUpload from "../components/onboarding/ResumeUpload";
 import EmployeeDetailsForm from "../components/onboarding/EmployeeDetailsForm";
+import SalaryBankDetailsForm from "../components/onboarding/SalaryBankDetailsForm";
 import OfferLetterPreview from "../components/onboarding/OfferLetterPreview";
 import OnboardingReview from "../components/onboarding/OnboardingReview";
 import Stepper from "../components/onboarding/Stepper";
@@ -58,8 +59,10 @@ const Onboarding = () => {
       case 2:
         return <EmployeeDetailsForm />;
       case 3:
-        return <OfferLetterPreview />;
+        return <SalaryBankDetailsForm />;
       case 4:
+        return <OfferLetterPreview />;
+      case 5:
         return <OnboardingReview />;
       default:
         return <ResumeUpload />;

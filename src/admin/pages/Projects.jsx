@@ -11,6 +11,7 @@ import {
   deleteProject,
   clearProjectError
 } from "../store/slices/projectSlice";
+import { fetchEmployees } from "../store/slices/employeeSlice";
 
 // Components
 import ProjectStatsCards from "../components/projects/ProjectStatsCards";
@@ -25,6 +26,7 @@ const Projects = () => {
   const { projects, loading, actionLoading, error, stats } = useSelector(
     (state) => state.projects
   );
+  const { employees } = useSelector((state) => state.employees);
 
   // Local UI States
   const [isAddOpen, setIsAddOpen] = useState(false);
@@ -35,6 +37,7 @@ const Projects = () => {
   // Load Initial Data on Mount
   useEffect(() => {
     dispatch(fetchProjects());
+    dispatch(fetchEmployees());
   }, [dispatch]);
 
   // Error Listening
@@ -120,6 +123,7 @@ const Projects = () => {
       {/* Main projects data table */}
       <ProjectTable
         projects={projects}
+        employees={employees}
         loading={loading}
         onEdit={handleEdit}
         onDelete={handleDeleteTrigger}
@@ -129,6 +133,7 @@ const Projects = () => {
       {/* Add / Edit Modal Drawer */}
       <AddProjectModal
         isOpen={isAddOpen}
+        employees={employees}
         onClose={() => {
           setIsAddOpen(false);
           setSelectedProject(null);

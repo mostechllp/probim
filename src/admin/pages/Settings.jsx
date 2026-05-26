@@ -1,7 +1,6 @@
 import { useState } from "react";
 import ProfileTab from "../components/settings/ProfileTab";
 import SecurityTab from "../components/settings/SecurityTab";
-import AppSettingsTab from "../components/settings/AppSettingsTab";
 import ThemeTab from "../components/settings/ThemeTab";
 
 const Settings = () => {
@@ -10,7 +9,6 @@ const Settings = () => {
   const tabs = [
     { id: "profile", label: "Profile", icon: "fas fa-user", color: "blue" },
     { id: "security", label: "Security", icon: "fas fa-lock", color: "green" },
-    { id: "app-settings", label: "App Settings", icon: "fas fa-cog", color: "purple" },
     { id: "theme", label: "Others", icon: "fas fa-palette", color: "orange" },
   ];
 
@@ -80,7 +78,6 @@ const Settings = () => {
           <div className="bg-white dark:bg-gray-800 border border-gray-200 dark:border-gray-700 rounded-xl p-4 md:p-6 shadow-soft">
             {activeTab === "profile" && <ProfileTab />}
             {activeTab === "security" && <SecurityTab />}
-            {activeTab === "app-settings" && <AppSettingsTab />}
             {activeTab === "theme" && <ThemeTab />}
           </div>
         </div>

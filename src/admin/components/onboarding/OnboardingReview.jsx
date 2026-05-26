@@ -1,6 +1,6 @@
 /* eslint-disable react-hooks/static-components */
 import { useDispatch, useSelector } from "react-redux";
-import { FiCheckCircle, FiFileText, FiUser, FiChevronLeft, FiSend, FiShield, FiGlobe, FiBriefcase, FiAlertTriangle, FiX } from "react-icons/fi";
+import { FiCheckCircle, FiFileText, FiUser, FiChevronLeft, FiSend, FiShield, FiGlobe, FiBriefcase, FiAlertTriangle, FiX, FiDollarSign } from "react-icons/fi";
 import { setStep, completeOnboarding } from "../../store/slices/onboardingSlice";
 import { showToast } from "../../components/common/Toast";
 import { fetchEmployees } from "../../store/slices/employeeSlice";
@@ -225,6 +225,12 @@ const OnboardingReview = () => {
       body.append("type", "employee");
       body.append("status", "active");
       body.append("address", employeeDetails.address || "");
+      body.append("basic_salary", employeeDetails.basicSalary || "");
+      body.append("other_allowance", employeeDetails.otherAllowance || "0");
+      body.append("total_salary", employeeDetails.totalMonthlySalary || "0");
+      body.append("payment_cycle", employeeDetails.paymentCycle || "Monthly");
+      body.append("bank_name", employeeDetails.bankName || "");
+      body.append("account_number", employeeDetails.accountNumber || "");
 
       // Debug: log all FormData entries
       console.log("[Onboarding] FormData entries:");
@@ -317,7 +323,7 @@ const OnboardingReview = () => {
         dispatch(completeOnboarding());
         showToast("Onboarding submitted successfully!", "success");
       }
-    } catch (error) {
+    } catch {
       setErrorModal({
         isOpen: true,
         title: "Something Went Wrong",
@@ -329,7 +335,7 @@ const OnboardingReview = () => {
   };
 
   const handleBack = () => {
-    dispatch(setStep(3));
+    dispatch(setStep(4));
   };
 
   const handleSaveDraft = () => {
@@ -498,6 +504,48 @@ const OnboardingReview = () => {
             </div>
           </div>
         </SummaryCard>
+
+        {/* Salary & Bank Details Summary */}
+        <div className="md:col-span-2">
+          <SummaryCard title="Salary & Bank Details" icon={FiDollarSign}>
+            <div className="space-y-6">
+              <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-4 gap-6">
+                <div className="space-y-1">
+                  <p className="text-xs font-semibold text-gray-400 dark:text-gray-500 uppercase tracking-wider">Basic Salary</p>
+                  <p className="text-sm font-bold text-gray-900 dark:text-white">
+                    AED {parseFloat(employeeDetails.basicSalary || 0).toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
+                  </p>
+                </div>
+                <div className="space-y-1">
+                  <p className="text-xs font-semibold text-gray-400 dark:text-gray-500 uppercase tracking-wider">Other Allowance</p>
+                  <p className="text-sm font-bold text-gray-900 dark:text-white">
+                    AED {parseFloat(employeeDetails.otherAllowance || 0).toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
+                  </p>
+                </div>
+                <div className="space-y-1">
+                  <p className="text-xs font-semibold text-gray-400 dark:text-gray-500 uppercase tracking-wider">Total Monthly Salary</p>
+                  <p className="text-sm font-extrabold text-green-600 dark:text-green-400 bg-green-50 dark:bg-green-950/20 px-3 py-1 rounded-lg inline-block">
+                    AED {parseFloat(employeeDetails.totalMonthlySalary || 0).toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
+                  </p>
+                </div>
+                <div className="space-y-1">
+                  <p className="text-xs font-semibold text-gray-400 dark:text-gray-500 uppercase tracking-wider">Payment Cycle</p>
+                  <p className="text-sm font-bold text-gray-900 dark:text-white">{employeeDetails.paymentCycle || "Monthly"}</p>
+                </div>
+              </div>
+              <div className="border-t border-gray-100 dark:border-gray-700/60 pt-6 grid grid-cols-1 sm:grid-cols-2 gap-6">
+                <div className="space-y-1">
+                  <p className="text-xs font-semibold text-gray-400 dark:text-gray-500 uppercase tracking-wider">Bank Name</p>
+                  <p className="text-sm font-bold text-gray-900 dark:text-white">{employeeDetails.bankName || "-"}</p>
+                </div>
+                <div className="space-y-1">
+                  <p className="text-xs font-semibold text-gray-400 dark:text-gray-500 uppercase tracking-wider">Account Number</p>
+                  <p className="text-sm font-bold text-gray-900 dark:text-white">{employeeDetails.accountNumber || "-"}</p>
+                </div>
+              </div>
+            </div>
+          </SummaryCard>
+        </div>
       </div>
 
       {/* Footer Actions */}

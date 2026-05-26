@@ -49,7 +49,13 @@ const AddEmployee = () => {
   const [additionalDocuments, setAdditionalDocuments] = useState([]);
   const [isSkilled, setIsSkilled] = useState(false);
   const [selectedOrgDetails, setSelectedOrgDetails] = useState(null);
-  const [selectedCompanyDetails, setSelectedCompanyDetails] = useState(null); // Add this state
+  const [selectedCompanyDetails, setSelectedCompanyDetails] = useState(null);
+
+  const [idGenerationMethod, setIdGenerationMethod] = useState("manual"); // manual, auto
+  const [idPrefix, setIdPrefix] = useState("EMP");
+  const [idFormat, setIdFormat] = useState("prefix+year+month+day+random"); // template
+  const [manualEmployeeId, setManualEmployeeId] = useState("");
+  const [generatedPreview, setGeneratedPreview] = useState("");
 
   // Fetch data from slices
   const { organizations = [] } = useSelector(
@@ -143,6 +149,181 @@ const AddEmployee = () => {
   const eidIssued = watch("eid_issued_date");
   const eidExpiry = watch("eid_expiry_date");
 
+  const generateEmployeeIdWithOptions = (dob, joiningDate, prefix, format) => {
+    if (
+      (format !== "manual" && (!dob || !joiningDate)) ||
+      format === "manual"
+    ) {
+      return "";
+    }
+
+    // Parse dates
+    let dobFormatted = dob;
+    let joiningFormatted = joiningDate;
+
+    if (dob && dob.match(/^\d{2}\/\d{2}\/\d{4}$/)) {
+      const [day, month, year] = dob.split("/");
+      dobFormatted = `${year}-${month}-${day}`;
+    }
+
+    if (joiningDate && joiningDate.match(/^\d{2}\/\d{2}\/\d{4}$/)) {
+      const [day, month, year] = joiningDate.split("/");
+      joiningFormatted = `${year}-${month}-${day}`;
+    }
+
+    const dobDate = dob ? new Date(dobFormatted) : null;
+    const joiningDateObj = joiningDate ? new Date(joiningFormatted) : null;
+
+    // Get current timestamp for uniqueness
+    const timestamp = Date.now().toString().slice(-4);
+    const random = Math.random().toString(36).substring(2, 6).toUpperCase();
+
+    // Replace placeholders in format
+    let generatedId = format;
+
+    // Replace prefix
+    generatedId = generatedId.replace(/prefix/g, prefix || "EMP");
+
+    // Replace year (joining or current)
+    if (generatedId.includes("year")) {
+      const year = joiningDateObj
+        ? joiningDateObj.getFullYear()
+        : new Date().getFullYear();
+      generatedId = generatedId.replace(/year/g, year);
+    }
+
+    // Replace month (from joining date or DOB or current)
+    if (generatedId.includes("month")) {
+      let month;
+      if (generatedId.includes("dob_month") && dobDate) {
+        month = String(dobDate.getMonth() + 1).padStart(2, "0");
+        generatedId = generatedId.replace(/dob_month/g, month);
+      } else if (generatedId.includes("joining_month") && joiningDateObj) {
+        month = String(joiningDateObj.getMonth() + 1).padStart(2, "0");
+        generatedId = generatedId.replace(/joining_month/g, month);
+      } else {
+        month = String(new Date().getMonth() + 1).padStart(2, "0");
+        generatedId = generatedId.replace(/month/g, month);
+      }
+    }
+
+    // Replace day (from DOB or joining date or current)
+    if (generatedId.includes("day")) {
+      let day;
+      if (generatedId.includes("dob_day") && dobDate) {
+        day = String(dobDate.getDate()).padStart(2, "0");
+        generatedId = generatedId.replace(/dob_day/g, day);
+      } else if (generatedId.includes("joining_day") && joiningDateObj) {
+        day = String(joiningDateObj.getDate()).padStart(2, "0");
+        generatedId = generatedId.replace(/joining_day/g, day);
+      } else {
+        day = String(new Date().getDate()).padStart(2, "0");
+        generatedId = generatedId.replace(/day/g, day);
+      }
+    }
+
+    // Replace DOB day+month (DDMM)
+    if (generatedId.includes("dob_ddmm") && dobDate) {
+      const dobDay = String(dobDate.getDate()).padStart(2, "0");
+      const dobMonth = String(dobDate.getMonth() + 1).padStart(2, "0");
+      generatedId = generatedId.replace(/dob_ddmm/g, `${dobDay}${dobMonth}`);
+    }
+
+    // Replace timestamp
+    if (generatedId.includes("timestamp")) {
+      generatedId = generatedId.replace(/timestamp/g, timestamp);
+    }
+
+    // Replace random
+    if (generatedId.includes("random")) {
+      generatedId = generatedId.replace(/random/g, random);
+    }
+
+    // Replace sequence (you can implement DB check for uniqueness)
+    if (generatedId.includes("sequence")) {
+      generatedId = generatedId.replace(/sequence/g, "001");
+    }
+
+    generatedId = generatedId.replace(/\+/g, "-");
+
+    return generatedId;
+  };
+
+  // Preview generated ID when user selects auto-generation
+  useEffect(() => {
+    if (idGenerationMethod === "auto" && watchDob && watchJoiningDate) {
+      const preview = generateEmployeeIdWithOptions(
+        watchDob,
+        watchJoiningDate,
+        idPrefix,
+        idFormat,
+      );
+      setGeneratedPreview(preview);
+      setValue("employee_id", preview);
+    } else if (idGenerationMethod === "manual") {
+      setValue("employee_id", manualEmployeeId);
+    }
+  }, [
+    idGenerationMethod,
+    idPrefix,
+    idFormat,
+    watchDob,
+    watchJoiningDate,
+    manualEmployeeId,
+    setValue,
+  ]);
+
+  // When manual ID changes
+  useEffect(() => {
+    if (idGenerationMethod === "manual") {
+      setValue("employee_id", manualEmployeeId);
+    }
+  }, [manualEmployeeId, idGenerationMethod, setValue]);
+
+  // Format templates for user to choose from
+  const formatOptions = [
+    {
+      value: "prefix+year+month+day+random",
+      label: "EMP20241225001",
+      description: "Prefix + Year + Month + Day + Random",
+    },
+    {
+      value: "prefix+year+dob_ddmm+random",
+      label: "EMP20242512001",
+      description: "Prefix + Year + DOB(DDMM) + Random",
+    },
+    {
+      value: "prefix+timestamp",
+      label: "EMP170351234567",
+      description: "Prefix + Timestamp",
+    },
+    {
+      value: "prefix+year+sequence",
+      label: "EMP2024001",
+      description: "Prefix + Year + Sequence",
+    },
+    {
+      value: "year+month+day+random",
+      label: "20241225001",
+      description: "Year + Month + Day + Random (No Prefix)",
+    },
+    {
+      value: "custom",
+      label: "Custom Format",
+      description: "Create your own format",
+    },
+  ];
+
+  // Custom format builder helper
+  const [customFormat, setCustomFormat] = useState(
+    "prefix+year+month+day+timestamp",
+  );
+
+  const getFormatPreview = (format) => {
+    if (format === "custom") return customFormat;
+    return format;
+  };
+
   // Generate Employee ID function
   const generateEmployeeId = (dob, joiningDate) => {
     if (!dob || !joiningDate) return "";
@@ -231,7 +412,7 @@ const AddEmployee = () => {
         (comp) => comp.id === parseInt(watchCompanyId),
       );
       setSelectedCompanyDetails(company || null);
-      
+
       // Clear labor fields if company has freezone trade license
       if (company && company.raw?.trade_license === "freezone") {
         setValue("labor_number", "");
@@ -287,7 +468,6 @@ const AddEmployee = () => {
           "type",
           "dob",
           "joining_date",
-          "special_days",
         ];
         // Only add company_id to validation if multi_company is "Yes"
         if (selectedOrgDetails?.multi_company === "Yes") {
@@ -297,28 +477,17 @@ const AddEmployee = () => {
       }
       case 1:
         return ["passport_issued_date", "passport_expiry_date"];
-      case 2:
-        { const laborFields = [];
-        
-        // Only require labor fields if company trade license is "mainland"
-        if (selectedCompanyDetails?.raw?.trade_license === "mainland") {
-          laborFields.push(
-            "labor_number",
-            "labor_issued_date",
-            "labor_expiry_date"
-          );
-        }
-        
+      case 2: {
         return [
           "visa_type",
           "visa_number",
           "visa_issued_date",
           "visa_expiry_date",
-          ...laborFields,
           "eid_number",
           "eid_issued_date",
           "eid_expiry_date",
-        ]; }
+        ];
+      }
       case 3:
         return ["company_email", "personal_email", "type", "role"];
       default:
@@ -656,7 +825,7 @@ const AddEmployee = () => {
     // Only send labor data if company trade license is "mainland"
     if (selectedCompanyDetails?.raw?.trade_license === "mainland") {
       formData.append("labor_number", data.labor_number || "");
-      
+
       const laborIssuedConverted = convertDateToBackend(data.labor_issued_date);
       formData.append("labor_issued_date", laborIssuedConverted);
 
@@ -1135,33 +1304,33 @@ const AddEmployee = () => {
                   </div>
 
                   {/* Show trade license info when company is selected */}
-                  {selectedCompanyDetails && selectedCompanyDetails.raw?.trade_license && (
-                    <div className="md:col-span-2">
-                      <div className={`p-3 rounded-lg ${selectedCompanyDetails.raw?.trade_license === "mainland" ? "bg-blue-50 border border-blue-200" : "bg-yellow-50 border border-yellow-200"}`}>
-                        <div className="flex items-center gap-2">
-                          <i className={`fas ${selectedCompanyDetails.raw?.trade_license === "mainland" ? "fa-building" : "fa-globe"} ${selectedCompanyDetails.raw?.trade_license === "mainland" ? "text-blue-600" : "text-yellow-600"}`}></i>
-                          <span className="text-sm font-semibold text-gray-700">
-                            Company Trade License:{" "}
-                            <span className={selectedCompanyDetails.raw?.trade_license === "mainland" ? "text-blue-600" : "text-yellow-600"}>
-                              {selectedCompanyDetails.raw?.trade_license.toUpperCase()}
+                  {selectedCompanyDetails &&
+                    selectedCompanyDetails.raw?.trade_license && (
+                      <div className="md:col-span-2">
+                        <div
+                          className={`p-3 rounded-lg ${selectedCompanyDetails.raw?.trade_license === "mainland" ? "bg-blue-50 border border-blue-200" : "bg-yellow-50 border border-yellow-200"}`}
+                        >
+                          <div className="flex items-center gap-2">
+                            <i
+                              className={`fas ${selectedCompanyDetails.raw?.trade_license === "mainland" ? "fa-building" : "fa-globe"} ${selectedCompanyDetails.raw?.trade_license === "mainland" ? "text-blue-600" : "text-yellow-600"}`}
+                            ></i>
+                            <span className="text-sm font-semibold text-gray-700">
+                              Company Trade License:{" "}
+                              <span
+                                className={
+                                  selectedCompanyDetails.raw?.trade_license ===
+                                  "mainland"
+                                    ? "text-blue-600"
+                                    : "text-yellow-600"
+                                }
+                              >
+                                {selectedCompanyDetails.raw?.trade_license.toUpperCase()}
+                              </span>
                             </span>
-                          </span>
-                          {selectedCompanyDetails.raw?.trade_license === "mainland" && (
-                            <span className="text-xs text-gray-600 ml-2">
-                              <i className="fas fa-info-circle mr-1"></i>
-                              Labor details are required for Mainland companies
-                            </span>
-                          )}
-                          {selectedCompanyDetails.raw?.trade_license === "freezone" && (
-                            <span className="text-xs text-gray-600 ml-2">
-                              <i className="fas fa-info-circle mr-1"></i>
-                              Labor details are not required for Freezone companies
-                            </span>
-                          )}
+                          </div>
                         </div>
                       </div>
-                    </div>
-                  )}
+                    )}
 
                   <div>
                     <label className="block text-xs md:text-sm font-semibold text-gray-700 mb-1 md:mb-2">
@@ -1344,9 +1513,6 @@ const AddEmployee = () => {
                             <Controller
                               name={`special_days.${index}.name`}
                               control={control}
-                              rules={{
-                                required: "Name is required"
-                              }}
                               render={({ field }) => (
                                 <div>
                                   <input
@@ -1354,8 +1520,8 @@ const AddEmployee = () => {
                                     type="text"
                                     placeholder="e.g., Birthday / Anniversary"
                                     className={`w-full px-3 py-2 bg-gray-50 border rounded-lg text-sm focus:outline-none ${
-                                      errors?.special_days?.[index]?.name 
-                                        ? "border-red-500 focus:border-red-500 focus:ring-red-500/20" 
+                                      errors?.special_days?.[index]?.name
+                                        ? "border-red-500 focus:border-red-500 focus:ring-red-500/20"
                                         : "border-gray-200 focus:border-green-500 focus:ring-2 focus:ring-green-500/20"
                                     }`}
                                   />
@@ -1372,16 +1538,15 @@ const AddEmployee = () => {
                             <Controller
                               name={`special_days.${index}.date`}
                               control={control}
-                              rules={{
-                                required: "Date is required"
-                              }}
                               render={({ field }) => (
                                 <div>
                                   <DateInput
                                     type="special_day"
                                     {...field}
                                     placeholder="dd/mm/yyyy"
-                                    error={!!errors?.special_days?.[index]?.date}
+                                    error={
+                                      !!errors?.special_days?.[index]?.date
+                                    }
                                   />
                                   {errors?.special_days?.[index]?.date && (
                                     <p className="mt-1 text-xs text-red-500">
@@ -1419,29 +1584,201 @@ const AddEmployee = () => {
                   </div>
 
                   {/* Auto-generated Employee ID - Display Only */}
-                  <div>
-                    <label className="block text-xs md:text-sm font-semibold text-gray-700 mb-1 md:mb-2">
-                      <i className="fas fa-id-card text-green-500 mr-1"></i>{" "}
-                      Employee ID (Auto-generated)
+                  {/* Enhanced Employee ID Generation */}
+                  <div className="md:col-span-2">
+                    <label className="block text-xs md:text-sm font-semibold text-gray-700 mb-2">
+                      <i className="fas fa-id-card text-green-500 mr-1"></i>
+                      Employee ID Generation{" "}
+                      <span className="text-red-500">*</span>
                     </label>
+
+                    {/* Generation Method Toggle */}
+                    <div className="flex gap-4 mb-4">
+                      <label className="flex items-center">
+                        <input
+                          type="radio"
+                          checked={idGenerationMethod === "manual"}
+                          onChange={() => setIdGenerationMethod("manual")}
+                          className="mr-2 text-green-500 focus:ring-green-500"
+                        />
+                        <span className="text-sm text-gray-700">
+                          Manual Entry
+                        </span>
+                      </label>
+                      <label className="flex items-center">
+                        <input
+                          type="radio"
+                          checked={idGenerationMethod === "auto"}
+                          onChange={() => setIdGenerationMethod("auto")}
+                          className="mr-2 text-green-500 focus:ring-green-500"
+                        />
+                        <span className="text-sm text-gray-700">
+                          Auto-Generate
+                        </span>
+                      </label>
+                    </div>
+
+                    {idGenerationMethod === "manual" ? (
+                      // Manual Entry
+                      <div>
+                        <input
+                          type="text"
+                          value={manualEmployeeId}
+                          onChange={(e) =>
+                            setManualEmployeeId(e.target.value.toUpperCase())
+                          }
+                          placeholder="Enter Employee ID (e.g., EMP001, STAFF-001)"
+                          className="w-full px-3 md:px-4 py-2 md:py-3 bg-gray-50 border border-gray-200 rounded-lg text-sm md:text-base text-gray-800 focus:outline-none focus:border-green-500 focus:ring-2 focus:ring-green-500/20"
+                        />
+                        <p className="text-xs text-gray-400 mt-1">
+                          <i className="fas fa-info-circle mr-1"></i>
+                          You can enter any unique ID format (e.g., EMP001,
+                          STAFF-2024-001)
+                        </p>
+                      </div>
+                    ) : (
+                      // Auto-Generation Options
+                      <div className="space-y-4">
+                        {/* Prefix */}
+                        <div>
+                          <label className="block text-xs font-semibold text-gray-700 mb-1">
+                            Prefix
+                          </label>
+                          <input
+                            type="text"
+                            value={idPrefix}
+                            onChange={(e) =>
+                              setIdPrefix(e.target.value.toUpperCase())
+                            }
+                            placeholder="e.g., EMP, STAFF, ENG"
+                            className="w-full px-3 py-2 bg-gray-50 border border-gray-200 rounded-lg text-sm focus:outline-none focus:border-green-500"
+                          />
+                        </div>
+
+                        {/* Format Selection */}
+                        <div>
+                          <label className="block text-xs font-semibold text-gray-700 mb-1">
+                            ID Format
+                          </label>
+                          <select
+                            value={idFormat}
+                            onChange={(e) => setIdFormat(e.target.value)}
+                            className="w-full px-3 py-2 bg-gray-50 border border-gray-200 rounded-lg text-sm focus:outline-none focus:border-green-500"
+                          >
+                            {formatOptions.map((option) => (
+                              <option key={option.value} value={option.value}>
+                                {option.label} - {option.description}
+                              </option>
+                            ))}
+                          </select>
+                        </div>
+
+                        {/* Custom Format Builder */}
+                        {idFormat === "custom" && (
+                          <div>
+                            <label className="block text-xs font-semibold text-gray-700 mb-1">
+                              Custom Format Pattern
+                            </label>
+                            <input
+                              type="text"
+                              value={customFormat}
+                              onChange={(e) => setCustomFormat(e.target.value)}
+                              placeholder="e.g., prefix+year+month+day+random"
+                              className="w-full px-3 py-2 bg-gray-50 border border-gray-200 rounded-lg text-sm font-mono focus:outline-none focus:border-green-500"
+                            />
+                            <div className="mt-2 text-xs text-gray-500">
+                              <p className="font-semibold mb-1">
+                                Available placeholders:
+                              </p>
+                              <div className="grid grid-cols-2 gap-1">
+                                <span>
+                                  <code className="bg-gray-100 px-1">
+                                    prefix
+                                  </code>{" "}
+                                  - Your prefix
+                                </span>
+                                <span>
+                                  <code className="bg-gray-100 px-1">year</code>{" "}
+                                  - Joining year
+                                </span>
+                                <span>
+                                  <code className="bg-gray-100 px-1">
+                                    month
+                                  </code>{" "}
+                                  - Joining month
+                                </span>
+                                <span>
+                                  <code className="bg-gray-100 px-1">day</code>{" "}
+                                  - Joining day
+                                </span>
+                                <span>
+                                  <code className="bg-gray-100 px-1">
+                                    dob_ddmm
+                                  </code>{" "}
+                                  - DOB (DDMM)
+                                </span>
+                                <span>
+                                  <code className="bg-gray-100 px-1">
+                                    timestamp
+                                  </code>{" "}
+                                  - Unix timestamp
+                                </span>
+                                <span>
+                                  <code className="bg-gray-100 px-1">
+                                    random
+                                  </code>{" "}
+                                  - Random string
+                                </span>
+                                <span>
+                                  <code className="bg-gray-100 px-1">
+                                    sequence
+                                  </code>{" "}
+                                  - Sequence number
+                                </span>
+                              </div>
+                            </div>
+                          </div>
+                        )}
+
+                        {/* Preview Section */}
+                        {watchDob && watchJoiningDate && generatedPreview && (
+                          <div className="mt-3 p-3 bg-green-50 border border-green-200 rounded-lg">
+                            <p className="text-xs text-green-700 font-semibold mb-1">
+                              Preview:
+                            </p>
+                            <p className="text-sm font-mono font-bold text-green-800">
+                              {generatedPreview}
+                            </p>
+                            <p className="text-xs text-green-600 mt-1">
+                              <i className="fas fa-check-circle mr-1"></i>
+                              ID will be generated based on DOB and Joining Date
+                            </p>
+                          </div>
+                        )}
+
+                        {(!watchDob || !watchJoiningDate) && (
+                          <div className="p-3 bg-yellow-50 border border-yellow-200 rounded-lg">
+                            <p className="text-xs text-yellow-700">
+                              <i className="fas fa-info-circle mr-1"></i>
+                              Please enter DOB and Joining Date to see ID
+                              preview
+                            </p>
+                          </div>
+                        )}
+                      </div>
+                    )}
+
+                    {/* Employee ID Field (Hidden/Disabled based on method) */}
                     <Controller
                       name="employee_id"
                       control={control}
-                      render={({ field }) => (
-                        <input
-                          {...field}
-                          type="text"
-                          readOnly
-                          disabled
-                          className="w-full px-3 md:px-4 py-2 md:py-3 bg-gray-100 border border-gray-200 rounded-lg text-sm md:text-base text-gray-600 cursor-not-allowed"
-                          placeholder="Will be auto-generated after entering DOB & Joining Date"
-                        />
-                      )}
+                      rules={{ required: "Employee ID is required" }}
+                      render={({ field }) => <input {...field} type="hidden" />}
                     />
-                    {watchDob && watchJoiningDate && (
-                      <p className="mt-1 text-xs text-green-600">
-                        <i className="fas fa-check-circle mr-1"></i>
-                        Employee ID generated based on DOB and Joining Date
+
+                    {errors.employee_id && (
+                      <p className="mt-1 text-xs text-red-500">
+                        {errors.employee_id.message}
                       </p>
                     )}
                   </div>
@@ -2001,25 +2338,22 @@ const AddEmployee = () => {
                 </div>
                 <div className="space-y-6">
                   {/* Labor Section - Only show for Mainland companies */}
-                  {selectedCompanyDetails?.raw?.trade_license === "mainland" && (
+                  {selectedCompanyDetails?.raw?.trade_license ===
+                    "mainland" && (
                     <div className="border border-gray-200 rounded-lg p-4 md:p-5">
                       <h4 className="text-sm font-semibold text-gray-700 mb-4 flex items-center">
                         <i className="fas fa-briefcase text-green-500 mr-2"></i>
                         Labor Details
-                        <span className="text-xs text-red-500 ml-2">* Required for Mainland companies</span>
                       </h4>
                       <div className="grid grid-cols-1 md:grid-cols-2 gap-4 md:gap-5">
                         <div>
                           <label className="block text-xs md:text-sm font-semibold text-gray-700 mb-1 md:mb-2">
                             <i className="fas fa-briefcase text-green-500 mr-1"></i>{" "}
-                            Labor Number <span className="text-red-500">*</span>
+                            Labor Number 
                           </label>
                           <Controller
                             name="labor_number"
                             control={control}
-                            rules={{ 
-                              required: selectedCompanyDetails?.raw?.trade_license === "mainland" ? "Labor number is required for Mainland companies" : false 
-                            }}
                             render={({ field }) => (
                               <>
                                 <input
@@ -2041,13 +2375,12 @@ const AddEmployee = () => {
                         <div>
                           <label className="block text-xs md:text-sm font-semibold text-gray-700 mb-1 md:mb-2">
                             <i className="fas fa-calendar-plus text-green-500 mr-1"></i>{" "}
-                            Labor Issued Date <span className="text-red-500">*</span>
+                            Labor Issued Date
                           </label>
                           <Controller
                             name="labor_issued_date"
                             control={control}
                             rules={{
-                              required: selectedCompanyDetails?.raw?.trade_license === "mainland" ? "Labor issued date is required for Mainland companies" : false,
                               validate: (value) =>
                                 validateIssueDate(
                                   value,
@@ -2075,13 +2408,12 @@ const AddEmployee = () => {
                         <div>
                           <label className="block text-xs md:text-sm font-semibold text-gray-700 mb-1 md:mb-2">
                             <i className="fas fa-calendar-times text-green-500 mr-1"></i>{" "}
-                            Labor Expiry Date <span className="text-red-500">*</span>
+                            Labor Expiry Date
                           </label>
                           <Controller
                             name="labor_expiry_date"
                             control={control}
                             rules={{
-                              required: selectedCompanyDetails?.raw?.trade_license === "mainland" ? "Labor expiry date is required for Mainland companies" : false,
                               validate: (value) =>
                                 validateExpiryDate(
                                   value,
@@ -2335,7 +2667,8 @@ const AddEmployee = () => {
                           icon="fas fa-file-contract"
                         />
                         {/* Only show labor documents for Mainland companies */}
-                        {selectedCompanyDetails?.raw?.trade_license === "mainland" && (
+                        {selectedCompanyDetails?.raw?.trade_license ===
+                          "mainland" && (
                           <>
                             <DocumentUpload
                               fieldKey="labor_card"
