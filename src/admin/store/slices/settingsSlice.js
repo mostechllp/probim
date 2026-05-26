@@ -3,31 +3,42 @@ import apiClient from "../../../utils/apiClient";
 
 export const updateProfile = createAsyncThunk(
   "settings/updateProfile",
-  async (profileData, { rejectWithValue, dispatch }) => {
+  async ({ formData, constructedAvatarUrl }, { rejectWithValue, dispatch }) => {
     console.log("=== updateProfile thunk called ===");
     
     try {
-      const isFormData = profileData instanceof FormData;
+      const isFormData = formData instanceof FormData;
       const headers = isFormData ? { "Content-Type": "multipart/form-data" } : {};
       
-      const response = await apiClient.post("/employee/update-profile", profileData, { headers });
+      const response = await apiClient.post("/employee/update-profile", formData, { headers });
       
       console.log("Update successful:", response.data);
       
-      // After successful update, fetch fresh user data
-      const userResponse = await apiClient.get("/auth/me");
-      const userDataFromResponse = userResponse.data.data || userResponse.data;
-      const updatedUser = userDataFromResponse.user || userDataFromResponse;
+      // Get the updated user data from the response
+      const responseData = response.data.data || response.data;
+      const updatedUser = responseData.user || responseData;
+      
+      // Use the constructed avatar URL if the backend didn't return one
+      let avatarUrl = updatedUser.avatar;
+      
+      if (!avatarUrl && constructedAvatarUrl) {
+        avatarUrl = constructedAvatarUrl;
+        console.log("📸 Using constructed avatar URL:", avatarUrl);
+      }
       
       const userData = {
         id: updatedUser.id,
         name: updatedUser.name || updatedUser.employee?.name,
         email: updatedUser.email,
         username: updatedUser.username,
-        avatar: updatedUser.avatar,
+        avatar: avatarUrl,
         type: updatedUser.type,
+        role: updatedUser.role,
+        employee: updatedUser.employee,
         ...updatedUser
       };
+      
+      console.log("Final userData with avatar:", userData.avatar);
       
       // Update auth state
       dispatch({
@@ -53,6 +64,7 @@ export const updateProfile = createAsyncThunk(
     }
   }
 );
+
 // Change password
 export const changePassword = createAsyncThunk(
   "settings/changePassword",
@@ -88,15 +100,35 @@ export const fetchUserProfile = createAsyncThunk(
   "settings/fetchProfile",
   async (_, { rejectWithValue, dispatch }) => {
     try {
+      console.log("=== CALLING /auth/me ===");
       const response = await apiClient.get("/auth/me");
-      const userData = response.data.data || response.data;
+      
+      console.log("=== RAW /auth/me RESPONSE ===");
+      console.log("Response data:", response.data);
+      
+      // Extract the user data correctly
+      const responseData = response.data.data || response.data;
+      
+      // The user data is inside the 'user' property
+      const userData = responseData.user || responseData;
+      
+      console.log("Extracted user data:", userData);
+      console.log("User avatar:", userData.avatar);
       
       const formattedUser = {
+        id: userData.id,
         name: userData.name || userData.employee?.name,
         email: userData.email,
         username: userData.username,
+        avatar: userData.avatar,  // Now this will have the correct value
+        type: userData.type,
+        role: userData.role,
+        employee: userData.employee,
+        permissions: userData.permissions,
         ...userData
       };
+      
+      console.log("Formatted user with avatar:", formattedUser.avatar);
       
       // Dispatch action to update auth state
       dispatch({
@@ -106,6 +138,8 @@ export const fetchUserProfile = createAsyncThunk(
       
       return formattedUser;
     } catch (error) {
+      console.error("Fetch profile error:", error);
+      console.error("Error response:", error.response?.data);
       return rejectWithValue(
         error.response?.data?.message || "Failed to fetch profile"
       );
