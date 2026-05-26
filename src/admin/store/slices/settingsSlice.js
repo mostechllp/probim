@@ -12,29 +12,22 @@ export const updateProfile = createAsyncThunk(
       
       const response = await apiClient.post("/employee/update-profile", profileData, { headers });
       
-      console.log("=== Update Profile Response ===");
-      console.log("Response data:", response.data);
+      console.log("Update successful:", response.data);
       
       // After successful update, fetch fresh user data
       const userResponse = await apiClient.get("/auth/me");
-      console.log("Raw user response:", userResponse.data);
-      
-      // IMPORTANT: Extract the user object correctly
       const userDataFromResponse = userResponse.data.data || userResponse.data;
-      const updatedUser = userDataFromResponse.user || userDataFromResponse; // <-- FIX: Get the user object
-      
-      console.log("Extracted user data:", updatedUser);
+      const updatedUser = userDataFromResponse.user || userDataFromResponse;
       
       const userData = {
         id: updatedUser.id,
         name: updatedUser.name || updatedUser.employee?.name,
         email: updatedUser.email,
         username: updatedUser.username,
-        avatar: updatedUser.avatar,  // This should now have the actual avatar path
+        avatar: updatedUser.avatar,
+        type: updatedUser.type,
         ...updatedUser
       };
-      
-      console.log("Formatted user data with avatar:", userData.avatar);
       
       // Update auth state
       dispatch({
@@ -44,7 +37,16 @@ export const updateProfile = createAsyncThunk(
       
       return userData;
     } catch (error) {
-      console.error("=== Update Profile Error ===", error);
+      console.error("Update Profile Error:", error.response?.data);
+      
+      // Handle validation errors
+      if (error.response?.status === 422 && error.response?.data?.errors) {
+        const errors = error.response.data.errors;
+        const firstError = Object.values(errors)[0];
+        const errorMessage = Array.isArray(firstError) ? firstError[0] : firstError;
+        return rejectWithValue(errorMessage);
+      }
+      
       return rejectWithValue(
         error.response?.data?.message || "Failed to update profile"
       );

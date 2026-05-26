@@ -23,11 +23,18 @@ const ProfileTab = () => {
   });
 
   const getAvatarUrl = () => {
-    if (avatarPreview) return avatarPreview;
-    if (avatarError) return null;
+    if (avatarPreview) {
+      return avatarPreview;
+    }
+    if (avatarError) {
+      return null;
+    }
     
     const avatar = user?.avatar || profile?.avatar;
-    if (!avatar) return null;
+    
+    if (!avatar) {
+      return null;
+    }
     
     if (typeof avatar === 'string' && (avatar.startsWith('http://') || avatar.startsWith('https://'))) {
       return avatar;
@@ -54,7 +61,6 @@ const ProfileTab = () => {
 
   useEffect(() => {
     if (user) {
-      // eslint-disable-next-line react-hooks/set-state-in-effect
       setProfileData({
         email: user?.email || "",
         username: user?.username || "",
@@ -67,7 +73,6 @@ const ProfileTab = () => {
       showToast("Profile updated successfully!", "success");
       dispatch(clearUpdateSuccess());
       dispatch(fetchUserProfile());
-      // eslint-disable-next-line react-hooks/set-state-in-effect
       setAvatarPreview(null);
       setAvatarFile(null);
       setAvatarTempPath(null);
@@ -104,6 +109,7 @@ const ProfileTab = () => {
       return;
     }
 
+    // Create preview
     const reader = new FileReader();
     reader.onload = (e) => {
       setAvatarPreview(e.target.result);
@@ -121,8 +127,10 @@ const ProfileTab = () => {
       });
 
       const result = response.data;
+      
       if (result.status && result.path) {
-        setAvatarTempPath(result.path);
+        console.log("✅ Avatar uploaded! Temp path:", result.path);
+        setAvatarTempPath(result.path); // Store the temp path (e.g., "temp/filename.jpg")
         setAvatarFile(file);
         showToast("Avatar uploaded successfully", "success");
       } else {
@@ -130,7 +138,8 @@ const ProfileTab = () => {
         setAvatarPreview(null);
       }
     } catch (error) {
-      showToast(`Upload failed: ${error.message}`, "error");
+      console.error("Avatar upload error:", error);
+      showToast(`Upload failed: ${error.response?.data?.message || error.message}`, "error");
       setAvatarPreview(null);
     } finally {
       setUploadingAvatar(false);
@@ -149,7 +158,7 @@ const ProfileTab = () => {
 
   const handleUpdateProfile = async (e) => {
     e.preventDefault();
-
+    
     if (!profileData.email.trim()) {
       showToast("Email is required", "error");
       return;
@@ -169,8 +178,16 @@ const ProfileTab = () => {
       formData.append("username", profileData.username.trim());
     }
 
+    // Send ONLY the temp path (starts with "temp/"), not the full URL
     if (avatarTempPath) {
-      formData.append("avatar", avatarTempPath);
+      console.log("📤 Sending avatar temp path:", avatarTempPath);
+      formData.append("avatar", avatarTempPath); // This should be like "temp/filename.jpg"
+    }
+
+    // Log what we're sending
+    console.log("Sending to backend:");
+    for (let pair of formData.entries()) {
+      console.log(`${pair[0]}: ${pair[1]}`);
     }
 
     await dispatch(updateProfile(formData));
@@ -178,7 +195,7 @@ const ProfileTab = () => {
   };
 
   const avatarUrl = getAvatarUrl();
-  const userInitials = (profileData.email || "U").charAt(0).toUpperCase();
+  const userInitials = (profileData.username || profileData.email || "U").charAt(0).toUpperCase();
 
   return (
     <div>
