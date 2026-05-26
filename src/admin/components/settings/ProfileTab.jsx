@@ -16,6 +16,7 @@ const ProfileTab = () => {
   const [avatarTempPath, setAvatarTempPath] = useState(null);
   const [uploadingAvatar, setUploadingAvatar] = useState(false);
   const [avatarError, setAvatarError] = useState(false);
+  const [lastUpdatedAvatar, setLastUpdatedAvatar] = useState(null); // Store last updated avatar
 
   const [profileData, setProfileData] = useState({
     email: "",
@@ -28,6 +29,11 @@ const ProfileTab = () => {
     }
     if (avatarError) {
       return null;
+    }
+    
+    // First check if we have a recently updated avatar
+    if (lastUpdatedAvatar) {
+      return lastUpdatedAvatar;
     }
     
     const avatar = user?.avatar || profile?.avatar;
@@ -56,8 +62,19 @@ const ProfileTab = () => {
   };
 
   useEffect(() => {
-    dispatch(fetchUserProfile());
-  }, [dispatch]);
+  const fetchUser = async () => {
+    try {
+      const result = await dispatch(fetchUserProfile());
+      console.log("Auth/me response:", result);
+      console.log("Response payload:", result.payload);
+      console.log("Full response structure:", JSON.stringify(result, null, 2));
+    } catch (error) {
+      console.error("Error fetching user:", error);
+    }
+  };
+  
+  fetchUser();
+}, [dispatch]);
 
   useEffect(() => {
     if (user) {
@@ -72,7 +89,6 @@ const ProfileTab = () => {
     if (updateSuccess) {
       showToast("Profile updated successfully!", "success");
       dispatch(clearUpdateSuccess());
-      dispatch(fetchUserProfile());
       setAvatarPreview(null);
       setAvatarFile(null);
       setAvatarTempPath(null);
@@ -130,7 +146,7 @@ const ProfileTab = () => {
       
       if (result.status && result.path) {
         console.log("✅ Avatar uploaded! Temp path:", result.path);
-        setAvatarTempPath(result.path); // Store the temp path (e.g., "temp/filename.jpg")
+        setAvatarTempPath(result.path);
         setAvatarFile(file);
         showToast("Avatar uploaded successfully", "success");
       } else {
@@ -151,6 +167,7 @@ const ProfileTab = () => {
     setAvatarFile(null);
     setAvatarTempPath(null);
     setAvatarError(false);
+    setLastUpdatedAvatar(null); // Clear the stored avatar
     if (fileInputRef.current) {
       fileInputRef.current.value = "";
     }
@@ -178,24 +195,31 @@ const ProfileTab = () => {
       formData.append("username", profileData.username.trim());
     }
 
-    // Send ONLY the temp path (starts with "temp/"), not the full URL
+    let constructedAvatarUrl = null;
+    
     if (avatarTempPath) {
       console.log("📤 Sending avatar temp path:", avatarTempPath);
-      formData.append("avatar", avatarTempPath); // This should be like "temp/filename.jpg"
+      formData.append("avatar", avatarTempPath);
+      
+      // Construct the permanent avatar URL based on your backend pattern
+      const baseUrl = import.meta.env.VITE_API_URL?.replace("/api", "") || window.location.origin;
+      const avatarFileName = avatarTempPath.replace('temp/', '');
+      constructedAvatarUrl = `${baseUrl}/storage/avatars/${avatarFileName}`;
+      console.log("📸 Constructed avatar URL:", constructedAvatarUrl);
+      
+      // Store the constructed URL to display immediately
+      setLastUpdatedAvatar(constructedAvatarUrl);
     }
 
-    // Log what we're sending
-    console.log("Sending to backend:");
-    for (let pair of formData.entries()) {
-      console.log(`${pair[0]}: ${pair[1]}`);
-    }
-
-    await dispatch(updateProfile(formData));
+    const result = await dispatch(updateProfile({ formData, constructedAvatarUrl }));
+    
     setProfileLoading(false);
   };
 
   const avatarUrl = getAvatarUrl();
   const userInitials = (profileData.username || profileData.email || "U").charAt(0).toUpperCase();
+
+  console.log("Current avatar URL being used:", avatarUrl);
 
   return (
     <div>
@@ -216,7 +240,11 @@ const ProfileTab = () => {
               src={avatarUrl}
               alt="Profile"
               className="w-32 h-32 rounded-full object-cover border-4 border-green-500 shadow-md"
-              onError={() => setAvatarError(true)}
+              onError={(e) => {
+                console.error("❌ Image failed to load:", avatarUrl);
+                setAvatarError(true);
+              }}
+              onLoad={() => console.log("✅ Avatar loaded successfully:", avatarUrl)}
             />
           ) : (
             <div className="w-32 h-32 rounded-full bg-gradient-to-r from-green-500 to-green-600 flex items-center justify-center text-white text-5xl font-bold shadow-md">
