@@ -4,7 +4,9 @@ const BaseModal = ({
   title,
   onSubmit,
   children,
-  loading = false
+  loading = false,
+  submitText = "Submit Request",
+  cancelText = "Cancel"
 }) => {
   if (!isOpen) return null;
 
@@ -26,20 +28,31 @@ const BaseModal = ({
         <form onSubmit={onSubmit} className="space-y-4">
           {children}
           
-          <div className="flex justify-end gap-3 pt-4">
+          <div className="flex flex-col sm:flex-row justify-end gap-3 pt-4">
             <button
               type="button"
               onClick={onClose}
-              className="px-4 py-2 rounded-lg bg-gray-100 dark:bg-gray-700 text-gray-700 dark:text-gray-300 hover:bg-gray-200 dark:hover:bg-gray-600 transition-all font-medium"
+              className="px-6 py-2.5 rounded-full font-semibold bg-gray-100 dark:bg-gray-700 text-gray-700 dark:text-gray-300 hover:bg-gray-200 dark:hover:bg-gray-600 transition-all flex items-center justify-center gap-2 text-sm"
             >
-              Cancel
+              <i className="fas fa-times text-xs"></i>
+              <span>{cancelText}</span>
             </button>
             <button
               type="submit"
               disabled={loading}
-              className="px-4 py-2 rounded-lg bg-blue-500 text-white hover:bg-blue-600 transition-all font-medium focus:outline-none focus:ring-2 focus:ring-blue-500 focus:ring-offset-2 disabled:opacity-50 disabled:cursor-not-allowed"
+              className="px-6 py-2.5 rounded-full font-semibold bg-green-500 text-white hover:bg-green-600 transition-all flex items-center justify-center gap-2 text-sm focus:outline-none focus:ring-2 focus:ring-green-500 focus:ring-offset-2 disabled:opacity-50 disabled:cursor-not-allowed"
             >
-              {loading ? "Submitting..." : "Submit Request"}
+              {loading ? (
+                <>
+                  <i className="fas fa-spinner fa-spin text-xs"></i>
+                  <span>Submitting...</span>
+                </>
+              ) : (
+                <>
+                  <i className="fas fa-paper-plane text-xs"></i>
+                  <span>{submitText}</span>
+                </>
+              )}
             </button>
           </div>
         </form>
