@@ -100,7 +100,9 @@ export const addProject = createAsyncThunk(
           description,
           status: projectData.status || "Active",
           createdDate: new Date().toISOString().split("T")[0],
-          taggedEmployees: []
+          taggedEmployees: [],
+          managerId: projectData.managerId || "",
+          teamLeadId: projectData.teamLeadId || ""
         };
 
         const updatedProjects = [newProject, ...projects];
@@ -116,7 +118,7 @@ export const updateProject = createAsyncThunk(
   async (projectData, { rejectWithValue }) => {
     return new Promise((resolve, reject) => {
       setTimeout(() => {
-        const { id, name, description, status } = projectData;
+        const { id, name, description, status, managerId, teamLeadId } = projectData;
         const trimmedName = name.trim();
         const trimmedDesc = (description || "").trim();
         
@@ -138,7 +140,9 @@ export const updateProject = createAsyncThunk(
               ...p,
               name: trimmedName,
               description: trimmedDesc,
-              status: status || p.status
+              status: status || p.status,
+              managerId: managerId !== undefined ? managerId : p.managerId || "",
+              teamLeadId: teamLeadId !== undefined ? teamLeadId : p.teamLeadId || ""
             };
           }
           return p;
