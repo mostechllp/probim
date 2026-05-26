@@ -111,11 +111,27 @@ const Organizations = () => {
   return (
     <div className="w-full overflow-x-hidden">
       {/* Header */}
-      <div className="flex flex-wrap justify-between items-center mb-4 md:mb-6">
-        <h2 className="text-lg md:text-2xl font-bold gradient-heading bg-clip-text text-transparent">
-          Organization Directory
-        </h2>
-      </div>
+<div className="flex flex-wrap justify-between items-center gap-3 mb-4 md:mb-6">
+  <h2 className="text-lg md:text-2xl font-bold gradient-heading bg-clip-text text-transparent">
+    Organization Directory
+  </h2>
+  <div className="flex gap-2">
+    <Link
+      to="/admin/designations"
+      className="bg-blue-500 hover:bg-blue-600 text-white px-3 md:px-4 py-2 rounded-lg text-xs md:text-sm font-semibold flex items-center gap-2 transition-all shadow-md hover:shadow-lg"
+    >
+      <i className="fas fa-briefcase"></i>
+      <span>Designations</span>
+    </Link>
+    <Link
+      to="/admin/departments"
+      className="bg-gray-500 hover:bg-gray-600 text-white px-3 md:px-4 py-2 rounded-lg text-xs md:text-sm font-semibold flex items-center gap-2 transition-all shadow-md hover:shadow-lg"
+    >
+      <i className="fas fa-diagram-project"></i>
+      <span>Departments</span>
+    </Link>
+  </div>
+</div>
 
       {/* No Organization State - Show Add Button */}
       {!hasOrganization ? (
