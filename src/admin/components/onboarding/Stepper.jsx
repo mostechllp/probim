@@ -5,8 +5,9 @@ const Stepper = ({ currentStep }) => {
   const steps = [
     { id: 1, title: "Resume Upload", subtitle: "AI Parsing" },
     { id: 2, title: "Employee Details", subtitle: "Verify Info" },
-    { id: 3, title: "Offer Letter", subtitle: "Generation" },
-    { id: 4, title: "Review & Submit", subtitle: "Finalization" },
+    { id: 3, title: "Salary & Bank", subtitle: "Financials" },
+    { id: 4, title: "Offer Letter", subtitle: "Generation" },
+    { id: 5, title: "Review & Submit", subtitle: "Finalization" },
   ];
 
   return (

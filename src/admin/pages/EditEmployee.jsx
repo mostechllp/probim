@@ -461,7 +461,6 @@ const EditEmployee = () => {
           "type",
           "dob",
           "joining_date",
-          "special_days",
         ];
         // Only add company_id to validation if multi_company is "Yes"
         if (selectedOrgDetails?.multi_company === "Yes") {
@@ -472,27 +471,16 @@ const EditEmployee = () => {
       case 1:
         return ["passport_issued_date", "passport_expiry_date"];
       case 2: {
-        const laborFields = [];
 
-        // Only require labor fields if company trade license is "mainland"
-        if (selectedCompanyDetails?.raw?.trade_license === "mainland") {
-          laborFields.push(
-            "labor_number",
-            "labor_issued_date",
-            "labor_expiry_date",
-          );
-        }
-
-        return [
-          "visa_type",
-          "visa_number",
-          "visa_issued_date",
-          "visa_expiry_date",
-          ...laborFields,
-          "eid_number",
-          "eid_issued_date",
-          "eid_expiry_date",
-        ];
+          return [
+    "visa_type",
+    "visa_number",
+    "visa_issued_date",
+    "visa_expiry_date",
+    "eid_number",
+    "eid_issued_date",
+    "eid_expiry_date",
+  ];
       }
       case 3:
         return ["company_email", "personal_email", "type", "role"];
@@ -1565,9 +1553,6 @@ const EditEmployee = () => {
                             <Controller
                               name={`special_days.${index}.name`}
                               control={control}
-                              rules={{
-                                required: "Name is required",
-                              }}
                               render={({ field }) => (
                                 <div>
                                   <input
@@ -2061,25 +2046,15 @@ const EditEmployee = () => {
                     <div className="border border-gray-200 rounded-lg p-4">
                       <h4 className="text-sm font-semibold text-gray-700 mb-4">
                         Labor Details
-                        <span className="text-xs text-red-500 ml-2">
-                          * Required for Mainland companies
-                        </span>
                       </h4>
                       <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                         <div>
                           <label className="block text-xs md:text-sm font-semibold text-gray-700 mb-1 md:mb-2">
-                            Labor Number <span className="text-red-500">*</span>
+                            Labor Number 
                           </label>
                           <Controller
                             name="labor_number"
                             control={control}
-                            rules={{
-                              required:
-                                selectedCompanyDetails?.raw?.trade_license ===
-                                "mainland"
-                                  ? "Labor number is required for Mainland companies"
-                                  : false,
-                            }}
                             render={({ field }) => (
                               <>
                                 <input
@@ -2100,8 +2075,7 @@ const EditEmployee = () => {
 
                         <div>
                           <label className="block text-xs md:text-sm font-semibold text-gray-700 mb-1 md:mb-2">
-                            Labor Issued Date{" "}
-                            <span className="text-red-500">*</span>
+                            Labor Issued Date
                           </label>
                           <Controller
                             name="labor_issued_date"
@@ -2131,8 +2105,7 @@ const EditEmployee = () => {
 
                         <div>
                           <label className="block text-xs md:text-sm font-semibold text-gray-700 mb-1 md:mb-2">
-                            Labor Expiry Date{" "}
-                            <span className="text-red-500">*</span>
+                            Labor Expiry Date
                           </label>
                           <Controller
                             name="labor_expiry_date"
