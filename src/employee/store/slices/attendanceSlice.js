@@ -58,11 +58,10 @@ export const punchIn = createAsyncThunk(
 // ✅ Punch Out
 export const punchOut = createAsyncThunk(
   "attendance/punchOut",
-  async ({ tasks_completed, plan_tomorrow }, { rejectWithValue }) => {
+  async ({ project_times = {} } = {}, { rejectWithValue }) => {
     try {
       const response = await apiClient.post("/employee/punch-out", {
-        tasks_completed,
-        plan_tomorrow,
+        project_times,
       });
       
       if (response.data && response.data.status === "success") {

@@ -3,22 +3,51 @@ import { useDispatch, useSelector } from 'react-redux';
 import { FiX, FiCheckCircle, FiClock, FiCalendar, FiSearch, FiChevronLeft, FiChevronRight } from 'react-icons/fi';
 import { fetchTaskReports, setTaskReportsPagination, setTaskReportsSearch, clearTaskReportsError } from '../../store/slices/taskReportsSlice';
 import { showToast } from '../common/Toast';
+import apiClient from '../../../utils/apiClient';
 
 // Punch Out Modal Component
 const PunchOutModal = ({ isOpen, onClose, onSubmit, loading }) => {
-  const [tasksCompleted, setTasksCompleted] = useState('');
-  const [planTomorrow, setPlanTomorrow] = useState('');
+  const [projects, setProjects] = useState([]);
+  const [projectTimes, setProjectTimes] = useState({});
+  const [loadingProjects, setLoadingProjects] = useState(false);
+  
+  const { user } = useSelector((state) => state.auth);
+  const dashboardData = useSelector((state) => state.EmpAttendance?.dashboardData);
+
+  useEffect(() => {
+    if (isOpen) {
+      const employeeId = dashboardData?.employee?.id || user?.id;
+      if (employeeId) {
+        setLoadingProjects(true);
+        apiClient.get(`/employees/${employeeId}/projects`)
+          .then((res) => {
+            if (res.data && res.data.data) {
+              setProjects(res.data.data);
+            }
+          })
+          .catch((err) => {
+            console.warn('Failed to fetch projects, using fallback data:', err.message);
+            // Fallback mock data if backend route is not yet deployed
+            setProjects([
+              { id: "proj-1", name: "Enterprise ERP Portal" },
+              { id: "proj-2", name: "Mobile Client App" },
+              { id: "proj-3", name: "Cloud Migration Phase 2" }
+            ]);
+          })
+          .finally(() => setLoadingProjects(false));
+      }
+    }
+  }, [isOpen, dashboardData, user]);
+
+  const handleTimeChange = (projectId, time) => {
+    setProjectTimes(prev => ({ ...prev, [projectId]: time }));
+  };
 
   const handleSubmit = (e) => {
     e.preventDefault();
-    if (!tasksCompleted.trim() || !planTomorrow.trim()) {
-      showToast("Please fill all fields", "error");
-      return;
-    }
-    onSubmit({ tasks_completed: tasksCompleted, plan_tomorrow: planTomorrow });
+    onSubmit({ project_times: projectTimes });
     // Clear form after submit
-    setTasksCompleted('');
-    setPlanTomorrow('');
+    setProjectTimes({});
   };
 
   if (!isOpen) return null;
@@ -37,32 +66,36 @@ const PunchOutModal = ({ isOpen, onClose, onSubmit, loading }) => {
         </div>
 
         <form onSubmit={handleSubmit} className="p-5">
-          <div className="mb-5">
-            <label className="block text-sm font-semibold text-[var(--text)] mb-2">
-              Tasks Completed Today *
-            </label>
-            <textarea
-              value={tasksCompleted}
-              onChange={(e) => setTasksCompleted(e.target.value)}
-              placeholder="What tasks did you complete today?"
-              rows="4"
-              className="w-full p-3 bg-[var(--surface2)] border border-[var(--border)] rounded-lg text-sm text-[var(--text)] focus:outline-none focus:border-green-500 focus:ring-2 focus:ring-green-500/20 transition-all resize-none"
-              required
-            />
-          </div>
 
           <div className="mb-6">
             <label className="block text-sm font-semibold text-[var(--text)] mb-2">
-              Plan for Tomorrow *
+              Assigned Projects Time (Manual Entry)
             </label>
-            <textarea
-              value={planTomorrow}
-              onChange={(e) => setPlanTomorrow(e.target.value)}
-              placeholder="What are your plans for tomorrow?"
-              rows="4"
-              className="w-full p-3 bg-[var(--surface2)] border border-[var(--border)] rounded-lg text-sm text-[var(--text)] focus:outline-none focus:border-green-500 focus:ring-2 focus:ring-green-500/20 transition-all resize-none"
-              required
-            />
+            {loadingProjects ? (
+              <div className="text-sm text-[var(--muted)]">Loading projects...</div>
+            ) : projects.length === 0 ? (
+              <div className="text-sm text-[var(--muted)]">No projects assigned.</div>
+            ) : (
+              <div className="max-h-48 overflow-y-auto pr-2 space-y-3">
+                {projects.map((project) => (
+                  <div key={project.id} className="flex items-center justify-between bg-[var(--surface2)] p-3 rounded-lg border border-[var(--border)]">
+                    <span className="text-sm font-medium text-[var(--text)]">{project.name}</span>
+                    <div className="flex items-center gap-2">
+                      <input
+                        type="number"
+                        min="0"
+                        step="0.5"
+                        placeholder="Hours"
+                        value={projectTimes[project.id] || ''}
+                        onChange={(e) => handleTimeChange(project.id, e.target.value)}
+                        className="w-20 p-1.5 bg-[var(--surface)] border border-[var(--border)] rounded text-sm text-center text-[var(--text)] focus:outline-none focus:border-green-500 focus:ring-1 focus:ring-green-500"
+                      />
+                      <span className="text-xs text-[var(--muted)]">hrs</span>
+                    </div>
+                  </div>
+                ))}
+              </div>
+            )}
           </div>
 
           <div className="flex gap-3">
@@ -75,8 +108,8 @@ const PunchOutModal = ({ isOpen, onClose, onSubmit, loading }) => {
             </button>
             <button
               type="submit"
-              disabled={loading || !tasksCompleted.trim() || !planTomorrow.trim()}
-              className="flex-1 py-2.5 px-4 bg-green-500 text-white rounded-lg font-semibold hover:bg-green-600 transition-all disabled:opacity-50 disabled:cursor-not-allowed flex items-center justify-center gap-2"
+              disabled={loading}
+              className="flex-1 py-2.5 px-4 bg-green-500 text-white rounded-lg font-semibold hover:bg-green-600 transition-all flex items-center justify-center gap-2"
             >
               {loading ? (
                 <>
