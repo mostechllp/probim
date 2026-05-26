@@ -4,11 +4,18 @@ import EmptyState from "./EmptyState";
 
 const ProjectTable = ({
   projects,
+  employees = [],
   loading,
   onEdit,
   onDelete,
   onAddNew
 }) => {
+  // Lookup function for employee names
+  const getEmployeeName = (id) => {
+    if (!id) return <span className="text-gray-400 dark:text-gray-500 italic text-[11px]">Not Assigned</span>;
+    const emp = employees.find((e) => String(e.id) === String(id));
+    return emp ? emp.name : <span className="text-gray-400 dark:text-gray-500 italic text-[11px]">Not Assigned</span>;
+  };
   const [searchTerm, setSearchTerm] = useState("");
   const [sortField, setSortField] = useState("name");
   const [sortDirection, setSortDirection] = useState("asc");
@@ -138,6 +145,9 @@ const ProjectTable = ({
               <th className="px-6 py-4 text-xs font-bold text-gray-500 dark:text-gray-400 uppercase tracking-wider select-none whitespace-nowrap">
                 Description
               </th>
+              <th className="px-6 py-4 text-xs font-bold text-gray-500 dark:text-gray-400 uppercase tracking-wider select-none whitespace-nowrap">
+                Leadership
+              </th>
               <th
                 onClick={() => handleSort("employeeCount")}
                 className="px-6 py-4 text-xs font-bold text-gray-500 dark:text-gray-400 uppercase tracking-wider cursor-pointer hover:bg-gray-100/50 dark:hover:bg-gray-700/30 select-none text-center whitespace-nowrap transition-colors"
@@ -177,6 +187,10 @@ const ProjectTable = ({
                     <div className="h-3 bg-gray-200 dark:bg-gray-700 rounded w-64"></div>
                   </td>
                   <td className="px-6 py-4">
+                    <div className="h-3.5 bg-gray-200 dark:bg-gray-700 rounded w-32 mb-1.5"></div>
+                    <div className="h-3 bg-gray-200 dark:bg-gray-700 rounded w-24"></div>
+                  </td>
+                  <td className="px-6 py-4">
                     <div className="h-6 w-12 bg-gray-200 dark:bg-gray-700 rounded-full mx-auto"></div>
                   </td>
                   <td className="px-6 py-4">
@@ -195,7 +209,7 @@ const ProjectTable = ({
               ))
             ) : paginatedProjects.length === 0 ? (
               <tr>
-                <td colSpan={6} className="px-6 py-10">
+                <td colSpan={7} className="px-6 py-10">
                   <EmptyState
                     message={searchTerm ? "No Match Found" : `No ${PROJECT_MODULE_NAME} Defined`}
                     description={
@@ -225,6 +239,18 @@ const ProjectTable = ({
                         <span className="italic text-gray-300 dark:text-gray-600">No description provided</span>
                       )}
                     </p>
+                  </td>
+                  <td className="px-6 py-4 whitespace-nowrap">
+                    <div className="flex flex-col gap-1.5">
+                      <div className="flex items-center gap-2 text-xs text-gray-600 dark:text-gray-300">
+                        <span className="font-bold text-[9px] uppercase px-1.5 py-0.5 rounded bg-blue-500/10 text-blue-500 dark:text-blue-400 tracking-wider">PM</span>
+                        <span className="font-medium">{getEmployeeName(project.managerId)}</span>
+                      </div>
+                      <div className="flex items-center gap-2 text-xs text-gray-600 dark:text-gray-300">
+                        <span className="font-bold text-[9px] uppercase px-1.5 py-0.5 rounded bg-purple-500/10 text-purple-500 dark:text-purple-400 tracking-wider">TL</span>
+                        <span className="font-medium">{getEmployeeName(project.teamLeadId)}</span>
+                      </div>
+                    </div>
                   </td>
                   <td className="px-6 py-4 whitespace-nowrap text-center">
                     <span className="inline-flex items-center justify-center px-2.5 py-1 text-xs font-bold leading-none text-green-700 bg-green-500/10 dark:text-green-300 rounded-full min-w-[28px]">
