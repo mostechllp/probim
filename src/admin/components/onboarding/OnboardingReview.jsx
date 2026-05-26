@@ -1,6 +1,6 @@
 /* eslint-disable react-hooks/static-components */
 import { useDispatch, useSelector } from "react-redux";
-import { FiCheckCircle, FiFileText, FiUser, FiChevronLeft, FiSend, FiShield, FiGlobe, FiBriefcase, FiAlertTriangle, FiX, FiDollarSign } from "react-icons/fi";
+import { FiCheckCircle, FiFileText, FiUser, FiChevronLeft, FiSend, FiShield, FiGlobe, FiBriefcase, FiAlertTriangle, FiX, FiDollarSign, FiCalendar } from "react-icons/fi";
 import { setStep, completeOnboarding } from "../../store/slices/onboardingSlice";
 import { showToast } from "../../components/common/Toast";
 import { fetchEmployees } from "../../store/slices/employeeSlice";
@@ -53,11 +53,11 @@ const OnboardingReview = () => {
     const randomYear = Math.floor(Math.random() * (maxYear - minYear + 1)) + minYear;
     const randomMonth = Math.floor(Math.random() * 12) + 1;
     const randomDay = Math.floor(Math.random() * 28) + 1; // standardizing max days to 28 to avoid invalid days like Feb 30
-    
+
     const yearStr = randomYear.toString();
     const monthStr = randomMonth.toString().padStart(2, "0");
     const dayStr = randomDay.toString().padStart(2, "0");
-    
+
     return `${yearStr}-${monthStr}-${dayStr}`; // Format: YYYY-MM-DD
   };
 
@@ -174,7 +174,12 @@ const OnboardingReview = () => {
       const last_name = parts.slice(1).join(" ") || "";
 
       // ── Step 6: Generate DOB + Employee ID ──
-      const dob = generateRandomDob();
+      let dob = "";
+      if (employeeDetails.specialDayEvent?.toLowerCase().trim() === "birthday" && employeeDetails.specialDayDate) {
+        dob = employeeDetails.specialDayDate;
+      } else {
+        dob = generateRandomDob();
+      }
       const employeeId = generateEmployeeId(dob, employeeDetails.joiningDate);
 
       // ── Step 7: Clean phone number ──
@@ -223,7 +228,7 @@ const OnboardingReview = () => {
       if (designation_id) body.append("designation_id", String(parseInt(designation_id)));
       body.append("role_id", String(parseInt(role_id)));
       body.append("type", "employee");
-      body.append("status", "active");
+      body.append("status", "onboarding");
       body.append("address", employeeDetails.address || "");
       body.append("basic_salary", employeeDetails.basicSalary || "");
       body.append("other_allowance", employeeDetails.otherAllowance || "0");
@@ -231,6 +236,8 @@ const OnboardingReview = () => {
       body.append("payment_cycle", employeeDetails.paymentCycle || "Monthly");
       body.append("bank_name", employeeDetails.bankName || "");
       body.append("account_number", employeeDetails.accountNumber || "");
+      body.append("special_day_event", employeeDetails.specialDayEvent || "");
+      body.append("special_day_date", employeeDetails.specialDayDate || "");
 
       // Debug: log all FormData entries
       console.log("[Onboarding] FormData entries:");
@@ -413,184 +420,279 @@ const OnboardingReview = () => {
         </div>
       )}
 
-    <div className="max-w-5xl mx-auto animate-fadeIn space-y-8">
-      {/* Summary Header - Green theme with subtle elegant background styling */}
-      <div className="bg-gradient-to-r from-green-600 to-emerald-700 rounded-3xl p-8 text-white shadow-xl shadow-green-600/20 flex flex-col md:flex-row items-center justify-between gap-6 overflow-hidden relative animate-fadeIn">
-        <div className="relative z-10">
-          <h2 className="text-2xl font-bold mb-2 text-white">Final Review & Submission</h2>
-          <p className="text-green-100 max-w-md text-sm leading-relaxed">
-            Please verify all information before finalizing the onboarding process. Once submitted, the employee will receive their portal access and offer letter.
-          </p>
-        </div>
-        <div className="relative z-10 flex flex-col items-center gap-2">
-          <div className="w-16 h-16 bg-white/20 backdrop-blur-md rounded-2xl flex items-center justify-center shadow-lg">
-            <FiCheckCircle size={32} />
+      <div className="max-w-5xl mx-auto animate-fadeIn space-y-8">
+        {/* Summary Header - Green theme with subtle elegant background styling */}
+        <div className="bg-gradient-to-r from-green-600 to-emerald-700 rounded-3xl p-8 text-white shadow-xl shadow-green-600/20 flex flex-col md:flex-row items-center justify-between gap-6 overflow-hidden relative animate-fadeIn">
+          <div className="relative z-10">
+            <h2 className="text-2xl font-bold mb-2 text-white">Final Review & Submission</h2>
+            <p className="text-green-100 max-w-md text-sm leading-relaxed">
+              Please verify all information before finalizing the onboarding process. Once submitted, the employee will receive their portal access and offer letter.
+            </p>
           </div>
-          <span className="text-xs font-bold uppercase tracking-widest opacity-80">Ready to Submit</span>
-        </div>
-        {/* Decorative Circles */}
-        <div className="absolute -right-10 -top-10 w-40 h-40 bg-white/10 rounded-full blur-3xl"></div>
-        <div className="absolute -left-10 -bottom-10 w-40 h-40 bg-green-400/20 rounded-full blur-3xl"></div>
-      </div>
-
-      <div className="grid grid-cols-1 md:grid-cols-2 gap-8">
-        {/* Employee Summary */}
-        <SummaryCard title="Employee Details" icon={FiUser}>
-          <div className="space-y-4">
-            <div className="flex items-center gap-4">
-              <div className="w-12 h-12 bg-gray-100 dark:bg-gray-700 rounded-xl flex items-center justify-center text-gray-400">
-                <FiUser size={24} />
-              </div>
-              <div>
-                <p className="text-lg font-bold text-gray-900 dark:text-white">{employeeDetails.fullName}</p>
-                <p className="text-sm text-gray-500">{employeeDetails.designation} • {employeeDetails.department}</p>
-              </div>
+          <div className="relative z-10 flex flex-col items-center gap-2">
+            <div className="w-16 h-16 bg-white/20 backdrop-blur-md rounded-2xl flex items-center justify-center shadow-lg">
+              <FiCheckCircle size={32} />
             </div>
+            <span className="text-xs font-bold uppercase tracking-widest opacity-80">Ready to Submit</span>
+          </div>
+          {/* Decorative Circles */}
+          <div className="absolute -right-10 -top-10 w-40 h-40 bg-white/10 rounded-full blur-3xl"></div>
+          <div className="absolute -left-10 -bottom-10 w-40 h-40 bg-green-400/20 rounded-full blur-3xl"></div>
+        </div>
 
-            <div className="grid grid-cols-1 gap-3 pt-4">
-              <div className="flex items-center gap-3 text-sm">
-                <FiBriefcase className="text-gray-400" />
-                <span className="text-gray-500 font-medium w-24">Experience:</span>
-                <span className="text-gray-900 dark:text-gray-300 font-semibold">{employeeDetails.experience}</span>
+        <div className="grid grid-cols-1 md:grid-cols-2 gap-8">
+          {/* Employee Summary */}
+          <SummaryCard title="Employee Details" icon={FiUser}>
+            <div className="space-y-4">
+              <div className="flex items-center gap-4">
+                <div className="w-12 h-12 bg-gray-100 dark:bg-gray-700 rounded-xl flex items-center justify-center text-gray-400">
+                  <FiUser size={24} />
+                </div>
+                <div>
+                  <p className="text-lg font-bold text-gray-900 dark:text-white">{employeeDetails.fullName}</p>
+                  <p className="text-sm text-gray-500">{employeeDetails.designation} • {employeeDetails.department}</p>
+                </div>
               </div>
-              <div className="flex items-center gap-3 text-sm">
-                <FiGlobe className="text-gray-400" />
-                <span className="text-gray-500 font-medium w-24">Nationality:</span>
-                <span className="text-gray-900 dark:text-gray-300 font-semibold">{employeeDetails.nationality}</span>
-              </div>
-              <div className="flex items-center gap-3 text-sm">
-                <FiShield className="text-gray-400" />
-                <span className="text-gray-500 font-medium w-24">Joining:</span>
-                <span className="text-gray-900 dark:text-gray-300 font-semibold">
-                  {employeeDetails.joiningDate?.match(/^\d{4}-\d{2}-\d{2}$/)
-                    ? (() => {
+
+              <div className="grid grid-cols-1 gap-3 pt-4">
+                <div className="flex items-center gap-3 text-sm">
+                  <FiBriefcase className="text-gray-400" />
+                  <span className="text-gray-500 font-medium w-24">Experience:</span>
+                  <span className="text-gray-900 dark:text-gray-300 font-semibold">{employeeDetails.experience}</span>
+                </div>
+                <div className="flex items-center gap-3 text-sm">
+                  <FiGlobe className="text-gray-400" />
+                  <span className="text-gray-500 font-medium w-24">Nationality:</span>
+                  <span className="text-gray-900 dark:text-gray-300 font-semibold">{employeeDetails.nationality}</span>
+                </div>
+                <div className="flex items-center gap-3 text-sm">
+                  <FiShield className="text-gray-400" />
+                  <span className="text-gray-500 font-medium w-24">Joining:</span>
+                  <span className="text-gray-900 dark:text-gray-300 font-semibold">
+                    {employeeDetails.joiningDate?.match(/^\d{4}-\d{2}-\d{2}$/)
+                      ? (() => {
                         const [year, month, day] = employeeDetails.joiningDate.split("-");
                         return `${day}/${month}/${year}`;
                       })()
-                    : employeeDetails.joiningDate}
-                </span>
-              </div>
-            </div>
-          </div>
-        </SummaryCard>
-
-        {/* Documents Summary */}
-        <SummaryCard title="Onboarding Assets" icon={FiFileText}>
-          <div className="space-y-4">
-            <div className="p-4 bg-gray-50 dark:bg-gray-900/50 rounded-2xl border border-gray-100 dark:border-gray-700 flex items-center justify-between">
-              <div className="flex items-center gap-3">
-                <div className="w-8 h-8 bg-green-100 dark:bg-green-900/30 text-green-600 rounded-lg flex items-center justify-center">
-                  <FiFileText size={16} />
+                      : employeeDetails.joiningDate}
+                  </span>
                 </div>
-                <div className="min-w-0">
-                  <p className="text-sm font-bold text-gray-900 dark:text-white truncate">Resume - Parsed</p>
-                  <p className="text-[10px] text-gray-500 font-medium uppercase tracking-wider">{resumeData?.fileName || "resume.pdf"}</p>
-                </div>
-              </div>
-              <span className="text-green-500 font-bold text-[10px] bg-green-50 dark:bg-green-900/20 px-2 py-1 rounded">COMPLETED</span>
-            </div>
-
-            <div className="p-4 bg-gray-50 dark:bg-gray-900/50 rounded-2xl border border-gray-100 dark:border-gray-700 flex items-center justify-between">
-              <div className="flex items-center gap-3">
-                <div className="w-8 h-8 bg-purple-100 dark:bg-purple-900/30 text-purple-600 rounded-lg flex items-center justify-center">
-                  <FiFileText size={16} />
-                </div>
-                <div className="min-w-0">
-                  <p className="text-sm font-bold text-gray-900 dark:text-white truncate">Offer Letter</p>
-                  <p className="text-[10px] text-gray-500 font-medium uppercase tracking-wider">Auto-Generated</p>
-                </div>
-              </div>
-              <span className="text-green-500 font-bold text-[10px] bg-green-50 dark:bg-green-900/20 px-2 py-1 rounded">GENERATED</span>
-            </div>
-          </div>
-        </SummaryCard>
-
-        {/* Salary & Bank Details Summary */}
-        <div className="md:col-span-2">
-          <SummaryCard title="Salary & Bank Details" icon={FiDollarSign}>
-            <div className="space-y-6">
-              <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-4 gap-6">
-                <div className="space-y-1">
-                  <p className="text-xs font-semibold text-gray-400 dark:text-gray-500 uppercase tracking-wider">Basic Salary</p>
-                  <p className="text-sm font-bold text-gray-900 dark:text-white">
-                    AED {parseFloat(employeeDetails.basicSalary || 0).toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
-                  </p>
-                </div>
-                <div className="space-y-1">
-                  <p className="text-xs font-semibold text-gray-400 dark:text-gray-500 uppercase tracking-wider">Other Allowance</p>
-                  <p className="text-sm font-bold text-gray-900 dark:text-white">
-                    AED {parseFloat(employeeDetails.otherAllowance || 0).toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
-                  </p>
-                </div>
-                <div className="space-y-1">
-                  <p className="text-xs font-semibold text-gray-400 dark:text-gray-500 uppercase tracking-wider">Total Monthly Salary</p>
-                  <p className="text-sm font-extrabold text-green-600 dark:text-green-400 bg-green-50 dark:bg-green-950/20 px-3 py-1 rounded-lg inline-block">
-                    AED {parseFloat(employeeDetails.totalMonthlySalary || 0).toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
-                  </p>
-                </div>
-                <div className="space-y-1">
-                  <p className="text-xs font-semibold text-gray-400 dark:text-gray-500 uppercase tracking-wider">Payment Cycle</p>
-                  <p className="text-sm font-bold text-gray-900 dark:text-white">{employeeDetails.paymentCycle || "Monthly"}</p>
-                </div>
-              </div>
-              <div className="border-t border-gray-100 dark:border-gray-700/60 pt-6 grid grid-cols-1 sm:grid-cols-2 gap-6">
-                <div className="space-y-1">
-                  <p className="text-xs font-semibold text-gray-400 dark:text-gray-500 uppercase tracking-wider">Bank Name</p>
-                  <p className="text-sm font-bold text-gray-900 dark:text-white">{employeeDetails.bankName || "-"}</p>
-                </div>
-                <div className="space-y-1">
-                  <p className="text-xs font-semibold text-gray-400 dark:text-gray-500 uppercase tracking-wider">Account Number</p>
-                  <p className="text-sm font-bold text-gray-900 dark:text-white">{employeeDetails.accountNumber || "-"}</p>
-                </div>
+                {employeeDetails.specialDayEvent && employeeDetails.specialDayDate && (
+                  <div className="flex items-center gap-3 text-sm">
+                    <FiCalendar className="text-gray-400" />
+                    <span className="text-gray-500 font-medium w-24">{employeeDetails.specialDayEvent}:</span>
+                    <span className="text-gray-900 dark:text-gray-300 font-semibold">
+                      {employeeDetails.specialDayDate?.split("-").reverse().join("/")}
+                    </span>
+                  </div>
+                )}
               </div>
             </div>
           </SummaryCard>
+
+          {/* Documents Summary */}
+          <SummaryCard title="Onboarding Assets" icon={FiFileText}>
+            <div className="space-y-4">
+              <div className="p-4 bg-gray-50 dark:bg-gray-900/50 rounded-2xl border border-gray-100 dark:border-gray-700 flex items-center justify-between">
+                <div className="flex items-center gap-3">
+                  <div className="w-8 h-8 bg-green-100 dark:bg-green-900/30 text-green-600 rounded-lg flex items-center justify-center">
+                    <FiFileText size={16} />
+                  </div>
+                  <div className="min-w-0">
+                    <p className="text-sm font-bold text-gray-900 dark:text-white truncate">Resume - Parsed</p>
+                    <p className="text-[10px] text-gray-500 font-medium uppercase tracking-wider">{resumeData?.fileName || "resume.pdf"}</p>
+                  </div>
+                </div>
+                <span className="text-green-500 font-bold text-[10px] bg-green-50 dark:bg-green-900/20 px-2 py-1 rounded">COMPLETED</span>
+              </div>
+
+              <div className="p-4 bg-gray-50 dark:bg-gray-900/50 rounded-2xl border border-gray-100 dark:border-gray-700 flex items-center justify-between">
+                <div className="flex items-center gap-3">
+                  <div className="w-8 h-8 bg-purple-100 dark:bg-purple-900/30 text-purple-600 rounded-lg flex items-center justify-center">
+                    <FiFileText size={16} />
+                  </div>
+                  <div className="min-w-0">
+                    <p className="text-sm font-bold text-gray-900 dark:text-white truncate">Offer Letter</p>
+                    <p className="text-[10px] text-gray-500 font-medium uppercase tracking-wider">Auto-Generated</p>
+                  </div>
+                </div>
+                <span className="text-green-500 font-bold text-[10px] bg-green-50 dark:bg-green-900/20 px-2 py-1 rounded">GENERATED</span>
+              </div>
+            </div>
+          </SummaryCard>
+
+          {/* Salary & Bank Details Summary */}
+          <div className="md:col-span-2">
+            <SummaryCard title="Salary & Bank Details" icon={FiDollarSign}>
+              <div className="space-y-6">
+                {/* Standard aggregates with dynamic currency */}
+                <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-4 gap-6">
+                  <div className="space-y-1">
+                    <p className="text-xs font-semibold text-gray-400 dark:text-gray-500 uppercase tracking-wider">Basic Salary</p>
+                    <p className="text-sm font-bold text-gray-900 dark:text-white">
+                      {employeeDetails.currency || "AED"} {parseFloat(employeeDetails.basicSalary || 0).toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
+                    </p>
+                  </div>
+                  <div className="space-y-1">
+                    <p className="text-xs font-semibold text-gray-400 dark:text-gray-500 uppercase tracking-wider">Other Allowance</p>
+                    <p className="text-sm font-bold text-gray-900 dark:text-white">
+                      {employeeDetails.currency || "AED"} {parseFloat(employeeDetails.otherAllowance || 0).toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
+                    </p>
+                  </div>
+                  <div className="space-y-1">
+                    <p className="text-xs font-semibold text-gray-400 dark:text-gray-500 uppercase tracking-wider">Total Monthly Salary</p>
+                    <p className="text-sm font-extrabold text-green-600 dark:text-green-400 bg-green-50 dark:bg-green-950/20 px-3 py-1 rounded-lg inline-block">
+                      {employeeDetails.currency || "AED"} {parseFloat(employeeDetails.totalMonthlySalary || 0).toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
+                    </p>
+                  </div>
+                  <div className="space-y-1">
+                    <p className="text-xs font-semibold text-gray-400 dark:text-gray-500 uppercase tracking-wider">Payment Cycle</p>
+                    <p className="text-sm font-bold text-gray-900 dark:text-white">{employeeDetails.paymentCycle || "Monthly"}</p>
+                  </div>
+                </div>
+
+                {/* Dynamic component breakdown list */}
+                {Array.isArray(employeeDetails.salaryComponents) && employeeDetails.salaryComponents.length > 0 && (
+                  <div className="pt-4 border-t border-gray-100 dark:border-gray-700/60">
+                    <p className="text-xs font-bold text-gray-400 dark:text-gray-500 uppercase tracking-wider mb-2.5">Salary Components Breakdown</p>
+                    <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 gap-3">
+                      {employeeDetails.salaryComponents.map((comp, idx) => (
+                        <div key={idx} className="p-3 bg-gray-50 dark:bg-gray-900/35 rounded-xl border border-gray-100 dark:border-gray-800/80 flex items-center justify-between">
+                          <span className="text-xs font-semibold text-gray-700 dark:text-gray-300 truncate">{comp.name}</span>
+                          <span className="text-xs font-bold text-gray-900 dark:text-white shrink-0 ml-2">
+                            {employeeDetails.currency || "AED"} {comp.price.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
+                          </span>
+                        </div>
+                      ))}
+                    </div>
+                  </div>
+                )}
+
+                {/* Country-specific Bank Transfer Info */}
+                <div className="border-t border-gray-100 dark:border-gray-700/60 pt-6 space-y-4">
+                  <div className="grid grid-cols-1 sm:grid-cols-3 gap-6">
+                    <div className="space-y-1">
+                      <p className="text-xs font-semibold text-gray-400 dark:text-gray-500 uppercase tracking-wider">Bank Country</p>
+                      <p className="text-sm font-bold text-gray-900 dark:text-white">{employeeDetails.bankCountry || "UAE"}</p>
+                    </div>
+                    <div className="space-y-1">
+                      <p className="text-xs font-semibold text-gray-400 dark:text-gray-500 uppercase tracking-wider">Bank Name</p>
+                      <p className="text-sm font-bold text-gray-900 dark:text-white">{employeeDetails.bankName || "-"}</p>
+                    </div>
+                    <div className="space-y-1">
+                      <p className="text-xs font-semibold text-gray-400 dark:text-gray-500 uppercase tracking-wider">Account Number</p>
+                      <p className="text-sm font-bold text-gray-900 dark:text-white font-mono">{employeeDetails.accountNumber || "-"}</p>
+                    </div>
+                  </div>
+
+                  <div className="grid grid-cols-1 sm:grid-cols-2 gap-6 pt-2">
+                    {employeeDetails.bankCountry === "India" ? (
+                      <>
+                        {employeeDetails.bankIfsc && (
+                          <div className="space-y-1">
+                            <p className="text-xs font-semibold text-gray-400 dark:text-gray-500 uppercase tracking-wider">IFSC Code</p>
+                            <p className="text-sm font-bold text-gray-900 dark:text-white font-mono">{employeeDetails.bankIfsc}</p>
+                          </div>
+                        )}
+                        {employeeDetails.bankBranch && (
+                          <div className="space-y-1">
+                            <p className="text-xs font-semibold text-gray-400 dark:text-gray-500 uppercase tracking-wider">Branch Name</p>
+                            <p className="text-sm font-bold text-gray-900 dark:text-white">{employeeDetails.bankBranch}</p>
+                          </div>
+                        )}
+                      </>
+                    ) : (
+                      <>
+                        {employeeDetails.bankIban && (
+                          <div className="space-y-1">
+                            <p className="text-xs font-semibold text-gray-400 dark:text-gray-500 uppercase tracking-wider">IBAN Number</p>
+                            <p className="text-sm font-bold text-gray-900 dark:text-white font-mono">
+                              {(() => {
+                                // Re-format space separators for display
+                                const raw = employeeDetails.bankIban.replace(/\s/g, "");
+                                let formatted = "";
+                                for (let i = 0; i < raw.length; i++) {
+                                  if (i > 0 && i % 4 === 0) formatted += " ";
+                                  formatted += raw[i];
+                                }
+                                return formatted;
+                              })()}
+                            </p>
+                          </div>
+                        )}
+                        {employeeDetails.bankSwift && (
+                          <div className="space-y-1">
+                            <p className="text-xs font-semibold text-gray-400 dark:text-gray-500 uppercase tracking-wider">SWIFT/BIC Code</p>
+                            <p className="text-sm font-bold text-gray-900 dark:text-white font-mono">{employeeDetails.bankSwift}</p>
+                          </div>
+                        )}
+                      </>
+                    )}
+                  </div>
+
+                  {/* Render Bank details custom fields if they exist */}
+                  {Array.isArray(employeeDetails.customBankFields) && employeeDetails.customBankFields.length > 0 && (
+                    <div className="pt-3 mt-3 border-t border-gray-50 dark:border-gray-700/30">
+                      <p className="text-xs font-bold text-gray-400 dark:text-gray-500 uppercase tracking-wider mb-2">Additional Bank Information</p>
+                      <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 gap-4">
+                        {employeeDetails.customBankFields.map((field, idx) => (
+                          <div key={idx} className="space-y-0.5">
+                            <p className="text-[10px] font-semibold text-gray-400 uppercase tracking-wide">{field.key}</p>
+                            <p className="text-xs font-bold text-gray-800 dark:text-gray-200">{field.value}</p>
+                          </div>
+                        ))}
+                      </div>
+                    </div>
+                  )}
+                </div>
+              </div>
+            </SummaryCard>
+          </div>
         </div>
-      </div>
 
-      {/* Footer Actions */}
-      <div className="flex flex-col sm:flex-row items-center justify-between gap-6 p-6 md:p-8 bg-white dark:bg-gray-800 rounded-3xl shadow-soft border border-gray-100 dark:border-gray-700">
-        <button
-          onClick={handleBack}
-          className="flex items-center gap-2 px-5 py-2.5 font-bold text-gray-500 hover:text-gray-900 dark:text-gray-400 dark:hover:text-white transition-all hover:translate-x-[-4px]"
-        >
-          <FiChevronLeft size={20} />
-          Go Back
-        </button>
-
-        <div className="flex items-center gap-3 md:gap-4 w-full sm:w-auto">
+        {/* Footer Actions */}
+        <div className="flex flex-col sm:flex-row items-center justify-between gap-6 p-6 md:p-8 bg-white dark:bg-gray-800 rounded-3xl shadow-soft border border-gray-100 dark:border-gray-700">
           <button
-            onClick={handleSaveDraft}
-            className="flex-1 sm:flex-none px-4 py-2 bg-gray-100 dark:bg-gray-700 text-gray-600 dark:text-gray-300 font-semibold rounded-full border border-gray-200 dark:border-gray-600 hover:bg-gray-200 dark:hover:bg-gray-600 transition-all text-sm whitespace-nowrap"
+            onClick={handleBack}
+            className="flex items-center gap-2 px-5 py-2.5 font-bold text-gray-500 hover:text-gray-900 dark:text-gray-400 dark:hover:text-white transition-all hover:translate-x-[-4px]"
           >
-            <span className="sm:hidden">Save Draft</span>
-            <span className="hidden sm:inline">Save as Draft</span>
+            <FiChevronLeft size={20} />
+            Go Back
           </button>
 
-          <button
-            onClick={handleSubmit}
-            disabled={isSubmitting}
-            className="flex-1 sm:flex-none bg-green-500 hover:bg-green-600 text-white px-6 py-2 rounded-full text-sm font-semibold flex items-center justify-center gap-2 transition-all shadow-md hover:shadow-lg whitespace-nowrap disabled:opacity-60 disabled:cursor-not-allowed"
-          >
-            {isSubmitting ? (
-              <>
-                <svg className="animate-spin -ml-1 mr-2 h-4 w-4 text-white inline-block" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24">
-                  <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4"></circle>
-                  <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path>
-                </svg>
-                Submitting...
-              </>
-            ) : (
-              <>
-                <span className="sm:hidden">Submit</span>
-                <span className="hidden sm:inline">Submit Onboarding</span>
-                <FiSend size={16} />
-              </>
-            )}
-          </button>
+          <div className="flex items-center gap-3 md:gap-4 w-full sm:w-auto">
+            <button
+              onClick={handleSaveDraft}
+              className="flex-1 sm:flex-none px-4 py-2 bg-gray-100 dark:bg-gray-700 text-gray-600 dark:text-gray-300 font-semibold rounded-full border border-gray-200 dark:border-gray-600 hover:bg-gray-200 dark:hover:bg-gray-600 transition-all text-sm whitespace-nowrap"
+            >
+              <span className="sm:hidden">Save Draft</span>
+              <span className="hidden sm:inline">Save as Draft</span>
+            </button>
+
+            <button
+              onClick={handleSubmit}
+              disabled={isSubmitting}
+              className="flex-1 sm:flex-none bg-green-500 hover:bg-green-600 text-white px-6 py-2 rounded-full text-sm font-semibold flex items-center justify-center gap-2 transition-all shadow-md hover:shadow-lg whitespace-nowrap disabled:opacity-60 disabled:cursor-not-allowed"
+            >
+              {isSubmitting ? (
+                <>
+                  <svg className="animate-spin -ml-1 mr-2 h-4 w-4 text-white inline-block" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24">
+                    <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4"></circle>
+                    <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path>
+                  </svg>
+                  Submitting...
+                </>
+              ) : (
+                <>
+                  <span className="sm:hidden">Submit</span>
+                  <span className="hidden sm:inline">Submit Onboarding</span>
+                  <FiSend size={16} />
+                </>
+              )}
+            </button>
+          </div>
         </div>
       </div>
-    </div>
     </>
   );
 };

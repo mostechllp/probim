@@ -60,8 +60,8 @@ const EmployeeDetailsForm = () => {
           <select
             {...register(name, { required: `${label} is required` })}
             className={`w-full px-4 py-2.5 bg-white dark:bg-gray-800 border rounded-xl text-gray-900 dark:text-white transition-all duration-200 outline-none ${errors[name]
-                ? "border-red-500 focus:ring-4 focus:ring-red-500/10"
-                : "border-gray-200 dark:border-gray-700 focus:border-green-500 focus:ring-4 focus:ring-green-500/10"
+              ? "border-red-500 focus:ring-4 focus:ring-red-500/10"
+              : "border-gray-200 dark:border-gray-700 focus:border-green-500 focus:ring-4 focus:ring-green-500/10"
               }`}
           >
             <option value="">Select {label}</option>
@@ -73,8 +73,8 @@ const EmployeeDetailsForm = () => {
             placeholder={placeholder}
             {...register(name, { required: `${label} is required` })}
             className={`w-full px-4 py-2.5 bg-white dark:bg-gray-800 border rounded-xl text-gray-900 dark:text-white transition-all duration-200 outline-none ${errors[name]
-                ? "border-red-500 focus:ring-4 focus:ring-red-500/10"
-                : "border-gray-200 dark:border-gray-700 focus:border-green-500 focus:ring-4 focus:ring-green-500/10"
+              ? "border-red-500 focus:ring-4 focus:ring-red-500/10"
+              : "border-gray-200 dark:border-gray-700 focus:border-green-500 focus:ring-4 focus:ring-green-500/10"
               }`}
           />
         )}
@@ -162,6 +162,46 @@ const EmployeeDetailsForm = () => {
             <div className="md:col-span-2">
               <InputField label="Highest Education" name="education" placeholder="University Degree etc." />
             </div>
+
+            <div className="space-y-1.5">
+              <label className="block text-sm font-semibold text-gray-700 dark:text-gray-300">
+                Special Day Event
+              </label>
+              <input
+                type="text"
+                placeholder="e.g. Birthday, Work Anniversary"
+                {...register("specialDayEvent")}
+                className="w-full px-4 py-2.5 bg-white dark:bg-gray-800 border border-gray-200 dark:border-gray-700 rounded-xl text-gray-900 dark:text-white transition-all duration-200 outline-none focus:border-green-500 focus:ring-4 focus:ring-green-500/10"
+                list="special-days-suggestions"
+              />
+              <datalist id="special-days-suggestions">
+                <option value="Birthday" />
+                <option value="Work Anniversary" />
+                <option value="Wedding Anniversary" />
+              </datalist>
+            </div>
+
+            <div className="space-y-1.5">
+              <label className="block text-sm font-semibold text-gray-700 dark:text-gray-300">
+                Special Day Date
+              </label>
+              <Controller
+                name="specialDayDate"
+                control={control}
+                render={({ field }) => (
+                  <DateInput
+                    {...field}
+                    type="special_day"
+                    placeholder="dd/mm/yyyy"
+                    error={!!errors.specialDayDate}
+                    className="!bg-white dark:!bg-gray-800 !border-gray-200 dark:!border-gray-700 !rounded-xl !text-gray-900 dark:!text-white !px-4 !py-2.5 outline-none focus:border-green-500 focus:ring-4 focus:ring-green-500/10"
+                  />
+                )}
+              />
+              {errors.specialDayDate && (
+                <p className="text-xs font-medium text-red-500 mt-1">{errors.specialDayDate.message}</p>
+              )}
+            </div>
           </div>
 
           {/* Form Footer */}
@@ -179,8 +219,7 @@ const EmployeeDetailsForm = () => {
               type="submit"
               className="bg-green-500 hover:bg-green-600 text-white px-6 py-2 rounded-full text-sm font-semibold flex items-center justify-center gap-2 transition-all shadow-md hover:shadow-lg whitespace-nowrap"
             >
-              <span className="md:hidden">Continue</span>
-              <span className="hidden md:inline">Continue to Offer Letter</span>
+              Continue
               <FiChevronRight size={18} />
             </button>
           </div>
@@ -191,3 +230,4 @@ const EmployeeDetailsForm = () => {
 };
 
 export default EmployeeDetailsForm;
+

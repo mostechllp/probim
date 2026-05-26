@@ -12,7 +12,6 @@ const DesignationModal = ({ isOpen, onClose, editingDesignation }) => {
   const [loading, setLoading] = useState(false);
   const [formData, setFormData] = useState({
     name: "",
-    defaultPunchAccess: false,
   });
 
   useEffect(() => {
@@ -20,25 +19,16 @@ const DesignationModal = ({ isOpen, onClose, editingDesignation }) => {
       // eslint-disable-next-line react-hooks/set-state-in-effect
       setFormData({
   name: editingDesignation.name,
-  defaultPunchAccess: !!editingDesignation.defaultPunchAccess,
 });
     } else {
       setFormData({
         name: "",
-        defaultPunchAccess: false,
       });
     }
   }, [editingDesignation]);
 
   const handleChange = (e) => {
     setFormData({ ...formData, [e.target.name]: e.target.value });
-  };
-
-  const handleToggleChange = () => {
-    setFormData((prev) => ({
-  ...prev,
-  defaultPunchAccess: !prev.defaultPunchAccess,
-}));
   };
 
   const handleSubmit = async (e) => {
@@ -53,7 +43,6 @@ const DesignationModal = ({ isOpen, onClose, editingDesignation }) => {
 
     const payload = {
       name: formData.name,
-      default_punch_access: formData.defaultPunchAccess ? 1 : 0,
     };
 
     let result;
@@ -75,7 +64,6 @@ const DesignationModal = ({ isOpen, onClose, editingDesignation }) => {
         onClose();
         setFormData({
           name: "",
-          defaultPunchAccess: false,
         });
       } else {
         showToast("Failed to update designation", "error");
@@ -92,7 +80,6 @@ const DesignationModal = ({ isOpen, onClose, editingDesignation }) => {
         onClose();
         setFormData({
           name: "",
-          defaultPunchAccess: false,
         });
       } else {
         showToast("Failed to add designation", "error");
@@ -139,43 +126,6 @@ const DesignationModal = ({ isOpen, onClose, editingDesignation }) => {
               autoFocus
               required
             />
-          </div>
-
-          {/* Default Punch Access Toggle */}
-          <div className="mb-6">
-            <div className="flex items-center justify-between p-3 bg-gray-50 dark:bg-gray-800 rounded-lg border border-gray-200 dark:border-gray-700">
-              <div>
-                <label className="text-sm font-semibold text-gray-700 dark:text-gray-300">
-                  <i className="fas fa-fingerprint text-green-500 mr-1"></i>
-                  Default Punch Access
-                </label>
-                <p className="text-[11px] text-gray-500 dark:text-gray-400 mt-1 max-w-[250px]">
-                  If enabled, employees with this designation can punch in/out
-                  without needing an approved WFH request.
-                </p>
-                <p className="text-[10px] text-blue-500 dark:text-blue-400 mt-1">
-                  <i className="fas fa-info-circle mr-1"></i>
-                  e.g. Delivery Man, Salesperson
-                </p>
-              </div>
-              <button
-                type="button"
-                onClick={handleToggleChange}
-                className={`relative inline-flex h-6 w-11 items-center rounded-full transition-all duration-200 ${
-                  formData.defaultPunchAccess
-                    ? "bg-green-500"
-                    : "bg-gray-300 dark:bg-gray-600"
-                }`}
-              >
-                <span
-                  className={`inline-block h-4 w-4 transform rounded-full bg-white transition-all duration-200 ${
-                    formData.defaultPunchAccess
-                      ? "translate-x-6"
-                      : "translate-x-1"
-                  }`}
-                />
-              </button>
-            </div>
           </div>
 
           {/* Action Buttons */}

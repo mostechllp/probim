@@ -255,7 +255,7 @@ const employeeSlice = createSlice({
           return {
             id: emp.id,
             name: [emp.first_name, emp.last_name].filter(Boolean).join(" "),
-            status: emp.user?.status === "active" ? "Active" : "Inactive",
+            status: emp.user?.status === "active" ? "Active" : emp.user?.status === "onboarding" ? "Onboarding" : "Inactive",
             designation: emp.user?.designation?.name || "-",
             department: emp.user?.department?.name || "-",
             company: emp.user?.company?.name || "-",

@@ -1,5 +1,5 @@
-import { useState, useEffect } from "react";
-import { useSelector } from "react-redux";
+import { useState, useEffect, useRef } from "react";
+import { useSelector, useDispatch } from "react-redux";
 import {
   FiUser,
   FiMail,
@@ -12,15 +12,22 @@ import {
   FiEdit2,
   FiCheckCircle,
   FiLoader,
-  FiAlertCircle,
 } from "react-icons/fi";
+import { changePassword, clearUpdateSuccess, fetchUserProfile, updateProfile } from "../../admin/store/slices/settingsSlice";
 import apiClient from "../../utils/apiClient";
+import { showToast } from "../../components/common/Toast";
 
 const Profile = () => {
+  const dispatch = useDispatch();
   const { user: authUser } = useSelector((state) => state.auth);
-  const [loading, setLoading] = useState(false);
+  const { profile, loading, updateSuccess, error } = useSelector((state) => state.settings);
+  const fileInputRef = useRef(null);
+  
   const [updating, setUpdating] = useState(false);
-  const [toast, setToast] = useState(null);
+  const [uploadingAvatar, setUploadingAvatar] = useState(false);
+  const [avatarPreview, setAvatarPreview] = useState(null);
+  const [avatarTempPath, setAvatarTempPath] = useState(null);
+  const [avatarError, setAvatarError] = useState(false);
   const [formData, setFormData] = useState({
     fullName: "",
     personalEmail: "",
@@ -32,9 +39,6 @@ const Profile = () => {
     newPassword: "",
     confirmPassword: "",
   });
-  const [photoPreview, setPhotoPreview] = useState(null);
-  const [photoFile, setPhotoFile] = useState(null);
-
   const [activeTab, setActiveTab] = useState("personal");
 
   // Get employee data from auth
@@ -51,96 +55,177 @@ const Profile = () => {
         address: employee.address || "",
       });
     }
-    setLoading(false);
   }, [employee]);
 
-  // Show toast notification
-  const showToast = (message, type = "success") => {
-    setToast({ message, type });
-    setTimeout(() => setToast(null), 3000);
+  // Fetch fresh profile data on mount
+  useEffect(() => {
+    dispatch(fetchUserProfile());
+  }, [dispatch]);
+
+  // Handle update success
+  useEffect(() => {
+    if (updateSuccess) {
+      showToast("Profile updated successfully!", "success");
+      dispatch(clearUpdateSuccess());
+      dispatch(fetchUserProfile());
+      
+      // Reset avatar states
+      // eslint-disable-next-line react-hooks/set-state-in-effect
+      setAvatarPreview(null);
+      setAvatarTempPath(null);
+      setAvatarError(false);
+      if (fileInputRef.current) {
+        fileInputRef.current.value = "";
+      }
+      setUpdating(false);
+    }
+  }, [updateSuccess, dispatch]);
+
+  // Handle errors
+  useEffect(() => {
+    if (error) {
+      showToast(error, "error");
+      dispatch(clearUpdateSuccess());
+      // eslint-disable-next-line react-hooks/set-state-in-effect
+      setUpdating(false);
+    }
+  }, [error, dispatch]);
+
+  // Get avatar URL
+  const getAvatarUrl = () => {
+    if (avatarPreview) return avatarPreview;
+    if (avatarError) return null;
+    
+    const avatar = authUser?.avatar || profile?.avatar;
+    if (!avatar) return null;
+    
+    if (typeof avatar === 'string' && (avatar.startsWith('http://') || avatar.startsWith('https://'))) {
+      return avatar;
+    }
+    
+    const baseUrl = import.meta.env.VITE_API_URL?.replace("/api", "") || window.location.origin;
+    
+    if (typeof avatar === "object" && avatar.path) {
+      return `${baseUrl}/storage/${avatar.path}`;
+    }
+    
+    if (typeof avatar === "string") {
+      if (avatar.startsWith("/storage/")) return `${baseUrl}${avatar}`;
+      if (avatar.startsWith("storage/")) return `${baseUrl}/${avatar}`;
+      return `${baseUrl}/storage/${avatar}`;
+    }
+    
+    return null;
   };
 
-  const handlePhotoChange = (e) => {
+  // Handle avatar upload
+  const handleAvatarChange = async (e) => {
     const file = e.target.files[0];
-    if (file) {
-      const fileSize = file.size / 1024 / 1024;
-      if (fileSize > 2) {
-        showToast("Profile photo must be less than 2MB", "error");
-        return;
-      }
+    if (!file) return;
 
-      const allowedTypes = ["image/jpeg", "image/png", "image/jpg"];
-      if (!allowedTypes.includes(file.type)) {
-        showToast("Only JPG, JPEG, and PNG files are allowed", "error");
-        return;
-      }
+    const allowedTypes = ["image/jpeg", "image/jpg", "image/png", "image/gif", "image/webp"];
+    if (!allowedTypes.includes(file.type)) {
+      showToast("Please upload a valid image file (JPEG, PNG, GIF, or WEBP)", "error");
+      return;
+    }
 
-      setPhotoFile(file);
-      const reader = new FileReader();
-      reader.onload = (event) => {
-        setPhotoPreview(event.target.result);
-      };
-      reader.readAsDataURL(file);
+    if (file.size > 2 * 1024 * 1024) {
+      showToast("Image size must be less than 2MB", "error");
+      return;
+    }
+
+    // Preview the image
+    const reader = new FileReader();
+    reader.onload = (e) => {
+      setAvatarPreview(e.target.result);
+    };
+    reader.readAsDataURL(file);
+
+    setUploadingAvatar(true);
+
+    try {
+      const uploadFormData = new FormData();
+      uploadFormData.append("file", file);
+
+      const response = await apiClient.post("/employee/upload-temp", uploadFormData, {
+        headers: { "Content-Type": "multipart/form-data" },
+      });
+
+      const result = response.data;
+      if (result.status && result.path) {
+        setAvatarTempPath(result.path);
+        showToast("Avatar uploaded successfully", "success");
+      } else {
+        showToast("Failed to upload avatar", "error");
+        setAvatarPreview(null);
+      }
+    } catch (error) {
+      console.error("Avatar upload error:", error);
+      showToast(`Upload failed: ${error.response?.data?.message || error.message}`, "error");
+      setAvatarPreview(null);
+    } finally {
+      setUploadingAvatar(false);
+    }
+  };
+
+  const handleRemoveAvatar = () => {
+    setAvatarPreview(null);
+    setAvatarTempPath(null);
+    setAvatarError(false);
+    if (fileInputRef.current) {
+      fileInputRef.current.value = "";
     }
   };
 
   const handleUpdateProfile = async (e) => {
     e.preventDefault();
-
-    setUpdating(true);
-
-    try {
-      // Try to update via API if endpoint exists
-      const formDataToSend = new FormData();
-
-      const nameParts = formData.fullName.trim().split(" ");
-      const firstName = nameParts[0] || "";
-      const lastName = nameParts.slice(1).join(" ") || "";
-
-      formDataToSend.append("first_name", firstName);
-      formDataToSend.append("last_name", lastName);
-      formDataToSend.append("name", formData.fullName);
-
-      if (formData.personalEmail)
-        formDataToSend.append("personal_email", formData.personalEmail);
-      if (formData.personalNumber)
-        formDataToSend.append("phone", formData.personalNumber);
-      if (formData.address) formDataToSend.append("address", formData.address);
-      if (photoFile) formDataToSend.append("avatar", photoFile);
-
-      // Try to update profile - if endpoint doesn't exist, save to localStorage
-      try {
-        await apiClient.post("/employee/profile/update", formDataToSend, {
-          headers: {
-            "Content-Type": "multipart/form-data",
-          },
-        });
-        showToast("Profile updated successfully!", "success");
-      } catch (apiError) {
-        // If API endpoint doesn't exist, save to localStorage
-        const profileData = {
-          name: formData.fullName,
-          personal_email: formData.personalEmail,
-          phone: formData.personalNumber,
-          address: formData.address,
-          avatar: photoPreview,
-          updatedAt: new Date().toISOString(),
-        };
-        localStorage.setItem("employeeProfile", JSON.stringify(profileData));
-        showToast(
-          "Profile saved locally! (API endpoint not available)",
-          "success",
-        );
-        console.log(apiError);
-      }
-
-      setPhotoFile(null);
-    } catch (error) {
-      console.error("Error updating profile:", error);
-      showToast("Failed to update profile", "error");
-    } finally {
-      setUpdating(false);
+    
+    // Validation
+    if (!formData.fullName.trim()) {
+      showToast("Full name is required", "error");
+      return;
     }
+    
+    if (formData.personalEmail && !formData.personalEmail.match(/^[^\s@]+@[^\s@]+\.[^\s@]+$/)) {
+      showToast("Please enter a valid email address", "error");
+      return;
+    }
+    
+    setUpdating(true);
+    
+    const profileFormData = new FormData();
+    
+    // Split name for first_name and last_name if needed by backend
+    const nameParts = formData.fullName.trim().split(" ");
+    const firstName = nameParts[0] || "";
+    const lastName = nameParts.slice(1).join(" ") || "";
+    
+    profileFormData.append("name", formData.fullName);
+    profileFormData.append("first_name", firstName);
+    profileFormData.append("last_name", lastName);
+    
+    if (formData.personalEmail) {
+      profileFormData.append("personal_email", formData.personalEmail);
+      profileFormData.append("email", formData.personalEmail); // Some backends use email field
+    }
+    
+    if (formData.personalNumber) {
+      profileFormData.append("phone", formData.personalNumber);
+      profileFormData.append("personal_number", formData.personalNumber);
+    }
+    
+    if (formData.address) {
+      profileFormData.append("address", formData.address);
+    }
+    
+    if (avatarTempPath) {
+      profileFormData.append("avatar", avatarTempPath);
+    }
+    
+    // Add _method for Laravel if needed
+    profileFormData.append("_method", "PUT");
+    
+    await dispatch(updateProfile(profileFormData));
   };
 
   const handleChangePassword = async (e) => {
@@ -163,37 +248,22 @@ const Profile = () => {
 
     setUpdating(true);
 
-    try {
-      // Try to change password via API
-      await apiClient.post("/employee/change-password", {
-        current_password: passwordData.currentPassword,
-        password: passwordData.newPassword,
-        password_confirmation: passwordData.confirmPassword,
-      });
+    const result = await dispatch(changePassword({
+      current_password: passwordData.currentPassword,
+      password: passwordData.newPassword,
+      password_confirmation: passwordData.confirmPassword,
+    }));
 
-      showToast("Password changed successfully!", "success");
+    if (changePassword.fulfilled.match(result)) {
       setPasswordData({
         currentPassword: "",
         newPassword: "",
         confirmPassword: "",
       });
-    } catch (error) {
-      console.error("Error changing password:", error);
-      // If API endpoint doesn't exist, show message
-      if (error.response?.status === 404) {
-        showToast(
-          "Password change endpoint not available. Please contact administrator.",
-          "error",
-        );
-      } else {
-        showToast(
-          error.response?.data?.message || "Failed to change password",
-          "error",
-        );
-      }
-    } finally {
-      setUpdating(false);
+      showToast("Password changed successfully!", "success");
     }
+    
+    setUpdating(false);
   };
 
   const handleReset = () => {
@@ -210,28 +280,13 @@ const Profile = () => {
       newPassword: "",
       confirmPassword: "",
     });
-    setPhotoPreview(null);
-    setPhotoFile(null);
+    handleRemoveAvatar();
   };
 
-  // Get profile photo URL
-  const getProfilePhotoUrl = () => {
-    if (photoPreview) return photoPreview;
+  const avatarUrl = getAvatarUrl();
+  const userInitials = (formData.fullName || employee?.name || "U").charAt(0).toUpperCase();
 
-    // Check localStorage for saved avatar
-    const savedProfile = localStorage.getItem("employeeProfile");
-    if (savedProfile) {
-      const profile = JSON.parse(savedProfile);
-      if (profile.avatar) return profile.avatar;
-    }
-
-    if (authUser?.avatar) return authUser.avatar;
-
-    const name = formData.fullName || employee?.name || "User";
-    return `https://ui-avatars.com/api/?name=${encodeURIComponent(name)}&background=2ecc71&color=fff&rounded=true&size=128`;
-  };
-
-  if (loading) {
+  if (loading && !profile) {
     return (
       <div className="flex justify-center items-center h-96">
         <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-green-500"></div>
@@ -252,30 +307,37 @@ const Profile = () => {
             {/* Avatar */}
             <div className="relative -mt-16 md:-mt-24 group z-10">
               <div className="w-32 h-32 md:w-40 md:h-40 rounded-full border-4 border-white bg-black flex items-center justify-center overflow-hidden shadow-lg relative">
-                <img
-                  src={getProfilePhotoUrl()}
-                  alt="Profile"
-                  className="w-full h-full object-cover"
-                  onError={(e) => {
-                    e.target.src = `https://ui-avatars.com/api/?name=${encodeURIComponent(formData.fullName || "User")}&background=2ecc71&color=fff&rounded=true&size=128`;
-                  }}
-                />
+                {avatarUrl && !avatarError ? (
+                  <img
+                    src={avatarUrl}
+                    alt="Profile"
+                    className="w-full h-full object-cover"
+                    onError={() => setAvatarError(true)}
+                  />
+                ) : (
+                  <div className="w-full h-full bg-gradient-to-r from-green-500 to-green-600 flex items-center justify-center text-white text-5xl font-bold">
+                    {userInitials}
+                  </div>
+                )}
                 <div
-                  onClick={() =>
-                    document.getElementById("profilePhoto").click()
-                  }
+                  onClick={() => fileInputRef.current?.click()}
                   className="absolute inset-0 bg-black/50 flex items-center justify-center opacity-0 group-hover:opacity-100 transition-opacity cursor-pointer"
                 >
-                  <FiCamera className="text-white text-3xl" />
+                  {uploadingAvatar ? (
+                    <FiLoader className="text-white text-3xl animate-spin" />
+                  ) : (
+                    <FiCamera className="text-white text-3xl" />
+                  )}
                 </div>
               </div>
               <div className="absolute bottom-2 right-2 md:bottom-4 md:right-4 w-5 h-5 md:w-6 md:h-6 bg-green-500 border-[3px] border-white rounded-full z-20"></div>
               <input
+                ref={fileInputRef}
                 type="file"
                 id="profilePhoto"
-                accept="image/jpeg,image/png,image/jpg"
+                accept="image/jpeg,image/jpg,image/png,image/gif,image/webp"
                 className="hidden"
-                onChange={handlePhotoChange}
+                onChange={handleAvatarChange}
               />
             </div>
 
@@ -383,6 +445,23 @@ const Profile = () => {
                 Update your personal details, email, and home address.
               </p>
 
+              {/* Avatar upload info */}
+              {(avatarPreview || avatarTempPath) && (
+                <div className="mb-6 p-3 bg-blue-50 dark:bg-blue-900/20 rounded-xl flex items-center justify-between">
+                  <span className="text-sm text-blue-600 dark:text-blue-400">
+                    <FiCamera className="inline mr-2" />
+                    New avatar selected
+                  </span>
+                  <button
+                    type="button"
+                    onClick={handleRemoveAvatar}
+                    className="text-sm text-red-500 hover:text-red-600"
+                  >
+                    Remove
+                  </button>
+                </div>
+              )}
+
               <div className="grid grid-cols-1 md:grid-cols-2 gap-6 mb-8">
                 <div className="form-field md:col-span-2 flex flex-col gap-2">
                   <label className="text-xs font-extrabold text-[var(--text-secondary)] ml-1">
@@ -484,7 +563,7 @@ const Profile = () => {
                         setFormData({ ...formData, address: e.target.value })
                       }
                       rows="3"
-                      className="w-full pl-12 pr-4 py-3.5 bg-gray-50 border border-gray-100 rounded-2xl text-sm font-semibold text-gray-800 focus:bg-white focus:outline-none focus:border-green-500 focus:ring-4 focus:ring-green-500/10 transition-all resize-none"
+                      className="w-full pl-12 pr-4 py-3.5 bg-[var(--surface2)] border border-[var(--border)] rounded-2xl text-sm font-semibold text-[var(--text)] focus:bg-[var(--surface)] focus:outline-none focus:border-green-500 focus:ring-4 focus:ring-green-500/10 transition-all resize-none"
                       placeholder="Enter full address"
                     />
                   </div>
@@ -501,15 +580,15 @@ const Profile = () => {
                 </button>
                 <button
                   type="submit"
-                  disabled={updating}
+                  disabled={updating || loading}
                   className="py-3 px-10 rounded-full font-bold bg-[#22c55e] text-white hover:bg-[#16a34a] shadow-md shadow-green-500/20 transition-all flex items-center justify-center gap-2 disabled:opacity-50 disabled:shadow-none"
                 >
-                  {updating ? (
+                  {(updating || loading) ? (
                     <FiLoader className="animate-spin" />
                   ) : (
                     <FiSave />
                   )}
-                  {updating ? "Saving..." : "Save Changes"}
+                  {(updating || loading) ? "Saving..." : "Save Changes"}
                 </button>
               </div>
             </form>
@@ -598,49 +677,21 @@ const Profile = () => {
               <div className="flex flex-col sm:flex-row gap-4 pt-6 border-t border-gray-100">
                 <button
                   type="submit"
-                  disabled={updating}
+                  disabled={updating || loading}
                   className="py-3 px-10 rounded-full font-bold bg-[#22c55e] text-white hover:bg-[#16a34a] shadow-md shadow-green-500/20 transition-all flex items-center justify-center gap-2 disabled:opacity-50 disabled:shadow-none"
                 >
-                  {updating ? (
+                  {(updating || loading) ? (
                     <FiLoader className="animate-spin" />
                   ) : (
                     <FiLock />
                   )}
-                  {updating ? "Updating..." : "Update Password"}
+                  {(updating || loading) ? "Updating..." : "Update Password"}
                 </button>
               </div>
             </form>
           )}
         </div>
       </div>
-
-      {/* Toast Notification */}
-      {toast && (
-        <div
-          className={`fixed bottom-6 right-6 bg-[var(--surface)] text-[var(--text)] py-3.5 px-6 rounded-full text-sm font-bold shadow-xl border-l-4 z-50 flex items-center gap-3 animate-slide-up ${
-            toast.type === "success"
-              ? "border-green-500"
-              : toast.type === "error"
-                ? "border-red-500"
-                : "border-blue-500"
-          }`}
-        >
-          {toast.type === "success" ? (
-            <div className="w-6 h-6 rounded-full bg-green-100 flex items-center justify-center text-green-500">
-              <FiCheckCircle />
-            </div>
-          ) : toast.type === "error" ? (
-            <div className="w-6 h-6 rounded-full bg-red-100 flex items-center justify-center text-red-500">
-              <FiAlertCircle />
-            </div>
-          ) : (
-            <div className="w-6 h-6 rounded-full bg-blue-100 flex items-center justify-center text-blue-500">
-              <FiAlertCircle />
-            </div>
-          )}
-          {toast.message}
-        </div>
-      )}
     </div>
   );
 };

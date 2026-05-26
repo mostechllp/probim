@@ -243,6 +243,9 @@ const EmployeeDetailsReport = () => {
   const inactiveCount = transformedEmployees.filter(
     (e) => e.status === "Inactive",
   ).length;
+  const onboardingCount = transformedEmployees.filter(
+    (e) => e.status === "Onboarding",
+  ).length;
 
   return (
     <div className="w-full overflow-x-hidden">
@@ -373,6 +376,7 @@ const EmployeeDetailsReport = () => {
                 <option value="all">All Status</option>
                 <option value="Active">Active</option>
                 <option value="Inactive">Inactive</option>
+                <option value="Onboarding">Onboarding</option>
               </select>
             </div>
 
@@ -545,6 +549,8 @@ const EmployeeDetailsReport = () => {
                           className={`px-2 py-1 rounded-full text-xs font-semibold ${
                             emp.status === "Active"
                               ? "bg-green-100 text-green-700 dark:bg-green-900/30 dark:text-green-400"
+                              : emp.status === "Onboarding"
+                              ? "bg-amber-100 text-amber-700 dark:bg-amber-900/30 dark:text-amber-400"
                               : "bg-red-100 text-red-700 dark:bg-red-900/30 dark:text-red-400"
                           }`}
                         >
