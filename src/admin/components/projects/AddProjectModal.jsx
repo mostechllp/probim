@@ -3,6 +3,7 @@ import { PROJECT_MODULE_NAME } from "../../utils/constants";
 
 const AddProjectModal = ({
   isOpen,
+  employees = [],
   onClose,
   onSave,
   project, // If project is passed, we are in EDIT mode
@@ -11,6 +12,8 @@ const AddProjectModal = ({
   const [name, setName] = useState("");
   const [description, setDescription] = useState("");
   const [status, setStatus] = useState("Active");
+  const [managerId, setManagerId] = useState("");
+  const [teamLeadId, setTeamLeadId] = useState("");
   const [error, setError] = useState("");
 
   const isEditMode = !!project;
@@ -20,11 +23,15 @@ const AddProjectModal = ({
       setName(project.name || "");
       setDescription(project.description || "");
       setStatus(project.status || "Active");
+      setManagerId(project.managerId || "");
+      setTeamLeadId(project.teamLeadId || "");
       setError("");
     } else {
       setName("");
       setDescription("");
       setStatus("Active");
+      setManagerId("");
+      setTeamLeadId("");
       setError("");
     }
   }, [project, isOpen]);
@@ -50,7 +57,9 @@ const AddProjectModal = ({
       id: project?.id,
       name: trimmedName,
       description: description.trim(),
-      status
+      status,
+      managerId,
+      teamLeadId
     });
   };
 
@@ -102,10 +111,50 @@ const AddProjectModal = ({
             />
           </div>
 
+          {/* Project Manager */}
+          <div className="space-y-1.5">
+            <label className="text-xs font-bold text-gray-500 dark:text-gray-400 uppercase tracking-wider block">
+              Project Manager
+            </label>
+            <select
+              value={managerId}
+              onChange={(e) => setManagerId(e.target.value)}
+              disabled={actionLoading}
+              className="w-full px-4 py-2.5 text-sm rounded-xl border border-gray-200 dark:border-gray-600 bg-white dark:bg-gray-800 text-gray-800 dark:text-gray-200 focus:outline-none focus:ring-2 focus:ring-green-500/20 focus:border-green-500 disabled:opacity-60 transition-all cursor-pointer"
+            >
+              <option value="" className="text-gray-400">Select Project Manager</option>
+              {employees && employees.map((emp) => (
+                <option key={emp.id} value={emp.id}>
+                  {emp.name}
+                </option>
+              ))}
+            </select>
+          </div>
+
+          {/* Team Lead */}
+          <div className="space-y-1.5">
+            <label className="text-xs font-bold text-gray-500 dark:text-gray-400 uppercase tracking-wider block">
+              Team Lead
+            </label>
+            <select
+              value={teamLeadId}
+              onChange={(e) => setTeamLeadId(e.target.value)}
+              disabled={actionLoading}
+              className="w-full px-4 py-2.5 text-sm rounded-xl border border-gray-200 dark:border-gray-600 bg-white dark:bg-gray-800 text-gray-800 dark:text-gray-200 focus:outline-none focus:ring-2 focus:ring-green-500/20 focus:border-green-500 disabled:opacity-60 transition-all cursor-pointer"
+            >
+              <option value="" className="text-gray-400">Select Team Lead</option>
+              {employees && employees.map((emp) => (
+                <option key={emp.id} value={emp.id}>
+                  {emp.name}
+                </option>
+              ))}
+            </select>
+          </div>
+
           {/* Description */}
           <div className="space-y-1.5">
             <label className="text-xs font-bold text-gray-500 dark:text-gray-400 uppercase tracking-wider block">
-              Description <span className="text-gray-300 dark:text-gray-500 font-normal lowercase italic">(recommended)</span>
+              Description <span className="text-gray-300 dark:text-gray-500 font-normal lowercase italic">(optional)</span>
             </label>
             <textarea
               placeholder={`Provide a comprehensive summary of the project goals, scopes, or outcomes...`}
