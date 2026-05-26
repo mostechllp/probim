@@ -15,33 +15,67 @@ const OfferLetterPreview = () => {
   const [template, setTemplate] = useState(offerLetter.template || "standard");
   const [isGenerating, setIsGenerating] = useState(false);
 
-  const generateContent = (empName, pos, date) => {
+  const generateContent = (empName, pos, date, basicSalary, otherAllowance, totalSalary, paymentCycle) => {
     let formattedDate = date;
     if (date && date.match(/^\d{4}-\d{2}-\d{2}$/)) {
       const [year, month, day] = date.split("-");
       formattedDate = `${day}/${month}/${year}`;
     }
+
+    const formattedBasic = basicSalary ? `AED ${parseFloat(basicSalary).toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}` : "[Basic Salary]";
+    const formattedAllowance = otherAllowance ? `AED ${parseFloat(otherAllowance).toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}` : "AED 0.00";
+    const formattedTotal = totalSalary ? `AED ${parseFloat(totalSalary).toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}` : "[Total Salary]";
+    const cycle = paymentCycle || "Monthly";
+
     return `Date: ${new Date().toLocaleDateString('en-GB')}
 
+PRIVATE & CONFIDENTIAL
+
 To: ${empName || "[Candidate Name]"}
-Position: ${pos || "[Job Title]"}
+Position Offered: ${pos || "[Job Title]"}
 
 Subject: Offer of Employment
 
 Dear ${empName || "Candidate"},
 
-On behalf of the Company, we are pleased to offer you the position of ${pos || "[Job Title]"}. We believe your skills and experience will be a valuable asset to our team.
+On behalf of the Company, we are pleased to extend this formal offer of employment for the position of ${pos || "[Job Title]"}. We were highly impressed by your qualifications and experience, and we believe your skills will be a valuable addition to our organization.
 
-This offer is contingent upon the successful completion of our onboarding process. Your proposed joining date is ${formattedDate || "[Joining Date]"}.
+Below are the key terms and conditions of your employment offer:
 
-Your compensation will be discussed in detail during the final interview stage. Please review the attached terms and conditions of employment.
+1. POSITION AND RESPONSIBILITIES
+Your initial designation will be ${pos || "[Job Title]"}, reporting directly to the Department Head. Your duties and responsibilities will be as standard for this position, along with any other assignments delegated by the management.
 
-We look forward to welcoming you to the team.
+2. PROBATIONARY PERIOD
+In accordance with the UAE Labor Law, you will serve a probationary period of six (6) months starting from your date of joining, which is proposed to be ${formattedDate || "[Joining Date]"}. During this period, your performance will be evaluated, and employment may be terminated by either party with written notice as per standard regulations.
+
+3. COMPENSATION AND BENEFITS
+Your compensation package is structured on a ${cycle.toLowerCase()} cycle as follows:
+   - Basic Salary: ${formattedBasic}
+   - Housing and Other Allowances: ${formattedAllowance}
+   - Total Gross Monthly Salary: ${formattedTotal}
+   
+All payments will be processed via bank transfer through the Wages Protection System (WPS) in accordance with UAE regulations. You will also be eligible for standard benefits, including comprehensive medical insurance and annual flight allowance, as per company policy.
+
+4. LEAVE ENTITLEMENTS
+You will be entitled to paid annual leave of 30 calendar days per completed year of service, in addition to standard public holidays announced by the UAE government.
+
+5. CONFIDENTIALITY AND CODE OF CONDUCT
+During and after your employment, you agree to maintain the strict confidentiality of all proprietary business, customer, and operational information. You will also be expected to adhere to the company's code of conduct and professional standards.
+
+This offer of employment is contingent upon the successful validation of your references, educational credentials, and the procurement of a valid UAE work permit and residency visa.
+
+Please indicate your acceptance of this offer by signing and returning a copy of this letter. We are thrilled at the prospect of you joining our team and look forward to building a successful future together.
 
 Sincerely,
 
 Human Resources Department
-UAE Operations`;
+UAE Operations
+
+---------------------------------------------------------
+ACCEPTANCE OF OFFER:
+I, ${empName || "[Candidate Name]"}, hereby accept the terms and conditions of employment as detailed above.
+
+Signature: ____________________      Date: ____________________`;
   };
 
   const [content, setContent] = useState("");
@@ -50,7 +84,11 @@ UAE Operations`;
     const initialContent = offerLetter.content || generateContent(
       employeeDetails.fullName,
       employeeDetails.designation,
-      employeeDetails.joiningDate
+      employeeDetails.joiningDate,
+      employeeDetails.basicSalary,
+      employeeDetails.otherAllowance,
+      employeeDetails.totalMonthlySalary,
+      employeeDetails.paymentCycle
     );
     // eslint-disable-next-line react-hooks/set-state-in-effect
     setContent(initialContent);
@@ -58,11 +96,11 @@ UAE Operations`;
 
   const handleNext = () => {
     dispatch(updateOfferLetter({ content, template, generated: true }));
-    dispatch(setStep(4));
+    dispatch(setStep(5));
   };
 
   const handleBack = () => {
-    dispatch(setStep(2));
+    dispatch(setStep(3));
   };
 
   const downloadPDF = () => {

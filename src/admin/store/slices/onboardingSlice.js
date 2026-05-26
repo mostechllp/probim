@@ -42,6 +42,12 @@ const initialState = {
     experience: "",
     education: "",
     joiningDate: "",
+    basicSalary: "",
+    otherAllowance: "",
+    totalMonthlySalary: 0,
+    paymentCycle: "Monthly",
+    bankName: "",
+    accountNumber: "",
   },
   offerLetter: {
     content: "",
