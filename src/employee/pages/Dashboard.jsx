@@ -79,6 +79,31 @@ const Dashboard = () => {
     return () => clearInterval(interval);
   }, []);
 
+  // Helper function to normalize location data from different formats
+  const normalizeLocation = (locationData) => {
+    if (!locationData) return null;
+    
+    // If location data is already in the expected format { latitude, longitude, address }
+    if (locationData.latitude && locationData.longitude) {
+      return {
+        latitude: parseFloat(locationData.latitude),
+        longitude: parseFloat(locationData.longitude),
+        address: locationData.address || `${locationData.latitude}, ${locationData.longitude}`
+      };
+    }
+    
+    // If location data is separate fields (from attendance_history)
+    if (locationData.punch_in_latitude || locationData.latitude) {
+      return {
+        latitude: parseFloat(locationData.punch_in_latitude || locationData.latitude),
+        longitude: parseFloat(locationData.punch_in_longitude || locationData.longitude),
+        address: locationData.punch_in_address || locationData.address || "Location recorded"
+      };
+    }
+    
+    return null;
+  };
+
   // Handle Punch In/Out
   const handlePunch = async () => {
     if (!isActuallyPunchedIn) {
@@ -311,8 +336,9 @@ const Dashboard = () => {
 
   // Render location information from backend
   const renderLocationInfo = () => {
-    const punchInLocation = todayAttendance.punch_in_location;
-    const punchOutLocation = todayAttendance.punch_out_location;
+    // Normalize location data from backend
+    const punchInLocation = normalizeLocation(todayAttendance.punch_in_location);
+    const punchOutLocation = normalizeLocation(todayAttendance.punch_out_location);
     
     if (!punchInLocation && !punchOutLocation) return null;
 
@@ -352,7 +378,7 @@ const Dashboard = () => {
           </div>
         )}
         
-        {punchOutLocation && (
+        {punchOutLocation && punchOutLocation.latitude && (
           <div>
             <div className="flex justify-between items-start">
               <div className="flex-1">
@@ -406,8 +432,8 @@ const Dashboard = () => {
               {selectedMapLocation.address || `${selectedMapLocation.latitude}, ${selectedMapLocation.longitude}`}
             </p>
             <MapView
-              latitude={selectedMapLocation.latitude}
-              longitude={selectedMapLocation.longitude}
+              latitude={parseFloat(selectedMapLocation.latitude)}
+              longitude={parseFloat(selectedMapLocation.longitude)}
               address={selectedMapLocation.address}
             />
             <div className="mt-4 flex justify-end">
@@ -589,6 +615,12 @@ const Dashboard = () => {
                               (1000 * 60 * 60)
                             ).toFixed(1)
                           : "-";
+                      
+                      // Get location from attendance history (different format than today_attendance)
+                      const locationAddress = attendance.punch_in_address;
+                      const locationLat = attendance.punch_in_latitude;
+                      const locationLng = attendance.punch_in_longitude;
+                      
                       return (
                         <tr
                           key={index}
@@ -603,13 +635,18 @@ const Dashboard = () => {
                               : "-"}
                           </td>
                           <td className="py-3 px-4">
-                            {attendance.punch_in_location && (
+                            {locationAddress && (
                               <div className="text-xs">
                                 <i className="fas fa-map-marker-alt text-green-500 text-xs mr-1"></i>
-                                <span className="text-[var(--muted)]" title={attendance.punch_in_location.address}>
-                                  {attendance.punch_in_location.address?.substring(0, 40)}
-                                  {attendance.punch_in_location.address?.length > 40 ? "..." : ""}
+                                <span className="text-[var(--muted)]" title={locationAddress}>
+                                  {locationAddress.substring(0, 40)}
+                                  {locationAddress.length > 40 ? "..." : ""}
                                 </span>
+                                {locationLat && locationLng && (
+                                  <div className="text-[10px] text-[var(--muted)] mt-1">
+                                    📍 {parseFloat(locationLat).toFixed(6)}, {parseFloat(locationLng).toFixed(6)}
+                                  </div>
+                                )}
                               </div>
                             )}
                           </td>
