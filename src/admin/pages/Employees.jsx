@@ -122,6 +122,7 @@ const Employees = () => {
 
   const activeCount = employees.filter((e) => e.status === "Active").length;
   const inactiveCount = employees.filter((e) => e.status === "Inactive").length;
+  const onboardingCount = employees.filter((e) => e.status === "Onboarding").length;
 
   return (
     // Remove the outer div with Sidebar and flex layout
@@ -174,18 +175,18 @@ const Employees = () => {
           </div>
         </div>
 
-        {/* On Leave Card */}
+        {/* Onboarding Card */}
         <div className="bg-white dark:bg-gray-800 rounded-xl p-3 md:p-4 border border-gray-200 dark:border-gray-700 transition-all hover:-translate-y-0.5 hover:shadow-soft">
           <div className="flex justify-between items-start mb-2 md:mb-3">
             <div className="w-8 h-8 md:w-10 md:h-10 bg-amber-100 dark:bg-amber-900/30 rounded-xl flex items-center justify-center">
-              <i className="fas fa-calendar-times text-amber-600 dark:text-amber-400 text-sm md:text-lg"></i>
+              <i className="fas fa-user-clock text-amber-600 dark:text-amber-400 text-sm md:text-lg"></i>
             </div>
           </div>
           <div className="text-xl md:text-2xl font-bold text-amber-600 dark:text-amber-400">
-            0
+            {onboardingCount}
           </div>
           <div className="text-[10px] md:text-xs text-gray-500 dark:text-gray-400 font-medium mt-1">
-            On Leave
+            Onboarding
           </div>
         </div>
       </div>
@@ -225,6 +226,16 @@ const Employees = () => {
             }`}
           >
             Inactive
+          </button>
+          <button
+            onClick={() => handleStatusFilter("Onboarding")}
+            className={`flex-1 sm:flex-none px-3 md:px-4 py-1.5 rounded-full text-xs md:text-sm font-medium transition-all ${
+              statusFilter === "Onboarding"
+                ? "bg-green-500 text-white shadow-md"
+                : "bg-gray-100 dark:bg-gray-700 text-gray-600 dark:text-gray-400 hover:bg-gray-200 dark:hover:bg-gray-600"
+            }`}
+          >
+            Onboarding
           </button>
         </div>
       </div>
@@ -394,7 +405,13 @@ const Employees = () => {
                             <div className="w-9 h-5 md:w-11 md:h-5 bg-gray-300 dark:bg-gray-600 rounded-full peer peer-checked:after:translate-x-full peer-checked:bg-green-500 after:content-[''] after:absolute after:top-0.5 after:left-[2px] after:bg-white after:rounded-full after:h-4 after:w-4 after:transition-all"></div>
                           </div>
                           <span
-                            className={`text-[10px] md:text-xs font-semibold ${emp.status === "Active" ? "text-green-600 dark:text-green-400" : "text-red-600 dark:text-red-400"}`}
+                            className={`text-[10px] md:text-xs font-semibold ${
+                              emp.status === "Active"
+                                ? "text-green-600 dark:text-green-400"
+                                : emp.status === "Onboarding"
+                                ? "text-amber-600 dark:text-amber-400"
+                                : "text-red-600 dark:text-red-400"
+                            }`}
                           >
                             {emp.status}
                           </span>
