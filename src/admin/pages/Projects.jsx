@@ -8,6 +8,7 @@ import {
   fetchProjects,
   addProject,
   updateProject,
+  patchProjectInline,
   deleteProject,
   clearProjectError
 } from "../store/slices/projectSlice";
@@ -23,7 +24,7 @@ const Projects = () => {
   const dispatch = useDispatch();
 
   // Redux Selectors
-  const { projects, loading, actionLoading, error, stats } = useSelector(
+  const { projects, loading, actionLoading, error, stats, validationErrors } = useSelector(
     (state) => state.projects
   );
   const { employees } = useSelector((state) => state.employees);
@@ -128,6 +129,14 @@ const Projects = () => {
         onEdit={handleEdit}
         onDelete={handleDeleteTrigger}
         onAddNew={handleAddNew}
+        onStatusChange={async (projectId, newStatus) => {
+          try {
+            await dispatch(patchProjectInline({ id: projectId, data: { status: newStatus } })).unwrap();
+            showToast("Status updated inline successfully!", "success");
+          } catch (e) {
+            // Handled
+          }
+        }}
       />
 
       {/* Add / Edit Modal Drawer */}
@@ -137,10 +146,12 @@ const Projects = () => {
         onClose={() => {
           setIsAddOpen(false);
           setSelectedProject(null);
+          dispatch(clearProjectError());
         }}
         onSave={handleSaveProject}
         project={selectedProject}
         actionLoading={actionLoading}
+        validationErrors={validationErrors}
       />
 
       {/* Cascading Deletion Modal Dialog */}

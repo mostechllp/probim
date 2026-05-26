@@ -7,7 +7,8 @@ const AddProjectModal = ({
   onClose,
   onSave,
   project, // If project is passed, we are in EDIT mode
-  actionLoading
+  actionLoading,
+  validationErrors = null
 }) => {
   const [name, setName] = useState("");
   const [description, setDescription] = useState("");
@@ -17,6 +18,13 @@ const AddProjectModal = ({
   const [error, setError] = useState("");
 
   const isEditMode = !!project;
+
+  // Helper to get backend validation error for a field
+  const getFieldError = (field) => {
+    if (!validationErrors || !validationErrors[field]) return null;
+    const errors = validationErrors[field];
+    return Array.isArray(errors) ? errors[0] : errors;
+  };
 
   useEffect(() => {
     if (project) {
@@ -107,8 +115,14 @@ const AddProjectModal = ({
               }}
               required
               disabled={actionLoading}
-              className="w-full px-4 py-2.5 text-sm rounded-xl border border-gray-200 dark:border-gray-600 bg-transparent text-gray-800 dark:text-gray-200 focus:outline-none focus:ring-2 focus:ring-green-500/20 focus:border-green-500 disabled:opacity-60 transition-all placeholder:text-gray-400"
+              className={`w-full px-4 py-2.5 text-sm rounded-xl border ${getFieldError('name') ? 'border-red-400 focus:ring-red-500/20 focus:border-red-500' : 'border-gray-200 dark:border-gray-600 focus:ring-green-500/20 focus:border-green-500'} bg-transparent text-gray-800 dark:text-gray-200 focus:outline-none focus:ring-2 disabled:opacity-60 transition-all placeholder:text-gray-400`}
             />
+            {getFieldError('name') && (
+              <p className="text-[11px] text-red-500 font-semibold mt-1 flex items-center gap-1">
+                <i className="fas fa-exclamation-circle text-[10px]"></i>
+                {getFieldError('name')}
+              </p>
+            )}
           </div>
 
           {/* Project Manager */}
@@ -120,7 +134,7 @@ const AddProjectModal = ({
               value={managerId}
               onChange={(e) => setManagerId(e.target.value)}
               disabled={actionLoading}
-              className="w-full px-4 py-2.5 text-sm rounded-xl border border-gray-200 dark:border-gray-600 bg-white dark:bg-gray-800 text-gray-800 dark:text-gray-200 focus:outline-none focus:ring-2 focus:ring-green-500/20 focus:border-green-500 disabled:opacity-60 transition-all cursor-pointer"
+              className={`w-full px-4 py-2.5 text-sm rounded-xl border ${getFieldError('project_manager_id') ? 'border-red-400 focus:ring-red-500/20 focus:border-red-500' : 'border-gray-200 dark:border-gray-600 focus:ring-green-500/20 focus:border-green-500'} bg-white dark:bg-gray-800 text-gray-800 dark:text-gray-200 focus:outline-none focus:ring-2 disabled:opacity-60 transition-all cursor-pointer`}
             >
               <option value="" className="text-gray-400">Select Project Manager</option>
               {employees && employees.map((emp) => (
@@ -129,6 +143,12 @@ const AddProjectModal = ({
                 </option>
               ))}
             </select>
+            {getFieldError('project_manager_id') && (
+              <p className="text-[11px] text-red-500 font-semibold mt-1 flex items-center gap-1">
+                <i className="fas fa-exclamation-circle text-[10px]"></i>
+                {getFieldError('project_manager_id')}
+              </p>
+            )}
           </div>
 
           {/* Team Lead */}
@@ -140,7 +160,7 @@ const AddProjectModal = ({
               value={teamLeadId}
               onChange={(e) => setTeamLeadId(e.target.value)}
               disabled={actionLoading}
-              className="w-full px-4 py-2.5 text-sm rounded-xl border border-gray-200 dark:border-gray-600 bg-white dark:bg-gray-800 text-gray-800 dark:text-gray-200 focus:outline-none focus:ring-2 focus:ring-green-500/20 focus:border-green-500 disabled:opacity-60 transition-all cursor-pointer"
+              className={`w-full px-4 py-2.5 text-sm rounded-xl border ${getFieldError('team_lead_id') ? 'border-red-400 focus:ring-red-500/20 focus:border-red-500' : 'border-gray-200 dark:border-gray-600 focus:ring-green-500/20 focus:border-green-500'} bg-white dark:bg-gray-800 text-gray-800 dark:text-gray-200 focus:outline-none focus:ring-2 disabled:opacity-60 transition-all cursor-pointer`}
             >
               <option value="" className="text-gray-400">Select Team Lead</option>
               {employees && employees.map((emp) => (
@@ -149,6 +169,12 @@ const AddProjectModal = ({
                 </option>
               ))}
             </select>
+            {getFieldError('team_lead_id') && (
+              <p className="text-[11px] text-red-500 font-semibold mt-1 flex items-center gap-1">
+                <i className="fas fa-exclamation-circle text-[10px]"></i>
+                {getFieldError('team_lead_id')}
+              </p>
+            )}
           </div>
 
           {/* Description */}
@@ -162,8 +188,14 @@ const AddProjectModal = ({
               onChange={(e) => setDescription(e.target.value)}
               disabled={actionLoading}
               rows={4}
-              className="w-full px-4 py-2.5 text-sm rounded-xl border border-gray-200 dark:border-gray-600 bg-transparent text-gray-800 dark:text-gray-200 focus:outline-none focus:ring-2 focus:ring-green-500/20 focus:border-green-500 disabled:opacity-60 transition-all placeholder:text-gray-400 resize-none leading-relaxed"
+              className={`w-full px-4 py-2.5 text-sm rounded-xl border ${getFieldError('description') ? 'border-red-400 focus:ring-red-500/20 focus:border-red-500' : 'border-gray-200 dark:border-gray-600 focus:ring-green-500/20 focus:border-green-500'} bg-transparent text-gray-800 dark:text-gray-200 focus:outline-none focus:ring-2 disabled:opacity-60 transition-all placeholder:text-gray-400 resize-none leading-relaxed`}
             />
+            {getFieldError('description') && (
+              <p className="text-[11px] text-red-500 font-semibold mt-1 flex items-center gap-1">
+                <i className="fas fa-exclamation-circle text-[10px]"></i>
+                {getFieldError('description')}
+              </p>
+            )}
           </div>
 
           {/* Status (Only in Edit Mode or Optional) */}

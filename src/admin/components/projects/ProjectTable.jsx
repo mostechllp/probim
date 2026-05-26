@@ -1,4 +1,5 @@
 import React, { useState, useMemo } from "react";
+import { Link } from "react-router-dom";
 import { PROJECT_MODULE_NAME } from "../../utils/constants";
 import EmptyState from "./EmptyState";
 
@@ -8,7 +9,8 @@ const ProjectTable = ({
   loading,
   onEdit,
   onDelete,
-  onAddNew
+  onAddNew,
+  onStatusChange
 }) => {
   // Lookup function for employee names
   const getEmployeeName = (id) => {
@@ -48,11 +50,7 @@ const ProjectTable = ({
       let valA = a[sortField];
       let valB = b[sortField];
 
-      // Handle special column checks
-      if (sortField === "employeeCount") {
-        valA = a.taggedEmployees?.length || 0;
-        valB = b.taggedEmployees?.length || 0;
-      }
+
 
       if (typeof valA === "string") {
         return sortDirection === "asc"
@@ -148,15 +146,7 @@ const ProjectTable = ({
               <th className="px-6 py-4 text-xs font-bold text-gray-500 dark:text-gray-400 uppercase tracking-wider select-none whitespace-nowrap">
                 Leadership
               </th>
-              <th
-                onClick={() => handleSort("employeeCount")}
-                className="px-6 py-4 text-xs font-bold text-gray-500 dark:text-gray-400 uppercase tracking-wider cursor-pointer hover:bg-gray-100/50 dark:hover:bg-gray-700/30 select-none text-center whitespace-nowrap transition-colors"
-              >
-                Employee Count{" "}
-                {sortField === "employeeCount" && (
-                  <i className={`fas fa-sort-amount-${sortDirection === "asc" ? "up" : "down"} text-green-500 ml-1.5`}></i>
-                )}
-              </th>
+
               <th
                 onClick={() => handleSort("createdDate")}
                 className="px-6 py-4 text-xs font-bold text-gray-500 dark:text-gray-400 uppercase tracking-wider cursor-pointer hover:bg-gray-100/50 dark:hover:bg-gray-700/30 select-none whitespace-nowrap transition-colors"
@@ -190,9 +180,7 @@ const ProjectTable = ({
                     <div className="h-3.5 bg-gray-200 dark:bg-gray-700 rounded w-32 mb-1.5"></div>
                     <div className="h-3 bg-gray-200 dark:bg-gray-700 rounded w-24"></div>
                   </td>
-                  <td className="px-6 py-4">
-                    <div className="h-6 w-12 bg-gray-200 dark:bg-gray-700 rounded-full mx-auto"></div>
-                  </td>
+
                   <td className="px-6 py-4">
                     <div className="h-3.5 bg-gray-200 dark:bg-gray-700 rounded w-24"></div>
                   </td>
@@ -209,7 +197,7 @@ const ProjectTable = ({
               ))
             ) : paginatedProjects.length === 0 ? (
               <tr>
-                <td colSpan={7} className="px-6 py-10">
+                <td colSpan={6} className="px-6 py-10">
                   <EmptyState
                     message={searchTerm ? "No Match Found" : `No ${PROJECT_MODULE_NAME} Defined`}
                     description={
@@ -252,11 +240,7 @@ const ProjectTable = ({
                       </div>
                     </div>
                   </td>
-                  <td className="px-6 py-4 whitespace-nowrap text-center">
-                    <span className="inline-flex items-center justify-center px-2.5 py-1 text-xs font-bold leading-none text-green-700 bg-green-500/10 dark:text-green-300 rounded-full min-w-[28px]">
-                      {project.taggedEmployees?.length || 0}
-                    </span>
-                  </td>
+
                   <td className="px-6 py-4 whitespace-nowrap">
                     <span className="text-xs text-gray-500 dark:text-gray-400 font-semibold">
                       <i className="far fa-calendar-alt text-gray-400 mr-1.5"></i>
@@ -264,17 +248,35 @@ const ProjectTable = ({
                     </span>
                   </td>
                   <td className="px-6 py-4 whitespace-nowrap text-center">
-                    <span
-                      className={`inline-block px-3 py-1 rounded-full text-[10px] font-bold tracking-wide uppercase ${project.status === "Active"
+                    <select
+                      value={project.status}
+                      onChange={async (e) => {
+                        const newStatus = e.target.value;
+                        if (onStatusChange) {
+                          onStatusChange(project.id, newStatus);
+                        }
+                      }}
+                      className={`px-3 py-1 rounded-full text-[10px] font-bold tracking-wide uppercase border-0 cursor-pointer focus:outline-none focus:ring-2 focus:ring-green-500/20 text-center bg-transparent ${
+                        project.status === "Active"
                           ? "bg-green-500/10 text-green-600 dark:text-green-400"
                           : "bg-gray-200/50 dark:bg-gray-700/50 text-gray-500 dark:text-gray-400"
-                        }`}
+                      }`}
                     >
-                      {project.status}
-                    </span>
+                      <option value="Active" className="bg-white dark:bg-gray-800 text-gray-800 dark:text-gray-200">Active</option>
+                      <option value="Inactive" className="bg-white dark:bg-gray-800 text-gray-800 dark:text-gray-200">Inactive</option>
+                    </select>
                   </td>
                   <td className="px-6 py-4 whitespace-nowrap text-right text-sm">
                     <div className="flex justify-end items-center gap-2">
+                      {/* View Details Button */}
+                      <Link
+                        to={`/admin/projects/${project.id}`}
+                        title="View Details"
+                        className="w-8 h-8 rounded-lg bg-blue-500/10 hover:bg-blue-500 text-blue-500 hover:text-white flex items-center justify-center transition-all shadow-sm hover:shadow-soft"
+                      >
+                        <i className="fas fa-eye text-xs"></i>
+                      </Link>
+
                       {/* Edit Button */}
                       <button
                         onClick={() => onEdit(project)}

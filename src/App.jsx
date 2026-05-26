@@ -20,6 +20,7 @@ const EmployeeLayout = lazy(() => import("./shared/layouts/EmployeeLayout"));
 // Lazy load pages - Admin
 const AdminDashboard = lazy(() => import("./admin/pages/Dashboard"));
 const Projects = lazy(() => import("./admin/pages/Projects"));
+const ProjectDetails = lazy(() => import("./admin/pages/ProjectDetails"));
 const ProjectAssignments = lazy(() => import("./admin/pages/ProjectAssignments"));
 const Employees = lazy(() => import("./admin/pages/Employees"));
 const AddEmployee = lazy(() => import("./admin/pages/AddEmployee"));
@@ -150,6 +151,7 @@ function App() {
           <Route path="dashboard" element={<AdminDashboard />} />
           <Route path="employees" element={<Employees />} />
           <Route path="projects" element={<Projects />} />
+          <Route path="projects/:id" element={<ProjectDetails />} />
           <Route path="project-assignments" element={<ProjectAssignments />} />
           <Route path="employees/add-employee" element={<AddEmployee />} />
           <Route path="employees/onboarding" element={<Onboarding />} />

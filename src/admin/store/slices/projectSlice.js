@@ -1,212 +1,143 @@
 import { createSlice, createAsyncThunk } from "@reduxjs/toolkit";
+import projectService from "../../services/projectService";
 
-// Helper to interact with LocalStorage
-const STORAGE_KEY = "probim_projects_data";
-
-const loadProjectsFromStorage = () => {
-  try {
-    const data = localStorage.getItem(STORAGE_KEY);
-    if (data) {
-      return JSON.parse(data);
-    }
-  } catch (e) {
-    console.error("Error loading projects from localStorage", e);
-  }
-
-  // Default seed projects
-  const seedProjects = [
-    {
-      id: "proj-1",
-      name: "Enterprise ERP Portal",
-      description: "Re-platforming the legacy human resource portals and customer management system to a single core interface.",
-      status: "Active",
-      createdDate: "2026-02-15",
-      taggedEmployees: [1, 2] // Seeded with employee IDs
-    },
-    {
-      id: "proj-2",
-      name: "Mobile Client App",
-      description: "Developing the React Native application for field agents to register logs, reports, and attendance records.",
-      status: "Active",
-      createdDate: "2026-03-10",
-      taggedEmployees: [3]
-    },
-    {
-      id: "proj-3",
-      name: "Cloud Migration Phase 2",
-      description: "Transitioning database storage and background job runner networks from local hypervisors to secure cloud instances.",
-      status: "Active",
-      createdDate: "2026-04-01",
-      taggedEmployees: [1, 3, 4]
-    },
-    {
-      id: "proj-4",
-      name: "Security Compliance Audit",
-      description: "Reviewing firewall policies, access logs, and verifying role permissions meet data standard regulations.",
-      status: "Inactive",
-      createdDate: "2026-01-20",
-      taggedEmployees: []
-    }
-  ];
-  
-  localStorage.setItem(STORAGE_KEY, JSON.stringify(seedProjects));
-  return seedProjects;
+// Helper to map backend format to frontend model
+const mapProjectFromApi = (apiProj) => {
+  if (!apiProj) return null;
+  return {
+    id: apiProj.id,
+    name: apiProj.name,
+    description: apiProj.description || "",
+    status: apiProj.status ?? "Active",
+    createdDate: apiProj.created_at ? apiProj.created_at.split("T")[0] : apiProj.createdDate || "",
+    updatedDate: apiProj.updated_at ? apiProj.updated_at.split("T")[0] : apiProj.updatedDate || "",
+    taggedEmployees: apiProj.taggedEmployees || apiProj.employees?.map(e => Number(e.id)) || [],
+    managerId: apiProj.project_manager_id || apiProj.managerId || "",
+    teamLeadId: apiProj.team_lead_id || apiProj.teamLeadId || "",
+    // Keep raw data just in case
+    raw: apiProj
+  };
 };
 
-const saveProjectsToStorage = (projects) => {
-  try {
-    localStorage.setItem(STORAGE_KEY, JSON.stringify(projects));
-  } catch (e) {
-    console.error("Error saving projects to localStorage", e);
-  }
-};
-
-// Async Thunks simulating API actions
+// Async Thunks
 export const fetchProjects = createAsyncThunk(
   "projects/fetchProjects",
   async (_, { rejectWithValue }) => {
-    return new Promise((resolve) => {
-      setTimeout(() => {
-        const projects = loadProjectsFromStorage();
-        resolve(projects);
-      }, 500); // 500ms delay to show skeletons
-    });
+    try {
+      const response = await projectService.getProjects();
+      const list = response.data || response || [];
+      return list.map(mapProjectFromApi);
+    } catch (error) {
+      return rejectWithValue(error.message || "Failed to fetch projects");
+    }
+  }
+);
+
+export const fetchProjectById = createAsyncThunk(
+  "projects/fetchProjectById",
+  async (projectId, { rejectWithValue }) => {
+    try {
+      const response = await projectService.getProjectById(projectId);
+      const data = response.data || response;
+      return mapProjectFromApi(data);
+    } catch (error) {
+      return rejectWithValue(error.message || "Failed to fetch project details");
+    }
   }
 );
 
 export const addProject = createAsyncThunk(
   "projects/addProject",
-  async (projectData, { rejectWithValue, getState }) => {
-    return new Promise((resolve, reject) => {
-      setTimeout(() => {
-        const name = projectData.name.trim();
-        const description = (projectData.description || "").trim();
-        
-        const projects = loadProjectsFromStorage();
-        
-        // Duplicate check
-        const isDuplicate = projects.some(
-          (p) => p.name.toLowerCase() === name.toLowerCase()
-        );
-        
-        if (isDuplicate) {
-          reject(rejectWithValue("A project with this name already exists."));
-          return;
-        }
-
-        const newProject = {
-          id: `proj-${Date.now()}`,
-          name,
-          description,
-          status: projectData.status || "Active",
-          createdDate: new Date().toISOString().split("T")[0],
-          taggedEmployees: [],
-          managerId: projectData.managerId || "",
-          teamLeadId: projectData.teamLeadId || ""
-        };
-
-        const updatedProjects = [newProject, ...projects];
-        saveProjectsToStorage(updatedProjects);
-        resolve(newProject);
-      }, 400);
-    });
+  async (projectData, { rejectWithValue }) => {
+    try {
+      const response = await projectService.createProject(projectData);
+      const data = response.data || response;
+      return mapProjectFromApi(data);
+    } catch (error) {
+      if (error.errors) {
+        return rejectWithValue(error);
+      }
+      return rejectWithValue(error.message || "Failed to create project");
+    }
   }
 );
 
 export const updateProject = createAsyncThunk(
   "projects/updateProject",
   async (projectData, { rejectWithValue }) => {
-    return new Promise((resolve, reject) => {
-      setTimeout(() => {
-        const { id, name, description, status, managerId, teamLeadId } = projectData;
-        const trimmedName = name.trim();
-        const trimmedDesc = (description || "").trim();
-        
-        const projects = loadProjectsFromStorage();
-        
-        // Duplicate check (excluding self)
-        const isDuplicate = projects.some(
-          (p) => p.id !== id && p.name.toLowerCase() === trimmedName.toLowerCase()
-        );
-        
-        if (isDuplicate) {
-          reject(rejectWithValue("A project with this name already exists."));
-          return;
-        }
+    try {
+      const { id, ...data } = projectData;
+      const response = await projectService.updateProject(id, data);
+      const updated = response.data || response;
+      return mapProjectFromApi(updated);
+    } catch (error) {
+      if (error.errors) {
+        return rejectWithValue(error);
+      }
+      return rejectWithValue(error.message || "Failed to update project");
+    }
+  }
+);
 
-        const updatedProjects = projects.map((p) => {
-          if (p.id === id) {
-            return {
-              ...p,
-              name: trimmedName,
-              description: trimmedDesc,
-              status: status || p.status,
-              managerId: managerId !== undefined ? managerId : p.managerId || "",
-              teamLeadId: teamLeadId !== undefined ? teamLeadId : p.teamLeadId || ""
-            };
-          }
-          return p;
-        });
-
-        saveProjectsToStorage(updatedProjects);
-        const updated = updatedProjects.find((p) => p.id === id);
-        resolve(updated);
-      }, 400);
-    });
+export const patchProjectInline = createAsyncThunk(
+  "projects/patchProjectInline",
+  async ({ id, data }, { rejectWithValue }) => {
+    try {
+      const response = await projectService.patchProject(id, data);
+      const updated = response.data || response;
+      return mapProjectFromApi(updated);
+    } catch (error) {
+      return rejectWithValue(error.message || "Failed to perform inline update");
+    }
   }
 );
 
 export const deleteProject = createAsyncThunk(
   "projects/deleteProject",
   async (projectId, { rejectWithValue }) => {
-    return new Promise((resolve) => {
-      setTimeout(() => {
-        const projects = loadProjectsFromStorage();
-        const filtered = projects.filter((p) => p.id !== projectId);
-        saveProjectsToStorage(filtered);
-        resolve(projectId);
-      }, 400);
-    });
+    try {
+      await projectService.deleteProject(projectId);
+      return projectId;
+    } catch (error) {
+      return rejectWithValue(error.message || "Failed to delete project");
+    }
+  }
+);
+
+export const fetchProjectEmployees = createAsyncThunk(
+  "projects/fetchProjectEmployees",
+  async (projectId, { rejectWithValue }) => {
+    try {
+      const response = await projectService.getProjectEmployees(projectId);
+      return response.data || response || [];
+    } catch (error) {
+      return rejectWithValue(error.message || "Failed to fetch employees assigned to this project");
+    }
   }
 );
 
 export const tagEmployeesToProject = createAsyncThunk(
   "projects/tagEmployeesToProject",
   async ({ projectId, employeeIds }, { rejectWithValue }) => {
-    return new Promise((resolve, reject) => {
-      setTimeout(() => {
-        const projects = loadProjectsFromStorage();
-        const exists = projects.some((p) => p.id === projectId);
-        
-        if (!exists) {
-          reject(rejectWithValue("Project not found."));
-          return;
-        }
-
-        const updatedProjects = projects.map((p) => {
-          if (p.id === projectId) {
-            return {
-              ...p,
-              // Convert to numbers or keep as IDs depending on format
-              taggedEmployees: employeeIds.map(Number)
-            };
-          }
-          return p;
-        });
-
-        saveProjectsToStorage(updatedProjects);
-        const updated = updatedProjects.find((p) => p.id === projectId);
-        resolve(updated);
-      }, 500);
-    });
+    try {
+      const response = await projectService.assignProjectsToEmployee(projectId, employeeIds);
+      const data = response.data || response;
+      return mapProjectFromApi(data);
+    } catch (error) {
+      return rejectWithValue(error.message || "Failed to tag employees");
+    }
   }
 );
 
 const initialState = {
   projects: [],
+  currentProject: null,
+  projectEmployees: [],
   loading: false,
   actionLoading: false,
   error: null,
+  validationErrors: null,
+  _optimisticSnapshot: null, // snapshot before optimistic update for rollback
   stats: {
     totalProjects: 0,
     activeProjects: 0,
@@ -219,17 +150,16 @@ const calculateStats = (projects) => {
   const totalProjects = projects.length;
   const activeProjects = projects.filter((p) => p.status === "Active").length;
   
-  // Calculate unique tagged employees
   const allTaggedSet = new Set();
   projects.forEach((p) => {
     (p.taggedEmployees || []).forEach((id) => allTaggedSet.add(id));
   });
   const taggedEmployeesCount = allTaggedSet.size;
 
-  // Recently added projects (created within the last 30 days)
   const thirtyDaysAgo = new Date();
   thirtyDaysAgo.setDate(thirtyDaysAgo.getDate() - 30);
   const recentlyAdded = projects.filter((p) => {
+    if (!p.createdDate) return false;
     const createdDate = new Date(p.createdDate);
     return createdDate >= thirtyDaysAgo;
   }).length;
@@ -248,6 +178,7 @@ const projectSlice = createSlice({
   reducers: {
     clearProjectError: (state) => {
       state.error = null;
+      state.validationErrors = null;
     }
   },
   extraReducers: (builder) => {
@@ -267,10 +198,39 @@ const projectSlice = createSlice({
         state.error = action.payload || "Failed to fetch projects";
       })
       
+      // Fetch Single Project By ID
+      .addCase(fetchProjectById.pending, (state) => {
+        state.loading = true;
+        state.error = null;
+      })
+      .addCase(fetchProjectById.fulfilled, (state, action) => {
+        state.loading = false;
+        state.currentProject = action.payload;
+      })
+      .addCase(fetchProjectById.rejected, (state, action) => {
+        state.loading = false;
+        state.error = action.payload || "Failed to fetch project details";
+      })
+
+      // Fetch Employees assigned to project
+      .addCase(fetchProjectEmployees.pending, (state) => {
+        state.loading = true;
+        state.error = null;
+      })
+      .addCase(fetchProjectEmployees.fulfilled, (state, action) => {
+        state.loading = false;
+        state.projectEmployees = action.payload;
+      })
+      .addCase(fetchProjectEmployees.rejected, (state, action) => {
+        state.loading = false;
+        state.error = action.payload || "Failed to fetch project employees";
+      })
+
       // Add Project
       .addCase(addProject.pending, (state) => {
         state.actionLoading = true;
         state.error = null;
+        state.validationErrors = null;
       })
       .addCase(addProject.fulfilled, (state, action) => {
         state.actionLoading = false;
@@ -279,22 +239,86 @@ const projectSlice = createSlice({
       })
       .addCase(addProject.rejected, (state, action) => {
         state.actionLoading = false;
-        state.error = action.payload;
+        if (action.payload && action.payload.errors) {
+          state.validationErrors = action.payload.errors;
+          state.error = action.payload.message;
+        } else {
+          state.error = action.payload;
+        }
       })
 
-      // Update Project
-      .addCase(updateProject.pending, (state) => {
+      // Update Project (with Optimistic UI update logic)
+      .addCase(updateProject.pending, (state, action) => {
+        state.actionLoading = true;
+        state.error = null;
+        state.validationErrors = null;
+        
+        // Optimistic UI updates — save snapshot for rollback
+        if (action.meta?.arg) {
+          const { id, name, description, status, managerId, teamLeadId } = action.meta.arg;
+          const originalProject = state.projects.find((p) => p.id === id);
+          if (originalProject) {
+            state._optimisticSnapshot = { ...originalProject };
+          }
+          state.projects = state.projects.map((p) => {
+            if (p.id === id) {
+              return {
+                ...p,
+                name: name !== undefined ? name : p.name,
+                description: description !== undefined ? description : p.description,
+                status: status !== undefined ? status : p.status,
+                managerId: managerId !== undefined ? managerId : p.managerId,
+                teamLeadId: teamLeadId !== undefined ? teamLeadId : p.teamLeadId
+              };
+            }
+            return p;
+          });
+        }
+      })
+      .addCase(updateProject.fulfilled, (state, action) => {
+        state.actionLoading = false;
+        state._optimisticSnapshot = null; // clear snapshot on success
+        state.projects = state.projects.map((p) => 
+          p.id === action.payload.id ? action.payload : p
+        );
+        if (state.currentProject && state.currentProject.id === action.payload.id) {
+          state.currentProject = action.payload;
+        }
+        state.stats = calculateStats(state.projects);
+      })
+      .addCase(updateProject.rejected, (state, action) => {
+        state.actionLoading = false;
+        // Rollback optimistic update
+        if (state._optimisticSnapshot) {
+          state.projects = state.projects.map((p) =>
+            p.id === state._optimisticSnapshot.id ? state._optimisticSnapshot : p
+          );
+          state._optimisticSnapshot = null;
+        }
+        if (action.payload && action.payload.errors) {
+          state.validationErrors = action.payload.errors;
+          state.error = action.payload.message;
+        } else {
+          state.error = action.payload;
+        }
+      })
+
+      // Inline Patch Project
+      .addCase(patchProjectInline.pending, (state) => {
         state.actionLoading = true;
         state.error = null;
       })
-      .addCase(updateProject.fulfilled, (state, action) => {
+      .addCase(patchProjectInline.fulfilled, (state, action) => {
         state.actionLoading = false;
         state.projects = state.projects.map((p) => 
           p.id === action.payload.id ? action.payload : p
         );
+        if (state.currentProject && state.currentProject.id === action.payload.id) {
+          state.currentProject = action.payload;
+        }
         state.stats = calculateStats(state.projects);
       })
-      .addCase(updateProject.rejected, (state, action) => {
+      .addCase(patchProjectInline.rejected, (state, action) => {
         state.actionLoading = false;
         state.error = action.payload;
       })
@@ -307,6 +331,9 @@ const projectSlice = createSlice({
       .addCase(deleteProject.fulfilled, (state, action) => {
         state.actionLoading = false;
         state.projects = state.projects.filter((p) => p.id !== action.payload);
+        if (state.currentProject && state.currentProject.id === action.payload) {
+          state.currentProject = null;
+        }
         state.stats = calculateStats(state.projects);
       })
       .addCase(deleteProject.rejected, (state, action) => {
@@ -314,7 +341,7 @@ const projectSlice = createSlice({
         state.error = action.payload || "Failed to delete project";
       })
 
-      // Tag Employees to Project
+      // Tag Employees
       .addCase(tagEmployeesToProject.pending, (state) => {
         state.actionLoading = true;
         state.error = null;
@@ -324,6 +351,9 @@ const projectSlice = createSlice({
         state.projects = state.projects.map((p) => 
           p.id === action.payload.id ? action.payload : p
         );
+        if (state.currentProject && state.currentProject.id === action.payload.id) {
+          state.currentProject = action.payload;
+        }
         state.stats = calculateStats(state.projects);
       })
       .addCase(tagEmployeesToProject.rejected, (state, action) => {

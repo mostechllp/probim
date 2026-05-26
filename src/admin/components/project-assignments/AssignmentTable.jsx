@@ -3,6 +3,143 @@ import { PROJECT_MODULE_NAME } from "../../utils/constants";
 import ProjectTags from "./ProjectTags";
 import EmptyState from "../projects/EmptyState";
 
+/* ─── EmployeeProjectsDrawer ─── */
+const EmployeeProjectsDrawer = ({ isOpen, onClose, employeeName, projectIds = [], projects = [], employees = [] }) => {
+  if (!isOpen) return null;
+
+  const getEmployeeDetails = (empId) => {
+    if (!empId) return { name: "Not Assigned", avatar: null, designation: "-" };
+    const emp = employees.find((e) => String(e.id) === String(empId));
+    return emp ? {
+      name: emp.name,
+      avatar: emp.avatar,
+      designation: emp.designation
+    } : { name: "Not Assigned", avatar: null, designation: "-" };
+  };
+
+  const getInitials = (name) => (name && name !== "Not Assigned" ? name.charAt(0).toUpperCase() : "N");
+
+  // Get full details for assigned projects
+  const assignedProjects = projects.filter((p) => projectIds.includes(String(p.id)));
+
+  return (
+    <>
+      {/* Backdrop with slide glow */}
+      <div
+        onClick={onClose}
+        className="fixed inset-0 bg-black/35 backdrop-blur-[2px] z-[1200] animate-fadeIn"
+      />
+
+      {/* Slide Drawer */}
+      <div
+        className="fixed top-0 right-0 h-full w-full max-w-md bg-white dark:bg-gray-800 border-l border-gray-100 dark:border-gray-700 shadow-2xl z-[1300] flex flex-col animate-slideLeft overflow-hidden"
+      >
+        {/* Drawer Header */}
+        <div className="p-5 border-b border-gray-100 dark:border-gray-700 flex justify-between items-center bg-gray-50/50 dark:bg-gray-800/40">
+          <div>
+            <h3 className="text-sm font-bold text-gray-800 dark:text-gray-200 uppercase tracking-wider">
+              Assigned Projects
+            </h3>
+            <p className="text-[10px] text-gray-400 dark:text-gray-500 font-semibold tracking-wide mt-1">
+              Resource: <span className="text-green-600 dark:text-green-400 font-bold">{employeeName}</span>
+            </p>
+          </div>
+          <button
+            onClick={onClose}
+            className="w-8 h-8 rounded-full flex items-center justify-center text-gray-400 hover:text-red-500 hover:bg-gray-100 dark:hover:bg-gray-700 transition-colors"
+          >
+            <i className="fas fa-times text-lg"></i>
+          </button>
+        </div>
+
+        {/* Scrollable list */}
+        <div className="flex-1 overflow-y-auto p-5 space-y-4 scrollbar-thin">
+          {assignedProjects.length === 0 ? (
+            <div className="h-full flex flex-col items-center justify-center text-center p-6">
+              <div className="w-16 h-16 bg-green-500/10 rounded-2xl flex items-center justify-center mb-4 text-green-500 animate-pulse">
+                <i className="fas fa-folder-open text-2xl"></i>
+              </div>
+              <h4 className="text-sm font-bold text-gray-700 dark:text-gray-300">No Assigned Projects</h4>
+              <p className="text-xs text-gray-400 mt-2 max-w-[200px] leading-relaxed">
+                This employee is not currently mapped to any project directories.
+              </p>
+            </div>
+          ) : (
+            assignedProjects.map((proj) => {
+              const pm = getEmployeeDetails(proj.managerId);
+              const tl = getEmployeeDetails(proj.teamLeadId);
+
+              return (
+                <div
+                  key={proj.id}
+                  className="bg-gray-55 dark:bg-gray-750/30 rounded-2xl border border-gray-100 dark:border-gray-700 p-4.5 space-y-3.5 shadow-sm transform hover:-translate-y-0.5 hover:shadow-soft transition-all duration-200"
+                >
+                  <div className="flex justify-between items-start gap-2">
+                    <h4 className="text-xs font-bold text-gray-800 dark:text-gray-200 leading-tight">
+                      {proj.name}
+                    </h4>
+                    <span
+                      className={`px-2.5 py-0.5 rounded-full text-[9px] font-extrabold tracking-wide uppercase ${proj.status === "Active"
+                          ? "bg-green-500/10 text-green-600 dark:text-green-400"
+                          : "bg-gray-150 text-gray-500 dark:text-gray-400"
+                        }`}
+                    >
+                      {proj.status}
+                    </span>
+                  </div>
+
+                  {proj.description && (
+                    <p className="text-[10px] text-gray-500 dark:text-gray-400 line-clamp-2 leading-relaxed">
+                      {proj.description}
+                    </p>
+                  )}
+
+                  <div className="grid grid-cols-2 gap-3 pt-3 border-t border-gray-100 dark:border-gray-700/50">
+                    {/* Project Manager info */}
+                    <div className="space-y-1.5">
+                      <span className="text-[9px] font-bold text-gray-400 dark:text-gray-500 uppercase tracking-widest block">PM</span>
+                      <div className="flex items-center gap-2">
+                        <div className="w-6 h-6 rounded-full overflow-hidden bg-blue-500/15 flex items-center justify-center border border-gray-100 dark:border-gray-700 flex-shrink-0">
+                          {pm.avatar ? (
+                            <img src={pm.avatar} alt={pm.name} className="w-full h-full object-cover" />
+                          ) : (
+                            <span className="text-[9px] font-bold text-blue-600 dark:text-blue-400">{getInitials(pm.name)}</span>
+                          )}
+                        </div>
+                        <span className="text-[10px] font-semibold text-gray-700 dark:text-gray-350 truncate block max-w-[90px]" title={pm.name}>
+                          {pm.name}
+                        </span>
+                      </div>
+                    </div>
+
+                    {/* Team Lead info */}
+                    <div className="space-y-1.5">
+                      <span className="text-[9px] font-bold text-gray-400 dark:text-gray-500 uppercase tracking-widest block">TL</span>
+                      <div className="flex items-center gap-2">
+                        <div className="w-6 h-6 rounded-full overflow-hidden bg-purple-500/15 flex items-center justify-center border border-gray-100 dark:border-gray-700 flex-shrink-0">
+                          {tl.avatar ? (
+                            <img src={tl.avatar} alt={tl.name} className="w-full h-full object-cover" />
+                          ) : (
+                            <span className="text-[9px] font-bold text-purple-600 dark:text-purple-400">{getInitials(tl.name)}</span>
+                          )}
+                        </div>
+                        <span className="text-[10px] font-semibold text-gray-700 dark:text-gray-350 truncate block max-w-[90px]" title={tl.name}>
+                          {tl.name}
+                        </span>
+                      </div>
+                    </div>
+                  </div>
+                </div>
+              );
+            })
+          )}
+        </div>
+      </div>
+    </>
+  );
+};
+
+/* ─── Main Table Component ─── */
 const AssignmentTable = ({
   assignments, // Array of { employeeId, projectIds, lastUpdated }
   employees, // List of all employees to map names/avatars
@@ -17,6 +154,10 @@ const AssignmentTable = ({
   const [sortDirection, setSortDirection] = useState("asc");
   const [currentPage, setCurrentPage] = useState(1);
   const [itemsPerPage, setItemsPerPage] = useState(10);
+
+  // Side Drawer state for single employee assignments
+  const [drawerOpen, setDrawerOpen] = useState(false);
+  const [drawerEmployee, setDrawerEmployee] = useState(null);
 
   // Map assignments to include employee information for quick searches and sorts
   const fullAssignments = useMemo(() => {
@@ -42,6 +183,44 @@ const AssignmentTable = ({
     });
   }, [assignments, employees]);
 
+  // Lookup function for Team Leads for assigned projects
+  const getProjectTeamLeads = (projectIds) => {
+    if (!projectIds || projectIds.length === 0) {
+      return <span className="text-gray-400 dark:text-gray-500 italic text-[11px]">No Projects Mapped</span>;
+    }
+
+    // Find unique team lead names
+    const leads = [];
+    projectIds.forEach((projId) => {
+      const proj = projects.find((p) => String(p.id) === String(projId));
+      if (proj && proj.teamLeadId) {
+        const leadEmp = employees.find((e) => String(e.id) === String(proj.teamLeadId));
+        if (leadEmp && leadEmp.name && !leads.includes(leadEmp.name)) {
+          leads.push(leadEmp.name);
+        }
+      }
+    });
+
+    if (leads.length === 0) {
+      return <span className="text-gray-450 italic text-[11px]">Not Assigned</span>;
+    }
+
+    return (
+      <div className="flex flex-wrap gap-1">
+        {leads.map((leadName, index) => (
+          <span
+            key={index}
+            className="inline-flex items-center gap-1 text-[10px] font-bold text-purple-650 bg-purple-500/10 dark:text-purple-300 dark:bg-purple-500/15 px-2 py-0.5 rounded-md max-w-[150px] truncate"
+            title={leadName}
+          >
+            <i className="fas fa-user-tie text-[8px] opacity-75"></i>
+            {leadName}
+          </span>
+        ))}
+      </div>
+    );
+  };
+
   // Handle column sorting toggle
   const handleSort = (field) => {
     if (sortField === field) {
@@ -58,6 +237,7 @@ const AssignmentTable = ({
       const matchName = assign.employeeName.toLowerCase().includes(searchTerm.toLowerCase());
       const matchRole = assign.designation.toLowerCase().includes(searchTerm.toLowerCase());
       const matchDept = assign.department.toLowerCase().includes(searchTerm.toLowerCase());
+      const matchEmpId = String(assign.employeeId).includes(searchTerm);
 
       // Also match assigned projects names
       const matchProjects = assign.projectIds.some((projId) => {
@@ -65,7 +245,7 @@ const AssignmentTable = ({
         return proj?.name.toLowerCase().includes(searchTerm.toLowerCase());
       });
 
-      return matchName || matchRole || matchDept || matchProjects;
+      return matchName || matchRole || matchDept || matchProjects || matchEmpId;
     });
   }, [fullAssignments, searchTerm, projects]);
 
@@ -111,8 +291,13 @@ const AssignmentTable = ({
     return name ? name.charAt(0).toUpperCase() : "E";
   };
 
+  const handleOpenDrawer = (assign) => {
+    setDrawerEmployee(assign);
+    setDrawerOpen(true);
+  };
+
   return (
-    <div className="bg-white dark:bg-gray-800 rounded-2xl border border-gray-100 dark:border-gray-700/60 shadow-soft overflow-hidden">
+    <div className="bg-white dark:bg-gray-800 rounded-2xl border border-gray-100 dark:border-gray-700/60 shadow-soft overflow-hidden animate-fadeIn">
 
       {/* Utilities Control Bar */}
       <div className="p-5 border-b border-gray-100 dark:border-gray-700 flex flex-col md:flex-row md:items-center justify-between gap-4">
@@ -140,10 +325,10 @@ const AssignmentTable = ({
         <div className="relative w-full md:w-80">
           <input
             type="text"
-            placeholder="Search employee or assigned projects..."
+            placeholder="Search employee, ID or assigned projects..."
             value={searchTerm}
             onChange={(e) => setSearchTerm(e.target.value)}
-            className="w-full pl-9 pr-4 py-2 text-xs rounded-xl border border-gray-250 dark:border-gray-600 bg-gray-50 dark:bg-gray-750 text-gray-800 dark:text-gray-200 placeholder-gray-400 focus:outline-none focus:ring-2 focus:ring-green-500/20 focus:border-green-500 focus:bg-white dark:focus:bg-gray-800 transition-all placeholder:text-gray-400"
+            className="w-full pl-9 pr-4 py-2 text-xs rounded-xl border border-gray-250 dark:border-gray-600 bg-gray-55 dark:bg-gray-750 text-gray-800 dark:text-gray-200 placeholder-gray-400 focus:outline-none focus:ring-2 focus:ring-green-500/20 focus:border-green-500 focus:bg-white dark:focus:bg-gray-800 transition-all placeholder:text-gray-400"
           />
           <i className="fas fa-search absolute left-3 top-3 text-gray-400 text-xs"></i>
           {searchTerm && (
@@ -171,26 +356,20 @@ const AssignmentTable = ({
                   <i className={`fas fa-sort-amount-${sortDirection === "asc" ? "up" : "down"} text-green-500 ml-1.5`}></i>
                 )}
               </th>
+              <th
+                onClick={() => handleSort("employeeId")}
+                className="px-6 py-4 text-xs font-bold text-gray-500 dark:text-gray-400 uppercase tracking-wider cursor-pointer hover:bg-gray-100/50 dark:hover:bg-gray-700/30 select-none text-center whitespace-nowrap transition-colors"
+              >
+                Employee ID{" "}
+                {sortField === "employeeId" && (
+                  <i className={`fas fa-sort-amount-${sortDirection === "asc" ? "up" : "down"} text-green-500 ml-1.5`}></i>
+                )}
+              </th>
               <th className="px-6 py-4 text-xs font-bold text-gray-500 dark:text-gray-400 uppercase tracking-wider select-none whitespace-nowrap">
                 Assigned {PROJECT_MODULE_NAME}s
               </th>
-              <th
-                onClick={() => handleSort("projectCount")}
-                className="px-6 py-4 text-xs font-bold text-gray-500 dark:text-gray-400 uppercase tracking-wider cursor-pointer hover:bg-gray-100/50 dark:hover:bg-gray-700/30 select-none text-center whitespace-nowrap transition-colors"
-              >
-                Total Projects{" "}
-                {sortField === "projectCount" && (
-                  <i className={`fas fa-sort-amount-${sortDirection === "asc" ? "up" : "down"} text-green-500 ml-1.5`}></i>
-                )}
-              </th>
-              <th
-                onClick={() => handleSort("lastUpdated")}
-                className="px-6 py-4 text-xs font-bold text-gray-500 dark:text-gray-400 uppercase tracking-wider cursor-pointer hover:bg-gray-100/50 dark:hover:bg-gray-700/30 select-none whitespace-nowrap transition-colors"
-              >
-                Last Updated{" "}
-                {sortField === "lastUpdated" && (
-                  <i className={`fas fa-sort-amount-${sortDirection === "asc" ? "up" : "down"} text-green-500 ml-1.5`}></i>
-                )}
+              <th className="px-6 py-4 text-xs font-bold text-gray-500 dark:text-gray-400 uppercase tracking-wider select-none whitespace-nowrap">
+                Team Lead
               </th>
               <th className="px-6 py-4 text-xs font-bold text-gray-500 dark:text-gray-400 uppercase tracking-wider select-none text-right whitespace-nowrap">
                 Actions
@@ -212,16 +391,16 @@ const AssignmentTable = ({
                     </div>
                   </td>
                   <td className="px-6 py-4">
+                    <div className="h-4 bg-gray-200 dark:bg-gray-700 rounded w-12 mx-auto"></div>
+                  </td>
+                  <td className="px-6 py-4">
                     <div className="flex gap-2">
                       <div className="h-6 w-16 bg-gray-200 dark:bg-gray-700 rounded-full"></div>
                       <div className="h-6 w-20 bg-gray-200 dark:bg-gray-700 rounded-full"></div>
                     </div>
                   </td>
                   <td className="px-6 py-4">
-                    <div className="h-6 w-10 bg-gray-200 dark:bg-gray-700 rounded-full mx-auto"></div>
-                  </td>
-                  <td className="px-6 py-4">
-                    <div className="h-3.5 bg-gray-200 dark:bg-gray-700 rounded w-20"></div>
+                    <div className="h-6 w-20 bg-gray-200 dark:bg-gray-700 rounded-lg"></div>
                   </td>
                   <td className="px-6 py-4">
                     <div className="flex gap-2 justify-end">
@@ -256,7 +435,10 @@ const AssignmentTable = ({
                   <td className="px-6 py-4 whitespace-nowrap">
                     <div className="flex items-center gap-3">
                       {/* Avatar */}
-                      <div className="w-8 h-8 rounded-full overflow-hidden bg-gradient-to-br from-green-500/20 to-teal-500/20 dark:from-green-500/10 dark:to-teal-500/10 flex items-center justify-center flex-shrink-0 border border-gray-100 dark:border-gray-700">
+                      <div
+                        onClick={() => handleOpenDrawer(assign)}
+                        className="w-8 h-8 rounded-full overflow-hidden bg-gradient-to-br from-green-500/20 to-teal-500/20 dark:from-green-500/10 dark:to-teal-500/10 flex items-center justify-center flex-shrink-0 border border-gray-100 dark:border-gray-700 cursor-pointer hover:ring-2 hover:ring-green-400 transition-all"
+                      >
                         {assign.avatar ? (
                           <img src={assign.avatar} alt={assign.employeeName} className="w-full h-full object-cover" />
                         ) : (
@@ -268,7 +450,10 @@ const AssignmentTable = ({
 
                       {/* Details */}
                       <div className="min-w-0">
-                        <span className="text-sm font-bold text-gray-800 dark:text-gray-200 block">
+                        <span
+                          onClick={() => handleOpenDrawer(assign)}
+                          className="text-sm font-bold text-gray-800 dark:text-gray-200 block hover:text-green-550 cursor-pointer transition-colors"
+                        >
                           {assign.employeeName}
                         </span>
                         <span className="text-[10px] text-gray-400 dark:text-gray-500 block leading-none mt-1 font-semibold">
@@ -276,6 +461,11 @@ const AssignmentTable = ({
                         </span>
                       </div>
                     </div>
+                  </td>
+
+                  {/* Employee ID Column */}
+                  <td className="px-6 py-4 whitespace-nowrap text-center text-xs font-bold text-gray-500 dark:text-gray-400">
+                    #{assign.employeeId}
                   </td>
 
                   {/* Assigned Tags List */}
@@ -286,24 +476,23 @@ const AssignmentTable = ({
                     />
                   </td>
 
-                  {/* Project Count Pill */}
-                  <td className="px-6 py-4 whitespace-nowrap text-center">
-                    <span className="inline-flex items-center justify-center px-2.5 py-1 text-xs font-bold leading-none text-green-700 bg-green-500/10 dark:text-green-300 rounded-full min-w-[28px]">
-                      {assign.projectCount}
-                    </span>
-                  </td>
-
-                  {/* Last updated Timestamp */}
-                  <td className="px-6 py-4 whitespace-nowrap">
-                    <span className="text-xs text-gray-500 dark:text-gray-400 font-semibold">
-                      <i className="far fa-clock text-gray-400 mr-1.5"></i>
-                      {assign.lastUpdated}
-                    </span>
+                  {/* Resolved Team Leads badges column */}
+                  <td className="px-6 py-4">
+                    {getProjectTeamLeads(assign.projectIds)}
                   </td>
 
                   {/* Actions Column */}
                   <td className="px-6 py-4 whitespace-nowrap text-right text-sm">
                     <div className="flex justify-end items-center gap-2">
+                      {/* View Assignments (Drawer) */}
+                      <button
+                        onClick={() => handleOpenDrawer(assign)}
+                        title="View Assignments Card"
+                        className="w-8 h-8 rounded-lg bg-blue-500/10 hover:bg-blue-50 text-blue-550 hover:text-white flex items-center justify-center transition-all shadow-sm hover:shadow-soft"
+                      >
+                        <i className="fas fa-eye text-xs"></i>
+                      </button>
+
                       {/* Edit Button */}
                       <button
                         onClick={() => onEdit(assign)}
@@ -374,6 +563,19 @@ const AssignmentTable = ({
           </div>
         </div>
       )}
+
+      {/* Slide Drawer for project assignments detailed cards */}
+      <EmployeeProjectsDrawer
+        isOpen={drawerOpen}
+        onClose={() => {
+          setDrawerOpen(false);
+          setDrawerEmployee(null);
+        }}
+        employeeName={drawerEmployee?.employeeName || ""}
+        projectIds={drawerEmployee?.projectIds || []}
+        projects={projects}
+        employees={employees}
+      />
     </div>
   );
 };
