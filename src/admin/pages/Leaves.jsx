@@ -1,4 +1,5 @@
-import UnderDevelopment from "../components/common/UnderDevelopment";
+import UnderDevelopment from "../../components/common/UnderDevelopment";
+
 
 const Leaves = () => {
   // Show under development temporarily

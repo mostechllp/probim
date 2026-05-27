@@ -311,7 +311,7 @@ const Attendances = () => {
         <EntriesSelector value={perPage} onChange={handlePerPageChange} />
         <div className="flex flex-col sm:flex-row gap-3 w-full sm:w-auto">
           <SearchBar value={searchTerm} onChange={handleSearchChange} placeholder="Search records..." />
-          <button
+          {/* <button
             onClick={() => setShowUploadModal(true)}
             disabled={isUploading}
             className="bg-green-500 hover:bg-green-600 text-white px-4 py-2 rounded-full text-sm font-semibold flex items-center justify-center gap-2 transition-all shadow-md hover:shadow-lg w-full sm:w-auto disabled:opacity-60 disabled:cursor-not-allowed"
@@ -321,7 +321,7 @@ const Attendances = () => {
             ) : (
               <><i className="fas fa-plus-circle"></i> Upload Logs</>
             )}
-          </button>
+          </button> */}
         </div>
       </div>
 
