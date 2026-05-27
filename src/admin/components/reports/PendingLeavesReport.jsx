@@ -8,6 +8,9 @@ import Pagination from "../common/Paginations";
 import ConfirmModal from "../common/ConfirmModal";
 import { clearError, updateLeaveStatus } from "../../store/slices/LeaveSlice";
 import { fetchPendingLeavesReport } from "../../store/slices/reportSlice";
+import ExportModal from "../../../components/common/ExportModal";
+import { exportToCSV, formatDate } from "../../../utils/reportUtils";
+import { generateLeavesPDF } from "../../../utils/reportPDFConfigs";
 
 const PendingLeavesReport = () => {
   const dispatch = useDispatch();
@@ -21,6 +24,7 @@ const PendingLeavesReport = () => {
   const [currentPage, setCurrentPage] = useState(1);
   const [perPage, setPerPage] = useState(10);
   const [searchTerm, setSearchTerm] = useState("");
+  const [showExportModal, setShowExportModal] = useState(false);
 
   // Filter states
   const [selectedLeaveType, setSelectedLeaveType] = useState("all");
@@ -58,7 +62,7 @@ const PendingLeavesReport = () => {
   useEffect(() => {
     // eslint-disable-next-line react-hooks/set-state-in-effect
     setCurrentPage(1);
-  }, [searchTerm, selectedLeaveType, dateRange, startDate, endDate]);
+  }, [searchTerm, selectedLeaveType, dateRange, startDate, endDate, perPage]);
 
   // Get unique leave types for filter
   const leavesArray = Array.isArray(leaves) ? leaves : [];
@@ -152,6 +156,24 @@ const PendingLeavesReport = () => {
     return filtered;
   };
 
+  // Transform data for export
+  const getExportData = () => {
+    const filtered = getFilteredLeaves();
+    return filtered.map((leave) => ({
+      request_date: formatDate(leave.created_at || leave.request_date),
+      employee_name: leave.employee_name ||
+        leave.employee?.name ||
+        leave.employee?.first_name ||
+        "-",
+      leave_type: leave.leave_type?.name || leave.type || "-",
+      from_date: formatDate(leave.from_date || leave.fromDate),
+      to_date: formatDate(leave.to_date || leave.toDate),
+      days: leave.number_of_days || leave.days || "-",
+      status: "Pending",
+      reason: leave.reason || "-",
+    }));
+  };
+
   const filteredLeaves = getFilteredLeaves();
   const totalFiltered = filteredLeaves.length;
   const totalPages = Math.ceil(totalFiltered / perPage);
@@ -222,74 +244,43 @@ const PendingLeavesReport = () => {
     setActionLoading(false);
   };
 
-  const handleExport = () => {
-    try {
-      const dataToExport = filteredLeaves;
-
-      if (dataToExport.length === 0) {
-        showToast("No data to export", "warning");
-        return;
-      }
-
-      const headers = [
-        "Request Date",
-        "Employee",
-        "Leave Type",
-        "From",
-        "To",
-        "Days",
-        "Status",
-      ];
-
-      const rows = dataToExport.map((leave) => [
-        formatDate(leave.created_at || leave.request_date),
-        leave.employee_name ||
-          leave.employee?.name ||
-          leave.employee?.first_name ||
-          "-",
-        leave.leave_type?.name || leave.type || "-",
-        formatDate(leave.from_date || leave.fromDate),
-        formatDate(leave.to_date || leave.toDate),
-        leave.number_of_days || leave.days || "-",
-        leave.status || "Pending",
-      ]);
-
-      const csvContent = [
-        headers.join(","),
-        ...rows.map((row) =>
-          row.map((cell) => `"${String(cell).replace(/"/g, '""')}"`).join(","),
-        ),
-      ].join("\n");
-
-      const blob = new Blob([csvContent], { type: "text/csv;charset=utf-8;" });
-      const link = document.createElement("a");
-      const url = URL.createObjectURL(blob);
-      link.setAttribute("href", url);
-      link.setAttribute(
-        "download",
-        `pending_leaves_${new Date().toISOString().split("T")[0]}.csv`,
-      );
-      document.body.appendChild(link);
-      link.click();
-      document.body.removeChild(link);
-      URL.revokeObjectURL(url);
-
-      showToast("Pending leaves exported successfully!", "success");
-    } catch (error) {
-      console.error("Export error:", error);
-      showToast("Failed to export data", "error");
+  const handleExport = async (format) => {
+    const exportData = getExportData();
+    
+    if (exportData.length === 0) {
+      showToast("No data to export", "warning");
+      return;
     }
-  };
 
-  const formatDate = (dateString) => {
-    if (!dateString) return "-";
-    const date = new Date(dateString);
-    if (isNaN(date.getTime())) return "-";
-    return date.toLocaleDateString("en-GB", {
-      day: "2-digit",
-      month: "short",
-      year: "numeric",
-    });
+    const headers = [
+      { key: "request_date", label: "Request Date" },
+      { key: "employee_name", label: "Employee" },
+      { key: "leave_type", label: "Leave Type" },
+      { key: "from_date", label: "From" },
+      { key: "to_date", label: "To" },
+      { key: "days", label: "Days" },
+      { key: "status", label: "Status" },
+      { key: "reason", label: "Reason" },
+    ];
+
+    const filename = `pending_leaves_${new Date().toISOString().split("T")[0]}`;
+
+    if (format === "csv") {
+      exportToCSV(exportData, headers, `${filename}.csv`);
+      showToast("Pending leaves exported successfully!", "success");
+    } else if (format === "pdf") {
+      // Get filter summary for PDF
+      const filters = {
+        leave_type: selectedLeaveType !== "all" ? selectedLeaveType : null,
+        date_range: dateRange !== "all" ? dateRange : null,
+        start_date: startDate || null,
+        end_date: endDate || null,
+        status_filter: "Pending",
+      };
+      
+      generateLeavesPDF(filteredLeaves, filters);
+      showToast("PDF report generated successfully!", "success");
+    }
   };
 
   const getStatusBadge = () => {
@@ -388,7 +379,7 @@ const PendingLeavesReport = () => {
 
         {/* Filters Bar */}
         <div className="bg-white dark:bg-gray-800 border border-gray-200 dark:border-gray-700 rounded-xl p-4 mb-6">
-          <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
+          <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">
             {/* Leave Type Filter */}
             <div>
               <label className="block text-xs font-semibold text-gray-500 dark:text-gray-400 mb-1">
@@ -439,7 +430,7 @@ const PendingLeavesReport = () => {
 
           {/* Custom Date Range */}
           {dateRange === "custom" && (
-            <div className="grid grid-cols-1 sm:grid-cols-2 gap-4 mt-4">
+            <div className="grid grid-cols-1 sm:grid-cols-2 gap-4 mt-4 pt-4 border-t border-gray-200 dark:border-gray-700">
               <div>
                 <label className="block text-xs font-semibold text-gray-500 dark:text-gray-400 mb-1">
                   From Date
@@ -485,7 +476,7 @@ const PendingLeavesReport = () => {
               placeholder="Search by employee or leave type..."
             />
             <button
-              onClick={handleExport}
+              onClick={() => setShowExportModal(true)}
               className="bg-green-500 hover:bg-green-600 text-white px-4 py-2 rounded-full text-sm font-semibold flex items-center justify-center gap-2 transition-all shadow-md hover:shadow-lg w-full sm:w-auto"
             >
               <i className="fas fa-download"></i> Export Report
@@ -496,7 +487,7 @@ const PendingLeavesReport = () => {
         {/* Loading State */}
         {loading && filteredLeaves.length === 0 ? (
           <div className="bg-white dark:bg-gray-800 rounded-xl border border-gray-200 dark:border-gray-700 p-8 text-center">
-            <i className="fas fa-spinner fa-spin text-3xl text-amber-500 mb-3"></i>
+            <i className="fas fa-spinner fa-spin text-3xl text-green-500 mb-3"></i>
             <p className="text-gray-500 dark:text-gray-400">
               Loading pending leaves...
             </p>
@@ -505,7 +496,7 @@ const PendingLeavesReport = () => {
           <>
             {/* Pending Leaves Table */}
             <div className="bg-white dark:bg-gray-800 rounded-xl border border-gray-200 dark:border-gray-700 overflow-x-auto shadow-soft">
-              <div className="min-w-[800px] md:min-w-0">
+              <div className="min-w-[900px] lg:min-w-0">
                 <table className="w-full border-collapse">
                   <thead>
                     <tr className="bg-gray-50 dark:bg-gray-700/50 border-b border-gray-200 dark:border-gray-700">
@@ -626,6 +617,17 @@ const PendingLeavesReport = () => {
           </>
         )}
       </main>
+
+      {/* Export Modal */}
+      <ExportModal
+        isOpen={showExportModal}
+        onClose={() => setShowExportModal(false)}
+        onExport={handleExport}
+        title="Export Pending Leave Requests"
+        totalRecords={getExportData().length}
+        formats={["csv", "pdf"]}
+        defaultFormat="csv"
+      />
 
       {/* Confirm Modal for Approve/Reject */}
       <ConfirmModal

@@ -7,6 +7,9 @@ import { showToast } from "../../../components/common/Toast";
 import Pagination from "../common/Paginations";
 import { fetchLeavesReport } from "../../store/slices/reportSlice";
 import { clearError } from "../../store/slices/LeaveSlice";
+import ExportModal from "../../../components/common/ExportModal";
+import { exportToCSV, formatDate } from "../../../utils/reportUtils";
+import { generateLeavesPDF } from "../../../utils/reportPDFConfigs";
 
 const LeaveRequestReports = () => {
   const dispatch = useDispatch();
@@ -20,6 +23,7 @@ const LeaveRequestReports = () => {
   const [currentPage, setCurrentPage] = useState(1);
   const [perPage, setPerPage] = useState(10);
   const [searchTerm, setSearchTerm] = useState("");
+  const [showExportModal, setShowExportModal] = useState(false);
 
   // Filter states
   const [selectedStatus, setSelectedStatus] = useState("all");
@@ -58,6 +62,7 @@ const LeaveRequestReports = () => {
     dateRange,
     startDate,
     endDate,
+    perPage,
   ]);
 
   // Get unique leave types for filter
@@ -69,6 +74,23 @@ const LeaveRequestReports = () => {
         .filter(Boolean),
     ),
   ];
+
+  // Transform leave data for export
+  const getExportData = () => {
+    const filtered = getFilteredLeaves();
+    return filtered.map((leave) => ({
+      request_date: formatDate(leave.created_at || leave.request_date),
+      employee_name: leave.employee_name ||
+        leave.employee?.name ||
+        leave.employee?.first_name ||
+        "-",
+      leave_type: leave.leave_type?.name || leave.type || "-",
+      from_date: formatDate(leave.from_date || leave.fromDate),
+      to_date: formatDate(leave.to_date || leave.toDate),
+      days: leave.number_of_days || leave.days || "-",
+      status: leave.status || "-",
+    }));
+  };
 
   // Filter leaves
   const getFilteredLeaves = () => {
@@ -175,74 +197,42 @@ const LeaveRequestReports = () => {
     showToast("Filters reset successfully", "success");
   };
 
-  const handleExport = () => {
-    try {
-      const dataToExport = filteredLeaves;
-
-      if (dataToExport.length === 0) {
-        showToast("No data to export", "warning");
-        return;
-      }
-
-      const headers = [
-        "Request Date",
-        "Employee",
-        "Leave Type",
-        "From",
-        "To",
-        "Days",
-        "Status",
-      ];
-
-      const rows = dataToExport.map((leave) => [
-        formatDate(leave.created_at || leave.request_date),
-        leave.employee_name ||
-          leave.employee?.name ||
-          leave.employee?.first_name ||
-          "-",
-        leave.leave_type?.name || leave.type || "-",
-        formatDate(leave.from_date || leave.fromDate),
-        formatDate(leave.to_date || leave.toDate),
-        leave.number_of_days || leave.days || "-",
-        leave.status || "-",
-      ]);
-
-      const csvContent = [
-        headers.join(","),
-        ...rows.map((row) =>
-          row.map((cell) => `"${String(cell).replace(/"/g, '""')}"`).join(","),
-        ),
-      ].join("\n");
-
-      const blob = new Blob([csvContent], { type: "text/csv;charset=utf-8;" });
-      const link = document.createElement("a");
-      const url = URL.createObjectURL(blob);
-      link.setAttribute("href", url);
-      link.setAttribute(
-        "download",
-        `leave_requests_${new Date().toISOString().split("T")[0]}.csv`,
-      );
-      document.body.appendChild(link);
-      link.click();
-      document.body.removeChild(link);
-      URL.revokeObjectURL(url);
-
-      showToast("Leave requests exported successfully!", "success");
-    } catch (error) {
-      console.error("Export error:", error);
-      showToast("Failed to export data", "error");
+  const handleExport = async (format) => {
+    const exportData = getExportData();
+    
+    if (exportData.length === 0) {
+      showToast("No data to export", "warning");
+      return;
     }
-  };
 
-  const formatDate = (dateString) => {
-    if (!dateString) return "-";
-    const date = new Date(dateString);
-    if (isNaN(date.getTime())) return "-";
-    return date.toLocaleDateString("en-GB", {
-      day: "2-digit",
-      month: "short",
-      year: "numeric",
-    });
+    const headers = [
+      { key: "request_date", label: "Request Date" },
+      { key: "employee_name", label: "Employee" },
+      { key: "leave_type", label: "Leave Type" },
+      { key: "from_date", label: "From" },
+      { key: "to_date", label: "To" },
+      { key: "days", label: "Days" },
+      { key: "status", label: "Status" },
+    ];
+
+    const filename = `leave_requests_${new Date().toISOString().split("T")[0]}`;
+
+    if (format === "csv") {
+      exportToCSV(exportData, headers, `${filename}.csv`);
+      showToast("Leave requests exported successfully!", "success");
+    } else if (format === "pdf") {
+      // Get filter summary for PDF
+      const filters = {
+        status: selectedStatus !== "all" ? selectedStatus : null,
+        leave_type: selectedLeaveType !== "all" ? selectedLeaveType : null,
+        date_range: dateRange !== "all" ? dateRange : null,
+        start_date: startDate || null,
+        end_date: endDate || null,
+      };
+      
+      generateLeavesPDF(filteredLeaves, filters);
+      showToast("PDF report generated successfully!", "success");
+    }
   };
 
   const getStatusBadge = (status) => {
@@ -450,7 +440,7 @@ const LeaveRequestReports = () => {
 
           {/* Custom Date Range */}
           {dateRange === "custom" && (
-            <div className="grid grid-cols-1 sm:grid-cols-2 gap-4 mt-4">
+            <div className="grid grid-cols-1 sm:grid-cols-2 gap-4 mt-4 pt-4 border-t border-gray-200 dark:border-gray-700">
               <div>
                 <label className="block text-xs font-semibold text-gray-500 dark:text-gray-400 mb-1">
                   From Date
@@ -493,10 +483,10 @@ const LeaveRequestReports = () => {
                 setSearchTerm(val);
                 setCurrentPage(1);
               }}
-              placeholder="Search records..."
+              placeholder="Search by employee name, leave type, status..."
             />
             <button
-              onClick={handleExport}
+              onClick={() => setShowExportModal(true)}
               className="bg-green-500 hover:bg-green-600 text-white px-4 py-2 rounded-full text-sm font-semibold flex items-center justify-center gap-2 transition-all shadow-md hover:shadow-lg w-full sm:w-auto"
             >
               <i className="fas fa-download"></i> Export Report
@@ -616,6 +606,17 @@ const LeaveRequestReports = () => {
           </>
         )}
       </main>
+
+      {/* Export Modal */}
+      <ExportModal
+        isOpen={showExportModal}
+        onClose={() => setShowExportModal(false)}
+        onExport={handleExport}
+        title="Export Leave Requests"
+        totalRecords={getExportData().length}
+        formats={["csv", "pdf"]}
+        defaultFormat="csv"
+      />
     </div>
   );
 };
