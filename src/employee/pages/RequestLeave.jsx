@@ -4,6 +4,7 @@ import { useDispatch, useSelector } from 'react-redux';
 import { addLeaveRequest, fetchEmployeeLeaves, fetchLeaveBalance } from '../store/slices/leavesSlice';
 import { FiChevronRight, FiCalendar, FiTag, FiMessageSquare, FiPaperclip, FiSend, FiX, FiAlertCircle } from 'react-icons/fi';
 import { MdCalculate } from 'react-icons/md';
+import DateInput from '../components/common/DateInput';
 
 const RequestLeave = () => {
   const navigate = useNavigate();
@@ -25,6 +26,7 @@ const RequestLeave = () => {
   const [totalDays, setTotalDays] = useState(0);
   const [selectedFile, setSelectedFile] = useState(null);
   const [localError, setLocalError] = useState('');
+  const [dateErrors, setDateErrors] = useState({ fromDate: '', toDate: '' });
   
   // Fetch leaves and balance on mount
   useEffect(() => {
@@ -39,6 +41,8 @@ const RequestLeave = () => {
   useEffect(() => {
     // eslint-disable-next-line react-hooks/immutability
     calculateDays();
+    // eslint-disable-next-line react-hooks/immutability
+    validateDateRange();
   }, [formData.fromDate, formData.toDate]);
   
   const calculateDays = () => {
@@ -54,6 +58,22 @@ const RequestLeave = () => {
     } else {
       setTotalDays(0);
     }
+  };
+  
+  const validateDateRange = () => {
+    const errors = { fromDate: '', toDate: '' };
+    
+    if (formData.fromDate && formData.toDate) {
+      const from = new Date(formData.fromDate);
+      const to = new Date(formData.toDate);
+      
+      if (to < from) {
+        errors.toDate = 'To date must be after from date';
+      }
+    }
+    
+    setDateErrors(errors);
+    return !errors.fromDate && !errors.toDate;
   };
   
   const validateForm = () => {
@@ -80,7 +100,7 @@ const RequestLeave = () => {
     e.preventDefault();
     setLocalError('');
     
-    if (!validateForm()) {
+    if (!validateForm() || !validateDateRange()) {
       return;
     }
     
@@ -113,6 +133,9 @@ const RequestLeave = () => {
   
   // Check if requested days exceed balance
   const exceedsBalance = totalDays > remaining && remaining >= 0;
+  
+  // Get today's date for min date
+  const today = new Date().toISOString().split('T')[0];
   
   return (
     <div className="p-4 md:p-6">
@@ -147,32 +170,43 @@ const RequestLeave = () => {
               <FiTag /> Leave Details
             </div>
             <div className="form-grid grid grid-cols-1 md:grid-cols-2 gap-5 mb-6">
+              {/* From Date - Using DateInput */}
               <div className="form-field flex flex-col gap-2">
                 <label className="text-xs font-semibold text-gray-700 flex items-center gap-1">
                   <FiCalendar className="text-green-500" /> From Date <span className="text-red-500 ml-1">*</span>
                 </label>
-                <input
-                  type="date"
+                <DateInput
                   value={formData.fromDate}
-                  onChange={(e) => setFormData({ ...formData, fromDate: e.target.value })}
-                  min={new Date().toISOString().split('T')[0]}
-                  className="py-3 px-3.5 bg-gray-50 border border-gray-200 rounded-lg text-sm text-gray-800 focus:outline-none focus:border-green-500 focus:ring-2 focus:ring-green-500/20 transition-all"
-                  required
+                  onChange={(date) => setFormData({ ...formData, fromDate: date })}
+                  placeholder="dd/mm/yyyy"
+                  minDate={today}
+                  error={!!dateErrors.fromDate}
+                  className="w-full"
                 />
+                {dateErrors.fromDate && (
+                  <p className="text-xs text-red-500 mt-1">{dateErrors.fromDate}</p>
+                )}
               </div>
+              
+              {/* To Date - Using DateInput */}
               <div className="form-field flex flex-col gap-2">
                 <label className="text-xs font-semibold text-gray-700 flex items-center gap-1">
                   <FiCalendar className="text-green-500" /> To Date <span className="text-red-500 ml-1">*</span>
                 </label>
-                <input
-                  type="date"
+                <DateInput
                   value={formData.toDate}
-                  onChange={(e) => setFormData({ ...formData, toDate: e.target.value })}
-                  min={formData.fromDate || new Date().toISOString().split('T')[0]}
-                  className="py-3 px-3.5 bg-gray-50 border border-gray-200 rounded-lg text-sm text-gray-800 focus:outline-none focus:border-green-500 focus:ring-2 focus:ring-green-500/20 transition-all"
-                  required
+                  onChange={(date) => setFormData({ ...formData, toDate: date })}
+                  placeholder="dd/mm/yyyy"
+                  minDate={formData.fromDate || today}
+                  error={!!dateErrors.toDate}
+                  className="w-full"
                 />
+                {dateErrors.toDate && (
+                  <p className="text-xs text-red-500 mt-1">{dateErrors.toDate}</p>
+                )}
               </div>
+              
+              {/* Leave Type */}
               <div className="form-field flex flex-col gap-2">
                 <label className="text-xs font-semibold text-gray-700 flex items-center gap-1">
                   <FiTag className="text-green-500" /> Leave Type <span className="text-red-500 ml-1">*</span>
@@ -190,6 +224,8 @@ const RequestLeave = () => {
                   <option value="Paternity Leave">Paternity Leave</option>
                 </select>
               </div>
+              
+              {/* Claim Salary */}
               <div className="form-field flex flex-col gap-2">
                 <label className="text-xs font-semibold text-gray-700 flex items-center gap-1">
                   <FiCalendar className="text-green-500" /> Claim Salary
@@ -203,6 +239,8 @@ const RequestLeave = () => {
                   <option value="No">No</option>
                 </select>
               </div>
+              
+              {/* Total Days */}
               <div className="form-field flex flex-col gap-2">
                 <label className="text-xs font-semibold text-gray-700 flex items-center gap-1">
                   <MdCalculate className="text-green-500" /> Total Days
@@ -214,6 +252,8 @@ const RequestLeave = () => {
                   <small className="text-[11px] text-gray-500">Days</small>
                 </div>
               </div>
+              
+              {/* Supporting Document */}
               <div className="form-field flex flex-col gap-2">
                 <label className="text-xs font-semibold text-gray-700 flex items-center gap-1">
                   <FiPaperclip className="text-green-500" /> Supporting Document (Optional)
@@ -225,6 +265,8 @@ const RequestLeave = () => {
                   className="py-2.5 px-3.5 bg-gray-50 border border-gray-200 rounded-lg text-sm text-gray-800 file:mr-4 file:py-1.5 file:px-3 file:rounded-full file:border-0 file:text-xs file:font-semibold file:bg-green-500 file:text-white file:cursor-pointer hover:file:bg-green-600"
                 />
               </div>
+              
+              {/* Reason for Leave */}
               <div className="form-field md:col-span-2 flex flex-col gap-2">
                 <label className="text-xs font-semibold text-gray-700 flex items-center gap-1">
                   <FiMessageSquare className="text-green-500" /> Reason for Leave <span className="text-red-500 ml-1">*</span>
