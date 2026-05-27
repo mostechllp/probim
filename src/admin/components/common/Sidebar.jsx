@@ -40,7 +40,7 @@ const Sidebar = ({ isOpen, setIsOpen }) => {
     { path: "/admin/task-reports", icon: "fas fa-tasks", label: "Task Reports" },
     { path: "/admin/wfh", icon: "fas fa-home", label: "WFH Requests" },
     { path: "/admin/reports", icon: "fas fa-chart-line", label: "Reports" },
-    { path: "/admin/payroll/add", icon: "fas fa-file-invoice-dollar", label: "Payroll" },
+    { path: "/admin/payroll", icon: "fas fa-file-invoice-dollar", label: "Payroll" },
     { path: "/admin/role-management", icon: "fas fa-user-shield", label: "Roles" },
     { path: "/admin/organizations", icon: "fas fa-building", label: "Organizations" },
     { path: "/admin/agreements", icon: "fas fa-file-signature", label: "Agreements" },
