@@ -1,4 +1,6 @@
 import React, { useState, useEffect, useRef } from "react";
+import { getPhotoUrl, getFallbackAvatar } from "../../../utils/imageHelper";
+
 
 const EmployeeSearchSelect = ({
   employees, // List of all employees to choose from
@@ -35,7 +37,7 @@ const EmployeeSearchSelect = ({
         name,
         department: emp.department || emp.user?.department?.name || "-",
         designation: emp.designation || emp.user?.designation?.name || "-",
-        avatar: emp.avatar || null
+        avatar: getPhotoUrl(emp.avatar) || null
       };
     });
   }, [employees]);
@@ -84,7 +86,15 @@ const EmployeeSearchSelect = ({
             {/* Avatar */}
             <div className="w-6 h-6 rounded-full overflow-hidden bg-gradient-to-br from-green-500/20 to-teal-500/20 dark:from-green-500/10 dark:to-teal-500/10 flex items-center justify-center flex-shrink-0 border border-gray-100 dark:border-gray-700">
               {selectedEmployee.avatar ? (
-                <img src={selectedEmployee.avatar} alt={selectedEmployee.name} className="w-full h-full object-cover" />
+                <img
+                  src={selectedEmployee.avatar}
+                  alt={selectedEmployee.name}
+                  className="w-full h-full object-cover"
+                  onError={(e) => {
+                    e.target.onerror = null;
+                    e.target.src = getFallbackAvatar(selectedEmployee.name);
+                  }}
+                />
               ) : (
                 <span className="text-[10px] font-bold text-green-600 dark:text-green-400">
                   {getInitials(selectedEmployee.name)}
@@ -145,7 +155,15 @@ const EmployeeSearchSelect = ({
                     {/* Avatar */}
                     <div className="w-8 h-8 rounded-full overflow-hidden bg-gradient-to-br from-green-500/20 to-teal-500/20 dark:from-green-500/10 dark:to-teal-500/10 flex items-center justify-center flex-shrink-0 border border-gray-100 dark:border-gray-700">
                       {emp.avatar ? (
-                        <img src={emp.avatar} alt={emp.name} className="w-full h-full object-cover" />
+                        <img
+                          src={emp.avatar}
+                          alt={emp.name}
+                          className="w-full h-full object-cover"
+                          onError={(e) => {
+                            e.target.onerror = null;
+                            e.target.src = getFallbackAvatar(emp.name);
+                          }}
+                        />
                       ) : (
                         <span className="text-xs font-bold text-green-600 dark:text-green-400">
                           {getInitials(emp.name)}

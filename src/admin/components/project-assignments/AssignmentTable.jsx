@@ -2,6 +2,8 @@ import React, { useState, useMemo } from "react";
 import { PROJECT_MODULE_NAME } from "../../utils/constants";
 import ProjectTags from "./ProjectTags";
 import EmptyState from "../projects/EmptyState";
+import { getPhotoUrl, getFallbackAvatar } from "../../../utils/imageHelper";
+
 
 /* ─── EmployeeProjectsModal ─── */
 const EmployeeProjectsModal = ({
@@ -22,10 +24,11 @@ const EmployeeProjectsModal = ({
     const emp = employees.find((e) => String(e.id) === String(empId));
     return emp ? {
       name: emp.name,
-      avatar: emp.avatar,
+      avatar: getPhotoUrl(emp.avatar),
       designation: emp.designation
     } : { name: "Not Assigned", avatar: null, designation: "-" };
   };
+
 
   const getInitials = (name) => (name && name !== "Not Assigned" ? name.charAt(0).toUpperCase() : "N");
 
@@ -50,7 +53,15 @@ const EmployeeProjectsModal = ({
               {/* Profile Avatar / Initials in Header */}
               <div className="w-14 h-14 rounded-2xl overflow-hidden bg-gradient-to-br from-green-500/20 to-teal-500/20 dark:from-green-500/10 dark:to-teal-500/10 flex items-center justify-center border border-green-500/20 flex-shrink-0 shadow-sm">
                 {avatar ? (
-                  <img src={avatar} alt={employeeName} className="w-full h-full object-cover" />
+                  <img
+                    src={getPhotoUrl(avatar)}
+                    alt={employeeName}
+                    className="w-full h-full object-cover"
+                    onError={(e) => {
+                      e.target.onerror = null;
+                      e.target.src = getFallbackAvatar(employeeName);
+                    }}
+                  />
                 ) : (
                   <span className="text-lg font-bold text-green-600 dark:text-green-400">
                     {getInitials(employeeName)}
@@ -120,7 +131,15 @@ const EmployeeProjectsModal = ({
                         <div className="flex items-center gap-2.5">
                           <div className="w-7 h-7 rounded-full overflow-hidden bg-blue-500/10 flex items-center justify-center border border-gray-100 dark:border-gray-700 flex-shrink-0">
                             {pm.avatar ? (
-                              <img src={pm.avatar} alt={pm.name} className="w-full h-full object-cover" />
+                              <img
+                                src={pm.avatar}
+                                alt={pm.name}
+                                className="w-full h-full object-cover"
+                                onError={(e) => {
+                                  e.target.onerror = null;
+                                  e.target.src = getFallbackAvatar(pm.name);
+                                }}
+                              />
                             ) : (
                               <span className="text-[10px] font-bold text-blue-600 dark:text-blue-400">{getInitials(pm.name)}</span>
                             )}
@@ -142,7 +161,15 @@ const EmployeeProjectsModal = ({
                         <div className="flex items-center gap-2.5">
                           <div className="w-7 h-7 rounded-full overflow-hidden bg-purple-500/10 flex items-center justify-center border border-gray-100 dark:border-gray-700 flex-shrink-0">
                             {tl.avatar ? (
-                              <img src={tl.avatar} alt={tl.name} className="w-full h-full object-cover" />
+                              <img
+                                src={tl.avatar}
+                                alt={tl.name}
+                                className="w-full h-full object-cover"
+                                onError={(e) => {
+                                  e.target.onerror = null;
+                                  e.target.src = getFallbackAvatar(tl.name);
+                                }}
+                              />
                             ) : (
                               <span className="text-[10px] font-bold text-purple-600 dark:text-purple-400">{getInitials(tl.name)}</span>
                             )}
@@ -220,7 +247,7 @@ const AssignmentTable = ({
         employeeName,
         designation: emp?.designation || emp?.user?.designation?.name || "-",
         department: emp?.department || emp?.user?.department?.name || "-",
-        avatar: emp?.avatar || null,
+        avatar: getPhotoUrl(emp?.avatar) || null,
         projectCount: assign.projectIds?.length || 0
       };
     });
@@ -483,7 +510,15 @@ const AssignmentTable = ({
                         className="w-8 h-8 rounded-full overflow-hidden bg-gradient-to-br from-green-500/20 to-teal-500/20 dark:from-green-500/10 dark:to-teal-500/10 flex items-center justify-center flex-shrink-0 border border-gray-100 dark:border-gray-700 cursor-pointer hover:ring-2 hover:ring-green-400 transition-all"
                       >
                         {assign.avatar ? (
-                          <img src={assign.avatar} alt={assign.employeeName} className="w-full h-full object-cover" />
+                          <img
+                            src={assign.avatar}
+                            alt={assign.employeeName}
+                            className="w-full h-full object-cover"
+                            onError={(e) => {
+                              e.target.onerror = null;
+                              e.target.src = getFallbackAvatar(assign.employeeName);
+                            }}
+                          />
                         ) : (
                           <span className="text-xs font-bold text-green-600 dark:text-green-400">
                             {getInitials(assign.employeeName)}

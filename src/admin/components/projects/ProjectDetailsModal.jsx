@@ -1,5 +1,7 @@
 import React from "react";
 import { PROJECT_MODULE_NAME } from "../../utils/constants";
+import { getPhotoUrl, getFallbackAvatar } from "../../../utils/imageHelper";
+
 
 const ProjectDetailsModal = ({ isOpen, onClose, project, employees = [] }) => {
   if (!isOpen || !project) return null;
@@ -9,10 +11,11 @@ const ProjectDetailsModal = ({ isOpen, onClose, project, employees = [] }) => {
     const emp = employees.find((e) => String(e.id) === String(empId));
     return emp ? {
       name: emp.name,
-      avatar: emp.avatar,
+      avatar: getPhotoUrl(emp.avatar),
       designation: emp.designation
     } : { name: "Not Assigned", avatar: null, designation: "-" };
   };
+
 
   const getInitials = (name) => (name && name !== "Not Assigned" ? name.charAt(0).toUpperCase() : "N");
 
@@ -79,7 +82,7 @@ const ProjectDetailsModal = ({ isOpen, onClose, project, employees = [] }) => {
             <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
               
               {/* Project Manager Card */}
-              <div className="bg-white dark:bg-gray-805 rounded-2xl border border-gray-100 dark:border-gray-700/60 p-5 space-y-4 shadow-sm hover:shadow-soft transition-all duration-200">
+              <div className="bg-white dark:bg-gray-855 rounded-2xl border border-gray-100 dark:border-gray-700/60 p-5 space-y-4 shadow-sm hover:shadow-soft transition-all duration-200">
                 <span className="text-[9px] font-extrabold uppercase tracking-widest text-blue-500 bg-blue-500/10 px-2 py-0.5 rounded">
                   Project Manager
                 </span>
@@ -87,7 +90,15 @@ const ProjectDetailsModal = ({ isOpen, onClose, project, employees = [] }) => {
                 <div className="flex items-center gap-3">
                   <div className="w-12 h-12 rounded-xl overflow-hidden bg-gradient-to-br from-blue-500/20 to-indigo-500/20 flex items-center justify-center border border-gray-100 dark:border-gray-750 flex-shrink-0 shadow-sm">
                     {pm.avatar ? (
-                      <img src={pm.avatar} alt="PM Avatar" className="w-full h-full object-cover" />
+                      <img
+                        src={pm.avatar}
+                        alt="PM Avatar"
+                        className="w-full h-full object-cover"
+                        onError={(e) => {
+                          e.target.onerror = null;
+                          e.target.src = getFallbackAvatar(pm.name);
+                        }}
+                      />
                     ) : (
                       <span className="text-sm font-bold text-blue-600 dark:text-blue-400">
                         {getInitials(pm.name)}
@@ -106,7 +117,7 @@ const ProjectDetailsModal = ({ isOpen, onClose, project, employees = [] }) => {
               </div>
 
               {/* Team Lead Card */}
-              <div className="bg-white dark:bg-gray-805 rounded-2xl border border-gray-100 dark:border-gray-700/60 p-5 space-y-4 shadow-sm hover:shadow-soft transition-all duration-200">
+              <div className="bg-white dark:bg-gray-855 rounded-2xl border border-gray-100 dark:border-gray-700/60 p-5 space-y-4 shadow-sm hover:shadow-soft transition-all duration-200">
                 <span className="text-[9px] font-extrabold uppercase tracking-widest text-purple-500 bg-purple-500/10 px-2 py-0.5 rounded">
                   Team Lead
                 </span>
@@ -114,7 +125,15 @@ const ProjectDetailsModal = ({ isOpen, onClose, project, employees = [] }) => {
                 <div className="flex items-center gap-3">
                   <div className="w-12 h-12 rounded-xl overflow-hidden bg-gradient-to-br from-purple-500/20 to-pink-500/20 flex items-center justify-center border border-gray-100 dark:border-gray-750 flex-shrink-0 shadow-sm">
                     {tl.avatar ? (
-                      <img src={tl.avatar} alt="TL Avatar" className="w-full h-full object-cover" />
+                      <img
+                        src={tl.avatar}
+                        alt="TL Avatar"
+                        className="w-full h-full object-cover"
+                        onError={(e) => {
+                          e.target.onerror = null;
+                          e.target.src = getFallbackAvatar(tl.name);
+                        }}
+                      />
                     ) : (
                       <span className="text-sm font-bold text-purple-600 dark:text-purple-400">
                         {getInitials(tl.name)}

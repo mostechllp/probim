@@ -1,4 +1,6 @@
 import React, { useState, useMemo } from "react";
+import { getPhotoUrl, getFallbackAvatar } from "../../../utils/imageHelper";
+
 
 const EmployeeTransferList = ({
   employees, // Array of ALL employees fetched from the store
@@ -35,7 +37,7 @@ const EmployeeTransferList = ({
         name,
         department: emp.department || emp.user?.department?.name || "-",
         designation: emp.designation || emp.user?.designation?.name || "-",
-        avatar: emp.avatar || null
+        avatar: getPhotoUrl(emp.avatar) || null
       };
     });
   }, [employees]);
@@ -203,7 +205,15 @@ const EmployeeTransferList = ({
                     {/* Avatar */}
                     <div className="w-8 h-8 rounded-full overflow-hidden bg-gradient-to-br from-green-500/20 to-teal-500/20 dark:from-green-500/10 dark:to-teal-500/10 border border-gray-100 dark:border-gray-700 flex items-center justify-center flex-shrink-0">
                       {emp.avatar ? (
-                        <img src={emp.avatar} alt={emp.name} className="w-full h-full object-cover" />
+                        <img
+                          src={emp.avatar}
+                          alt={emp.name}
+                          className="w-full h-full object-cover"
+                          onError={(e) => {
+                            e.target.onerror = null;
+                            e.target.src = getFallbackAvatar(emp.name);
+                          }}
+                        />
                       ) : (
                         <span className="text-xs font-bold text-green-600 dark:text-green-400">
                           {getInitials(emp.name)}
@@ -357,7 +367,15 @@ const EmployeeTransferList = ({
                     {/* Avatar */}
                     <div className="w-8 h-8 rounded-full overflow-hidden bg-gradient-to-br from-indigo-500/20 to-blue-500/20 dark:from-indigo-500/10 dark:to-blue-500/10 border border-gray-100 dark:border-gray-700 flex items-center justify-center flex-shrink-0">
                       {emp.avatar ? (
-                        <img src={emp.avatar} alt={emp.name} className="w-full h-full object-cover" />
+                        <img
+                          src={emp.avatar}
+                          alt={emp.name}
+                          className="w-full h-full object-cover"
+                          onError={(e) => {
+                            e.target.onerror = null;
+                            e.target.src = getFallbackAvatar(emp.name);
+                          }}
+                        />
                       ) : (
                         <span className="text-xs font-bold text-indigo-600 dark:text-indigo-400">
                           {getInitials(emp.name)}
