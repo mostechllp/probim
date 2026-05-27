@@ -3,8 +3,18 @@ import { PROJECT_MODULE_NAME } from "../../utils/constants";
 import ProjectTags from "./ProjectTags";
 import EmptyState from "../projects/EmptyState";
 
-/* ─── EmployeeProjectsDrawer ─── */
-const EmployeeProjectsDrawer = ({ isOpen, onClose, employeeName, projectIds = [], projects = [], employees = [] }) => {
+/* ─── EmployeeProjectsModal ─── */
+const EmployeeProjectsModal = ({
+  isOpen,
+  onClose,
+  employeeName,
+  designation = "-",
+  department = "-",
+  avatar = null,
+  projectIds = [],
+  projects = [],
+  employees = []
+}) => {
   if (!isOpen) return null;
 
   const getEmployeeDetails = (empId) => {
@@ -24,115 +34,145 @@ const EmployeeProjectsDrawer = ({ isOpen, onClose, employeeName, projectIds = []
 
   return (
     <>
-      {/* Backdrop with slide glow */}
+      {/* Backdrop overlay */}
       <div
         onClick={onClose}
-        className="fixed inset-0 bg-black/35 backdrop-blur-[2px] z-[1200] animate-fadeIn"
-      />
-
-      {/* Slide Drawer */}
-      <div
-        className="fixed top-0 right-0 h-full w-full max-w-md bg-white dark:bg-gray-800 border-l border-gray-100 dark:border-gray-700 shadow-2xl z-[1300] flex flex-col animate-slideLeft overflow-hidden"
+        className="fixed inset-0 bg-black/40 backdrop-blur-md z-[1200] flex items-center justify-center p-4 sm:p-6 modal-overlay"
       >
-        {/* Drawer Header */}
-        <div className="p-5 border-b border-gray-100 dark:border-gray-700 flex justify-between items-center bg-gray-50/50 dark:bg-gray-800/40">
-          <div>
-            <h3 className="text-sm font-bold text-gray-800 dark:text-gray-200 uppercase tracking-wider">
-              Assigned Projects
-            </h3>
-            <p className="text-[10px] text-gray-400 dark:text-gray-500 font-semibold tracking-wide mt-1">
-              Resource: <span className="text-green-600 dark:text-green-400 font-bold">{employeeName}</span>
-            </p>
-          </div>
-          <button
-            onClick={onClose}
-            className="w-8 h-8 rounded-full flex items-center justify-center text-gray-400 hover:text-red-500 hover:bg-gray-100 dark:hover:bg-gray-700 transition-colors"
-          >
-            <i className="fas fa-times text-lg"></i>
-          </button>
-        </div>
-
-        {/* Scrollable list */}
-        <div className="flex-1 overflow-y-auto p-5 space-y-4 scrollbar-thin">
-          {assignedProjects.length === 0 ? (
-            <div className="h-full flex flex-col items-center justify-center text-center p-6">
-              <div className="w-16 h-16 bg-green-500/10 rounded-2xl flex items-center justify-center mb-4 text-green-500 animate-pulse">
-                <i className="fas fa-folder-open text-2xl"></i>
+        {/* Modal Card */}
+        <div
+          onClick={(e) => e.stopPropagation()}
+          className="bg-white dark:bg-gray-800 border border-gray-100 dark:border-gray-700/60 shadow-2xl rounded-3xl w-full max-w-lg md:max-w-xl max-h-[85vh] flex flex-col overflow-hidden modal-card"
+        >
+          {/* Header area with elegant gradient, details and close button */}
+          <div className="relative p-6 border-b border-gray-100 dark:border-gray-700/60 flex justify-between items-start bg-gradient-to-br from-green-500/5 via-emerald-500/5 to-transparent flex-shrink-0">
+            <div className="flex gap-4 items-center">
+              {/* Profile Avatar / Initials in Header */}
+              <div className="w-14 h-14 rounded-2xl overflow-hidden bg-gradient-to-br from-green-500/20 to-teal-500/20 dark:from-green-500/10 dark:to-teal-500/10 flex items-center justify-center border border-green-500/20 flex-shrink-0 shadow-sm">
+                {avatar ? (
+                  <img src={avatar} alt={employeeName} className="w-full h-full object-cover" />
+                ) : (
+                  <span className="text-lg font-bold text-green-600 dark:text-green-400">
+                    {getInitials(employeeName)}
+                  </span>
+                )}
               </div>
-              <h4 className="text-sm font-bold text-gray-700 dark:text-gray-300">No Assigned Projects</h4>
-              <p className="text-xs text-gray-400 mt-2 max-w-[200px] leading-relaxed">
-                This employee is not currently mapped to any project directories.
-              </p>
+
+              <div>
+                <span className="text-[9px] font-bold text-green-600 dark:text-green-400 uppercase tracking-widest bg-green-500/10 px-2.5 py-1 rounded-md">
+                  Assigned {PROJECT_MODULE_NAME}s
+                </span>
+                <h3 className="text-base font-extrabold text-gray-850 dark:text-gray-100 mt-2 leading-none">
+                  {employeeName}
+                </h3>
+                <p className="text-[10.5px] text-gray-400 dark:text-gray-500 font-semibold mt-1.5 leading-none">
+                  {designation} &bull; {department}
+                </p>
+              </div>
             </div>
-          ) : (
-            assignedProjects.map((proj) => {
-              const pm = getEmployeeDetails(proj.managerId);
-              const tl = getEmployeeDetails(proj.teamLeadId);
 
-              return (
-                <div
-                  key={proj.id}
-                  className="bg-gray-55 dark:bg-gray-750/30 rounded-2xl border border-gray-100 dark:border-gray-700 p-4.5 space-y-3.5 shadow-sm transform hover:-translate-y-0.5 hover:shadow-soft transition-all duration-200"
-                >
-                  <div className="flex justify-between items-start gap-2">
-                    <h4 className="text-xs font-bold text-gray-800 dark:text-gray-200 leading-tight">
-                      {proj.name}
-                    </h4>
-                    <span
-                      className={`px-2.5 py-0.5 rounded-full text-[9px] font-extrabold tracking-wide uppercase ${proj.status === "Active"
-                          ? "bg-green-500/10 text-green-600 dark:text-green-400"
-                          : "bg-gray-150 text-gray-500 dark:text-gray-400"
-                        }`}
-                    >
-                      {proj.status}
-                    </span>
-                  </div>
+            <button
+              onClick={onClose}
+              className="text-gray-400 hover:text-red-500 hover:bg-gray-100 dark:hover:bg-gray-700/50 transition-colors w-8 h-8 rounded-full flex items-center justify-center"
+            >
+              <i className="fas fa-times text-lg"></i>
+            </button>
+          </div>
 
-                  {proj.description && (
-                    <p className="text-[10px] text-gray-500 dark:text-gray-400 line-clamp-2 leading-relaxed">
-                      {proj.description}
-                    </p>
-                  )}
-
-                  <div className="grid grid-cols-2 gap-3 pt-3 border-t border-gray-100 dark:border-gray-700/50">
-                    {/* Project Manager info */}
-                    <div className="space-y-1.5">
-                      <span className="text-[9px] font-bold text-gray-400 dark:text-gray-500 uppercase tracking-widest block">PM</span>
-                      <div className="flex items-center gap-2">
-                        <div className="w-6 h-6 rounded-full overflow-hidden bg-blue-500/15 flex items-center justify-center border border-gray-100 dark:border-gray-700 flex-shrink-0">
-                          {pm.avatar ? (
-                            <img src={pm.avatar} alt={pm.name} className="w-full h-full object-cover" />
-                          ) : (
-                            <span className="text-[9px] font-bold text-blue-600 dark:text-blue-400">{getInitials(pm.name)}</span>
-                          )}
-                        </div>
-                        <span className="text-[10px] font-semibold text-gray-700 dark:text-gray-350 truncate block max-w-[90px]" title={pm.name}>
-                          {pm.name}
-                        </span>
-                      </div>
-                    </div>
-
-                    {/* Team Lead info */}
-                    <div className="space-y-1.5">
-                      <span className="text-[9px] font-bold text-gray-400 dark:text-gray-500 uppercase tracking-widest block">TL</span>
-                      <div className="flex items-center gap-2">
-                        <div className="w-6 h-6 rounded-full overflow-hidden bg-purple-500/15 flex items-center justify-center border border-gray-100 dark:border-gray-700 flex-shrink-0">
-                          {tl.avatar ? (
-                            <img src={tl.avatar} alt={tl.name} className="w-full h-full object-cover" />
-                          ) : (
-                            <span className="text-[9px] font-bold text-purple-600 dark:text-purple-400">{getInitials(tl.name)}</span>
-                          )}
-                        </div>
-                        <span className="text-[10px] font-semibold text-gray-700 dark:text-gray-350 truncate block max-w-[90px]" title={tl.name}>
-                          {tl.name}
-                        </span>
-                      </div>
-                    </div>
-                  </div>
+          {/* Scrollable list of assigned projects */}
+          <div className="flex-1 overflow-y-auto p-6 space-y-4.5 bg-gray-50/50 dark:bg-gray-900/10 scrollbar-thin">
+            {assignedProjects.length === 0 ? (
+              <div className="py-12 flex flex-col items-center justify-center text-center p-6 bg-white dark:bg-gray-800 rounded-2xl border border-dashed border-gray-200 dark:border-gray-700">
+                <div className="w-16 h-16 bg-green-500/10 rounded-3xl flex items-center justify-center mb-4 text-green-500 animate-pulse">
+                  <i className="fas fa-folder-open text-2xl"></i>
                 </div>
-              );
-            })
-          )}
+                <h4 className="text-sm font-bold text-gray-700 dark:text-gray-300">No Assigned Projects</h4>
+                <p className="text-xs text-gray-400 mt-2 max-w-[240px] leading-relaxed">
+                  This employee is not currently mapped to any project directories.
+                </p>
+              </div>
+            ) : (
+              assignedProjects.map((proj) => {
+                const pm = getEmployeeDetails(proj.managerId);
+                const tl = getEmployeeDetails(proj.teamLeadId);
+
+                return (
+                  <div
+                    key={proj.id}
+                    className="bg-white dark:bg-gray-800/80 rounded-2xl border border-gray-100 dark:border-gray-700/60 p-5 space-y-4 shadow-sm hover:shadow-soft hover:-translate-y-0.5 transition-all duration-200"
+                  >
+                    <div className="flex justify-between items-start gap-3">
+                      <h4 className="text-sm font-bold text-gray-850 dark:text-gray-200 leading-snug">
+                        {proj.name}
+                      </h4>
+                    </div>
+
+                    {proj.description && (
+                      <p className="text-[11px] text-gray-550 dark:text-gray-450 leading-relaxed font-medium">
+                        {proj.description}
+                      </p>
+                    )}
+
+                    <div className="grid grid-cols-2 gap-4 pt-4 border-t border-gray-50 dark:border-gray-700/50">
+                      {/* Project Manager info */}
+                      <div className="space-y-2">
+                        <span className="text-[8.5px] font-bold text-gray-405 dark:text-gray-500 uppercase tracking-widest block font-extrabold">PM</span>
+                        <div className="flex items-center gap-2.5">
+                          <div className="w-7 h-7 rounded-full overflow-hidden bg-blue-500/10 flex items-center justify-center border border-gray-100 dark:border-gray-700 flex-shrink-0">
+                            {pm.avatar ? (
+                              <img src={pm.avatar} alt={pm.name} className="w-full h-full object-cover" />
+                            ) : (
+                              <span className="text-[10px] font-bold text-blue-600 dark:text-blue-400">{getInitials(pm.name)}</span>
+                            )}
+                          </div>
+                          <div className="min-w-0">
+                            <span className="text-[10.5px] font-bold text-gray-700 dark:text-gray-300 truncate block max-w-[120px]" title={pm.name}>
+                              {pm.name}
+                            </span>
+                            <span className="text-[8.5px] text-gray-400 dark:text-gray-500 block truncate max-w-[120px] font-semibold">
+                              {pm.designation}
+                            </span>
+                          </div>
+                        </div>
+                      </div>
+
+                      {/* Team Lead info */}
+                      <div className="space-y-2">
+                        <span className="text-[8.5px] font-bold text-gray-405 dark:text-gray-500 uppercase tracking-widest block font-extrabold">TL</span>
+                        <div className="flex items-center gap-2.5">
+                          <div className="w-7 h-7 rounded-full overflow-hidden bg-purple-500/10 flex items-center justify-center border border-gray-100 dark:border-gray-700 flex-shrink-0">
+                            {tl.avatar ? (
+                              <img src={tl.avatar} alt={tl.name} className="w-full h-full object-cover" />
+                            ) : (
+                              <span className="text-[10px] font-bold text-purple-600 dark:text-purple-400">{getInitials(tl.name)}</span>
+                            )}
+                          </div>
+                          <div className="min-w-0">
+                            <span className="text-[10.5px] font-bold text-gray-700 dark:text-gray-300 truncate block max-w-[120px]" title={tl.name}>
+                              {tl.name}
+                            </span>
+                            <span className="text-[8.5px] text-gray-400 dark:text-gray-500 block truncate max-w-[120px] font-semibold">
+                              {tl.designation}
+                            </span>
+                          </div>
+                        </div>
+                      </div>
+                    </div>
+                  </div>
+                );
+              })
+            )}
+          </div>
+
+          {/* Modal Footer with elegant Close button */}
+          <div className="px-6 py-4 bg-gray-55 dark:bg-gray-800/60 border-t border-gray-100 dark:border-gray-750 flex items-center justify-end flex-shrink-0">
+            <button
+              onClick={onClose}
+              className="px-6 py-2.5 rounded-full text-xs font-bold text-white bg-green-500 hover:bg-green-600 shadow-sm hover:shadow transition-all duration-200 transform hover:-translate-y-0.5"
+            >
+              Close View
+            </button>
+          </div>
         </div>
       </div>
     </>
@@ -164,6 +204,9 @@ const AssignmentTable = ({
     return assignments.map((assign) => {
       const emp = employees.find((e) => Number(e.id) === Number(assign.employeeId));
       let employeeName = emp?.name || "";
+      if (!employeeName && (assign.firstName || assign.lastName)) {
+        employeeName = [assign.firstName, assign.lastName].filter(Boolean).join(" ");
+      }
       if (!employeeName && emp) {
         employeeName = [emp.first_name, emp.last_name].filter(Boolean).join(" ");
       }
@@ -488,7 +531,7 @@ const AssignmentTable = ({
                       <button
                         onClick={() => handleOpenDrawer(assign)}
                         title="View Assignments Card"
-                        className="w-8 h-8 rounded-lg bg-blue-500/10 hover:bg-blue-50 text-blue-550 hover:text-white flex items-center justify-center transition-all shadow-sm hover:shadow-soft"
+                        className="w-8 h-8 rounded-lg bg-blue-500/10 hover:bg-blue-500 text-blue-550 hover:text-white flex items-center justify-center transition-all shadow-sm hover:shadow-soft"
                       >
                         <i className="fas fa-eye text-xs"></i>
                       </button>
@@ -564,14 +607,17 @@ const AssignmentTable = ({
         </div>
       )}
 
-      {/* Slide Drawer for project assignments detailed cards */}
-      <EmployeeProjectsDrawer
+      {/* Center-aligned Modal for project assignments detailed cards */}
+      <EmployeeProjectsModal
         isOpen={drawerOpen}
         onClose={() => {
           setDrawerOpen(false);
           setDrawerEmployee(null);
         }}
         employeeName={drawerEmployee?.employeeName || ""}
+        designation={drawerEmployee?.designation || ""}
+        department={drawerEmployee?.department || ""}
+        avatar={drawerEmployee?.avatar || null}
         projectIds={drawerEmployee?.projectIds || []}
         projects={projects}
         employees={employees}

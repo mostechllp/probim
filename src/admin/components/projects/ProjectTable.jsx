@@ -10,7 +10,8 @@ const ProjectTable = ({
   onEdit,
   onDelete,
   onAddNew,
-  onStatusChange
+  onStatusChange,
+  onViewDetails
 }) => {
   // Lookup function for employee names
   const getEmployeeName = (id) => {
@@ -156,9 +157,6 @@ const ProjectTable = ({
                   <i className={`fas fa-sort-amount-${sortDirection === "asc" ? "up" : "down"} text-green-500 ml-1.5`}></i>
                 )}
               </th>
-              <th className="px-6 py-4 text-xs font-bold text-gray-500 dark:text-gray-400 uppercase tracking-wider select-none whitespace-nowrap text-center">
-                Status
-              </th>
               <th className="px-6 py-4 text-xs font-bold text-gray-500 dark:text-gray-400 uppercase tracking-wider select-none text-right whitespace-nowrap">
                 Actions
               </th>
@@ -182,12 +180,6 @@ const ProjectTable = ({
                   </td>
 
                   <td className="px-6 py-4">
-                    <div className="h-3.5 bg-gray-200 dark:bg-gray-700 rounded w-24"></div>
-                  </td>
-                  <td className="px-6 py-4">
-                    <div className="h-5 w-16 bg-gray-200 dark:bg-gray-700 rounded-full mx-auto"></div>
-                  </td>
-                  <td className="px-6 py-4">
                     <div className="flex gap-2 justify-end">
                       <div className="h-8 w-8 bg-gray-200 dark:bg-gray-700 rounded-full"></div>
                       <div className="h-8 w-8 bg-gray-200 dark:bg-gray-700 rounded-full"></div>
@@ -197,7 +189,7 @@ const ProjectTable = ({
               ))
             ) : paginatedProjects.length === 0 ? (
               <tr>
-                <td colSpan={6} className="px-6 py-10">
+                <td colSpan={5} className="px-6 py-10">
                   <EmptyState
                     message={searchTerm ? "No Match Found" : `No ${PROJECT_MODULE_NAME} Defined`}
                     description={
@@ -247,35 +239,16 @@ const ProjectTable = ({
                       {project.createdDate}
                     </span>
                   </td>
-                  <td className="px-6 py-4 whitespace-nowrap text-center">
-                    <select
-                      value={project.status}
-                      onChange={async (e) => {
-                        const newStatus = e.target.value;
-                        if (onStatusChange) {
-                          onStatusChange(project.id, newStatus);
-                        }
-                      }}
-                      className={`px-3 py-1 rounded-full text-[10px] font-bold tracking-wide uppercase border-0 cursor-pointer focus:outline-none focus:ring-2 focus:ring-green-500/20 text-center bg-transparent ${
-                        project.status === "Active"
-                          ? "bg-green-500/10 text-green-600 dark:text-green-400"
-                          : "bg-gray-200/50 dark:bg-gray-700/50 text-gray-500 dark:text-gray-400"
-                      }`}
-                    >
-                      <option value="Active" className="bg-white dark:bg-gray-800 text-gray-800 dark:text-gray-200">Active</option>
-                      <option value="Inactive" className="bg-white dark:bg-gray-800 text-gray-800 dark:text-gray-200">Inactive</option>
-                    </select>
-                  </td>
                   <td className="px-6 py-4 whitespace-nowrap text-right text-sm">
                     <div className="flex justify-end items-center gap-2">
                       {/* View Details Button */}
-                      <Link
-                        to={`/admin/projects/${project.id}`}
+                      <button
+                        onClick={() => onViewDetails(project)}
                         title="View Details"
                         className="w-8 h-8 rounded-lg bg-blue-500/10 hover:bg-blue-500 text-blue-500 hover:text-white flex items-center justify-center transition-all shadow-sm hover:shadow-soft"
                       >
                         <i className="fas fa-eye text-xs"></i>
-                      </Link>
+                      </button>
 
                       {/* Edit Button */}
                       <button

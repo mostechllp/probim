@@ -1,14 +1,30 @@
 import { createSlice, createAsyncThunk } from "@reduxjs/toolkit";
 import projectService from "../../services/projectService";
 
-const mapAssignmentFromApi = (apiAssign) => {
+const mapAssignmentFromApi = (apiAssign, fallbackEmployeeId = null) => {
   if (!apiAssign) return null;
 
-  // Calculate employee ID from nested models or keys
-  const employeeId = apiAssign.employee_id ||
-    apiAssign.employeeId ||
-    apiAssign.employee?.id ||
-    apiAssign.id;
+  // Try to find a NUMERIC employee ID from various fields
+  // Priority: id (database PK) > employee_id (if numeric) > employee.id > fallback
+  const candidates = [
+    apiAssign.id,                  // Database primary key (most reliable for employee objects)
+    apiAssign.employee_id,         // Could be numeric FK or string HR code
+    apiAssign.employeeId,          // camelCase variant
+    apiAssign.employee?.id,        // Nested relation
+    fallbackEmployeeId             // Passed from caller
+  ];
+
+  let employeeId = null;
+  for (const candidate of candidates) {
+    if (candidate !== null && candidate !== undefined && candidate !== '' && !isNaN(Number(candidate))) {
+      employeeId = Number(candidate);
+      break;
+    }
+  }
+
+  if (!employeeId || isNaN(employeeId)) {
+    return null;
+  }
 
   // Calculate project IDs array
   let projectIds = [];
@@ -16,12 +32,15 @@ const mapAssignmentFromApi = (apiAssign) => {
     projectIds = apiAssign.project_ids;
   } else if (apiAssign.projectIds) {
     projectIds = apiAssign.projectIds;
-  } else if (apiAssign.projects) {
+  } else if (Array.isArray(apiAssign.projects)) {
     projectIds = apiAssign.projects.map(p => p.id || p);
   }
 
   return {
-    employeeId: Number(employeeId),
+    employeeId,
+    employeeCode: apiAssign.employee_id || null,  // Preserve the string HR code for display
+    firstName: apiAssign.first_name || null,
+    lastName: apiAssign.last_name || null,
     projectIds: projectIds.map(String),
     lastUpdated: apiAssign.updated_at ? apiAssign.updated_at.split("T")[0] : apiAssign.lastUpdated || new Date().toISOString().split("T")[0],
     raw: apiAssign
@@ -34,9 +53,30 @@ export const fetchAssignments = createAsyncThunk(
   async (_, { rejectWithValue }) => {
     try {
       const response = await projectService.getProjectAssignments();
-      const list = response.data || response || [];
-      return list.map(mapAssignmentFromApi).filter(a => a.employeeId);
+
+      // Handle nested API response: { status: 'success', data: [...] }
+      // Also handle: { data: { data: [...] } } or just [...]
+      let list = [];
+      if (Array.isArray(response)) {
+        list = response;
+      } else if (Array.isArray(response?.data)) {
+        list = response.data;
+      } else if (Array.isArray(response?.data?.data)) {
+        list = response.data.data;
+      } else if (response?.data && typeof response.data === 'object') {
+        // If data is a single object (not array), wrap it
+        list = [response.data];
+      } else {
+        list = [];
+      }
+
+      // Filter: valid employeeId AND has at least one project assigned
+      const mapped = list
+        .map(item => mapAssignmentFromApi(item))
+        .filter(a => a !== null && !isNaN(a.employeeId) && a.projectIds.length > 0);
+      return mapped;
     } catch (error) {
+      console.error('[API ERROR] fetchAssignments:', error);
       return rejectWithValue(error.message || "Failed to load project assignments");
     }
   }
@@ -49,9 +89,29 @@ export const saveAssignment = createAsyncThunk(
       // Cast list to numbers to meet database exists validations
       const ids = projectIds.map(Number);
       const response = await projectService.assignProjectsToEmployee(employeeId, ids);
+
+      // Try to map from response, but pass employeeId as fallback
       const data = response.data || response;
-      return mapAssignmentFromApi(data);
+      let mapped = mapAssignmentFromApi(data, employeeId);
+
+      // If mapping from response failed entirely, construct from known input
+      if (!mapped || isNaN(mapped.employeeId)) {
+        mapped = {
+          employeeId: Number(employeeId),
+          projectIds: ids.map(String),
+          lastUpdated: new Date().toISOString().split("T")[0],
+          raw: data
+        };
+      }
+
+      // Ensure projectIds are synced with what we sent (response may not echo them)
+      if (!mapped.projectIds || mapped.projectIds.length === 0) {
+        mapped.projectIds = ids.map(String);
+      }
+
+      return mapped;
     } catch (error) {
+      console.error('[API ERROR] saveAssignment:', error);
       return rejectWithValue(error.message || "Failed to save project assignment");
     }
   }

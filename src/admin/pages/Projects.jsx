@@ -19,6 +19,7 @@ import ProjectStatsCards from "../components/projects/ProjectStatsCards";
 import ProjectTable from "../components/projects/ProjectTable";
 import AddProjectModal from "../components/projects/AddProjectModal";
 import ConfirmModal from "../components/common/ConfirmModal";
+import ProjectDetailsModal from "../components/projects/ProjectDetailsModal";
 
 const Projects = () => {
   const dispatch = useDispatch();
@@ -32,8 +33,10 @@ const Projects = () => {
   // Local UI States
   const [isAddOpen, setIsAddOpen] = useState(false);
   const [isDeleteOpen, setIsDeleteOpen] = useState(false);
+  const [isDetailsOpen, setIsDetailsOpen] = useState(false);
 
   const [selectedProject, setSelectedProject] = useState(null);
+  const [viewingProject, setViewingProject] = useState(null);
 
   // Load Initial Data on Mount
   useEffect(() => {
@@ -129,6 +132,10 @@ const Projects = () => {
         onEdit={handleEdit}
         onDelete={handleDeleteTrigger}
         onAddNew={handleAddNew}
+        onViewDetails={(proj) => {
+          setViewingProject(proj);
+          setIsDetailsOpen(true);
+        }}
         onStatusChange={async (projectId, newStatus) => {
           try {
             await dispatch(patchProjectInline({ id: projectId, data: { status: newStatus } })).unwrap();
@@ -152,6 +159,17 @@ const Projects = () => {
         project={selectedProject}
         actionLoading={actionLoading}
         validationErrors={validationErrors}
+      />
+
+      {/* Project Details Modal */}
+      <ProjectDetailsModal
+        isOpen={isDetailsOpen}
+        project={viewingProject}
+        employees={employees}
+        onClose={() => {
+          setIsDetailsOpen(false);
+          setViewingProject(null);
+        }}
       />
 
       {/* Cascading Deletion Modal Dialog */}

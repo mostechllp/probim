@@ -120,7 +120,7 @@ export const tagEmployeesToProject = createAsyncThunk(
   "projects/tagEmployeesToProject",
   async ({ projectId, employeeIds }, { rejectWithValue }) => {
     try {
-      const response = await projectService.assignProjectsToEmployee(projectId, employeeIds);
+      const response = await projectService.assignEmployeesToProject(projectId, employeeIds);
       const data = response.data || response;
       return mapProjectFromApi(data);
     } catch (error) {

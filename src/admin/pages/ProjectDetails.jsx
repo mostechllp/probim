@@ -158,15 +158,6 @@ const ProjectDetails = () => {
               <h2 className="text-lg md:text-2xl font-bold text-gray-800 dark:text-gray-150 tracking-tight">
                 {currentProject.name}
               </h2>
-              <span
-                className={`px-3 py-1 rounded-full text-[10px] font-bold tracking-wide uppercase ${
-                  currentProject.status === "Active"
-                    ? "bg-green-500/10 text-green-600 dark:text-green-400"
-                    : "bg-gray-150/60 dark:bg-gray-700 text-gray-500 dark:text-gray-400"
-                }`}
-              >
-                {currentProject.status}
-              </span>
             </div>
             <p className="text-[10px] text-gray-400 dark:text-gray-500 uppercase tracking-widest font-semibold mt-1">
               Project Code: #{currentProject.id} &bull; Created: {currentProject.createdDate}

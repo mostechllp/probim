@@ -198,40 +198,6 @@ const AddProjectModal = ({
             )}
           </div>
 
-          {/* Status (Only in Edit Mode or Optional) */}
-          {isEditMode && (
-            <div className="space-y-1.5">
-              <label className="text-xs font-bold text-gray-500 dark:text-gray-400 uppercase tracking-wider block">
-                Status
-              </label>
-              <div className="flex gap-4">
-                <label className="flex items-center gap-2 cursor-pointer select-none text-sm font-semibold text-gray-700 dark:text-gray-300">
-                  <input
-                    type="radio"
-                    name="status"
-                    value="Active"
-                    checked={status === "Active"}
-                    onChange={() => setStatus("Active")}
-                    disabled={actionLoading}
-                    className="w-4 h-4 text-green-500 focus:ring-green-500 border-gray-300 dark:border-gray-600 dark:bg-gray-700 bg-transparent"
-                  />
-                  Active
-                </label>
-                <label className="flex items-center gap-2 cursor-pointer select-none text-sm font-semibold text-gray-700 dark:text-gray-300">
-                  <input
-                    type="radio"
-                    name="status"
-                    value="Inactive"
-                    checked={status === "Inactive"}
-                    onChange={() => setStatus("Inactive")}
-                    disabled={actionLoading}
-                    className="w-4 h-4 text-green-500 focus:ring-green-500 border-gray-300 dark:border-gray-600 dark:bg-gray-700 bg-transparent"
-                  />
-                  Inactive
-                </label>
-              </div>
-            </div>
-          )}
 
           {/* Form Footer Actions */}
           <div className="flex justify-end gap-3 pt-4 border-t border-gray-100 dark:border-gray-700/60">
