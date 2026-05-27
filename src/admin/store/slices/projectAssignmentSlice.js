@@ -1,118 +1,162 @@
 import { createSlice, createAsyncThunk } from "@reduxjs/toolkit";
+import projectService from "../../services/projectService";
 
-const STORAGE_KEY = "probim_project_assignments_data";
+const mapAssignmentFromApi = (apiAssign, fallbackEmployeeId = null) => {
+  if (!apiAssign) return null;
 
-const loadAssignmentsFromStorage = () => {
-  try {
-    const data = localStorage.getItem(STORAGE_KEY);
-    if (data) {
-      return JSON.parse(data);
-    }
-  } catch (e) {
-    console.error("Error loading assignments from localStorage", e);
-  }
-
-  // Default seeded project assignments (Employee ID -> Project IDs mapping)
-  const seedAssignments = [
-    {
-      employeeId: 1, // Seeded Employee ID
-      projectIds: ["proj-1", "proj-3"],
-      lastUpdated: "2026-05-12"
-    },
-    {
-      employeeId: 2,
-      projectIds: ["proj-1"],
-      lastUpdated: "2026-05-15"
-    },
-    {
-      employeeId: 3,
-      projectIds: ["proj-2", "proj-3"],
-      lastUpdated: "2026-05-20"
-    },
-    {
-      employeeId: 4,
-      projectIds: ["proj-3"],
-      lastUpdated: "2026-05-24"
-    }
+  // Try to find a NUMERIC employee ID from various fields
+  // Priority: id (database PK) > employee_id (if numeric) > employee.id > fallback
+  const candidates = [
+    apiAssign.id,                  // Database primary key (most reliable for employee objects)
+    apiAssign.employee_id,         // Could be numeric FK or string HR code
+    apiAssign.employeeId,          // camelCase variant
+    apiAssign.employee?.id,        // Nested relation
+    fallbackEmployeeId             // Passed from caller
   ];
 
-  localStorage.setItem(STORAGE_KEY, JSON.stringify(seedAssignments));
-  return seedAssignments;
-};
-
-const saveAssignmentsToStorage = (assignments) => {
-  try {
-    localStorage.setItem(STORAGE_KEY, JSON.stringify(assignments));
-  } catch (e) {
-    console.error("Error saving assignments to localStorage", e);
+  let employeeId = null;
+  for (const candidate of candidates) {
+    if (candidate !== null && candidate !== undefined && candidate !== '' && !isNaN(Number(candidate))) {
+      employeeId = Number(candidate);
+      break;
+    }
   }
+
+  if (!employeeId || isNaN(employeeId)) {
+    return null;
+  }
+
+  // Calculate project IDs array
+  let projectIds = [];
+  if (apiAssign.project_ids) {
+    projectIds = apiAssign.project_ids;
+  } else if (apiAssign.projectIds) {
+    projectIds = apiAssign.projectIds;
+  } else if (Array.isArray(apiAssign.projects)) {
+    projectIds = apiAssign.projects.map(p => p.id || p);
+  }
+
+  return {
+    employeeId,
+    employeeCode: apiAssign.employee_id || null,  // Preserve the string HR code for display
+    firstName: apiAssign.first_name || null,
+    lastName: apiAssign.last_name || null,
+    projectIds: projectIds.map(String),
+    lastUpdated: apiAssign.updated_at ? apiAssign.updated_at.split("T")[0] : apiAssign.lastUpdated || new Date().toISOString().split("T")[0],
+    raw: apiAssign
+  };
 };
 
 // Async Thunks
 export const fetchAssignments = createAsyncThunk(
   "projectAssignments/fetchAssignments",
   async (_, { rejectWithValue }) => {
-    return new Promise((resolve) => {
-      setTimeout(() => {
-        const assignments = loadAssignmentsFromStorage();
-        resolve(assignments);
-      }, 500); // simulated API delay
-    });
+    try {
+      const response = await projectService.getProjectAssignments();
+
+      // Handle nested API response: { status: 'success', data: [...] }
+      // Also handle: { data: { data: [...] } } or just [...]
+      let list = [];
+      if (Array.isArray(response)) {
+        list = response;
+      } else if (Array.isArray(response?.data)) {
+        list = response.data;
+      } else if (Array.isArray(response?.data?.data)) {
+        list = response.data.data;
+      } else if (response?.data && typeof response.data === 'object') {
+        // If data is a single object (not array), wrap it
+        list = [response.data];
+      } else {
+        list = [];
+      }
+
+      // Filter: valid employeeId AND has at least one project assigned
+      const mapped = list
+        .map(item => mapAssignmentFromApi(item))
+        .filter(a => a !== null && !isNaN(a.employeeId) && a.projectIds.length > 0);
+      return mapped;
+    } catch (error) {
+      console.error('[API ERROR] fetchAssignments:', error);
+      return rejectWithValue(error.message || "Failed to load project assignments");
+    }
   }
 );
 
 export const saveAssignment = createAsyncThunk(
   "projectAssignments/saveAssignment",
   async ({ employeeId, projectIds }, { rejectWithValue }) => {
-    return new Promise((resolve) => {
-      setTimeout(() => {
-        const assignments = loadAssignmentsFromStorage();
-        const empId = Number(employeeId);
-        
-        // Remove duplicates in selected projects
-        const uniqueProjectIds = [...new Set(projectIds)];
+    try {
+      // Cast list to numbers to meet database exists validations
+      const ids = projectIds.map(Number);
+      const response = await projectService.assignProjectsToEmployee(employeeId, ids);
 
-        const existingIdx = assignments.findIndex((a) => Number(a.employeeId) === empId);
+      // Try to map from response, but pass employeeId as fallback
+      const data = response.data || response;
+      let mapped = mapAssignmentFromApi(data, employeeId);
 
-        const newAssignment = {
-          employeeId: empId,
-          projectIds: uniqueProjectIds,
-          lastUpdated: new Date().toISOString().split("T")[0]
+      // If mapping from response failed entirely, construct from known input
+      if (!mapped || isNaN(mapped.employeeId)) {
+        mapped = {
+          employeeId: Number(employeeId),
+          projectIds: ids.map(String),
+          lastUpdated: new Date().toISOString().split("T")[0],
+          raw: data
         };
+      }
 
-        let updatedAssignments;
-        if (existingIdx !== -1) {
-          updatedAssignments = assignments.map((a, idx) => 
-            idx === existingIdx ? newAssignment : a
-          );
-        } else {
-          updatedAssignments = [newAssignment, ...assignments];
-        }
+      // Ensure projectIds are synced with what we sent (response may not echo them)
+      if (!mapped.projectIds || mapped.projectIds.length === 0) {
+        mapped.projectIds = ids.map(String);
+      }
 
-        saveAssignmentsToStorage(updatedAssignments);
-        resolve(newAssignment);
-      }, 400);
-    });
+      return mapped;
+    } catch (error) {
+      console.error('[API ERROR] saveAssignment:', error);
+      return rejectWithValue(error.message || "Failed to save project assignment");
+    }
   }
 );
 
 export const deleteAssignment = createAsyncThunk(
   "projectAssignments/deleteAssignment",
   async (employeeId, { rejectWithValue }) => {
-    return new Promise((resolve) => {
-      setTimeout(() => {
-        const assignments = loadAssignmentsFromStorage();
-        const empId = Number(employeeId);
-        const filtered = assignments.filter((a) => Number(a.employeeId) !== empId);
-        saveAssignmentsToStorage(filtered);
-        resolve(empId);
-      }, 400);
-    });
+    try {
+      // Deleting assignments by employee involves removing all projects
+      await projectService.assignProjectsToEmployee(employeeId, []);
+      return Number(employeeId);
+    } catch (error) {
+      return rejectWithValue(error.message || "Failed to remove project assignments");
+    }
+  }
+);
+
+export const fetchEmployeeProjects = createAsyncThunk(
+  "projectAssignments/fetchEmployeeProjects",
+  async (employeeId, { rejectWithValue }) => {
+    try {
+      const response = await projectService.getEmployeeProjects(employeeId);
+      return response.data || response || [];
+    } catch (error) {
+      return rejectWithValue(error.message || "Failed to fetch projects assigned to employee");
+    }
+  }
+);
+
+export const removeEmployeeSingleProject = createAsyncThunk(
+  "projectAssignments/removeEmployeeSingleProject",
+  async ({ employeeId, projectId }, { rejectWithValue }) => {
+    try {
+      await projectService.removeEmployeeProject(employeeId, projectId);
+      return { employeeId: Number(employeeId), projectId: String(projectId) };
+    } catch (error) {
+      return rejectWithValue(error.message || "Failed to remove assignment details");
+    }
   }
 );
 
 const initialState = {
   assignments: [],
+  employeeProjects: [],
   loading: false,
   actionLoading: false,
   error: null
@@ -149,11 +193,13 @@ const projectAssignmentSlice = createSlice({
       })
       .addCase(saveAssignment.fulfilled, (state, action) => {
         state.actionLoading = false;
+
         const exists = state.assignments.some(
           (a) => Number(a.employeeId) === Number(action.payload.employeeId)
         );
+
         if (exists) {
-          state.assignments = state.assignments.map((a) => 
+          state.assignments = state.assignments.map((a) =>
             Number(a.employeeId) === Number(action.payload.employeeId) ? action.payload : a
           );
         } else {
@@ -162,7 +208,7 @@ const projectAssignmentSlice = createSlice({
       })
       .addCase(saveAssignment.rejected, (state, action) => {
         state.actionLoading = false;
-        state.error = action.payload;
+        state.error = action.payload || "Failed to save project mappings";
       })
 
       // Delete Assignment
@@ -179,6 +225,37 @@ const projectAssignmentSlice = createSlice({
       .addCase(deleteAssignment.rejected, (state, action) => {
         state.actionLoading = false;
         state.error = action.payload || "Failed to delete assignment mapping";
+      })
+
+      // Fetch Employee Assigned Projects
+      .addCase(fetchEmployeeProjects.pending, (state) => {
+        state.loading = true;
+        state.error = null;
+      })
+      .addCase(fetchEmployeeProjects.fulfilled, (state, action) => {
+        state.loading = false;
+        state.employeeProjects = action.payload;
+      })
+      .addCase(fetchEmployeeProjects.rejected, (state, action) => {
+        state.loading = false;
+        state.error = action.payload;
+      })
+
+      // Remove single project assignment from employee
+      .addCase(removeEmployeeSingleProject.fulfilled, (state, action) => {
+        const { employeeId, projectId } = action.payload;
+        state.assignments = state.assignments.map((a) => {
+          if (Number(a.employeeId) === employeeId) {
+            return {
+              ...a,
+              projectIds: a.projectIds.filter(id => String(id) !== projectId)
+            };
+          }
+          return a;
+        });
+        state.employeeProjects = state.employeeProjects.filter(
+          (p) => String(p.id) !== projectId
+        );
       });
   }
 });
