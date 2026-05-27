@@ -234,18 +234,14 @@ const OnboardingReview = () => {
       body.append("other_allowance", employeeDetails.otherAllowance || "0");
       body.append("total_salary", employeeDetails.totalMonthlySalary || "0");
       body.append("payment_cycle", employeeDetails.paymentCycle || "Monthly");
-      
-      const primaryBank = (employeeDetails.bankAccounts && employeeDetails.bankAccounts.length > 0) 
-        ? employeeDetails.bankAccounts[0] 
-        : employeeDetails;
-        
-      body.append("bank_name", primaryBank.bankName || "");
-      body.append("account_number", primaryBank.accountNumber || "");
-      
-      if (employeeDetails.bankAccounts && employeeDetails.bankAccounts.length > 0) {
-        body.append("bank_accounts", JSON.stringify(employeeDetails.bankAccounts));
+      if (Array.isArray(employeeDetails.bankAccounts) && employeeDetails.bankAccounts.length > 0) {
+        body.append("bank_name", employeeDetails.bankAccounts[0].bankName || "");
+        body.append("account_number", employeeDetails.bankAccounts[0].accountNumber || "");
+        body.append("bank_details", JSON.stringify(employeeDetails.bankAccounts));
+      } else {
+        body.append("bank_name", employeeDetails.bankName || "");
+        body.append("account_number", employeeDetails.accountNumber || "");
       }
-
       body.append("special_day_event", employeeDetails.specialDayEvent || "");
       body.append("special_day_date", employeeDetails.specialDayDate || "");
 
@@ -578,13 +574,16 @@ const OnboardingReview = () => {
                   </div>
                 )}
 
-                {/* Bank Accounts Info */}
-                <div className="border-t border-gray-100 dark:border-gray-700/60 pt-6 space-y-6">
-                  {Array.isArray(employeeDetails.bankAccounts) && employeeDetails.bankAccounts.length > 0 ? (
-                    employeeDetails.bankAccounts.map((bank, index) => (
-                      <div key={bank.id || index} className="space-y-4 pb-4 border-b border-gray-100 dark:border-gray-700/30 last:border-0 last:pb-0">
-                        <p className="text-xs font-bold text-gray-500 uppercase tracking-wider mb-2">Bank Account {index + 1}</p>
-                        <div className="grid grid-cols-1 sm:grid-cols-3 gap-6">
+                {/* Country-specific Bank Transfer Info */}
+                {Array.isArray(employeeDetails.bankAccounts) && employeeDetails.bankAccounts.length > 0 ? (
+                  <div className="border-t border-gray-100 dark:border-gray-700/60 pt-6 space-y-6">
+                    <p className="text-xs font-bold text-gray-400 dark:text-gray-500 uppercase tracking-wider mb-2">Bank Accounts</p>
+                    {employeeDetails.bankAccounts.map((bank, index) => (
+                      <div key={index} className="p-4 bg-gray-50 dark:bg-gray-900/35 rounded-2xl border border-gray-100 dark:border-gray-700/80 space-y-4 relative">
+                        <span className="absolute top-4 right-4 text-[10px] font-bold text-green-700 dark:text-green-400 bg-green-100 dark:bg-green-900/30 px-2.5 py-1 rounded-md uppercase tracking-wider">
+                          Account {index + 1}
+                        </span>
+                        <div className="grid grid-cols-1 sm:grid-cols-3 gap-6 pr-20">
                           <div className="space-y-1">
                             <p className="text-xs font-semibold text-gray-400 dark:text-gray-500 uppercase tracking-wider">Bank Country</p>
                             <p className="text-sm font-bold text-gray-900 dark:text-white">{bank.bankCountry || "UAE"}</p>
@@ -643,11 +642,13 @@ const OnboardingReview = () => {
                           )}
                         </div>
                       </div>
-                    ))
-                  ) : (
-                    <p className="text-sm text-gray-500 italic">No bank details added.</p>
-                  )}
-                </div>
+                    ))}
+                  </div>
+                ) : (
+                  <div className="border-t border-gray-100 dark:border-gray-700/60 pt-6 space-y-4">
+                    <p className="text-sm text-gray-500 italic">No bank accounts added.</p>
+                  </div>
+                )}
               </div>
             </SummaryCard>
           </div>

@@ -163,6 +163,7 @@ const EmployeeDetailsForm = () => {
               <InputField label="Highest Education" name="education" placeholder="University Degree etc." />
             </div>
 
+            {/*
             <div className="space-y-1.5">
               <label className="block text-sm font-semibold text-gray-700 dark:text-gray-300">
                 Special Day Event
@@ -202,6 +203,7 @@ const EmployeeDetailsForm = () => {
                 <p className="text-xs font-medium text-red-500 mt-1">{errors.specialDayDate.message}</p>
               )}
             </div>
+            */}
           </div>
 
           {/* Form Footer */}
