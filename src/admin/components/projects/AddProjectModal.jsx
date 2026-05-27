@@ -1,5 +1,6 @@
 import React, { useState, useEffect } from "react";
 import { PROJECT_MODULE_NAME } from "../../utils/constants";
+import apiClient from "../../../utils/apiClient";
 
 const AddProjectModal = ({
   isOpen,
@@ -16,8 +17,29 @@ const AddProjectModal = ({
   const [managerId, setManagerId] = useState("");
   const [teamLeadId, setTeamLeadId] = useState("");
   const [error, setError] = useState("");
+  const [eligibleManagers, setEligibleManagers] = useState([]);
 
   const isEditMode = !!project;
+
+  useEffect(() => {
+    const fetchEligibleManagers = async () => {
+      try {
+        const response = await apiClient.get("/admin/projects/eligible-managers");
+        if (response.data && response.data.status === "success") {
+          setEligibleManagers(response.data.data || []);
+        } else if (response.data && Array.isArray(response.data)) {
+          setEligibleManagers(response.data);
+        } else if (response.data && response.data.data && Array.isArray(response.data.data)) {
+          setEligibleManagers(response.data.data);
+        }
+      } catch (err) {
+        console.error("Failed to fetch eligible managers:", err);
+      }
+    };
+    if (isOpen) {
+      fetchEligibleManagers();
+    }
+  }, [isOpen]);
 
   // Helper to get backend validation error for a field
   const getFieldError = (field) => {
@@ -137,9 +159,9 @@ const AddProjectModal = ({
               className={`w-full px-4 py-2.5 text-sm rounded-xl border ${getFieldError('project_manager_id') ? 'border-red-400 focus:ring-red-500/20 focus:border-red-500' : 'border-gray-200 dark:border-gray-600 focus:ring-green-500/20 focus:border-green-500'} bg-white dark:bg-gray-800 text-gray-800 dark:text-gray-200 focus:outline-none focus:ring-2 disabled:opacity-60 transition-all cursor-pointer`}
             >
               <option value="" className="text-gray-400">Select Project Manager</option>
-              {employees && employees.map((emp) => (
+              {eligibleManagers.map((emp) => (
                 <option key={emp.id} value={emp.id}>
-                  {emp.name}
+                  {emp.full_name || emp.name || `${emp.first_name || ""} ${emp.last_name || ""}`.trim() || `Employee #${emp.id}`}
                 </option>
               ))}
             </select>
@@ -163,9 +185,9 @@ const AddProjectModal = ({
               className={`w-full px-4 py-2.5 text-sm rounded-xl border ${getFieldError('team_lead_id') ? 'border-red-400 focus:ring-red-500/20 focus:border-red-500' : 'border-gray-200 dark:border-gray-600 focus:ring-green-500/20 focus:border-green-500'} bg-white dark:bg-gray-800 text-gray-800 dark:text-gray-200 focus:outline-none focus:ring-2 disabled:opacity-60 transition-all cursor-pointer`}
             >
               <option value="" className="text-gray-400">Select Team Lead</option>
-              {employees && employees.map((emp) => (
+              {eligibleManagers.map((emp) => (
                 <option key={emp.id} value={emp.id}>
-                  {emp.name}
+                  {emp.full_name || emp.name || `${emp.first_name || ""} ${emp.last_name || ""}`.trim() || `Employee #${emp.id}`}
                 </option>
               ))}
             </select>

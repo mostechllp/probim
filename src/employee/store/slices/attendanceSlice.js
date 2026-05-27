@@ -8,7 +8,7 @@ export const fetchDashboardData = createAsyncThunk(
     try {
       const response = await apiClient.get("/employee/dashboard");
       console.log("Dashboard data:", response.data);
-      
+
       if (response.data && response.data.status === "success") {
         return response.data.data;
       } else {
@@ -25,14 +25,14 @@ export const fetchDashboardData = createAsyncThunk(
 
 export const punchIn = createAsyncThunk(
   "attendance/punchIn",
-  async (data, { rejectWithValue }) => { 
+  async (data, { rejectWithValue }) => {
     try {
       const payload = {
         ...(data?.location && { location: data.location })
       };
-      
+
       const response = await apiClient.post("/employee/punch-in", payload);
-      
+
       if (response.data && response.data.status === "success") {
         // Save to localStorage
         localStorage.setItem("attendance-punched-in", "true");
@@ -40,7 +40,7 @@ export const punchIn = createAsyncThunk(
         if (data?.location) {
           localStorage.setItem("attendance-punch-location", JSON.stringify(data.location));
         }
-        
+
         return response.data.data;
       } else {
         return rejectWithValue(response.data?.message || "Punch in failed");
@@ -54,30 +54,37 @@ export const punchIn = createAsyncThunk(
   }
 );
 
+// empAttendanceSlice.js
 export const punchOut = createAsyncThunk(
   "attendance/punchOut",
-  async ({ tasks_completed, plan_tomorrow, location }, { rejectWithValue }) => { // Add location parameter
+  async ({ project_times, total_hours, location }, { rejectWithValue }) => {
     try {
+      // Convert { "7": "05:00" } → [{ project_id: 7, time_minutes: 300 }]
+      const formattedProjectTimes = Object.entries(project_times || {}).map(
+        ([projectId, time]) => {
+          const [hours, minutes] = time.split(":").map(Number);
+          return {
+            project_id: parseInt(projectId),
+            time_minutes: hours * 60 + minutes,
+          };
+        }
+      );
+
       const payload = {
-        tasks_completed,
-        plan_tomorrow,
+        project_times: formattedProjectTimes,
+        total_hours,
+        ...(location && { location }),
       };
-      
-      // Add location if provided
-      if (location) {
-        payload.location = location;
-      }
-      
+
+      console.log("PUNCH OUT PAYLOAD:", JSON.stringify(payload, null, 2));
       const response = await apiClient.post("/employee/punch-out", payload);
-      
+      // ...rest unchanged
+
       if (response.data && response.data.status === "success") {
         const data = response.data.data;
-        
-        // Clear localStorage on punch out
         localStorage.removeItem("attendance-punched-in");
         localStorage.removeItem("attendance-punch-in-time");
         localStorage.removeItem("attendance-punch-location");
-        
         return {
           punch_out: data.punch_out,
           log_date: data.log_date,
@@ -89,6 +96,7 @@ export const punchOut = createAsyncThunk(
       }
     } catch (error) {
       console.error("Punch out error:", error);
+      console.error("Validation errors:", JSON.stringify(error.response?.data, null, 2)); // ← HERE
       return rejectWithValue(
         error.response?.data?.message || "Punch out failed"
       );
@@ -139,7 +147,7 @@ const attendanceSlice = createSlice({
         state.loading = false;
         state.error = action.payload;
       })
-      
+
       // ✅ Punch In
       .addCase(punchIn.pending, (state) => {
         state.loading = true;
