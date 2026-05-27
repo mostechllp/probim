@@ -18,10 +18,28 @@ const EmployeeDetailsForm = () => {
     reset,
     control,
     getValues,
+    watch,
+    trigger,
     formState: { errors },
   } = useForm({
     defaultValues: employeeDetails,
   });
+
+  const watchSpecialDayEvent = watch("specialDayEvent");
+  const watchSpecialDayDate = watch("specialDayDate");
+
+  // Re-validate fields when their counterparts change to ensure correct validation state
+  useEffect(() => {
+    if (watchSpecialDayEvent !== undefined) {
+      trigger("specialDayDate");
+    }
+  }, [watchSpecialDayEvent, trigger]);
+
+  useEffect(() => {
+    if (watchSpecialDayDate !== undefined) {
+      trigger("specialDayEvent");
+    }
+  }, [watchSpecialDayDate, trigger]);
 
   // Re-initialize form whenever Redux parsed data changes (e.g. after AI resume parsing)
   // Using reset() ensures ALL fields including phone are properly populated
@@ -163,7 +181,6 @@ const EmployeeDetailsForm = () => {
               <InputField label="Highest Education" name="education" placeholder="University Degree etc." />
             </div>
 
-            {/*
             <div className="space-y-1.5">
               <label className="block text-sm font-semibold text-gray-700 dark:text-gray-300">
                 Special Day Event
@@ -171,8 +188,20 @@ const EmployeeDetailsForm = () => {
               <input
                 type="text"
                 placeholder="e.g. Birthday, Work Anniversary"
-                {...register("specialDayEvent")}
-                className="w-full px-4 py-2.5 bg-white dark:bg-gray-800 border border-gray-200 dark:border-gray-700 rounded-xl text-gray-900 dark:text-white transition-all duration-200 outline-none focus:border-green-500 focus:ring-4 focus:ring-green-500/10"
+                {...register("specialDayEvent", {
+                  validate: (val) => {
+                    const date = getValues("specialDayDate");
+                    if (date && !val?.trim()) {
+                      return "Event name is required when a date is provided";
+                    }
+                    return true;
+                  }
+                })}
+                className={`w-full px-4 py-2.5 bg-white dark:bg-gray-800 border rounded-xl text-gray-900 dark:text-white transition-all duration-200 outline-none ${
+                  errors.specialDayEvent
+                    ? "border-red-500 focus:ring-4 focus:ring-red-500/10 focus:border-red-500"
+                    : "border-gray-200 dark:border-gray-700 focus:border-green-500 focus:ring-4 focus:ring-green-500/10"
+                }`}
                 list="special-days-suggestions"
               />
               <datalist id="special-days-suggestions">
@@ -180,6 +209,9 @@ const EmployeeDetailsForm = () => {
                 <option value="Work Anniversary" />
                 <option value="Wedding Anniversary" />
               </datalist>
+              {errors.specialDayEvent && (
+                <p className="text-xs font-medium text-red-500 mt-1">{errors.specialDayEvent.message}</p>
+              )}
             </div>
 
             <div className="space-y-1.5">
@@ -189,6 +221,15 @@ const EmployeeDetailsForm = () => {
               <Controller
                 name="specialDayDate"
                 control={control}
+                rules={{
+                  validate: (val) => {
+                    const event = getValues("specialDayEvent");
+                    if (event && !val) {
+                      return "Date is required when an event is provided";
+                    }
+                    return true;
+                  }
+                }}
                 render={({ field }) => (
                   <DateInput
                     {...field}
@@ -203,7 +244,6 @@ const EmployeeDetailsForm = () => {
                 <p className="text-xs font-medium text-red-500 mt-1">{errors.specialDayDate.message}</p>
               )}
             </div>
-            */}
           </div>
 
           {/* Form Footer */}
