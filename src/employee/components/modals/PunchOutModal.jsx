@@ -10,13 +10,16 @@ const PunchOutModal = ({ isOpen, onClose, onSubmit, loading }) => {
   const [projects, setProjects] = useState([]);
   const [projectTimes, setProjectTimes] = useState({});
   const [loadingProjects, setLoadingProjects] = useState(false);
-  
+
   const { user } = useSelector((state) => state.auth);
   const dashboardData = useSelector((state) => state.EmpAttendance?.dashboardData);
 
   useEffect(() => {
     if (isOpen) {
-      const employeeId = dashboardData?.employee?.id || user?.id;
+      const employeeId = dashboardData?.employee?.id
+        || user?.id
+        || dashboardData?.employee?.employee_id
+        || user?.employee_id;
       if (employeeId) {
         setLoadingProjects(true);
         apiClient.get(`/employees/${employeeId}/projects`)
@@ -26,13 +29,8 @@ const PunchOutModal = ({ isOpen, onClose, onSubmit, loading }) => {
             }
           })
           .catch((err) => {
-            console.warn('Failed to fetch projects, using fallback data:', err.message);
-            // Fallback mock data if backend route is not yet deployed
-            setProjects([
-              { id: "proj-1", name: "Enterprise ERP Portal" },
-              { id: "proj-2", name: "Mobile Client App" },
-              { id: "proj-3", name: "Cloud Migration Phase 2" }
-            ]);
+            console.error('Failed to fetch projects:', err.message);
+            setProjects([]);
           })
           .finally(() => setLoadingProjects(false));
       }
@@ -54,7 +52,7 @@ const PunchOutModal = ({ isOpen, onClose, onSubmit, loading }) => {
 
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 backdrop-blur-sm animate-fade-in">
-      <div className="bg-[var(--surface)] rounded-xl w-full max-w-md mx-4 shadow-2xl animate-slide-up">
+      <div className="bg-[var(--surface)] rounded-xl w-full max-w-xl mx-4 shadow-2xl animate-slide-up">
         <div className="flex justify-between items-center p-5 border-b border-[var(--border)]">
           <h3 className="text-xl font-bold text-[var(--text)]">Punch Out</h3>
           <button
@@ -69,14 +67,14 @@ const PunchOutModal = ({ isOpen, onClose, onSubmit, loading }) => {
 
           <div className="mb-6">
             <label className="block text-sm font-semibold text-[var(--text)] mb-2">
-              Assigned Projects Time (Manual Entry)
+              Assigned Projects Time
             </label>
             {loadingProjects ? (
               <div className="text-sm text-[var(--muted)]">Loading projects...</div>
             ) : projects.length === 0 ? (
               <div className="text-sm text-[var(--muted)]">No projects assigned.</div>
             ) : (
-              <div className="max-h-48 overflow-y-auto pr-2 space-y-3">
+              <div className="max-h-[60vh] overflow-y-auto pr-2 space-y-3">
                 {projects.map((project) => (
                   <div key={project.id} className="flex items-center justify-between bg-[var(--surface2)] p-3 rounded-lg border border-[var(--border)]">
                     <span className="text-sm font-medium text-[var(--text)]">{project.name}</span>
@@ -98,18 +96,18 @@ const PunchOutModal = ({ isOpen, onClose, onSubmit, loading }) => {
             )}
           </div>
 
-          <div className="flex gap-3">
+          <div className="flex gap-3 pt-4 border-t border-[var(--border)]">
             <button
               type="button"
               onClick={onClose}
-              className="flex-1 py-2.5 px-4 bg-[var(--surface2)] border border-[var(--border)] rounded-lg text-[var(--text)] font-semibold hover:bg-[var(--surface3)] transition-colors"
+              className="flex-1 py-3 px-8 bg-[var(--surface2)] border border-[var(--border)] rounded-full text-[var(--text)] font-semibold text-sm hover:bg-[var(--surface3)] hover:-translate-y-0.5 hover:shadow-md transition-all cursor-pointer"
             >
               Cancel
             </button>
             <button
               type="submit"
               disabled={loading}
-              className="flex-1 py-2.5 px-4 bg-green-500 text-white rounded-lg font-semibold hover:bg-green-600 transition-all flex items-center justify-center gap-2"
+              className="flex-1 bg-green-500 border-none text-white py-3 px-8 rounded-full font-semibold text-sm cursor-pointer transition-all flex items-center justify-center gap-2 hover:bg-green-600 hover:-translate-y-0.5 hover:shadow-md disabled:opacity-50 disabled:cursor-not-allowed"
             >
               {loading ? (
                 <>
@@ -135,12 +133,12 @@ const TaskReportsList = () => {
   const dispatch = useDispatch();
   // Add safety checks for undefined state
   const taskReportsState = useSelector((state) => state.EmpTaskReports) || {};
-  const { 
-    taskReports = [], 
-    loading = false, 
-    pagination = { currentPage: 1, perPage: 10 }, 
-    search = '', 
-    error = null 
+  const {
+    taskReports = [],
+    loading = false,
+    pagination = { currentPage: 1, perPage: 10 },
+    search = '',
+    error = null
   } = taskReportsState;
 
   // Fetch task reports on component mount
@@ -326,11 +324,10 @@ const TaskReportsList = () => {
                 <button
                   key={i}
                   onClick={() => handlePageChange(pageNum)}
-                  className={`w-9 h-9 rounded-lg border text-xs transition-all ${
-                    currentPage === pageNum
+                  className={`w-9 h-9 rounded-lg border text-xs transition-all ${currentPage === pageNum
                       ? "bg-green-500 border-green-500 text-white"
                       : "border-[var(--border)] bg-[var(--surface)] text-[var(--text)] hover:bg-[var(--surface2)]"
-                  }`}
+                    }`}
                 >
                   {pageNum}
                 </button>
