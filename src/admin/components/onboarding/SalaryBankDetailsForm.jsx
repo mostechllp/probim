@@ -20,6 +20,7 @@ const SalaryBankDetailsForm = () => {
   const [isSalarySaved, setIsSalarySaved] = useState(false);
 
   // 2. Bank Details States
+  const [bankAccounts, setBankAccounts] = useState([]);
   const [bankCountry, setBankCountry] = useState("UAE"); // Default UAE
   const [bankName, setBankName] = useState("");
   const [bankAccountNumber, setBankAccountNumber] = useState("");
@@ -27,10 +28,6 @@ const SalaryBankDetailsForm = () => {
   const [bankBranch, setBankBranch] = useState("");
   const [bankIban, setBankIban] = useState("");
   const [bankSwift, setBankSwift] = useState("");
-  const [customBankFields, setCustomBankFields] = useState([]);
-  const [newCustomBankKey, setNewCustomBankKey] = useState("");
-  const [newCustomBankValue, setNewCustomBankValue] = useState("");
-  const [isBankSaved, setIsBankSaved] = useState(false);
 
   // 3. Payment Cycle State
   const [paymentCycle, setPaymentCycle] = useState("Monthly");
@@ -69,26 +66,20 @@ const SalaryBankDetailsForm = () => {
         setSalaryComponents(details.salaryComponents);
         setIsSalarySaved(details.isSalarySaved ?? false);
       }
-      if (details.bankCountry) setBankCountry(details.bankCountry);
-      if (details.bankName) setBankName(details.bankName);
-      if (details.accountNumber) setBankAccountNumber(details.accountNumber);
-      if (details.bankIfsc) setBankIfsc(details.bankIfsc);
-      if (details.bankBranch) setBankBranch(details.bankBranch);
-      
-      // Auto-format IBAN on restore
-      if (details.bankIban) {
-        const rawIban = details.bankIban.replace(/\s/g, "");
-        let formatted = "";
-        for (let i = 0; i < rawIban.length; i++) {
-          if (i > 0 && i % 4 === 0) formatted += " ";
-          formatted += rawIban[i];
-        }
-        setBankIban(formatted);
+      if (Array.isArray(details.bankAccounts) && details.bankAccounts.length > 0) {
+        setBankAccounts(details.bankAccounts);
+      } else if (details.bankName) {
+        setBankAccounts([{
+          id: Date.now(),
+          bankCountry: details.bankCountry || "UAE",
+          bankName: details.bankName,
+          accountNumber: details.accountNumber,
+          bankIfsc: details.bankIfsc || "",
+          bankBranch: details.bankBranch || "",
+          bankIban: details.bankIban ? details.bankIban.replace(/\s/g, "") : "",
+          bankSwift: details.bankSwift || ""
+        }]);
       }
-      
-      if (details.bankSwift) setBankSwift(details.bankSwift);
-      if (Array.isArray(details.customBankFields)) setCustomBankFields(details.customBankFields);
-      if (details.isBankSaved !== undefined) setIsBankSaved(details.isBankSaved);
       if (details.paymentCycle) setPaymentCycle(details.paymentCycle);
     }
   }, [employeeDetails]);
@@ -179,7 +170,6 @@ const SalaryBankDetailsForm = () => {
     setBankIban("");
     setBankSwift("");
     setFormErrors({});
-    setIsBankSaved(false);
   };
 
   const handleBankNameChange = (e) => {
@@ -277,46 +267,12 @@ const SalaryBankDetailsForm = () => {
     }
   };
 
-  // --- Dynamic Bank Custom Fields ---
-  const handleAddCustomBankField = () => {
-    if (!newCustomBankKey.trim()) {
-      showToast("Custom field name cannot be empty", "error");
-      return;
-    }
-    if (!newCustomBankValue.trim()) {
-      showToast("Custom field value cannot be empty", "error");
+  const handleAddBankDetails = () => {
+    if (bankAccounts.length >= 2) {
+      showToast("You can only add up to 2 bank accounts", "warning");
       return;
     }
 
-    const keyLower = newCustomBankKey.trim().toLowerCase();
-    const forbidden = ["bankname", "bank name", "accountnumber", "account number", "ifsc", "branch", "iban", "swift"];
-    if (forbidden.includes(keyLower)) {
-      showToast("Cannot add standard fields as custom fields", "error");
-      return;
-    }
-
-    if (customBankFields.some(f => f.key.toLowerCase() === keyLower)) {
-      showToast(`Custom field "${newCustomBankKey.trim()}" already exists!`, "error");
-      return;
-    }
-
-    const newField = {
-      id: Date.now(),
-      key: newCustomBankKey.trim(),
-      value: newCustomBankValue.trim()
-    };
-
-    setCustomBankFields(prev => [...prev, newField]);
-    setNewCustomBankKey("");
-    setNewCustomBankValue("");
-    showToast("Custom bank field added successfully!", "success");
-  };
-
-  const handleDeleteCustomBankField = (id) => {
-    setCustomBankFields(prev => prev.filter(f => f.id !== id));
-  };
-
-  const handleSaveBankDetails = () => {
     let errors = {};
     if (!bankName.trim()) errors.bankName = "Bank name is required";
     if (!bankAccountNumber.trim()) errors.accountNumber = "Account number is required";
@@ -349,8 +305,33 @@ const SalaryBankDetailsForm = () => {
       return;
     }
 
-    setIsBankSaved(true);
-    showToast("Bank details saved successfully!", "success");
+    const newBank = {
+      id: Date.now(),
+      bankCountry,
+      bankName,
+      accountNumber: bankAccountNumber,
+      bankIfsc,
+      bankBranch,
+      bankIban: bankIban.replace(/\s/g, ""),
+      bankSwift
+    };
+
+    setBankAccounts(prev => [...prev, newBank]);
+    
+    // Reset form
+    setBankName("");
+    setBankAccountNumber("");
+    setBankIfsc("");
+    setBankBranch("");
+    setBankIban("");
+    setBankSwift("");
+    setFormErrors({});
+    
+    showToast("Bank details added successfully!", "success");
+  };
+
+  const handleDeleteBank = (id) => {
+    setBankAccounts(prev => prev.filter(b => b.id !== id));
   };
 
   // --- Draft Saving Flow ---
@@ -365,15 +346,7 @@ const SalaryBankDetailsForm = () => {
       currency,
       salaryComponents,
       isSalarySaved,
-      bankCountry,
-      bankName,
-      accountNumber: bankAccountNumber,
-      bankIfsc,
-      bankBranch,
-      bankIban: cleanIban,
-      bankSwift,
-      customBankFields,
-      isBankSaved
+      bankAccounts
     };
 
     const draftState = {
@@ -401,8 +374,8 @@ const SalaryBankDetailsForm = () => {
       return;
     }
 
-    if (!isBankSaved) {
-      showToast("Please save your Bank Details before continuing", "warning");
+    if (bankAccounts.length === 0) {
+      showToast("Please add at least one Bank Account before continuing", "warning");
       return;
     }
 
@@ -415,15 +388,7 @@ const SalaryBankDetailsForm = () => {
       currency,
       salaryComponents,
       isSalarySaved,
-      bankCountry,
-      bankName,
-      accountNumber: bankAccountNumber,
-      bankIfsc,
-      bankBranch,
-      bankIban: cleanIban,
-      bankSwift,
-      customBankFields,
-      isBankSaved
+      bankAccounts
     };
 
     dispatch(updateEmployeeDetails(finalPayload));
@@ -715,9 +680,8 @@ const SalaryBankDetailsForm = () => {
           </div>
 
           <div className="p-6 md:p-8 space-y-6">
-            {!isBankSaved ? (
-              // BANK DETAILS EDIT MODE
-              <div className="space-y-6 animate-fadeIn">
+            {/* BANK DETAILS EDIT MODE */}
+            <div className={`space-y-6 animate-fadeIn ${bankAccounts.length >= 2 ? 'opacity-50 pointer-events-none' : ''}`}>
                 <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
                   {/* Country Selector */}
                   <div className="space-y-2">
@@ -871,100 +835,22 @@ const SalaryBankDetailsForm = () => {
                   )}
                 </div>
 
-                {/* DYNAMIC SETUP: Custom additional fields input */}
-                <div className="p-5 bg-gray-50/50 dark:bg-gray-900/30 rounded-2xl border border-gray-100 dark:border-gray-700/50 space-y-4">
-                  <h4 className="text-sm font-bold text-gray-800 dark:text-gray-300 uppercase tracking-wider">
-                    Add Custom Bank Field (Optional)
-                  </h4>
-                  <div className="grid grid-cols-1 sm:grid-cols-5 gap-4 items-end">
-                    <div className="sm:col-span-2 space-y-1.5">
-                      <label className="text-xs font-semibold text-gray-500 dark:text-gray-400">
-                        Field Name (Key)
-                      </label>
-                      <input
-                        type="text"
-                        placeholder="e.g. Account Type, Correspondent Bank"
-                        value={newCustomBankKey}
-                        onChange={(e) => setNewCustomBankKey(e.target.value)}
-                        className="w-full px-4 py-2.5 bg-white dark:bg-gray-900 border border-gray-200 dark:border-gray-700 rounded-xl text-sm text-gray-900 dark:text-white outline-none focus:border-green-500"
-                      />
-                    </div>
-                    
-                    <div className="sm:col-span-2 space-y-1.5">
-                      <label className="text-xs font-semibold text-gray-500 dark:text-gray-400">
-                        Field Value
-                      </label>
-                      <input
-                        type="text"
-                        placeholder="e.g. Savings, Citibank US"
-                        value={newCustomBankValue}
-                        onChange={(e) => setNewCustomBankValue(e.target.value)}
-                        className="w-full px-4 py-2.5 bg-white dark:bg-gray-900 border border-gray-200 dark:border-gray-700 rounded-xl text-sm text-gray-900 dark:text-white outline-none focus:border-green-500"
-                      />
-                    </div>
-
-                    <button
-                      type="button"
-                      onClick={handleAddCustomBankField}
-                      className="sm:col-span-1 py-3 px-4 bg-green-500 hover:bg-green-600 text-white rounded-xl text-sm font-bold transition-all shadow-md hover:shadow-lg flex items-center justify-center gap-1 hover:scale-[1.02]"
-                    >
-                      <FiPlus size={16} />
-                      Add Field
-                    </button>
-                  </div>
-                </div>
-
-                {/* Custom bank fields listing */}
-                {customBankFields.length > 0 && (
-                  <div className="overflow-hidden border border-gray-100 dark:border-gray-700/80 rounded-xl">
-                    <table className="min-w-full divide-y divide-gray-100 dark:divide-gray-700/60 text-left">
-                      <thead className="bg-gray-50 dark:bg-gray-800 text-xs font-bold text-gray-500 dark:text-gray-400 uppercase">
-                        <tr>
-                          <th className="px-4 py-3">Custom Field Name</th>
-                          <th className="px-4 py-3">Custom Value</th>
-                          <th className="px-4 py-3 text-center">Action</th>
-                        </tr>
-                      </thead>
-                      <tbody className="divide-y divide-gray-100 dark:divide-gray-700/60 text-sm">
-                        {customBankFields.map((field) => (
-                          <tr key={field.id} className="hover:bg-gray-50/50 dark:hover:bg-gray-900/10">
-                            <td className="px-4 py-3 font-semibold text-gray-700 dark:text-gray-300">
-                              {field.key}
-                            </td>
-                            <td className="px-4 py-3 font-bold text-gray-900 dark:text-white">
-                              {field.value}
-                            </td>
-                            <td className="px-4 py-3 text-center">
-                              <button
-                                type="button"
-                                onClick={() => handleDeleteCustomBankField(field.id)}
-                                className="p-1 text-red-500 hover:text-red-650 hover:bg-red-50 dark:hover:bg-red-955/20 rounded-lg transition-all"
-                              >
-                                <FiTrash2 size={16} />
-                              </button>
-                            </td>
-                          </tr>
-                        ))}
-                      </tbody>
-                    </table>
-                  </div>
-                )}
-
                 {/* Save Bank Details Button */}
                 <div className="flex justify-end">
                   <button
                     type="button"
-                    onClick={handleSaveBankDetails}
+                    onClick={handleAddBankDetails}
                     className="px-6 py-2.5 bg-green-600 hover:bg-green-700 text-white rounded-full text-xs font-bold transition-all shadow-md flex items-center gap-2 hover:scale-[1.02]"
                   >
-                    <FiSave size={14} />
-                    Save Bank Details
+                    <FiPlus size={14} />
+                    Add Bank Account
                   </button>
                 </div>
               </div>
-            ) : (
-              // BANK DETAILS SAVED SINGLE TABLE ROW RENDERING
-              <div className="overflow-x-auto border border-gray-150 dark:border-gray-700/80 rounded-2xl shadow-inner animate-fadeIn">
+
+            {/* BANK DETAILS SAVED MULTIPLE ROWS RENDERING */}
+            {bankAccounts.length > 0 && (
+              <div className="overflow-x-auto border border-gray-150 dark:border-gray-700/80 rounded-2xl shadow-inner animate-fadeIn mt-6">
                 <table className="min-w-full divide-y divide-gray-100 dark:divide-gray-700/80 text-left">
                   <thead className="bg-gray-50/70 dark:bg-gray-800/40 text-xs font-bold uppercase tracking-wider text-gray-500 dark:text-gray-400">
                     <tr>
@@ -975,80 +861,70 @@ const SalaryBankDetailsForm = () => {
                     </tr>
                   </thead>
                   <tbody className="divide-y divide-gray-100 dark:divide-gray-750 bg-white dark:bg-gray-800/20">
-                    <tr className="hover:bg-gray-50/30 dark:hover:bg-gray-800/10 transition-colors">
-                      
-                      {/* Bank Country Column */}
-                      <td className="px-6 py-5 whitespace-nowrap">
-                        <span className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-xl text-sm font-extrabold text-blue-700 dark:text-blue-400 bg-blue-50 dark:bg-blue-950/30 border border-blue-100 dark:border-blue-900/30 shadow-sm">
-                          <FiGlobe className="text-blue-600" size={14} />
-                          {bankCountry}
-                        </span>
-                      </td>
+                    {bankAccounts.map((bank) => (
+                      <tr key={bank.id} className="hover:bg-gray-50/30 dark:hover:bg-gray-800/10 transition-colors">
+                        
+                        {/* Bank Country Column */}
+                        <td className="px-6 py-5 whitespace-nowrap">
+                          <span className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-xl text-sm font-extrabold text-blue-700 dark:text-blue-400 bg-blue-50 dark:bg-blue-950/30 border border-blue-100 dark:border-blue-900/30 shadow-sm">
+                            <FiGlobe className="text-blue-600" size={14} />
+                            {bank.bankCountry}
+                          </span>
+                        </td>
 
-                      {/* Bank Name, Account details and custom fields stacked */}
-                      <td className="px-6 py-5">
-                        <div className="space-y-1">
-                          <p className="text-sm font-bold text-gray-900 dark:text-white">{bankName}</p>
-                          <p className="text-xs text-gray-500 dark:text-gray-400 font-medium">
-                            Account Number: <span className="font-semibold text-gray-700 dark:text-gray-300">{bankAccountNumber}</span>
-                          </p>
-                          {bankCountry === "India" && bankBranch && (
-                            <p className="text-xs text-gray-500 dark:text-gray-400 font-medium">
-                              Branch: <span className="font-semibold text-gray-700 dark:text-gray-300">{bankBranch}</span>
-                            </p>
-                          )}
-                          
-                          {/* Custom fields rendered under standard bank fields */}
-                          {customBankFields.length > 0 && (
-                            <div className="pt-2 border-t border-gray-100 dark:border-gray-700/30 mt-2 space-y-1">
-                              {customBankFields.map((field) => (
-                                <p key={field.id} className="text-xs text-gray-500 dark:text-gray-400 font-medium">
-                                  {field.key}: <span className="font-semibold text-gray-700 dark:text-gray-300">{field.value}</span>
-                                </p>
-                              ))}
-                            </div>
-                          )}
-                        </div>
-                      </td>
-
-                      {/* Key Identifier column (India: IFSC Code, UAE: IBAN & SWIFT) */}
-                      <td className="px-6 py-5">
-                        {bankCountry === "India" ? (
+                        {/* Bank Name, Account details and custom fields stacked */}
+                        <td className="px-6 py-5">
                           <div className="space-y-1">
-                            <span className="text-[10px] font-bold text-gray-400 dark:text-gray-500 uppercase tracking-widest block">IFSC Code</span>
-                            <span className="font-mono text-sm font-bold text-gray-900 dark:text-white bg-gray-100 dark:bg-gray-900 px-2.5 py-1 rounded border border-gray-200 dark:border-gray-800">
-                              {bankIfsc}
-                            </span>
+                            <p className="text-sm font-bold text-gray-900 dark:text-white">{bank.bankName}</p>
+                            <p className="text-xs text-gray-500 dark:text-gray-400 font-medium">
+                              Account Number: <span className="font-semibold text-gray-700 dark:text-gray-300">{bank.accountNumber}</span>
+                            </p>
+                            {bank.bankCountry === "India" && bank.bankBranch && (
+                              <p className="text-xs text-gray-500 dark:text-gray-400 font-medium">
+                                Branch: <span className="font-semibold text-gray-700 dark:text-gray-300">{bank.bankBranch}</span>
+                              </p>
+                            )}
                           </div>
-                        ) : (
-                          <div className="space-y-1.5">
-                            <span className="text-[10px] font-bold text-gray-400 dark:text-gray-500 uppercase tracking-widest block">IBAN & SWIFT</span>
-                            <div className="space-y-1">
-                              <span className="font-mono text-xs font-bold text-gray-900 dark:text-white bg-gray-100 dark:bg-gray-900 px-2 py-1 rounded border border-gray-200 dark:border-gray-800 block w-fit">
-                                {bankIban}
-                              </span>
-                              {bankSwift && (
-                                <span className="text-[10px] text-gray-400 dark:text-gray-500 font-semibold block">
-                                  SWIFT: <span className="font-mono text-xs font-bold text-gray-700 dark:text-gray-300 bg-gray-100/50 dark:bg-gray-900/50 px-1.5 py-0.5 rounded">{bankSwift}</span>
-                                </span>
-                              )}
-                            </div>
-                          </div>
-                        )}
-                      </td>
+                        </td>
 
-                      {/* Action column to unlock edit state */}
-                      <td className="px-6 py-5 text-center whitespace-nowrap">
-                        <button
-                          type="button"
-                          onClick={() => setIsBankSaved(false)}
-                          className="inline-flex items-center justify-center gap-1.5 px-4 py-2 text-xs font-bold text-green-600 dark:text-green-400 bg-green-50 hover:bg-green-100 dark:bg-green-950/20 dark:hover:bg-green-950/40 rounded-xl transition-all border border-green-150/40 dark:border-green-900/30 hover:scale-[1.03]"
-                        >
-                          <FiEdit size={14} />
-                          Modify Bank Details
-                        </button>
-                      </td>
-                    </tr>
+                        {/* Key Identifier column (India: IFSC Code, UAE: IBAN & SWIFT) */}
+                        <td className="px-6 py-5">
+                          {bank.bankCountry === "India" ? (
+                            <div className="space-y-1">
+                              <span className="text-[10px] font-bold text-gray-400 dark:text-gray-500 uppercase tracking-widest block">IFSC Code</span>
+                              <span className="font-mono text-sm font-bold text-gray-900 dark:text-white bg-gray-100 dark:bg-gray-900 px-2.5 py-1 rounded border border-gray-200 dark:border-gray-800">
+                                {bank.bankIfsc}
+                              </span>
+                            </div>
+                          ) : (
+                            <div className="space-y-1.5">
+                              <span className="text-[10px] font-bold text-gray-400 dark:text-gray-500 uppercase tracking-widest block">IBAN & SWIFT</span>
+                              <div className="space-y-1">
+                                <span className="font-mono text-xs font-bold text-gray-900 dark:text-white bg-gray-100 dark:bg-gray-900 px-2 py-1 rounded border border-gray-200 dark:border-gray-800 block w-fit">
+                                  {bank.bankIban}
+                                </span>
+                                {bank.bankSwift && (
+                                  <span className="text-[10px] text-gray-400 dark:text-gray-500 font-semibold block">
+                                    SWIFT: <span className="font-mono text-xs font-bold text-gray-700 dark:text-gray-300 bg-gray-100/50 dark:bg-gray-900/50 px-1.5 py-0.5 rounded">{bank.bankSwift}</span>
+                                  </span>
+                                )}
+                              </div>
+                            </div>
+                          )}
+                        </td>
+
+                        {/* Action column to unlock edit state */}
+                        <td className="px-6 py-5 text-center whitespace-nowrap">
+                          <button
+                            type="button"
+                            onClick={() => handleDeleteBank(bank.id)}
+                            className="p-2 text-red-500 hover:text-red-650 hover:bg-red-50 dark:hover:bg-red-950/20 rounded-lg transition-all"
+                          >
+                            <FiTrash2 size={18} />
+                          </button>
+                        </td>
+                      </tr>
+                    ))}
                   </tbody>
                 </table>
               </div>
@@ -1070,7 +946,7 @@ const SalaryBankDetailsForm = () => {
           <button
             type="submit"
             className={`w-full sm:w-auto px-8 py-3 rounded-full text-sm font-bold flex items-center justify-center gap-2 transition-all shadow-md hover:shadow-lg whitespace-nowrap text-white ${
-              isSalarySaved && isBankSaved
+              isSalarySaved && bankAccounts.length > 0
                 ? "bg-green-500 hover:bg-green-600 hover:scale-[1.02]"
                 : "bg-gray-300 dark:bg-gray-700 cursor-not-allowed text-gray-500 dark:text-gray-400 opacity-60"
             }`}

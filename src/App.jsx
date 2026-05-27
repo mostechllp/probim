@@ -223,10 +223,7 @@ function App() {
           <Route path="leaves" element={<Leaves />} />
           <Route path="leaves/leave-types" element={<LeaveTypeManagement />} />
           <Route path="leaves/allocations" element={<LeaveAllocations />} />
-          <Route
-            path="leaves/allocations/:id"
-            element={<EditLeaveAllocation />}
-          />
+          <Route path="leaves/allocations/:id" element={<EditLeaveAllocation />} />
           <Route path="payroll/add" element={<AddPayroll />} />
           <Route path="wfh" element={<AdminWFH />} />
           <Route path="settings" element={<Settings />} />
