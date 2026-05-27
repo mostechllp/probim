@@ -6,6 +6,9 @@ import EntriesSelector from "../common/EntriesSelector";
 import { showToast } from "../../../components/common/Toast";
 import Pagination from "../common/Paginations";
 import { fetchEmployeeUpcomingRenewalsReport } from "../../store/slices/reportSlice";
+import ExportModal from "../../../components/common/ExportModal";
+import { exportToCSV, formatDate, getDaysDifference } from "../../../utils/reportUtils";
+import { generateEmployeeUpcomingRenewalsPDF } from "../../../utils/reportPDFConfigs";
 
 const EmployeeUpcomingRenewalsReport = () => {
   const dispatch = useDispatch();
@@ -17,6 +20,7 @@ const EmployeeUpcomingRenewalsReport = () => {
   const [currentPage, setCurrentPage] = useState(1);
   const [perPage, setPerPage] = useState(10);
   const [searchTerm, setSearchTerm] = useState("");
+  const [showExportModal, setShowExportModal] = useState(false);
 
   // Filter states
   const [selectedCompany, setSelectedCompany] = useState("all");
@@ -39,7 +43,7 @@ const EmployeeUpcomingRenewalsReport = () => {
   useEffect(() => {
     // eslint-disable-next-line react-hooks/set-state-in-effect
     setCurrentPage(1);
-  }, [searchTerm, selectedCompany, selectedDepartment, minDays, maxDays]);
+  }, [searchTerm, selectedCompany, selectedDepartment, minDays, maxDays, perPage]);
 
   // Transform employee data to extract document expiry fields
   const transformEmployee = (emp) => {
@@ -58,24 +62,36 @@ const EmployeeUpcomingRenewalsReport = () => {
       visa_expiry: raw?.visa_expiry_date,
       labor_expiry: raw?.labor_expiry_date,
       eid_expiry: raw?.eid_expiry_date,
+      // Additional fields for better export
+      email: raw?.company_email || raw?.personal_email || user?.email || "-",
+      phone: raw?.company_mobile_number || raw?.personal_number || "-",
     };
   };
 
-  // Get days difference between two dates
-  const getDaysDifference = (dateStr) => {
-    if (!dateStr) return null;
-    const today = new Date();
-    today.setHours(0, 0, 0, 0);
-    const expiryDate = new Date(dateStr);
-    if (isNaN(expiryDate.getTime())) return null;
-
-    return Math.ceil((expiryDate - today) / (1000 * 60 * 60 * 24));
-  };
-
-  // Check if a date is within the upcoming renewal range (31-90 days)
+  // Check if a date is within the upcoming renewal range
   const isUpcomingRenewal = (dateStr) => {
     const daysLeft = getDaysDifference(dateStr);
     return daysLeft !== null && daysLeft >= minDays && daysLeft <= maxDays;
+  };
+
+  // Get the earliest upcoming expiry with document type
+  const getEarliestUpcomingExpiry = (employee) => {
+    const expiryItems = [
+      { date: employee.passport_expiry, name: "Passport", key: "passport" },
+      { date: employee.visa_expiry, name: "Visa", key: "visa" },
+      { date: employee.labor_expiry, name: "Labor Card", key: "labor" },
+      { date: employee.eid_expiry, name: "EID", key: "eid" },
+    ].map(item => ({
+      ...item,
+      days: getDaysDifference(item.date)
+    })).filter(
+      item => item.days !== null && item.days >= minDays && item.days <= maxDays
+    );
+
+    if (expiryItems.length === 0) return null;
+    return expiryItems.reduce((min, item) => 
+      item.days < min.days ? item : min, expiryItems[0]
+    );
   };
 
   // Get employees with upcoming renewals
@@ -114,41 +130,48 @@ const EmployeeUpcomingRenewalsReport = () => {
           (emp.emp_id || "").toLowerCase().includes(searchLower) ||
           (emp.name || "").toLowerCase().includes(searchLower) ||
           (emp.company_name || "").toLowerCase().includes(searchLower) ||
-          (emp.department_name || "").toLowerCase().includes(searchLower),
+          (emp.department_name || "").toLowerCase().includes(searchLower) ||
+          (emp.email || "").toLowerCase().includes(searchLower) ||
+          (emp.phone || "").toLowerCase().includes(searchLower),
       );
     }
 
     // Sort by earliest upcoming expiry date
     filtered.sort((a, b) => {
-      const getEarliestUpcomingDays = (emp) => {
-        const expiryDates = [
-          {
-            date: emp.passport_expiry,
-            days: getDaysDifference(emp.passport_expiry),
-          },
-          { date: emp.visa_expiry, days: getDaysDifference(emp.visa_expiry) },
-          { date: emp.labor_expiry, days: getDaysDifference(emp.labor_expiry) },
-          { date: emp.eid_expiry, days: getDaysDifference(emp.eid_expiry) },
-        ].filter(
-          (item) =>
-            item.days !== null && item.days >= minDays && item.days <= maxDays,
-        );
+      const expiryA = getEarliestUpcomingExpiry(a);
+      const expiryB = getEarliestUpcomingExpiry(b);
 
-        if (expiryDates.length === 0) return null;
-        return Math.min(...expiryDates.map((item) => item.days));
-      };
+      if (!expiryA && !expiryB) return 0;
+      if (!expiryA) return 1;
+      if (!expiryB) return -1;
 
-      const daysA = getEarliestUpcomingDays(a);
-      const daysB = getEarliestUpcomingDays(b);
-
-      if (!daysA && !daysB) return 0;
-      if (!daysA) return 1;
-      if (!daysB) return -1;
-
-      return daysA - daysB;
+      return expiryA.days - expiryB.days;
     });
 
     return filtered;
+  };
+
+  // Transform data for export
+  const getExportData = () => {
+    const filteredEmployees = getEmployeesWithUpcomingRenewals();
+    return filteredEmployees.map((emp) => {
+      const earliest = getEarliestUpcomingExpiry(emp);
+      return {
+        emp_id: emp.emp_id,
+        name: emp.name,
+        company_name: emp.company_name,
+        department_name: emp.department_name,
+        passport_expiry: formatDate(emp.passport_expiry),
+        visa_expiry: formatDate(emp.visa_expiry),
+        labor_expiry: formatDate(emp.labor_expiry),
+        eid_expiry: formatDate(emp.eid_expiry),
+        earliest_document: earliest ? earliest.name : "-",
+        days_left: earliest ? `${earliest.days} days` : "-",
+        email: emp.email,
+        phone: emp.phone,
+        renewal_range: `${minDays}-${maxDays} days`,
+      };
+    });
   };
 
   const filteredEmployees = getEmployeesWithUpcomingRenewals();
@@ -167,119 +190,46 @@ const EmployeeUpcomingRenewalsReport = () => {
     showToast("Filters reset successfully", "success");
   };
 
-  const handleExport = () => {
-    try {
-      const dataToExport = filteredEmployees;
-
-      if (dataToExport.length === 0) {
-        showToast("No data to export", "warning");
-        return;
-      }
-
-      const headers = [
-        "EMP ID",
-        "NAME",
-        "COMPANY",
-        "DEPARTMENT",
-        "PASSPORT EXPIRY",
-        "VISA EXPIRY",
-        "LABOR EXPIRY",
-        "EID EXPIRY",
-        "DAYS LEFT",
-      ];
-
-      const rows = dataToExport.map((emp) => {
-        // Get the earliest upcoming expiry days
-        const expiryDates = [
-          {
-            date: emp.passport_expiry,
-            days: getDaysDifference(emp.passport_expiry),
-            name: "Passport",
-          },
-          {
-            date: emp.visa_expiry,
-            days: getDaysDifference(emp.visa_expiry),
-            name: "Visa",
-          },
-          {
-            date: emp.labor_expiry,
-            days: getDaysDifference(emp.labor_expiry),
-            name: "Labor",
-          },
-          {
-            date: emp.eid_expiry,
-            days: getDaysDifference(emp.eid_expiry),
-            name: "EID",
-          },
-        ].filter(
-          (item) =>
-            item.days !== null && item.days >= minDays && item.days <= maxDays,
-        );
-
-        const earliest =
-          expiryDates.length > 0
-            ? Math.min(...expiryDates.map((item) => item.days))
-            : null;
-
-        return [
-          emp.emp_id,
-          emp.name,
-          emp.company_name,
-          emp.department_name,
-          emp.passport_expiry
-            ? new Date(emp.passport_expiry).toLocaleDateString()
-            : "-",
-          emp.visa_expiry
-            ? new Date(emp.visa_expiry).toLocaleDateString()
-            : "-",
-          emp.labor_expiry
-            ? new Date(emp.labor_expiry).toLocaleDateString()
-            : "-",
-          emp.eid_expiry ? new Date(emp.eid_expiry).toLocaleDateString() : "-",
-          earliest ? `${earliest} days` : "-",
-        ];
-      });
-
-      const csvContent = [
-        headers.join(","),
-        ...rows.map((row) =>
-          row.map((cell) => `"${String(cell).replace(/"/g, '""')}"`).join(","),
-        ),
-      ].join("\n");
-
-      const blob = new Blob([csvContent], { type: "text/csv;charset=utf-8;" });
-      const link = document.createElement("a");
-      const url = URL.createObjectURL(blob);
-      link.setAttribute("href", url);
-      link.setAttribute(
-        "download",
-        `employee_upcoming_renewals_${new Date().toISOString().split("T")[0]}.csv`,
-      );
-      document.body.appendChild(link);
-      link.click();
-      document.body.removeChild(link);
-      URL.revokeObjectURL(url);
-
-      showToast("Employee upcoming renewals exported successfully!", "success");
-    } catch (error) {
-      console.error("Export error:", error);
-      showToast("Failed to export data", "error");
+  const handleExport = async (format) => {
+    const exportData = getExportData();
+    
+    if (exportData.length === 0) {
+      showToast("No data to export", "warning");
+      return;
     }
-  };
 
-  const formatDate = (dateStr) => {
-    if (!dateStr) return "-";
-    const date = new Date(dateStr);
-    if (isNaN(date.getTime())) return "-";
-    return date
-      .toLocaleDateString("en-GB", {
-        year: "numeric",
-        month: "2-digit",
-        day: "2-digit",
-      })
-      .split("/")
-      .reverse()
-      .join("-");
+    const headers = [
+      { key: "emp_id", label: "Employee ID" },
+      { key: "name", label: "Name" },
+      { key: "company_name", label: "Company" },
+      { key: "department_name", label: "Department" },
+      { key: "passport_expiry", label: "Passport Expiry" },
+      { key: "visa_expiry", label: "Visa Expiry" },
+      { key: "labor_expiry", label: "Labor Expiry" },
+      { key: "eid_expiry", label: "EID Expiry" },
+      { key: "earliest_document", label: "Earliest Document" },
+      { key: "days_left", label: "Days Left" },
+      { key: "email", label: "Email" },
+      { key: "phone", label: "Phone" },
+      { key: "renewal_range", label: "Renewal Range" },
+    ];
+
+    const filename = `employee_upcoming_renewals_${minDays}_${maxDays}days_${new Date().toISOString().split("T")[0]}`;
+
+    if (format === "csv") {
+      exportToCSV(exportData, headers, `${filename}.csv`);
+      showToast("Employee upcoming renewals exported successfully!", "success");
+    } else if (format === "pdf") {
+      generateEmployeeUpcomingRenewalsPDF(filteredEmployees, "Employee Upcoming Renewals Report", {
+        minDays: minDays,
+        maxDays: maxDays,
+        company: selectedCompany !== "all" ? selectedCompany : null,
+        department: selectedDepartment !== "all" ? selectedDepartment : null,
+        search: searchTerm || null,
+        generated_date: new Date().toISOString(),
+      });
+      showToast("PDF report generated successfully!", "success");
+    }
   };
 
   const getUpcomingClass = (expiryDate) => {
@@ -334,6 +284,25 @@ const EmployeeUpcomingRenewalsReport = () => {
   const renewing31to45Days = getCountForRange(31, 45);
   const renewing46to60Days = getCountForRange(46, 60);
   const renewing61to90Days = getCountForRange(61, 90);
+
+  // Get document type stats for upcoming renewals
+  const getDocumentStats = () => {
+    let passportUpcoming = 0;
+    let visaUpcoming = 0;
+    let laborUpcoming = 0;
+    let eidUpcoming = 0;
+
+    transformedEmps.forEach((emp) => {
+      if (isUpcomingRenewal(emp.passport_expiry)) passportUpcoming++;
+      if (isUpcomingRenewal(emp.visa_expiry)) visaUpcoming++;
+      if (isUpcomingRenewal(emp.labor_expiry)) laborUpcoming++;
+      if (isUpcomingRenewal(emp.eid_expiry)) eidUpcoming++;
+    });
+
+    return { passportUpcoming, visaUpcoming, laborUpcoming, eidUpcoming };
+  };
+
+  const docStats = getDocumentStats();
 
   return (
     <div className="w-full overflow-x-hidden">
@@ -411,6 +380,73 @@ const EmployeeUpcomingRenewalsReport = () => {
           </div>
         </div>
 
+        {/* Document Type Stats */}
+        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4 mb-6">
+          <div className="bg-white dark:bg-gray-800 rounded-xl p-4 border border-gray-200 dark:border-gray-700">
+            <div className="flex items-center justify-between">
+              <div>
+                <p className="text-xs text-gray-500 dark:text-gray-400">
+                  Passport Upcoming
+                </p>
+                <p className="text-2xl font-bold text-blue-600 dark:text-blue-400">
+                  {docStats.passportUpcoming}
+                </p>
+              </div>
+              <div className="w-10 h-10 bg-blue-100 dark:bg-blue-900/30 rounded-lg flex items-center justify-center">
+                <i className="fas fa-passport text-blue-600 dark:text-blue-400"></i>
+              </div>
+            </div>
+          </div>
+
+          <div className="bg-white dark:bg-gray-800 rounded-xl p-4 border border-gray-200 dark:border-gray-700">
+            <div className="flex items-center justify-between">
+              <div>
+                <p className="text-xs text-gray-500 dark:text-gray-400">
+                  Visa Upcoming
+                </p>
+                <p className="text-2xl font-bold text-purple-600 dark:text-purple-400">
+                  {docStats.visaUpcoming}
+                </p>
+              </div>
+              <div className="w-10 h-10 bg-purple-100 dark:bg-purple-900/30 rounded-lg flex items-center justify-center">
+                <i className="fas fa-id-card text-purple-600 dark:text-purple-400"></i>
+              </div>
+            </div>
+          </div>
+
+          <div className="bg-white dark:bg-gray-800 rounded-xl p-4 border border-gray-200 dark:border-gray-700">
+            <div className="flex items-center justify-between">
+              <div>
+                <p className="text-xs text-gray-500 dark:text-gray-400">
+                  Labor Upcoming
+                </p>
+                <p className="text-2xl font-bold text-orange-600 dark:text-orange-400">
+                  {docStats.laborUpcoming}
+                </p>
+              </div>
+              <div className="w-10 h-10 bg-orange-100 dark:bg-orange-900/30 rounded-lg flex items-center justify-center">
+                <i className="fas fa-briefcase text-orange-600 dark:text-orange-400"></i>
+              </div>
+            </div>
+          </div>
+
+          <div className="bg-white dark:bg-gray-800 rounded-xl p-4 border border-gray-200 dark:border-gray-700">
+            <div className="flex items-center justify-between">
+              <div>
+                <p className="text-xs text-gray-500 dark:text-gray-400">
+                  EID Upcoming
+                </p>
+                <p className="text-2xl font-bold text-teal-600 dark:text-teal-400">
+                  {docStats.eidUpcoming}
+                </p>
+              </div>
+              <div className="w-10 h-10 bg-teal-100 dark:bg-teal-900/30 rounded-lg flex items-center justify-center">
+                <i className="fas fa-id-card text-teal-600 dark:text-teal-400"></i>
+              </div>
+            </div>
+          </div>
+        </div>
+
         {/* Filters Bar */}
         <div className="bg-white dark:bg-gray-800 border border-gray-200 dark:border-gray-700 rounded-xl p-4 mb-6">
           <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
@@ -455,7 +491,7 @@ const EmployeeUpcomingRenewalsReport = () => {
             {/* Renewal Period Range */}
             <div>
               <label className="block text-xs font-semibold text-gray-500 dark:text-gray-400 mb-1">
-                <i className="fas fa-hourglass-half mr-1"></i> Renewal Period
+                <i className="fas fa-hourglass-half mr-1"></i> Renewal Period (Days)
               </label>
               <div className="flex gap-2">
                 <input
@@ -467,7 +503,7 @@ const EmployeeUpcomingRenewalsReport = () => {
                   placeholder="Min"
                 />
                 <span className="text-gray-500 dark:text-gray-400 self-center">
-                  -
+                  to
                 </span>
                 <input
                   type="number"
@@ -490,6 +526,10 @@ const EmployeeUpcomingRenewalsReport = () => {
               </button>
             </div>
           </div>
+          <div className="mt-2 text-xs text-gray-500 dark:text-gray-400">
+            <i className="fas fa-info-circle mr-1"></i>
+            Showing employees with documents expiring between {minDays} and {maxDays} days from today
+          </div>
         </div>
 
         {/* Actions Bar */}
@@ -508,10 +548,10 @@ const EmployeeUpcomingRenewalsReport = () => {
                 setSearchTerm(val);
                 setCurrentPage(1);
               }}
-              placeholder="Search records..."
+              placeholder="Search by name, emp ID, company, email, phone..."
             />
             <button
-              onClick={handleExport}
+              onClick={() => setShowExportModal(true)}
               className="bg-green-500 hover:bg-green-600 text-white px-4 py-2 rounded-full text-sm font-semibold flex items-center justify-center gap-2 transition-all shadow-md hover:shadow-lg w-full sm:w-auto"
             >
               <i className="fas fa-download"></i> Export Report
@@ -522,7 +562,7 @@ const EmployeeUpcomingRenewalsReport = () => {
         {/* Loading State */}
         {loading && filteredEmployees.length === 0 ? (
           <div className="bg-white dark:bg-gray-800 rounded-xl border border-gray-200 dark:border-gray-700 p-8 text-center">
-            <i className="fas fa-spinner fa-spin text-3xl text-blue-500 mb-3"></i>
+            <i className="fas fa-spinner fa-spin text-3xl text-green-500 mb-3"></i>
             <p className="text-gray-500 dark:text-gray-400">
               Loading employee renewal data...
             </p>
@@ -531,7 +571,7 @@ const EmployeeUpcomingRenewalsReport = () => {
           <>
             {/* Upcoming Renewals Table */}
             <div className="bg-white dark:bg-gray-800 rounded-xl border border-gray-200 dark:border-gray-700 overflow-x-auto shadow-soft">
-              <div className="min-w-[800px] md:min-w-0">
+              <div className="min-w-[1000px] lg:min-w-0">
                 <table className="w-full border-collapse">
                   <thead>
                     <tr className="bg-gray-50 dark:bg-gray-700/50 border-b border-gray-200 dark:border-gray-700">
@@ -570,44 +610,8 @@ const EmployeeUpcomingRenewalsReport = () => {
                   <tbody>
                     {pageEmployees.length > 0 ? (
                       pageEmployees.map((emp, idx) => {
-                        // Get the earliest upcoming expiry
-                        const expiryItems = [
-                          {
-                            date: emp.passport_expiry,
-                            days: getDaysDifference(emp.passport_expiry),
-                            name: "Passport",
-                          },
-                          {
-                            date: emp.visa_expiry,
-                            days: getDaysDifference(emp.visa_expiry),
-                            name: "Visa",
-                          },
-                          {
-                            date: emp.labor_expiry,
-                            days: getDaysDifference(emp.labor_expiry),
-                            name: "Labor",
-                          },
-                          {
-                            date: emp.eid_expiry,
-                            days: getDaysDifference(emp.eid_expiry),
-                            name: "EID",
-                          },
-                        ].filter(
-                          (item) =>
-                            item.days !== null &&
-                            item.days >= minDays &&
-                            item.days <= maxDays,
-                        );
-
-                        const earliest =
-                          expiryItems.length > 0
-                            ? expiryItems.reduce(
-                                (min, item) =>
-                                  item.days < min.days ? item : min,
-                                expiryItems[0],
-                              )
-                            : null;
-
+                        const earliest = getEarliestUpcomingExpiry(emp);
+                        
                         return (
                           <tr
                             key={emp.id}
@@ -654,8 +658,7 @@ const EmployeeUpcomingRenewalsReport = () => {
                                   className={`inline-flex items-center gap-1 px-2 py-1 rounded-full text-xs font-semibold ${
                                     earliest.days >= 31 && earliest.days <= 45
                                       ? "bg-blue-100 text-blue-700 dark:bg-blue-900/30 dark:text-blue-400"
-                                      : earliest.days >= 46 &&
-                                          earliest.days <= 60
+                                      : earliest.days >= 46 && earliest.days <= 60
                                         ? "bg-cyan-100 text-cyan-700 dark:bg-cyan-900/30 dark:text-cyan-400"
                                         : "bg-green-100 text-green-700 dark:bg-green-900/30 dark:text-green-400"
                                   }`}
@@ -704,6 +707,17 @@ const EmployeeUpcomingRenewalsReport = () => {
           </>
         )}
       </main>
+
+      {/* Export Modal */}
+      <ExportModal
+        isOpen={showExportModal}
+        onClose={() => setShowExportModal(false)}
+        onExport={handleExport}
+        title="Export Employee Upcoming Renewals"
+        totalRecords={getExportData().length}
+        formats={["csv", "pdf"]}
+        defaultFormat="csv"
+      />
     </div>
   );
 };

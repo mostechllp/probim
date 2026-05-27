@@ -6,6 +6,9 @@ import EntriesSelector from "../common/EntriesSelector";
 import { showToast } from "../../../components/common/Toast";
 import Pagination from "../common/Paginations";
 import { fetchEmployeeNearestExpiryReport } from "../../store/slices/reportSlice";
+import ExportModal from "../../../components/common/ExportModal";
+import { exportToCSV, formatDate } from "../../../utils/reportUtils";
+import { generateEmployeeExpiryPDF } from "../../../utils/reportPDFConfigs";
 
 const EmployeeNearestExpiryReport = () => {
   const dispatch = useDispatch();
@@ -17,6 +20,7 @@ const EmployeeNearestExpiryReport = () => {
   const [currentPage, setCurrentPage] = useState(1);
   const [perPage, setPerPage] = useState(10);
   const [searchTerm, setSearchTerm] = useState("");
+  const [showExportModal, setShowExportModal] = useState(false);
 
   // Filter states
   const [selectedCompany, setSelectedCompany] = useState("all");
@@ -38,7 +42,7 @@ const EmployeeNearestExpiryReport = () => {
   useEffect(() => {
     // eslint-disable-next-line react-hooks/set-state-in-effect
     setCurrentPage(1);
-  }, [searchTerm, selectedCompany, selectedDepartment, expiryDays]);
+  }, [searchTerm, selectedCompany, selectedDepartment, expiryDays, perPage]);
 
   // Transform employee data to extract document expiry fields
   const transformEmployee = (emp) => {
@@ -57,6 +61,9 @@ const EmployeeNearestExpiryReport = () => {
       visa_expiry: raw?.visa_expiry_date,
       labor_expiry: raw?.labor_expiry_date,
       eid_expiry: raw?.eid_expiry_date,
+      // Additional fields for better export
+      email: raw?.company_email || raw?.personal_email || user?.email || "-",
+      phone: raw?.company_mobile_number || raw?.personal_number || "-",
     };
   };
 
@@ -126,7 +133,9 @@ const EmployeeNearestExpiryReport = () => {
           (emp.emp_id || "").toLowerCase().includes(searchLower) ||
           (emp.name || "").toLowerCase().includes(searchLower) ||
           (emp.company_name || "").toLowerCase().includes(searchLower) ||
-          (emp.department_name || "").toLowerCase().includes(searchLower),
+          (emp.department_name || "").toLowerCase().includes(searchLower) ||
+          (emp.email || "").toLowerCase().includes(searchLower) ||
+          (emp.phone || "").toLowerCase().includes(searchLower),
       );
     }
 
@@ -145,6 +154,28 @@ const EmployeeNearestExpiryReport = () => {
     return filtered;
   };
 
+  // Transform data for export
+  const getExportData = () => {
+    const filteredEmployees = getEmployeesWithNearestExpiry();
+    return filteredEmployees.map((emp) => {
+      const earliest = getEarliestExpiry(emp);
+      return {
+        emp_id: emp.emp_id,
+        name: emp.name,
+        company_name: emp.company_name,
+        department_name: emp.department_name,
+        passport_expiry: formatDate(emp.passport_expiry),
+        visa_expiry: formatDate(emp.visa_expiry),
+        labor_expiry: formatDate(emp.labor_expiry),
+        eid_expiry: formatDate(emp.eid_expiry),
+        days_left: earliest ? `${earliest.daysLeft} days` : "-",
+        email: emp.email,
+        phone: emp.phone,
+        expiry_period: `${expiryDays} days`,
+      };
+    });
+  };
+
   const filteredEmployees = getEmployeesWithNearestExpiry();
   const totalFiltered = filteredEmployees.length;
   const totalPages = Math.ceil(totalFiltered / perPage);
@@ -160,88 +191,44 @@ const EmployeeNearestExpiryReport = () => {
     showToast("Filters reset successfully", "success");
   };
 
-  const handleExport = () => {
-    try {
-      const dataToExport = filteredEmployees;
-
-      if (dataToExport.length === 0) {
-        showToast("No data to export", "warning");
-        return;
-      }
-
-      const headers = [
-        "EMP ID",
-        "NAME",
-        "COMPANY",
-        "DEPARTMENT",
-        "PASSPORT EXPIRY",
-        "VISA EXPIRY",
-        "LABOR EXPIRY",
-        "EID EXPIRY",
-        "DAYS LEFT",
-      ];
-
-      const rows = dataToExport.map((emp) => {
-        const earliest = getEarliestExpiry(emp);
-        return [
-          emp.emp_id,
-          emp.name,
-          emp.company_name,
-          emp.department_name,
-          emp.passport_expiry
-            ? new Date(emp.passport_expiry).toLocaleDateString()
-            : "-",
-          emp.visa_expiry
-            ? new Date(emp.visa_expiry).toLocaleDateString()
-            : "-",
-          emp.labor_expiry
-            ? new Date(emp.labor_expiry).toLocaleDateString()
-            : "-",
-          emp.eid_expiry ? new Date(emp.eid_expiry).toLocaleDateString() : "-",
-          earliest ? `${earliest.daysLeft} days` : "-",
-        ];
-      });
-
-      const csvContent = [
-        headers.join(","),
-        ...rows.map((row) =>
-          row.map((cell) => `"${String(cell).replace(/"/g, '""')}"`).join(","),
-        ),
-      ].join("\n");
-
-      const blob = new Blob([csvContent], { type: "text/csv;charset=utf-8;" });
-      const link = document.createElement("a");
-      const url = URL.createObjectURL(blob);
-      link.setAttribute("href", url);
-      link.setAttribute(
-        "download",
-        `employee_nearest_expiry_${new Date().toISOString().split("T")[0]}.csv`,
-      );
-      document.body.appendChild(link);
-      link.click();
-      document.body.removeChild(link);
-      URL.revokeObjectURL(url);
-
-      showToast("Employee expiry data exported successfully!", "success");
-    } catch (error) {
-      console.error("Export error:", error);
-      showToast("Failed to export data", "error");
+  const handleExport = async (format) => {
+    const exportData = getExportData();
+    
+    if (exportData.length === 0) {
+      showToast("No data to export", "warning");
+      return;
     }
-  };
 
-  const formatDate = (dateStr) => {
-    if (!dateStr) return "-";
-    const date = new Date(dateStr);
-    if (isNaN(date.getTime())) return "-";
-    return date
-      .toLocaleDateString("en-GB", {
-        year: "numeric",
-        month: "2-digit",
-        day: "2-digit",
-      })
-      .split("/")
-      .reverse()
-      .join("-");
+    const headers = [
+      { key: "emp_id", label: "Employee ID" },
+      { key: "name", label: "Name" },
+      { key: "company_name", label: "Company" },
+      { key: "department_name", label: "Department" },
+      { key: "passport_expiry", label: "Passport Expiry" },
+      { key: "visa_expiry", label: "Visa Expiry" },
+      { key: "labor_expiry", label: "Labor Expiry" },
+      { key: "eid_expiry", label: "EID Expiry" },
+      { key: "days_left", label: "Days Left" },
+      { key: "email", label: "Email" },
+      { key: "phone", label: "Phone" },
+      { key: "expiry_period", label: "Expiry Period" },
+    ];
+
+    const filename = `employee_nearest_expiry_${expiryDays}days_${new Date().toISOString().split("T")[0]}`;
+
+    if (format === "csv") {
+      exportToCSV(exportData, headers, `${filename}.csv`);
+      showToast("Employee expiry data exported successfully!", "success");
+    } else if (format === "pdf") {
+      generateEmployeeExpiryPDF(filteredEmployees, "Employee Document Expiry Report", {
+        expiryDays: expiryDays,
+        company: selectedCompany !== "all" ? selectedCompany : null,
+        department: selectedDepartment !== "all" ? selectedDepartment : null,
+        search: searchTerm || null,
+        generated_date: new Date().toISOString(),
+      });
+      showToast("PDF report generated successfully!", "success");
+    }
   };
 
   const getExpiryClass = (expiryDate) => {
@@ -296,6 +283,25 @@ const EmployeeNearestExpiryReport = () => {
     const earliest = getEarliestExpiry(emp);
     return earliest && earliest.daysLeft <= 30 && earliest.daysLeft > 15;
   }).length;
+
+  // Get document type stats
+  const getDocumentStats = () => {
+    let passportExpiring = 0;
+    let visaExpiring = 0;
+    let laborExpiring = 0;
+    let eidExpiring = 0;
+
+    filteredEmployees.forEach((emp) => {
+      if (isWithinExpiry(emp.passport_expiry)) passportExpiring++;
+      if (isWithinExpiry(emp.visa_expiry)) visaExpiring++;
+      if (isWithinExpiry(emp.labor_expiry)) laborExpiring++;
+      if (isWithinExpiry(emp.eid_expiry)) eidExpiring++;
+    });
+
+    return { passportExpiring, visaExpiring, laborExpiring, eidExpiring };
+  };
+
+  const docStats = getDocumentStats();
 
   return (
     <div className="w-full overflow-x-hidden">
@@ -373,6 +379,73 @@ const EmployeeNearestExpiryReport = () => {
           </div>
         </div>
 
+        {/* Document Type Stats */}
+        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4 mb-6">
+          <div className="bg-white dark:bg-gray-800 rounded-xl p-4 border border-gray-200 dark:border-gray-700">
+            <div className="flex items-center justify-between">
+              <div>
+                <p className="text-xs text-gray-500 dark:text-gray-400">
+                  Passport Expiring
+                </p>
+                <p className="text-2xl font-bold text-blue-600 dark:text-blue-400">
+                  {docStats.passportExpiring}
+                </p>
+              </div>
+              <div className="w-10 h-10 bg-blue-100 dark:bg-blue-900/30 rounded-lg flex items-center justify-center">
+                <i className="fas fa-passport text-blue-600 dark:text-blue-400"></i>
+              </div>
+            </div>
+          </div>
+
+          <div className="bg-white dark:bg-gray-800 rounded-xl p-4 border border-gray-200 dark:border-gray-700">
+            <div className="flex items-center justify-between">
+              <div>
+                <p className="text-xs text-gray-500 dark:text-gray-400">
+                  Visa Expiring
+                </p>
+                <p className="text-2xl font-bold text-purple-600 dark:text-purple-400">
+                  {docStats.visaExpiring}
+                </p>
+              </div>
+              <div className="w-10 h-10 bg-purple-100 dark:bg-purple-900/30 rounded-lg flex items-center justify-center">
+                <i className="fas fa-id-card text-purple-600 dark:text-purple-400"></i>
+              </div>
+            </div>
+          </div>
+
+          <div className="bg-white dark:bg-gray-800 rounded-xl p-4 border border-gray-200 dark:border-gray-700">
+            <div className="flex items-center justify-between">
+              <div>
+                <p className="text-xs text-gray-500 dark:text-gray-400">
+                  Labor Expiring
+                </p>
+                <p className="text-2xl font-bold text-orange-600 dark:text-orange-400">
+                  {docStats.laborExpiring}
+                </p>
+              </div>
+              <div className="w-10 h-10 bg-orange-100 dark:bg-orange-900/30 rounded-lg flex items-center justify-center">
+                <i className="fas fa-briefcase text-orange-600 dark:text-orange-400"></i>
+              </div>
+            </div>
+          </div>
+
+          <div className="bg-white dark:bg-gray-800 rounded-xl p-4 border border-gray-200 dark:border-gray-700">
+            <div className="flex items-center justify-between">
+              <div>
+                <p className="text-xs text-gray-500 dark:text-gray-400">
+                  EID Expiring
+                </p>
+                <p className="text-2xl font-bold text-teal-600 dark:text-teal-400">
+                  {docStats.eidExpiring}
+                </p>
+              </div>
+              <div className="w-10 h-10 bg-teal-100 dark:bg-teal-900/30 rounded-lg flex items-center justify-center">
+                <i className="fas fa-id-card text-teal-600 dark:text-teal-400"></i>
+              </div>
+            </div>
+          </div>
+        </div>
+
         {/* Filters Bar */}
         <div className="bg-white dark:bg-gray-800 border border-gray-200 dark:border-gray-700 rounded-xl p-4 mb-6">
           <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
@@ -442,6 +515,10 @@ const EmployeeNearestExpiryReport = () => {
               </button>
             </div>
           </div>
+          <div className="mt-2 text-xs text-gray-500 dark:text-gray-400">
+            <i className="fas fa-info-circle mr-1"></i>
+            Showing employees with documents expiring within {expiryDays} days from today
+          </div>
         </div>
 
         {/* Actions Bar */}
@@ -460,10 +537,10 @@ const EmployeeNearestExpiryReport = () => {
                 setSearchTerm(val);
                 setCurrentPage(1);
               }}
-              placeholder="Search by name, emp ID, company..."
+              placeholder="Search by name, emp ID, company, email, phone..."
             />
             <button
-              onClick={handleExport}
+              onClick={() => setShowExportModal(true)}
               className="bg-green-500 hover:bg-green-600 text-white px-4 py-2 rounded-full text-sm font-semibold flex items-center justify-center gap-2 transition-all shadow-md hover:shadow-lg w-full sm:w-auto"
             >
               <i className="fas fa-download"></i> Export Report
@@ -474,7 +551,7 @@ const EmployeeNearestExpiryReport = () => {
         {/* Loading State */}
         {loading && filteredEmployees.length === 0 ? (
           <div className="bg-white dark:bg-gray-800 rounded-xl border border-gray-200 dark:border-gray-700 p-8 text-center">
-            <i className="fas fa-spinner fa-spin text-3xl text-red-500 mb-3"></i>
+            <i className="fas fa-spinner fa-spin text-3xl text-green-500 mb-3"></i>
             <p className="text-gray-500 dark:text-gray-400">
               Loading employee expiry data...
             </p>
@@ -483,7 +560,7 @@ const EmployeeNearestExpiryReport = () => {
           <>
             {/* Nearest Expiry Table */}
             <div className="bg-white dark:bg-gray-800 rounded-xl border border-gray-200 dark:border-gray-700 overflow-x-auto shadow-soft">
-              <div className="min-width-[800px] md:min-w-0">
+              <div className="min-w-[1000px] lg:min-w-0">
                 <table className="w-full border-collapse">
                   <thead>
                     <tr className="bg-gray-50 dark:bg-gray-700/50 border-b border-gray-200 dark:border-gray-700">
@@ -618,6 +695,17 @@ const EmployeeNearestExpiryReport = () => {
           </>
         )}
       </main>
+
+      {/* Export Modal */}
+      <ExportModal
+        isOpen={showExportModal}
+        onClose={() => setShowExportModal(false)}
+        onExport={handleExport}
+        title="Export Employee Expiry Report"
+        totalRecords={getExportData().length}
+        formats={["csv", "pdf"]}
+        defaultFormat="csv"
+      />
     </div>
   );
 };
