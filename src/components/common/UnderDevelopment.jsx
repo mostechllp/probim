@@ -1,4 +1,3 @@
-// components/common/UnderDevelopment.jsx
 const UnderDevelopment = ({ pageName = "This page" }) => {
   return (
     <div className="w-full min-h-[calc(100vh-200px)] flex items-center justify-center px-4">
