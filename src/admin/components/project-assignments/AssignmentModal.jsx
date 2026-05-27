@@ -1,5 +1,7 @@
 import React, { useState, useEffect, useRef, useMemo } from "react";
 import { PROJECT_MODULE_NAME } from "../../utils/constants";
+import { getPhotoUrl, getFallbackAvatar } from "../../../utils/imageHelper";
+
 
 /* ─── helpers ──────────────────────────────────────────────────── */
 const getInitials = (name) => (name ? name.charAt(0).toUpperCase() : "E");
@@ -13,7 +15,7 @@ const mapEmployee = (emp) => {
     name,
     department: emp.department || emp.user?.department?.name || "",
     designation: emp.designation || emp.user?.designation?.name || "",
-    avatar: emp.avatar || null,
+    avatar: getPhotoUrl(emp.avatar) || null,
   };
 };
 
@@ -364,7 +366,15 @@ const AssignmentModal = ({
                   <div className="flex items-center gap-3 px-4 py-3 rounded-xl border border-gray-200 dark:border-gray-700 bg-gray-50 dark:bg-gray-750 opacity-80">
                     <div className="w-8 h-8 rounded-full bg-gradient-to-br from-green-400/30 to-teal-500/20 flex items-center justify-center flex-shrink-0 border border-gray-200 dark:border-gray-700">
                       {selectedEmp.avatar ? (
-                        <img src={selectedEmp.avatar} alt={selectedEmp.name} className="w-full h-full object-cover rounded-full" />
+                        <img
+                          src={selectedEmp.avatar}
+                          alt={selectedEmp.name}
+                          className="w-full h-full object-cover rounded-full"
+                          onError={(e) => {
+                            e.target.onerror = null;
+                            e.target.src = getFallbackAvatar(selectedEmp.name);
+                          }}
+                        />
                       ) : (
                         <span className="text-xs font-bold text-green-600 dark:text-green-400">
                           {getInitials(selectedEmp.name)}
