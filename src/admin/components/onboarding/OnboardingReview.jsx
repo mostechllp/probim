@@ -234,8 +234,18 @@ const OnboardingReview = () => {
       body.append("other_allowance", employeeDetails.otherAllowance || "0");
       body.append("total_salary", employeeDetails.totalMonthlySalary || "0");
       body.append("payment_cycle", employeeDetails.paymentCycle || "Monthly");
-      body.append("bank_name", employeeDetails.bankName || "");
-      body.append("account_number", employeeDetails.accountNumber || "");
+      
+      const primaryBank = (employeeDetails.bankAccounts && employeeDetails.bankAccounts.length > 0) 
+        ? employeeDetails.bankAccounts[0] 
+        : employeeDetails;
+        
+      body.append("bank_name", primaryBank.bankName || "");
+      body.append("account_number", primaryBank.accountNumber || "");
+      
+      if (employeeDetails.bankAccounts && employeeDetails.bankAccounts.length > 0) {
+        body.append("bank_accounts", JSON.stringify(employeeDetails.bankAccounts));
+      }
+
       body.append("special_day_event", employeeDetails.specialDayEvent || "");
       body.append("special_day_date", employeeDetails.specialDayDate || "");
 
@@ -568,81 +578,74 @@ const OnboardingReview = () => {
                   </div>
                 )}
 
-                {/* Country-specific Bank Transfer Info */}
-                <div className="border-t border-gray-100 dark:border-gray-700/60 pt-6 space-y-4">
-                  <div className="grid grid-cols-1 sm:grid-cols-3 gap-6">
-                    <div className="space-y-1">
-                      <p className="text-xs font-semibold text-gray-400 dark:text-gray-500 uppercase tracking-wider">Bank Country</p>
-                      <p className="text-sm font-bold text-gray-900 dark:text-white">{employeeDetails.bankCountry || "UAE"}</p>
-                    </div>
-                    <div className="space-y-1">
-                      <p className="text-xs font-semibold text-gray-400 dark:text-gray-500 uppercase tracking-wider">Bank Name</p>
-                      <p className="text-sm font-bold text-gray-900 dark:text-white">{employeeDetails.bankName || "-"}</p>
-                    </div>
-                    <div className="space-y-1">
-                      <p className="text-xs font-semibold text-gray-400 dark:text-gray-500 uppercase tracking-wider">Account Number</p>
-                      <p className="text-sm font-bold text-gray-900 dark:text-white font-mono">{employeeDetails.accountNumber || "-"}</p>
-                    </div>
-                  </div>
+                {/* Bank Accounts Info */}
+                <div className="border-t border-gray-100 dark:border-gray-700/60 pt-6 space-y-6">
+                  {Array.isArray(employeeDetails.bankAccounts) && employeeDetails.bankAccounts.length > 0 ? (
+                    employeeDetails.bankAccounts.map((bank, index) => (
+                      <div key={bank.id || index} className="space-y-4 pb-4 border-b border-gray-100 dark:border-gray-700/30 last:border-0 last:pb-0">
+                        <p className="text-xs font-bold text-gray-500 uppercase tracking-wider mb-2">Bank Account {index + 1}</p>
+                        <div className="grid grid-cols-1 sm:grid-cols-3 gap-6">
+                          <div className="space-y-1">
+                            <p className="text-xs font-semibold text-gray-400 dark:text-gray-500 uppercase tracking-wider">Bank Country</p>
+                            <p className="text-sm font-bold text-gray-900 dark:text-white">{bank.bankCountry || "UAE"}</p>
+                          </div>
+                          <div className="space-y-1">
+                            <p className="text-xs font-semibold text-gray-400 dark:text-gray-500 uppercase tracking-wider">Bank Name</p>
+                            <p className="text-sm font-bold text-gray-900 dark:text-white">{bank.bankName || "-"}</p>
+                          </div>
+                          <div className="space-y-1">
+                            <p className="text-xs font-semibold text-gray-400 dark:text-gray-500 uppercase tracking-wider">Account Number</p>
+                            <p className="text-sm font-bold text-gray-900 dark:text-white font-mono">{bank.accountNumber || "-"}</p>
+                          </div>
+                        </div>
 
-                  <div className="grid grid-cols-1 sm:grid-cols-2 gap-6 pt-2">
-                    {employeeDetails.bankCountry === "India" ? (
-                      <>
-                        {employeeDetails.bankIfsc && (
-                          <div className="space-y-1">
-                            <p className="text-xs font-semibold text-gray-400 dark:text-gray-500 uppercase tracking-wider">IFSC Code</p>
-                            <p className="text-sm font-bold text-gray-900 dark:text-white font-mono">{employeeDetails.bankIfsc}</p>
-                          </div>
-                        )}
-                        {employeeDetails.bankBranch && (
-                          <div className="space-y-1">
-                            <p className="text-xs font-semibold text-gray-400 dark:text-gray-500 uppercase tracking-wider">Branch Name</p>
-                            <p className="text-sm font-bold text-gray-900 dark:text-white">{employeeDetails.bankBranch}</p>
-                          </div>
-                        )}
-                      </>
-                    ) : (
-                      <>
-                        {employeeDetails.bankIban && (
-                          <div className="space-y-1">
-                            <p className="text-xs font-semibold text-gray-400 dark:text-gray-500 uppercase tracking-wider">IBAN Number</p>
-                            <p className="text-sm font-bold text-gray-900 dark:text-white font-mono">
-                              {(() => {
-                                // Re-format space separators for display
-                                const raw = employeeDetails.bankIban.replace(/\s/g, "");
-                                let formatted = "";
-                                for (let i = 0; i < raw.length; i++) {
-                                  if (i > 0 && i % 4 === 0) formatted += " ";
-                                  formatted += raw[i];
-                                }
-                                return formatted;
-                              })()}
-                            </p>
-                          </div>
-                        )}
-                        {employeeDetails.bankSwift && (
-                          <div className="space-y-1">
-                            <p className="text-xs font-semibold text-gray-400 dark:text-gray-500 uppercase tracking-wider">SWIFT/BIC Code</p>
-                            <p className="text-sm font-bold text-gray-900 dark:text-white font-mono">{employeeDetails.bankSwift}</p>
-                          </div>
-                        )}
-                      </>
-                    )}
-                  </div>
-
-                  {/* Render Bank details custom fields if they exist */}
-                  {Array.isArray(employeeDetails.customBankFields) && employeeDetails.customBankFields.length > 0 && (
-                    <div className="pt-3 mt-3 border-t border-gray-50 dark:border-gray-700/30">
-                      <p className="text-xs font-bold text-gray-400 dark:text-gray-500 uppercase tracking-wider mb-2">Additional Bank Information</p>
-                      <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 gap-4">
-                        {employeeDetails.customBankFields.map((field, idx) => (
-                          <div key={idx} className="space-y-0.5">
-                            <p className="text-[10px] font-semibold text-gray-400 uppercase tracking-wide">{field.key}</p>
-                            <p className="text-xs font-bold text-gray-800 dark:text-gray-200">{field.value}</p>
-                          </div>
-                        ))}
+                        <div className="grid grid-cols-1 sm:grid-cols-2 gap-6 pt-2">
+                          {bank.bankCountry === "India" ? (
+                            <>
+                              {bank.bankIfsc && (
+                                <div className="space-y-1">
+                                  <p className="text-xs font-semibold text-gray-400 dark:text-gray-500 uppercase tracking-wider">IFSC Code</p>
+                                  <p className="text-sm font-bold text-gray-900 dark:text-white font-mono">{bank.bankIfsc}</p>
+                                </div>
+                              )}
+                              {bank.bankBranch && (
+                                <div className="space-y-1">
+                                  <p className="text-xs font-semibold text-gray-400 dark:text-gray-500 uppercase tracking-wider">Branch Name</p>
+                                  <p className="text-sm font-bold text-gray-900 dark:text-white">{bank.bankBranch}</p>
+                                </div>
+                              )}
+                            </>
+                          ) : (
+                            <>
+                              {bank.bankIban && (
+                                <div className="space-y-1">
+                                  <p className="text-xs font-semibold text-gray-400 dark:text-gray-500 uppercase tracking-wider">IBAN Number</p>
+                                  <p className="text-sm font-bold text-gray-900 dark:text-white font-mono">
+                                    {(() => {
+                                      const raw = bank.bankIban.replace(/\s/g, "");
+                                      let formatted = "";
+                                      for (let i = 0; i < raw.length; i++) {
+                                        if (i > 0 && i % 4 === 0) formatted += " ";
+                                        formatted += raw[i];
+                                      }
+                                      return formatted;
+                                    })()}
+                                  </p>
+                                </div>
+                              )}
+                              {bank.bankSwift && (
+                                <div className="space-y-1">
+                                  <p className="text-xs font-semibold text-gray-400 dark:text-gray-500 uppercase tracking-wider">SWIFT/BIC Code</p>
+                                  <p className="text-sm font-bold text-gray-900 dark:text-white font-mono">{bank.bankSwift}</p>
+                                </div>
+                              )}
+                            </>
+                          )}
+                        </div>
                       </div>
-                    </div>
+                    ))
+                  ) : (
+                    <p className="text-sm text-gray-500 italic">No bank details added.</p>
                   )}
                 </div>
               </div>
