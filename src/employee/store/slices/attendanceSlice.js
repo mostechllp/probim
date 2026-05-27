@@ -23,26 +23,25 @@ export const fetchDashboardData = createAsyncThunk(
   }
 );
 
-// ✅ Punch In
 export const punchIn = createAsyncThunk(
   "attendance/punchIn",
-  async (_, { rejectWithValue }) => {
+  async (data, { rejectWithValue }) => { 
     try {
-      const response = await apiClient.post("/employee/punch-in");
+      const payload = {
+        ...(data?.location && { location: data.location })
+      };
+      
+      const response = await apiClient.post("/employee/punch-in", payload);
       
       if (response.data && response.data.status === "success") {
-        const data = response.data.data;
-        
-        // Save to localStorage for persistence
+        // Save to localStorage
         localStorage.setItem("attendance-punched-in", "true");
-        localStorage.setItem("attendance-punch-in-time", data.punch_in);
+        localStorage.setItem("attendance-punch-in-time", response.data.data.punch_in);
+        if (data?.location) {
+          localStorage.setItem("attendance-punch-location", JSON.stringify(data.location));
+        }
         
-        return {
-          punch_in: data.punch_in,
-          log_date: data.log_date,
-          log_status: data.log_status,
-          id: data.id
-        };
+        return response.data.data;
       } else {
         return rejectWithValue(response.data?.message || "Punch in failed");
       }
@@ -55,14 +54,21 @@ export const punchIn = createAsyncThunk(
   }
 );
 
-// ✅ Punch Out
 export const punchOut = createAsyncThunk(
   "attendance/punchOut",
-  async ({ project_times = {} } = {}, { rejectWithValue }) => {
+  async ({ tasks_completed, plan_tomorrow, location }, { rejectWithValue }) => { // Add location parameter
     try {
-      const response = await apiClient.post("/employee/punch-out", {
-        project_times,
-      });
+      const payload = {
+        tasks_completed,
+        plan_tomorrow,
+      };
+      
+      // Add location if provided
+      if (location) {
+        payload.location = location;
+      }
+      
+      const response = await apiClient.post("/employee/punch-out", payload);
       
       if (response.data && response.data.status === "success") {
         const data = response.data.data;
@@ -70,6 +76,7 @@ export const punchOut = createAsyncThunk(
         // Clear localStorage on punch out
         localStorage.removeItem("attendance-punched-in");
         localStorage.removeItem("attendance-punch-in-time");
+        localStorage.removeItem("attendance-punch-location");
         
         return {
           punch_out: data.punch_out,

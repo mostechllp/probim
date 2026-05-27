@@ -7,6 +7,7 @@ import "./index.css";
 import App from "./App.jsx";
 import { LoadingProvider } from "./context/LoadingContext.jsx";
 import { Toaster } from "react-hot-toast";
+import 'leaflet/dist/leaflet.css';
 
 createRoot(document.getElementById("root")).render(
   <StrictMode>
