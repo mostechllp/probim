@@ -6,6 +6,9 @@ import EntriesSelector from "../common/EntriesSelector";
 import { showToast } from "../../../components/common/Toast";
 import Pagination from "../common/Paginations";
 import { fetchAttendanceReport } from "../../store/slices/reportSlice";
+import ExportModal from "../../../components/common/ExportModal";
+import { exportToCSV, formatDate } from "../../../utils/reportUtils";
+import { generateAttendancePDF } from "../../../utils/reportPDFConfigs";
 
 const AttendanceReport = () => {
   const dispatch = useDispatch();
@@ -21,6 +24,7 @@ const AttendanceReport = () => {
   const [perPage, setPerPage] = useState(10);
   const [searchTerm, setSearchTerm] = useState("");
   const [companyFilter, setCompanyFilter] = useState("all");
+  const [showExportModal, setShowExportModal] = useState(false);
 
   // Date range state
   const [startDate, setStartDate] = useState(() => {
@@ -57,6 +61,12 @@ const AttendanceReport = () => {
     endDate,
   ]);
 
+  // Reset to first page when filters change
+  useEffect(() => {
+    // eslint-disable-next-line react-hooks/set-state-in-effect
+    setCurrentPage(1);
+  }, [companyFilter, searchTerm, perPage, startDate, endDate]);
+
   const handleApplyFilters = () => {
     setCurrentPage(1);
     showToast("Filters applied successfully", "success");
@@ -73,59 +83,53 @@ const AttendanceReport = () => {
     showToast("Filters reset successfully", "success");
   };
 
-  const handleExport = () => {
-    if (!records || records.length === 0) {
+  // Transform attendance data for export
+  const getExportData = () => {
+    const allRecords = records || [];
+    return allRecords.map(record => ({
+      date: formatDate(record.date),
+      employee_name: record.employeeName || record.name || "-",
+      department: record.department || "-",
+      punch_in: record.punchIn || record.punch_in || "-",
+      punch_out: record.punchOut || record.punch_out || "-",
+      duration: record.duration || "-",
+      status: record.lateBy && record.lateBy > 0 ? "Late" : (record.status === "Absent" ? "Absent" : "Present"),
+      late_by: record.lateBy ? `${record.lateBy} mins` : "-",
+    }));
+  };
+
+  const handleExport = async (format) => {
+    const exportData = getExportData();
+    
+    if (exportData.length === 0) {
       showToast("No data to export", "warning");
       return;
     }
 
-    try {
-      const headers = [
-        "Date",
-        "Employee",
-        "Department",
-        "Punch In",
-        "Punch Out",
-        "Duration",
-        "Status",
-        "Late By",
-      ];
+    const headers = [
+      { key: "date", label: "Date" },
+      { key: "employee_name", label: "Employee" },
+      { key: "department", label: "Department" },
+      { key: "punch_in", label: "Punch In" },
+      { key: "punch_out", label: "Punch Out" },
+      { key: "duration", label: "Duration" },
+      { key: "status", label: "Status" },
+      { key: "late_by", label: "Late By" },
+    ];
 
-      const rows = records.map((record) => [
-        record.date || "-",
-        record.employeeName || "-",
-        record.department || "-",
-        record.punchIn || "-",
-        record.punchOut || "-",
-        record.duration || "-",
-        record.status || "Present",
-        record.lateBy ? `${record.lateBy} mins` : "-",
-      ]);
+    const filename = `attendance_report_${startDate}_to_${endDate}`;
 
-      const csvContent = [
-        headers.join(","),
-        ...rows.map((row) =>
-          row.map((cell) => `"${String(cell).replace(/"/g, '""')}"`).join(","),
-        ),
-      ].join("\n");
-
-      const blob = new Blob([csvContent], { type: "text/csv;charset=utf-8;" });
-      const link = document.createElement("a");
-      const url = URL.createObjectURL(blob);
-      link.setAttribute("href", url);
-      link.setAttribute(
-        "download",
-        `attendance_report_${startDate}_to_${endDate}.csv`,
-      );
-      document.body.appendChild(link);
-      link.click();
-      document.body.removeChild(link);
-      URL.revokeObjectURL(url);
-
+    if (format === "csv") {
+      exportToCSV(exportData, headers, `${filename}.csv`);
       showToast("Attendance report exported successfully!", "success");
-    } catch (error) {
-      console.error("Export error:", error);
-      showToast("Failed to export data", "error");
+    } else if (format === "pdf") {
+      generateAttendancePDF(records, {
+        start_date: startDate,
+        end_date: endDate,
+        company: companyFilter !== "all" ? companyFilter : null,
+        search: searchTerm || null,
+      });
+      showToast("PDF report generated successfully!", "success");
     }
   };
 
@@ -159,14 +163,20 @@ const AttendanceReport = () => {
     );
   };
 
-  const filteredRecords = records || [];
+  // Calculate stats for summary
+  const allRecords = records || [];
+  const totalPresent = allRecords.filter(r => r.status !== "Absent" && !r.lateBy).length;
+  const totalLate = allRecords.filter(r => r.lateBy && r.lateBy > 0).length;
+  const totalAbsent = allRecords.filter(r => r.status === "Absent").length;
+
+  const filteredRecords = allRecords;
   const totalFiltered = totalCount || filteredRecords.length;
   const totalPages = lastPage || Math.ceil(totalFiltered / perPage);
   const start = (currentPage - 1) * perPage;
 
   // Get unique companies for filter
   const uniqueCompanies = [
-    ...new Set((records || []).map((record) => record.company).filter(Boolean)),
+    ...new Set(allRecords.map((record) => record.company).filter(Boolean)),
   ];
 
   return (
@@ -190,6 +200,73 @@ const AttendanceReport = () => {
           <p className="text-sm text-gray-500 dark:text-gray-400 mt-1">
             Detailed attendance logs with punch in/out times and duration
           </p>
+        </div>
+
+        {/* Stats Cards */}
+        <div className="grid grid-cols-1 sm:grid-cols-4 gap-4 mb-6">
+          <div className="bg-white dark:bg-gray-800 rounded-xl p-4 border border-gray-200 dark:border-gray-700">
+            <div className="flex items-center justify-between">
+              <div>
+                <p className="text-xs text-gray-500 dark:text-gray-400">
+                  Total Records
+                </p>
+                <p className="text-2xl font-bold text-blue-600 dark:text-blue-400">
+                  {totalFiltered}
+                </p>
+              </div>
+              <div className="w-10 h-10 bg-blue-100 dark:bg-blue-900/30 rounded-lg flex items-center justify-center">
+                <i className="fas fa-calendar-check text-blue-600 dark:text-blue-400"></i>
+              </div>
+            </div>
+          </div>
+
+          <div className="bg-white dark:bg-gray-800 rounded-xl p-4 border border-gray-200 dark:border-gray-700">
+            <div className="flex items-center justify-between">
+              <div>
+                <p className="text-xs text-gray-500 dark:text-gray-400">
+                  Present
+                </p>
+                <p className="text-2xl font-bold text-green-600 dark:text-green-400">
+                  {totalPresent}
+                </p>
+              </div>
+              <div className="w-10 h-10 bg-green-100 dark:bg-green-900/30 rounded-lg flex items-center justify-center">
+                <i className="fas fa-user-check text-green-600 dark:text-green-400"></i>
+              </div>
+            </div>
+          </div>
+
+          <div className="bg-white dark:bg-gray-800 rounded-xl p-4 border border-gray-200 dark:border-gray-700">
+            <div className="flex items-center justify-between">
+              <div>
+                <p className="text-xs text-gray-500 dark:text-gray-400">
+                  Late
+                </p>
+                <p className="text-2xl font-bold text-amber-600 dark:text-amber-400">
+                  {totalLate}
+                </p>
+              </div>
+              <div className="w-10 h-10 bg-amber-100 dark:bg-amber-900/30 rounded-lg flex items-center justify-center">
+                <i className="fas fa-clock text-amber-600 dark:text-amber-400"></i>
+              </div>
+            </div>
+          </div>
+
+          <div className="bg-white dark:bg-gray-800 rounded-xl p-4 border border-gray-200 dark:border-gray-700">
+            <div className="flex items-center justify-between">
+              <div>
+                <p className="text-xs text-gray-500 dark:text-gray-400">
+                  Absent
+                </p>
+                <p className="text-2xl font-bold text-red-600 dark:text-red-400">
+                  {totalAbsent}
+                </p>
+              </div>
+              <div className="w-10 h-10 bg-red-100 dark:bg-red-900/30 rounded-lg flex items-center justify-center">
+                <i className="fas fa-user-slash text-red-600 dark:text-red-400"></i>
+              </div>
+            </div>
+          </div>
         </div>
 
         {/* Date Range Filter */}
@@ -272,7 +349,7 @@ const AttendanceReport = () => {
               placeholder="Search by employee name..."
             />
             <button
-              onClick={handleExport}
+              onClick={() => setShowExportModal(true)}
               className="bg-green-500 hover:bg-green-600 text-white px-4 py-2 rounded-full text-sm font-semibold flex items-center justify-center gap-2 transition-all shadow-md hover:shadow-lg w-full sm:w-auto"
             >
               <i className="fas fa-download"></i> Export Report
@@ -336,7 +413,7 @@ const AttendanceReport = () => {
                             {start + idx + 1}
                           </td>
                           <td className="px-3 md:px-4 py-2 md:py-3 text-xs md:text-sm text-gray-600 dark:text-gray-400 whitespace-nowrap">
-                            {record.date || "-"}
+                            {formatDate(record.date)}
                           </td>
                           <td className="px-3 md:px-4 py-2 md:py-3 text-xs md:text-sm font-semibold text-gray-800 dark:text-gray-200">
                             {record.employeeName || record.name || "-"}
@@ -411,6 +488,17 @@ const AttendanceReport = () => {
           </>
         )}
       </main>
+
+      {/* Export Modal */}
+      <ExportModal
+        isOpen={showExportModal}
+        onClose={() => setShowExportModal(false)}
+        onExport={handleExport}
+        title="Export Attendance Report"
+        totalRecords={getExportData().length}
+        formats={["csv", "pdf"]}
+        defaultFormat="csv"
+      />
     </div>
   );
 };
