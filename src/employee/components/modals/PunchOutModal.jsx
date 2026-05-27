@@ -1,38 +1,74 @@
 import { useEffect, useState } from 'react';
 import { useDispatch, useSelector } from 'react-redux';
-import { FiX, FiCheckCircle, FiClock, FiCalendar, FiSearch, FiChevronLeft, FiChevronRight } from 'react-icons/fi';
-import { fetchTaskReports, setTaskReportsPagination, setTaskReportsSearch, clearTaskReportsError } from '../../store/slices/taskReportsSlice';
+import { FiX, FiCheckCircle, FiClock, FiSave, FiCalendar, FiSearch, FiChevronLeft, FiChevronRight } from 'react-icons/fi';
 import { showToast } from '../common/Toast';
 import apiClient from '../../../utils/apiClient';
+import { TimeInput } from '../common/TimeInput';
+import { fetchTaskReports, setTaskReportsPagination, setTaskReportsSearch, clearTaskReportsError } from '../../store/slices/taskReportsSlice';
 
 // Punch Out Modal Component
 const PunchOutModal = ({ isOpen, onClose, onSubmit, loading }) => {
   const [projects, setProjects] = useState([]);
   const [projectTimes, setProjectTimes] = useState({});
   const [loadingProjects, setLoadingProjects] = useState(false);
+  const [totalHours, setTotalHours] = useState(0);
 
   const { user } = useSelector((state) => state.auth);
   const dashboardData = useSelector((state) => state.EmpAttendance?.dashboardData);
 
+  // Calculate total hours whenever project times change
+  useEffect(() => {
+    let total = 0;
+    Object.values(projectTimes).forEach(time => {
+      if (time) {
+        const [hours, minutes] = time.split(':');
+        const hoursDecimal = parseInt(hours) + (parseInt(minutes) / 60);
+        total += hoursDecimal;
+      }
+    });
+    setTotalHours(Math.round(total * 10) / 10);
+  }, [projectTimes]);
+
+  // Fetch projects when modal opens - using the same endpoint as dashboard
   useEffect(() => {
     if (isOpen) {
       const employeeId = dashboardData?.employee?.id
+        || user?.employee?.id
         || user?.id
-        || dashboardData?.employee?.employee_id
-        || user?.employee_id;
+        || dashboardData?.employee?.employee_id;
+      
       if (employeeId) {
         setLoadingProjects(true);
-        apiClient.get(`/employees/${employeeId}/projects`)
+        
+        // Use the same endpoint that dashboard uses: /admin/project-assignments/{id}
+        apiClient.get(`/admin/project-assignments/${employeeId}`)
           .then((res) => {
-            if (res.data && res.data.data) {
-              setProjects(res.data.data);
+            console.log("Projects API response from project-assignments:", res.data);
+            
+            let projectsData = [];
+            
+            if (res.data?.data?.projects && Array.isArray(res.data.data.projects)) {
+              projectsData = res.data.data.projects;
+            } else if (res.data?.projects && Array.isArray(res.data.projects)) {
+              projectsData = res.data.projects;
+            } else if (res.data?.data && Array.isArray(res.data.data)) {
+              projectsData = res.data.data;
+            } else if (Array.isArray(res.data)) {
+              projectsData = res.data;
             }
+            
+            console.log("Extracted projects:", projectsData);
+            setProjects(projectsData);
           })
           .catch((err) => {
-            console.error('Failed to fetch projects:', err.message);
+            console.error('Failed to fetch projects:', err);
+            showToast('Failed to load projects', 'error');
             setProjects([]);
           })
           .finally(() => setLoadingProjects(false));
+      } else {
+        console.error("No employee ID found:", { dashboardData, user });
+        setLoadingProjects(false);
       }
     }
   }, [isOpen, dashboardData, user]);
@@ -43,18 +79,56 @@ const PunchOutModal = ({ isOpen, onClose, onSubmit, loading }) => {
 
   const handleSubmit = (e) => {
     e.preventDefault();
-    onSubmit({ project_times: projectTimes });
-    // Clear form after submit
+    
+    // Validate that at least one project has time entered
+    const hasTime = Object.values(projectTimes).some(time => time && time !== '00:00');
+    if (!hasTime) {
+      showToast('Please enter time worked for at least one project', 'warning');
+      return;
+    }
+    
+    onSubmit({ project_times: projectTimes, total_hours: totalHours });
+  };
+
+  const handleSetAllSame = () => {
+    if (projects.length === 0) return;
+    // Calculate equal distribution of 8 hours across projects
+    const hoursPerProject = 8 / projects.length;
+    const newTimes = {};
+    projects.forEach(project => {
+      const hours = Math.floor(hoursPerProject);
+      const minutes = Math.round((hoursPerProject % 1) * 60);
+      newTimes[project.id] = `${hours.toString().padStart(2, '0')}:${minutes.toString().padStart(2, '0')}`;
+    });
+    setProjectTimes(newTimes);
+  };
+
+  const handleClearAll = () => {
     setProjectTimes({});
+  };
+
+  const formatTimeDisplay = (time) => {
+    if (!time) return '0 hrs';
+    const [hours, minutes] = time.split(':');
+    const hourNum = parseInt(hours);
+    const minNum = parseInt(minutes);
+    
+    if (hourNum === 0 && minNum === 0) return '0 hrs';
+    if (hourNum === 0) return `${minNum} min`;
+    if (minNum === 0) return `${hourNum} hr${hourNum > 1 ? 's' : ''}`;
+    return `${hourNum} hr ${minNum} min`;
   };
 
   if (!isOpen) return null;
 
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 backdrop-blur-sm animate-fade-in">
-      <div className="bg-[var(--surface)] rounded-xl w-full max-w-xl mx-4 shadow-2xl animate-slide-up">
+      <div className="bg-[var(--surface)] rounded-xl w-full max-w-2xl mx-4 shadow-2xl animate-slide-up max-h-[90vh] flex flex-col">
         <div className="flex justify-between items-center p-5 border-b border-[var(--border)]">
-          <h3 className="text-xl font-bold text-[var(--text)]">Punch Out</h3>
+          <div>
+            <h3 className="text-xl font-bold text-[var(--text)]">Punch Out</h3>
+            <p className="text-xs text-[var(--muted)] mt-1">Record time spent on each project</p>
+          </div>
           <button
             onClick={onClose}
             className="text-[var(--muted)] hover:text-[var(--text)] transition-colors"
@@ -63,38 +137,92 @@ const PunchOutModal = ({ isOpen, onClose, onSubmit, loading }) => {
           </button>
         </div>
 
-        <form onSubmit={handleSubmit} className="p-5">
+        <form onSubmit={handleSubmit} className="p-5 flex-1 overflow-y-auto">
+          <div className="mb-4">
+            <label className="block text-sm font-semibold text-[var(--text)] mb-2">
+              <FiClock className="inline mr-2 text-green-500" />
+              Time Worked on Projects
+            </label>
+            <p className="text-xs text-[var(--muted)] mb-3">
+              Enter the time you spent working on each project today
+            </p>
+            
+            {projects.length > 0 && (
+              <div className="flex gap-2 mb-3">
+                <button
+                  type="button"
+                  onClick={handleSetAllSame}
+                  className="text-xs px-3 py-1 rounded-full bg-green-500/10 text-green-500 hover:bg-green-500/20 transition-colors"
+                >
+                  Distribute 8 hours equally
+                </button>
+                <button
+                  type="button"
+                  onClick={handleClearAll}
+                  className="text-xs px-3 py-1 rounded-full bg-red-500/10 text-red-500 hover:bg-red-500/20 transition-colors"
+                >
+                  Clear All
+                </button>
+              </div>
+            )}
+          </div>
 
           <div className="mb-6">
-            <label className="block text-sm font-semibold text-[var(--text)] mb-2">
-              Assigned Projects Time
-            </label>
             {loadingProjects ? (
-              <div className="text-sm text-[var(--muted)]">Loading projects...</div>
+              <div className="text-center py-8">
+                <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-green-500 mx-auto mb-3"></div>
+                <div className="text-sm text-[var(--muted)]">Loading your projects...</div>
+              </div>
             ) : projects.length === 0 ? (
-              <div className="text-sm text-[var(--muted)]">No projects assigned.</div>
+              <div className="text-center py-8 bg-[var(--surface2)] rounded-xl">
+                <FiClock className="text-4xl text-[var(--muted)] mx-auto mb-2" />
+                <div className="text-sm text-[var(--muted)]">No projects assigned to you</div>
+                <div className="text-xs text-[var(--muted)] mt-1">You can still punch out without recording time</div>
+              </div>
             ) : (
-              <div className="max-h-[60vh] overflow-y-auto pr-2 space-y-3">
+              <div className="space-y-3 max-h-[50vh] overflow-y-auto pr-2">
                 {projects.map((project) => (
-                  <div key={project.id} className="flex items-center justify-between bg-[var(--surface2)] p-3 rounded-lg border border-[var(--border)]">
-                    <span className="text-sm font-medium text-[var(--text)]">{project.name}</span>
-                    <div className="flex items-center gap-2">
-                      <input
-                        type="number"
-                        min="0"
-                        step="0.5"
-                        placeholder="Hours"
-                        value={projectTimes[project.id] || ''}
-                        onChange={(e) => handleTimeChange(project.id, e.target.value)}
-                        className="w-20 p-1.5 bg-[var(--surface)] border border-[var(--border)] rounded text-sm text-center text-[var(--text)] focus:outline-none focus:border-green-500 focus:ring-1 focus:ring-green-500"
-                      />
-                      <span className="text-xs text-[var(--muted)]">hrs</span>
+                  <div 
+                    key={project.id} 
+                    className="flex items-center justify-between bg-[var(--surface2)] p-4 rounded-xl border border-[var(--border)] hover:border-green-500/30 transition-all"
+                  >
+                    <div className="flex-1">
+                      <span className="text-sm font-semibold text-[var(--text)]">{project.name}</span>
+                      {project.description && (
+                        <p className="text-xs text-[var(--muted)] mt-0.5 line-clamp-1">{project.description}</p>
+                      )}
+                    </div>
+                    <div className="flex items-center gap-3">
+                      <div className="w-32">
+                        <TimeInput
+                          value={projectTimes[project.id] || ''}
+                          onChange={(e) => handleTimeChange(project.id, e.target.value)}
+                          className="text-sm"
+                        />
+                      </div>
+                      <span className="text-xs text-[var(--muted)] w-20">
+                        {formatTimeDisplay(projectTimes[project.id])}
+                      </span>
                     </div>
                   </div>
                 ))}
               </div>
             )}
           </div>
+
+          {/* Total Hours Summary */}
+          {projects.length > 0 && (
+            <div className="mb-6 p-4 bg-green-500/10 rounded-xl border border-green-500/20">
+              <div className="flex justify-between items-center">
+                <span className="text-sm font-semibold text-[var(--text)]">Total Time Recorded:</span>
+                <span className="text-xl font-bold text-green-500">{totalHours} hours</span>
+              </div>
+              <div className="text-xs text-[var(--muted)] mt-1">
+                <i className="fas fa-info-circle mr-1"></i>
+                Make sure your total time accurately reflects your work today
+              </div>
+            </div>
+          )}
 
           <div className="flex gap-3 pt-4 border-t border-[var(--border)]">
             <button
@@ -116,7 +244,7 @@ const PunchOutModal = ({ isOpen, onClose, onSubmit, loading }) => {
                 </>
               ) : (
                 <>
-                  <FiCheckCircle />
+                  <FiSave />
                   Confirm Punch Out
                 </>
               )}
@@ -131,7 +259,6 @@ const PunchOutModal = ({ isOpen, onClose, onSubmit, loading }) => {
 // Task Reports List Component
 const TaskReportsList = () => {
   const dispatch = useDispatch();
-  // Add safety checks for undefined state
   const taskReportsState = useSelector((state) => state.EmpTaskReports) || {};
   const {
     taskReports = [],
@@ -199,11 +326,6 @@ const TaskReportsList = () => {
   const handleEntriesChange = (e) => {
     dispatch(setTaskReportsPagination({ currentPage: 1, perPage: parseInt(e.target.value) }));
   };
-
-  // Debug log
-  useEffect(() => {
-    console.log("TaskReportsList State:", { taskReports, loading, pagination, search });
-  }, [taskReports, loading, pagination, search]);
 
   if (loading && taskReports.length === 0) {
     return (

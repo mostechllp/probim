@@ -243,6 +243,7 @@ const EmployeeDetailsReport = () => {
   const inactiveCount = transformedEmployees.filter(
     (e) => e.status === "Inactive",
   ).length;
+  // eslint-disable-next-line no-unused-vars
   const onboardingCount = transformedEmployees.filter(
     (e) => e.status === "Onboarding",
   ).length;

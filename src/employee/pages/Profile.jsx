@@ -12,6 +12,7 @@ import {
   FiEdit2,
   FiCheckCircle,
   FiLoader,
+  FiInfo,
 } from "react-icons/fi";
 import { changePassword, clearUpdateSuccess, fetchUserProfile, updateProfile } from "../../admin/store/slices/settingsSlice";
 import apiClient from "../../utils/apiClient";
@@ -28,6 +29,7 @@ const Profile = () => {
   const [avatarPreview, setAvatarPreview] = useState(null);
   const [avatarTempPath, setAvatarTempPath] = useState(null);
   const [avatarError, setAvatarError] = useState(false);
+  const [lastUpdatedAvatar, setLastUpdatedAvatar] = useState(null);
   const [formData, setFormData] = useState({
     fullName: "",
     personalEmail: "",
@@ -47,11 +49,10 @@ const Profile = () => {
   // Initialize form data from auth
   useEffect(() => {
     if (employee) {
-      // eslint-disable-next-line react-hooks/set-state-in-effect
       setFormData({
         fullName: employee.name || "",
-        personalEmail: employee.personal_email || "",
-        personalNumber: employee.phone || "",
+        personalEmail: employee.personal_email || employee.email || "",
+        personalNumber: employee.phone || employee.personal_number || "",
         address: employee.address || "",
       });
     }
@@ -59,7 +60,26 @@ const Profile = () => {
 
   // Fetch fresh profile data on mount
   useEffect(() => {
-    dispatch(fetchUserProfile());
+    const fetchUser = async () => {
+      try {
+        const result = await dispatch(fetchUserProfile());
+        console.log("✅ Profile fetched:", result.payload);
+        if (result.payload) {
+          // Update form data with fresh profile data
+          const userData = result.payload;
+          setFormData({
+            fullName: userData.name || userData.employee?.name || "",
+            personalEmail: userData.personal_email || userData.email || "",
+            personalNumber: userData.phone || userData.personal_number || "",
+            address: userData.address || "",
+          });
+        }
+      } catch (error) {
+        console.error("Error fetching profile:", error);
+      }
+    };
+    
+    fetchUser();
   }, [dispatch]);
 
   // Handle update success
@@ -67,10 +87,23 @@ const Profile = () => {
     if (updateSuccess) {
       showToast("Profile updated successfully!", "success");
       dispatch(clearUpdateSuccess());
-      dispatch(fetchUserProfile());
+      
+      // Refetch fresh profile data
+      const refetchProfile = async () => {
+        const result = await dispatch(fetchUserProfile());
+        if (result.payload) {
+          const userData = result.payload;
+          setFormData({
+            fullName: userData.name || userData.employee?.name || "",
+            personalEmail: userData.personal_email || userData.email || "",
+            personalNumber: userData.phone || userData.personal_number || "",
+            address: userData.address || "",
+          });
+        }
+      };
+      refetchProfile();
       
       // Reset avatar states
-      // eslint-disable-next-line react-hooks/set-state-in-effect
       setAvatarPreview(null);
       setAvatarTempPath(null);
       setAvatarError(false);
@@ -86,7 +119,6 @@ const Profile = () => {
     if (error) {
       showToast(error, "error");
       dispatch(clearUpdateSuccess());
-      // eslint-disable-next-line react-hooks/set-state-in-effect
       setUpdating(false);
     }
   }, [error, dispatch]);
@@ -95,7 +127,9 @@ const Profile = () => {
   const getAvatarUrl = () => {
     if (avatarPreview) return avatarPreview;
     if (avatarError) return null;
+    if (lastUpdatedAvatar) return lastUpdatedAvatar;
     
+    // Check auth user first, then profile
     const avatar = authUser?.avatar || profile?.avatar;
     if (!avatar) return null;
     
@@ -153,6 +187,7 @@ const Profile = () => {
 
       const result = response.data;
       if (result.status && result.path) {
+        console.log("✅ Avatar uploaded! Temp path:", result.path);
         setAvatarTempPath(result.path);
         showToast("Avatar uploaded successfully", "success");
       } else {
@@ -172,61 +207,103 @@ const Profile = () => {
     setAvatarPreview(null);
     setAvatarTempPath(null);
     setAvatarError(false);
+    setLastUpdatedAvatar(null);
     if (fileInputRef.current) {
       fileInputRef.current.value = "";
     }
   };
 
   const handleUpdateProfile = async (e) => {
-    e.preventDefault();
+  e.preventDefault();
+  
+  // Validation
+  if (!formData.fullName.trim()) {
+    showToast("Full name is required", "error");
+    return;
+  }
+  
+  setUpdating(true);
+  
+  const profileFormData = new FormData();
+  
+  // Split name for first_name and last_name if needed by backend
+  const nameParts = formData.fullName.trim().split(" ");
+  const firstName = nameParts[0] || "";
+  const lastName = nameParts.slice(1).join(" ") || "";
+  
+  profileFormData.append("name", formData.fullName);
+  profileFormData.append("first_name", firstName);
+  profileFormData.append("last_name", lastName);
+  
+  // IMPORTANT: DO NOT send email at all since it's disabled/read-only
+  // The email field is disabled, so we should never try to update it
+  // Remove ALL email-related code from the update
+  
+  // ONLY send phone if it has changed
+  const originalPhone = employee?.phone || employee?.personal_number || "";
+  if (formData.personalNumber && formData.personalNumber !== originalPhone) {
+    console.log("📱 Phone changed from:", originalPhone, "to:", formData.personalNumber);
+    profileFormData.append("phone", formData.personalNumber);
+    profileFormData.append("personal_number", formData.personalNumber);
+  } else {
+    console.log("📱 Phone unchanged, skipping update");
+  }
+  
+  // ONLY send address if it has changed
+  const originalAddress = employee?.address || "";
+  if (formData.address && formData.address !== originalAddress) {
+    console.log("🏠 Address changed");
+    profileFormData.append("address", formData.address);
+  } else {
+    console.log("🏠 Address unchanged, skipping update");
+  }
+  
+  let constructedAvatarUrl = null;
+  
+  if (avatarTempPath) {
+    console.log("📤 Sending avatar temp path:", avatarTempPath);
+    profileFormData.append("avatar", avatarTempPath);
     
-    // Validation
-    if (!formData.fullName.trim()) {
-      showToast("Full name is required", "error");
-      return;
-    }
+    // Construct the permanent avatar URL
+    const baseUrl = import.meta.env.VITE_API_URL?.replace("/api", "") || window.location.origin;
+    const avatarFileName = avatarTempPath.replace('temp/', '');
+    constructedAvatarUrl = `${baseUrl}/storage/avatars/${avatarFileName}`;
+    console.log("📸 Constructed avatar URL:", constructedAvatarUrl);
     
-    if (formData.personalEmail && !formData.personalEmail.match(/^[^\s@]+@[^\s@]+\.[^\s@]+$/)) {
-      showToast("Please enter a valid email address", "error");
-      return;
-    }
-    
-    setUpdating(true);
-    
-    const profileFormData = new FormData();
-    
-    // Split name for first_name and last_name if needed by backend
-    const nameParts = formData.fullName.trim().split(" ");
-    const firstName = nameParts[0] || "";
-    const lastName = nameParts.slice(1).join(" ") || "";
-    
-    profileFormData.append("name", formData.fullName);
-    profileFormData.append("first_name", firstName);
-    profileFormData.append("last_name", lastName);
-    
-    if (formData.personalEmail) {
-      profileFormData.append("personal_email", formData.personalEmail);
-      profileFormData.append("email", formData.personalEmail); // Some backends use email field
-    }
-    
-    if (formData.personalNumber) {
-      profileFormData.append("phone", formData.personalNumber);
-      profileFormData.append("personal_number", formData.personalNumber);
-    }
-    
-    if (formData.address) {
-      profileFormData.append("address", formData.address);
-    }
-    
+    // Store the constructed URL to display immediately
+    setLastUpdatedAvatar(constructedAvatarUrl);
+  }
+  
+  // Check if there's anything to update
+  const hasChanges = profileFormData.has('phone') || 
+                     profileFormData.has('personal_number') || 
+                     profileFormData.has('address') || 
+                     avatarTempPath;
+  
+  if (!hasChanges) {
+    showToast("No changes to update", "info");
+    setUpdating(false);
+    return;
+  }
+  
+  // Log the FormData contents for debugging
+  console.log("📤 Sending profile update with:");
+  for (let pair of profileFormData.entries()) {
+    console.log(pair[0] + ': ' + pair[1]);
+  }
+  
+  const result = await dispatch(updateProfile({ formData: profileFormData, constructedAvatarUrl }));
+  
+  if (!updateProfile.fulfilled.match(result)) {
+    setUpdating(false);
+    // Revert avatar preview if update failed
     if (avatarTempPath) {
-      profileFormData.append("avatar", avatarTempPath);
+      setAvatarPreview(null);
+      setAvatarTempPath(null);
+      setLastUpdatedAvatar(null);
     }
-    
-    // Add _method for Laravel if needed
-    profileFormData.append("_method", "PUT");
-    
-    await dispatch(updateProfile(profileFormData));
-  };
+  }
+};
 
   const handleChangePassword = async (e) => {
     e.preventDefault();
@@ -270,8 +347,8 @@ const Profile = () => {
     if (employee) {
       setFormData({
         fullName: employee.name || "",
-        personalEmail: employee.personal_email || "",
-        personalNumber: employee.phone || "",
+        personalEmail: employee.personal_email || employee.email || "",
+        personalNumber: employee.phone || employee.personal_number || "",
         address: employee.address || "",
       });
     }
@@ -285,6 +362,11 @@ const Profile = () => {
 
   const avatarUrl = getAvatarUrl();
   const userInitials = (formData.fullName || employee?.name || "U").charAt(0).toUpperCase();
+
+  console.log("Current avatar URL:", avatarUrl);
+  console.log("AuthUser avatar:", authUser?.avatar);
+  console.log("Profile avatar:", profile?.avatar);
+  console.log("Last updated avatar:", lastUpdatedAvatar);
 
   if (loading && !profile) {
     return (
@@ -312,7 +394,11 @@ const Profile = () => {
                     src={avatarUrl}
                     alt="Profile"
                     className="w-full h-full object-cover"
-                    onError={() => setAvatarError(true)}
+                    onError={(e) => {
+                      console.error("❌ Image failed to load:", avatarUrl);
+                      setAvatarError(true);
+                    }}
+                    onLoad={() => console.log("✅ Avatar loaded successfully:", avatarUrl)}
                   />
                 ) : (
                   <div className="w-full h-full bg-gradient-to-r from-green-500 to-green-600 flex items-center justify-center text-white text-5xl font-bold">
@@ -351,7 +437,7 @@ const Profile = () => {
                 {authUser?.type || "employee"}
                 <span className="text-gray-300 mx-1">•</span>
                 <span className="text-green-600">
-                  {employee?.employee_id || "1"}
+                  {employee?.employee_id || authUser?.id || "1"}
                 </span>
               </div>
             </div>
@@ -496,7 +582,7 @@ const Profile = () => {
                     </div>
                     <input
                       type="email"
-                      value={employee?.company_email || authUser?.email || ""}
+                      value={employee?.company_email || profile?.email || "your company email"}
                       disabled
                       className="w-full pl-12 pr-4 py-3.5 bg-[var(--surface2)]/70 border border-[var(--border)] rounded-2xl text-sm font-semibold text-[var(--muted)] cursor-not-allowed"
                     />
@@ -504,27 +590,28 @@ const Profile = () => {
                 </div>
 
                 <div className="form-field flex flex-col gap-2">
-                  <label className="text-xs font-extrabold text-[var(--text-secondary)] ml-1">
-                    Personal Email
-                  </label>
-                  <div className="relative">
-                    <div className="absolute inset-y-0 left-0 pl-4 flex items-center pointer-events-none">
-                      <FiMail className="text-gray-400 text-lg" />
-                    </div>
-                    <input
-                      type="email"
-                      value={formData.personalEmail}
-                      onChange={(e) =>
-                        setFormData({
-                          ...formData,
-                          personalEmail: e.target.value,
-                        })
-                      }
-                      className="w-full pl-12 pr-4 py-3.5 bg-[var(--surface2)] border border-[var(--border)] rounded-2xl text-sm font-semibold text-[var(--text)] focus:bg-[var(--surface)] focus:outline-none focus:border-green-500 focus:ring-4 focus:ring-green-500/10 transition-all"
-                      placeholder="Enter personal email"
-                    />
-                  </div>
-                </div>
+  <label className="text-xs font-extrabold text-[var(--text-secondary)] ml-1">
+    Personal Email{" "}
+    <span className="text-gray-400 font-medium">
+      (Cannot be changed)
+    </span>
+  </label>
+  <div className="relative">
+    <div className="absolute inset-y-0 left-0 pl-4 flex items-center pointer-events-none">
+      <FiMail className="text-gray-400 text-lg" />
+    </div>
+    <input
+      type="email"
+      value={formData.personalEmail}
+      disabled
+      className="w-full pl-12 pr-4 py-3.5 bg-[var(--surface2)]/70 border border-[var(--border)] rounded-2xl text-sm font-semibold text-[var(--muted)] cursor-not-allowed"
+    />
+  </div>
+  <p className="text-xs text-gray-400 mt-1">
+    <FiInfo className="inline mr-1" />
+    Personal email cannot be changed. Contact HR for updates.
+  </p>
+</div>
 
                 <div className="form-field flex flex-col gap-2 md:col-span-2">
                   <label className="text-xs font-extrabold text-[var(--text-secondary)] ml-1">

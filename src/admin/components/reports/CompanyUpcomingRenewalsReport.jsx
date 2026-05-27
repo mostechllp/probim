@@ -6,6 +6,9 @@ import EntriesSelector from "../common/EntriesSelector";
 import { showToast } from "../../../components/common/Toast";
 import Pagination from "../common/Paginations";
 import { fetchCompanyUpcomingRenewalsReport } from "../../store/slices/reportSlice";
+import ExportModal from "../../../components/common/ExportModal";
+import { exportToCSV, formatDate, getDaysDifference } from "../../../utils/reportUtils";
+import { generateCompanyUpcomingRenewalsPDF } from "../../../utils/reportPDFConfigs";
 
 const CompanyUpcomingRenewalsReport = () => {
   const dispatch = useDispatch();
@@ -17,6 +20,7 @@ const CompanyUpcomingRenewalsReport = () => {
   const [currentPage, setCurrentPage] = useState(1);
   const [perPage, setPerPage] = useState(10);
   const [searchTerm, setSearchTerm] = useState("");
+  const [showExportModal, setShowExportModal] = useState(false);
 
   // Filter states
   const [minDays, setMinDays] = useState(31);
@@ -37,7 +41,7 @@ const CompanyUpcomingRenewalsReport = () => {
   useEffect(() => {
     // eslint-disable-next-line react-hooks/set-state-in-effect
     setCurrentPage(1);
-  }, [searchTerm, minDays, maxDays]);
+  }, [searchTerm, minDays, maxDays, perPage]);
 
   // Transform organization data to extract document expiry fields
   const transformOrganization = (org) => {
@@ -78,17 +82,6 @@ const CompanyUpcomingRenewalsReport = () => {
         address: org.address,
       },
     ];
-  };
-
-  // Get days difference between two dates
-  const getDaysDifference = (dateStr) => {
-    if (!dateStr) return null;
-    const today = new Date();
-    today.setHours(0, 0, 0, 0);
-    const expiryDate = new Date(dateStr);
-    if (isNaN(expiryDate.getTime())) return null;
-
-    return Math.ceil((expiryDate - today) / (1000 * 60 * 60 * 24));
   };
 
   // Check if a date is within the upcoming renewal range (31-90 days)
@@ -165,6 +158,23 @@ const CompanyUpcomingRenewalsReport = () => {
     return filtered;
   };
 
+  // Transform data for export
+  const getExportData = () => {
+    const filteredCompanies = getCompaniesWithUpcomingRenewals();
+    return filteredCompanies.map((company) => ({
+      company_name: company.name,
+      trade_license_number: company.trade_license_number || "-",
+      trade_license_expiry: formatDate(company.trade_license_expiry),
+      trade_license_days_left: getDaysDifference(company.trade_license_expiry) || "-",
+      establishment_card_number: company.establishment_card_number || "-",
+      establishment_card_expiry: formatDate(company.establishment_card_expiry),
+      establishment_card_days_left: getDaysDifference(company.establishment_card_expiry) || "-",
+      phone: company.phone || "-",
+      email: company.email || "-",
+      renewal_range: `${minDays}-${maxDays} days`,
+    }));
+  };
+
   const filteredCompanies = getCompaniesWithUpcomingRenewals();
   const totalFiltered = filteredCompanies.length;
   const totalPages = Math.ceil(totalFiltered / perPage);
@@ -179,80 +189,43 @@ const CompanyUpcomingRenewalsReport = () => {
     showToast("Filters reset successfully", "success");
   };
 
-  const handleExport = () => {
-    try {
-      const dataToExport = filteredCompanies;
+  const handleExport = async (format) => {
+  const exportData = getExportData();
+  
+  if (exportData.length === 0) {
+    showToast("No data to export", "warning");
+    return;
+  }
 
-      if (dataToExport.length === 0) {
-        showToast("No data to export", "warning");
-        return;
-      }
+  const headers = [
+    { key: "company_name", label: "Company Name" },
+    { key: "trade_license_number", label: "Trade License" },
+    { key: "trade_license_expiry", label: "TL Expiry Date" },
+    { key: "trade_license_days_left", label: "Days Left (TL)" },
+    { key: "establishment_card_number", label: "Establishment Card" },
+    { key: "establishment_card_expiry", label: "EC Expiry Date" },
+    { key: "establishment_card_days_left", label: "Days Left (EC)" },
+    { key: "phone", label: "Phone" },
+    { key: "email", label: "Email" },
+    { key: "renewal_range", label: "Renewal Range" },
+  ];
 
-      const headers = [
-        "COMPANY NAME",
-        "TRADE LICENSE",
-        "TL EXPIRY",
-        "DAYS LEFT (TL)",
-        "EST. CARD",
-        "EC EXPIRY",
-        "DAYS LEFT (EC)",
-      ];
+  const filename = `company_upcoming_renewals_${minDays}_${maxDays}days_${new Date().toISOString().split("T")[0]}`;
 
-      const rows = dataToExport.map((company) => [
-        company.name,
-        company.trade_license_number || "-",
-        company.trade_license_expiry
-          ? new Date(company.trade_license_expiry).toLocaleDateString()
-          : "-",
-        getDaysDifference(company.trade_license_expiry) || "-",
-        company.establishment_card_number || "-",
-        company.establishment_card_expiry
-          ? new Date(company.establishment_card_expiry).toLocaleDateString()
-          : "-",
-        getDaysDifference(company.establishment_card_expiry) || "-",
-      ]);
-
-      const csvContent = [
-        headers.join(","),
-        ...rows.map((row) =>
-          row.map((cell) => `"${String(cell).replace(/"/g, '""')}"`).join(","),
-        ),
-      ].join("\n");
-
-      const blob = new Blob([csvContent], { type: "text/csv;charset=utf-8;" });
-      const link = document.createElement("a");
-      const url = URL.createObjectURL(blob);
-      link.setAttribute("href", url);
-      link.setAttribute(
-        "download",
-        `company_upcoming_renewals_${new Date().toISOString().split("T")[0]}.csv`,
-      );
-      document.body.appendChild(link);
-      link.click();
-      document.body.removeChild(link);
-      URL.revokeObjectURL(url);
-
-      showToast("Company upcoming renewals exported successfully!", "success");
-    } catch (error) {
-      console.error("Export error:", error);
-      showToast("Failed to export data", "error");
-    }
-  };
-
-  const formatDate = (dateStr) => {
-    if (!dateStr) return "-";
-    const date = new Date(dateStr);
-    if (isNaN(date.getTime())) return "-";
-    return date
-      .toLocaleDateString("en-GB", {
-        year: "numeric",
-        month: "2-digit",
-        day: "2-digit",
-      })
-      .split("/")
-      .reverse()
-      .join("-");
-  };
+  if (format === "csv") {
+    exportToCSV(exportData, headers, `${filename}.csv`);
+    showToast("Company upcoming renewals exported successfully!", "success");
+  } else if (format === "pdf") {
+    // Use the correct PDF generator for upcoming renewals
+    generateCompanyUpcomingRenewalsPDF(filteredCompanies, "Company Upcoming Renewals Report", {
+      minDays: minDays,
+      maxDays: maxDays,
+      search: searchTerm || null,
+      generated_date: new Date().toISOString(),
+    });
+    showToast("PDF report generated successfully!", "success");
+  }
+};
 
   const getUpcomingClass = (expiryDate) => {
     const daysLeft = getDaysDifference(expiryDate);
@@ -324,6 +297,9 @@ const CompanyUpcomingRenewalsReport = () => {
 
   const stats = getDocumentStats();
 
+  // Fix typo in breadcrumb
+  const breadcrumbText = "Company Upcoming Renewal Report";
+
   return (
     <div className="w-full overflow-x-hidden">
       <main className="content px-4 py-4 md:px-6 md:py-6 w-full overflow-x-hidden">
@@ -337,12 +313,10 @@ const CompanyUpcomingRenewalsReport = () => {
               Reports
             </Link>
             <i className="fas fa-chevron-right text-gray-400 text-[10px] md:text-xs"></i>
-            <span className="text-gray-500">
-              Comapany Upcoming Renewal Report
-            </span>
+            <span className="text-gray-500">{breadcrumbText}</span>
           </div>
           <h2 className="text-xl md:text-3xl font-bold bg-gradient-to-r from-gray-800 to-green-600 bg-clip-text text-transparent">
-            Comapany Upcoming Renewal Report
+            {breadcrumbText}
           </h2>
           <p className="text-sm text-gray-500 dark:text-gray-400 mt-1">
             Companies with documents expiring within {minDays}-{maxDays} days
@@ -441,7 +415,7 @@ const CompanyUpcomingRenewalsReport = () => {
             {/* Renewal Period Range */}
             <div>
               <label className="block text-xs font-semibold text-gray-500 dark:text-gray-400 mb-1">
-                <i className="fas fa-hourglass-half mr-1"></i> Renewal Period
+                <i className="fas fa-hourglass-half mr-1"></i> Renewal Period (Days)
               </label>
               <div className="flex gap-2">
                 <input
@@ -453,7 +427,7 @@ const CompanyUpcomingRenewalsReport = () => {
                   placeholder="Min"
                 />
                 <span className="text-gray-500 dark:text-gray-400 self-center">
-                  -
+                  to
                 </span>
                 <input
                   type="number"
@@ -476,6 +450,10 @@ const CompanyUpcomingRenewalsReport = () => {
               </button>
             </div>
           </div>
+          <div className="mt-2 text-xs text-gray-500 dark:text-gray-400">
+            <i className="fas fa-info-circle mr-1"></i>
+            Showing documents expiring between {minDays} and {maxDays} days from today
+          </div>
         </div>
 
         {/* Actions Bar */}
@@ -494,10 +472,10 @@ const CompanyUpcomingRenewalsReport = () => {
                 setSearchTerm(val);
                 setCurrentPage(1);
               }}
-              placeholder="Search by company name..."
+              placeholder="Search by company name, trade license, establishment card..."
             />
             <button
-              onClick={handleExport}
+              onClick={() => setShowExportModal(true)}
               className="bg-green-500 hover:bg-green-600 text-white px-4 py-2 rounded-full text-sm font-semibold flex items-center justify-center gap-2 transition-all shadow-md hover:shadow-lg w-full sm:w-auto"
             >
               <i className="fas fa-download"></i> Export Report
@@ -508,7 +486,7 @@ const CompanyUpcomingRenewalsReport = () => {
         {/* Loading State */}
         {loading && filteredCompanies.length === 0 ? (
           <div className="bg-white dark:bg-gray-800 rounded-xl border border-gray-200 dark:border-gray-700 p-8 text-center">
-            <i className="fas fa-spinner fa-spin text-3xl text-blue-500 mb-3"></i>
+            <i className="fas fa-spinner fa-spin text-3xl text-green-500 mb-3"></i>
             <p className="text-gray-500 dark:text-gray-400">
               Loading company renewal data...
             </p>
@@ -670,6 +648,17 @@ const CompanyUpcomingRenewalsReport = () => {
           </>
         )}
       </main>
+
+      {/* Export Modal */}
+      <ExportModal
+        isOpen={showExportModal}
+        onClose={() => setShowExportModal(false)}
+        onExport={handleExport}
+        title="Export Company Upcoming Renewals"
+        totalRecords={getExportData().length}
+        formats={["csv", "pdf"]}
+        defaultFormat="csv"
+      />
     </div>
   );
 };

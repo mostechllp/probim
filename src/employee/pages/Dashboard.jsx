@@ -1,30 +1,28 @@
-import { useEffect, useState, useRef } from "react";
+import { useEffect, useState } from "react";
 import { useDispatch, useSelector } from "react-redux";
-import {
-  Chart as ChartJS,
-  BarElement,
-  CategoryScale,
-  LinearScale,
-  Tooltip,
-  Legend,
-} from "chart.js";
-import { Bar } from "react-chartjs-2";
 import {
   punchIn,
   punchOut,
   fetchDashboardData,
 } from "../store/slices/attendanceSlice";
+import { fetchMyProjects } from "../store/slices/employeeProjectSlice";
 import PunchOutModal from "../components/modals/PunchOutModal";
 import MapView from "../components/common/MapView";
 import LocationModal from "../components/modals/LocationModal";
-
-ChartJS.register(BarElement, CategoryScale, LinearScale, Tooltip, Legend);
 
 const Dashboard = () => {
   const dispatch = useDispatch();
   const { user } = useSelector((state) => state.auth);
   const { loading, dashboardData } = useSelector(
     (state) => state.EmpAttendance,
+  );
+  const {
+    projects,
+    stats,
+    loading: projectsLoading,
+  } = useSelector(
+    (state) =>
+      state.employeeProjects || { projects: [], stats: {}, loading: false },
   );
 
   // Use dashboard data as source of truth (not Redux isPunchedIn)
@@ -39,7 +37,7 @@ const Dashboard = () => {
   const [showPunchOutModal, setShowPunchOutModal] = useState(false);
   const [toast, setToast] = useState(null);
   const [isSubmitting, setIsSubmitting] = useState(false);
-  const chartRef = useRef(null);
+  const [selectedProject, setSelectedProject] = useState(null);
 
   const [showLocationModal, setShowLocationModal] = useState(false);
   const [punchType, setPunchType] = useState("punch-in");
@@ -53,10 +51,21 @@ const Dashboard = () => {
     setTimeout(() => setToast(null), 3000);
   };
 
-  // Fetch dashboard data on component mount
+  // Fetch dashboard data and projects on component mount
   useEffect(() => {
     dispatch(fetchDashboardData());
   }, [dispatch]);
+
+  // Separate useEffect to fetch projects when dashboard data loads
+  useEffect(() => {
+    if (dashboardData?.employee?.id) {
+      console.log(
+        "Fetching projects for employee ID from dashboard:",
+        dashboardData.employee.id,
+      );
+      dispatch(fetchMyProjects(dashboardData.employee.id));
+    }
+  }, [dashboardData]);
 
   // Update date and time
   useEffect(() => {
@@ -82,25 +91,32 @@ const Dashboard = () => {
   // Helper function to normalize location data from different formats
   const normalizeLocation = (locationData) => {
     if (!locationData) return null;
-    
-    // If location data is already in the expected format { latitude, longitude, address }
+
     if (locationData.latitude && locationData.longitude) {
       return {
         latitude: parseFloat(locationData.latitude),
         longitude: parseFloat(locationData.longitude),
-        address: locationData.address || `${locationData.latitude}, ${locationData.longitude}`
+        address:
+          locationData.address ||
+          `${locationData.latitude}, ${locationData.longitude}`,
       };
     }
-    
-    // If location data is separate fields (from attendance_history)
+
     if (locationData.punch_in_latitude || locationData.latitude) {
       return {
-        latitude: parseFloat(locationData.punch_in_latitude || locationData.latitude),
-        longitude: parseFloat(locationData.punch_in_longitude || locationData.longitude),
-        address: locationData.punch_in_address || locationData.address || "Location recorded"
+        latitude: parseFloat(
+          locationData.punch_in_latitude || locationData.latitude,
+        ),
+        longitude: parseFloat(
+          locationData.punch_in_longitude || locationData.longitude,
+        ),
+        address:
+          locationData.punch_in_address ||
+          locationData.address ||
+          "Location recorded",
       };
     }
-    
+
     return null;
   };
 
@@ -111,41 +127,42 @@ const Dashboard = () => {
         showToastMessage("❌ You cannot punch in at this time", "error");
         return;
       }
-      // Show location verification modal for punch in
       setPunchType("punch-in");
       setShowLocationModal(true);
     } else {
-      // For punch out, first show the punch out modal (tasks_completed, plan_tomorrow)
       setPunchType("punch-out");
       setShowPunchOutModal(true);
     }
   };
 
-  // Handle location confirmation (for both punch in and punch out)
+  // Handle location confirmation
   const handleLocationConfirm = async (locationData) => {
     setShowLocationModal(false);
     setIsSubmitting(true);
-    
+
     if (punchType === "punch-in") {
-      // Punch in with location
       const result = await dispatch(punchIn({ location: locationData }));
       setIsSubmitting(false);
-      
+
       if (punchIn.fulfilled.match(result)) {
-        showToastMessage("✅ Punched in successfully with location verification!", "success");
+        showToastMessage(
+          "✅ Punched in successfully with location verification!",
+          "success",
+        );
         await dispatch(fetchDashboardData());
       } else {
         showToastMessage(result.payload || "❌ Punch in failed", "error");
       }
     } else {
-      // For punch out, we have the form data from punchOutData
       if (punchOutData) {
-        const result = await dispatch(punchOut({ 
-          ...punchOutData, 
-          location: locationData 
-        }));
+        const result = await dispatch(
+          punchOut({
+            ...punchOutData,
+            location: locationData,
+          }),
+        );
         setIsSubmitting(false);
-        
+
         if (punchOut.fulfilled.match(result)) {
           showToastMessage("✅ Punched out successfully!", "success");
           setShowPunchOutModal(false);
@@ -156,24 +173,20 @@ const Dashboard = () => {
         }
       }
     }
-    
+
     setIsSubmitting(false);
   };
 
-  // Handle punch out form submission (from PunchOutModal)
   const handlePunchOutSubmit = async (data) => {
-    // Store the form data and show location modal
     setPunchOutData(data);
     setShowPunchOutModal(false);
     setShowLocationModal(true);
   };
 
-  // Format punch time with proper timezone handling
   const formatPunchTime = (time) => {
     if (!time) return "—";
     try {
       let date;
-
       if (typeof time === "string" && time.match(/^\d{2}:\d{2}:\d{2}$/)) {
         const now = new Date();
         const [hours, minutes, seconds] = time.split(":");
@@ -193,105 +206,18 @@ const Dashboard = () => {
         date = new Date(time);
       }
 
-      if (isNaN(date.getTime())) {
-        return time;
-      }
-
+      if (isNaN(date.getTime())) return time;
       return date.toLocaleTimeString("en-US", {
         hour: "2-digit",
         minute: "2-digit",
         hour12: true,
       });
     } catch (error) {
-      console.error("Error formatting time:", error);
-      return time;
+      return (time, error);
     }
   };
 
-  // Prepare chart data from attendance history
-  const getChartData = () => {
-    if (
-      !dashboardData?.attendance_history ||
-      dashboardData.attendance_history.length === 0
-    ) {
-      return {
-        labels: ["Mon", "Tue", "Wed", "Thu", "Fri", "Sat", "Sun"],
-        datasets: [
-          {
-            label: "Hours Worked",
-            data: [0, 0, 0, 0, 0, 0, 0],
-            backgroundColor: "#2ecc71",
-            borderRadius: 8,
-            barPercentage: 0.6,
-          },
-        ],
-      };
-    }
-
-    const last7Days = [];
-    const hoursWorked = [];
-
-    for (let i = 6; i >= 0; i--) {
-      const date = new Date();
-      date.setDate(date.getDate() - i);
-      const dateStr = date.toISOString().split("T")[0];
-      const dayName = date.toLocaleDateString("en-US", { weekday: "short" });
-      last7Days.push(dayName);
-
-      const attendance = dashboardData.attendance_history.find(
-        (a) => a.log_date === dateStr,
-      );
-      if (attendance && attendance.punch_in && attendance.punch_out) {
-        const punchInTimeDate = new Date(attendance.punch_in);
-        const punchOutTimeDate = new Date(attendance.punch_out);
-        const hours = (punchOutTimeDate - punchInTimeDate) / (1000 * 60 * 60);
-        hoursWorked.push(Math.round(hours * 10) / 10);
-      } else {
-        hoursWorked.push(0);
-      }
-    }
-
-    return {
-      labels: last7Days,
-      datasets: [
-        {
-          label: "Hours Worked",
-          data: hoursWorked,
-          backgroundColor: "#2ecc71",
-          borderRadius: 8,
-          barPercentage: 0.6,
-        },
-      ],
-    };
-  };
-
-  const chartOptions = {
-    responsive: true,
-    maintainAspectRatio: false,
-    plugins: {
-      legend: { display: false },
-      tooltip: {
-        backgroundColor: "#2ecc71",
-        callbacks: {
-          label: (context) => {
-            const hours = context.raw;
-            return hours > 0 ? `${hours} hours` : "No data";
-          },
-        },
-      },
-    },
-    scales: {
-      y: {
-        beginAtZero: true,
-        max: 9,
-        title: { display: true, text: "Hours", font: { size: 11 } },
-        ticks: { stepSize: 2 },
-      },
-      x: { ticks: { font: { size: 11 } } },
-    },
-  };
-
-  // Get employee name
+  // Get employee name and role
   const getEmployeeName = () => {
     if (dashboardData?.employee) {
       return `${dashboardData.employee.first_name} ${dashboardData.employee.last_name}`;
@@ -299,7 +225,6 @@ const Dashboard = () => {
     return user?.name || "User";
   };
 
-  // Get employee role/ID
   const getEmployeeRole = () => {
     if (dashboardData?.employee) {
       return `Employee ID: ${dashboardData.employee.employee_id}`;
@@ -307,20 +232,17 @@ const Dashboard = () => {
     return user?.role?.name || user?.role || "Employee";
   };
 
-  // Determine if button should be disabled
   const isButtonDisabled = () => {
     if (loading || isSubmitting) return true;
     if (!isActuallyPunchedIn && !canPunch) return true;
     return false;
   };
 
-  // Get button text
   const getButtonText = () => {
     if (loading || isSubmitting) return "Processing...";
     return isActuallyPunchedIn ? "Punch Out" : "Punch In";
   };
 
-  // Get status display
   const getStatusDisplay = () => {
     if (isActuallyPunchedIn) {
       return { text: "Punched In ✓", color: "text-green-500" };
@@ -334,12 +256,43 @@ const Dashboard = () => {
   const statusDisplay = getStatusDisplay();
   const displayPunchTime = punchInTimeFromApi || todayAttendance.punch_in_time;
 
-  // Render location information from backend
+  // Get priority badge color
+  const getPriorityColor = (priority) => {
+    switch (priority?.toLowerCase()) {
+      case "high":
+        return "bg-red-100 text-red-700 dark:bg-red-900/30 dark:text-red-400";
+      case "medium":
+        return "bg-yellow-100 text-yellow-700 dark:bg-yellow-900/30 dark:text-yellow-400";
+      case "low":
+        return "bg-green-100 text-green-700 dark:bg-green-900/30 dark:text-green-400";
+      default:
+        return "bg-gray-100 text-gray-700 dark:bg-gray-800 dark:text-gray-400";
+    }
+  };
+
+  // Get status badge color
+  const getStatusColor = (status) => {
+    switch (status?.toLowerCase()) {
+      case "active":
+        return "bg-green-100 text-green-700 dark:bg-green-900/30 dark:text-green-400";
+      case "completed":
+        return "bg-blue-100 text-blue-700 dark:bg-blue-900/30 dark:text-blue-400";
+      case "on hold":
+        return "bg-orange-100 text-orange-700 dark:bg-orange-900/30 dark:text-orange-400";
+      default:
+        return "bg-gray-100 text-gray-700 dark:bg-gray-800 dark:text-gray-400";
+    }
+  };
+
+  // Render location info
   const renderLocationInfo = () => {
-    // Normalize location data from backend
-    const punchInLocation = normalizeLocation(todayAttendance.punch_in_location);
-    const punchOutLocation = normalizeLocation(todayAttendance.punch_out_location);
-    
+    const punchInLocation = normalizeLocation(
+      todayAttendance.punch_in_location,
+    );
+    const punchOutLocation = normalizeLocation(
+      todayAttendance.punch_out_location,
+    );
+
     if (!punchInLocation && !punchOutLocation) return null;
 
     const handleShowMap = (location) => {
@@ -350,10 +303,10 @@ const Dashboard = () => {
     return (
       <div className="location-info bg-[var(--surface)] border border-[var(--border)] rounded-xl p-5 mb-7">
         <h3 className="text-base font-semibold text-[var(--text)] mb-3 flex items-center gap-2">
-          <i className="fas fa-map-marker-alt text-green-500"></i> 
+          <i className="fas fa-map-marker-alt text-green-500"></i>
           Today's Punch Locations
         </h3>
-        
+
         {punchInLocation && (
           <div className="mb-3 pb-3 border-b border-[var(--border)]">
             <div className="flex justify-between items-start">
@@ -362,10 +315,8 @@ const Dashboard = () => {
                   <i className="fas fa-sign-in-alt mr-1"></i> Punch In Location:
                 </p>
                 <p className="text-sm text-[var(--text)] mt-1">
-                  {punchInLocation.address || `${punchInLocation.latitude}, ${punchInLocation.longitude}`}
-                </p>
-                <p className="text-xs text-[var(--muted)] mt-1">
-                  📍 Coordinates: {punchInLocation.latitude?.toFixed(6)}, {punchInLocation.longitude?.toFixed(6)}
+                  {punchInLocation.address ||
+                    `${punchInLocation.latitude}, ${punchInLocation.longitude}`}
                 </p>
               </div>
               <button
@@ -377,19 +328,18 @@ const Dashboard = () => {
             </div>
           </div>
         )}
-        
+
         {punchOutLocation && punchOutLocation.latitude && (
           <div>
             <div className="flex justify-between items-start">
               <div className="flex-1">
                 <p className="text-sm font-semibold text-red-500">
-                  <i className="fas fa-sign-out-alt mr-1"></i> Punch Out Location:
+                  <i className="fas fa-sign-out-alt mr-1"></i> Punch Out
+                  Location:
                 </p>
                 <p className="text-sm text-[var(--text)] mt-1">
-                  {punchOutLocation.address || `${punchOutLocation.latitude}, ${punchOutLocation.longitude}`}
-                </p>
-                <p className="text-xs text-[var(--muted)] mt-1">
-                  📍 Coordinates: {punchOutLocation.latitude?.toFixed(6)}, {punchOutLocation.longitude?.toFixed(6)}
+                  {punchOutLocation.address ||
+                    `${punchOutLocation.latitude}, ${punchOutLocation.longitude}`}
                 </p>
               </div>
               <button
@@ -429,7 +379,8 @@ const Dashboard = () => {
           </div>
           <div className="p-4">
             <p className="text-sm text-[var(--text)] mb-3">
-              {selectedMapLocation.address || `${selectedMapLocation.latitude}, ${selectedMapLocation.longitude}`}
+              {selectedMapLocation.address ||
+                `${selectedMapLocation.latitude}, ${selectedMapLocation.longitude}`}
             </p>
             <MapView
               latitude={parseFloat(selectedMapLocation.latitude)}
@@ -478,7 +429,7 @@ const Dashboard = () => {
         </div>
       </div>
 
-      {/* Location Info from Backend */}
+      {/* Location Info */}
       {renderLocationInfo()}
 
       {/* Punch Card */}
@@ -526,54 +477,213 @@ const Dashboard = () => {
         </button>
       </div>
 
-      {/* Stats Grid */}
-      <div className="stats-grid grid grid-cols-2 md:grid-cols-3 gap-5 mb-7">
+      <div className="stats-grid grid grid-cols-2 gap-5 mb-7">
         <div className="stat-card bg-[var(--surface)] border border-[var(--border)] rounded-xl p-5 text-center hover:-translate-y-0.5 hover:shadow-md transition-all">
           <div className="stat-icon w-12 h-12 rounded-xl bg-green-500/10 text-green-500 flex items-center justify-center text-2xl mx-auto mb-3">
-            <i className="fas fa-calendar-check"></i>
+            <i className="fas fa-project-diagram"></i>
           </div>
           <div className="stat-number text-3xl font-extrabold text-green-600">
-            {dashboardData?.attendance_history?.filter(
-              (a) => a.punch_in && a.punch_out,
-            ).length || 0}
+            {stats.totalProjects || 0}
           </div>
           <div className="stat-label text-xs text-[var(--muted)]">
-            Days Present
+            Total Projects
           </div>
         </div>
         <div className="stat-card bg-[var(--surface)] border border-[var(--border)] rounded-xl p-5 text-center hover:-translate-y-0.5 hover:shadow-md transition-all">
           <div className="stat-icon w-12 h-12 rounded-xl bg-blue-500/10 text-blue-500 flex items-center justify-center text-2xl mx-auto mb-3">
-            <i className="fas fa-calendar-alt"></i>
+            <i className="fas fa-check-circle"></i>
           </div>
           <div className="stat-number text-3xl font-extrabold text-blue-500">
-            {dashboardData?.leave_stats?.total_taken || 0}
+            {stats.activeProjects || 0}
           </div>
           <div className="stat-label text-xs text-[var(--muted)]">
-            Leaves Taken
+            Active Projects
           </div>
         </div>
-        <div className="stat-card bg-[var(--surface)] border border-[var(--border)] rounded-xl p-5 text-center hover:-translate-y-0.5 hover:shadow-md transition-all">
-          <div className="stat-icon w-12 h-12 rounded-xl bg-amber-500/10 text-amber-500 flex items-center justify-center text-2xl mx-auto mb-3">
-            <i className="fas fa-hourglass-half"></i>
+      </div>
+      <div className="projects-section bg-[var(--surface)] border border-[var(--border)] rounded-xl p-5 mb-7">
+        <h3 className="text-base font-semibold text-[var(--text)] mb-5 flex items-center gap-2">
+          <i className="fas fa-project-diagram text-green-500"></i>
+          My Assigned Projects
+        </h3>
+
+        {projectsLoading ? (
+          <div className="flex justify-center items-center py-12">
+            <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-green-500"></div>
           </div>
-          <div className="stat-number text-3xl font-extrabold text-amber-500">
-            {dashboardData?.leave_stats?.balance || 0}
+        ) : projects.length === 0 ? (
+          <div className="text-center py-12">
+            <i className="fas fa-folder-open text-5xl text-[var(--muted)] mb-3"></i>
+            <p className="text-[var(--text-secondary)]">
+              No projects assigned yet
+            </p>
           </div>
-          <div className="stat-label text-xs text-[var(--muted)]">
-            Leave Balance
+        ) : (
+          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-5">
+            {projects.map((project) => (
+              <div
+                key={project.id}
+                className="project-card bg-[var(--surface2)] border border-[var(--border)] rounded-xl p-5 hover:shadow-md transition-all cursor-pointer"
+                onClick={() => setSelectedProject(project)}
+              >
+                <div className="flex justify-between items-start mb-3">
+                  <h4 className="font-semibold text-[var(--text)] text-base">
+                    {project.name}
+                  </h4>
+                  <span
+                    className={`px-2 py-1 rounded-full text-xs font-semibold ${getPriorityColor(project.priority)}`}
+                  >
+                    {project.priority || "Medium"}
+                  </span>
+                </div>
+
+                <p className="text-sm text-[var(--text-secondary)] mb-3 line-clamp-2">
+                  {project.description || "No description provided"}
+                </p>
+
+                {/* Manager Info */}
+                <div className="flex items-center gap-2 mb-2">
+                  <i className="fas fa-user-tie text-xs text-green-500"></i>
+                  <span className="text-xs text-[var(--muted)]">Manager:</span>
+                  <span className="text-xs font-medium text-[var(--text)]">
+                    {project.managerName}
+                  </span>
+                </div>
+
+                {/* Team Lead Info */}
+                <div className="flex items-center gap-2 mb-3">
+                  <i className="fas fa-users text-xs text-blue-500"></i>
+                  <span className="text-xs text-[var(--muted)]">
+                    Team Lead:
+                  </span>
+                  <span className="text-xs font-medium text-[var(--text)]">
+                    {project.teamLeadName}
+                  </span>
+                </div>
+
+                {/* Assigned Date */}
+                <div className="flex items-center gap-2 mb-3 pt-2 border-t border-[var(--border)]">
+                  <i className="fas fa-calendar-alt text-xs text-purple-500"></i>
+                  <span className="text-xs text-[var(--muted)]">
+                    Assigned on:
+                  </span>
+                  <span className="text-xs font-medium text-[var(--text)]">
+                    {project.assignedDate}
+                  </span>
+                </div>
+
+                <div className="mt-2 pt-2 border-t border-[var(--border)]">
+                  <span
+                    className={`px-2 py-1 rounded-full text-xs font-semibold ${getStatusColor(project.status)}`}
+                  >
+                    {project.status || "Active"}
+                  </span>
+                </div>
+              </div>
+            ))}
           </div>
-        </div>
+        )}
       </div>
 
-      {/* Chart Card */}
-      <div className="chart-card bg-[var(--surface)] border border-[var(--border)] rounded-xl p-5 mb-7">
-        <h3 className="text-base font-semibold text-[var(--text)] mb-5 flex items-center gap-2">
-          <i className="fas fa-chart-line"></i> My Attendance (Last 7 Days)
-        </h3>
-        <div className="chart-container h-64 relative">
-          <Bar ref={chartRef} data={getChartData()} options={chartOptions} />
+      {/* Project Details Modal */}
+      {selectedProject && (
+        <div className="fixed inset-0 bg-black/70 flex items-center justify-center z-50 p-4">
+          <div className="bg-[var(--surface)] rounded-xl max-w-2xl w-full max-h-[90vh] overflow-hidden">
+            <div className="flex justify-between items-center p-4 border-b border-[var(--border)]">
+              <h3 className="text-lg font-semibold text-[var(--text)]">
+                <i className="fas fa-project-diagram text-green-500 mr-2"></i>
+                {selectedProject.name}
+              </h3>
+              <button
+                onClick={() => setSelectedProject(null)}
+                className="text-[var(--muted)] hover:text-[var(--text)] transition-colors"
+              >
+                <i className="fas fa-times text-xl"></i>
+              </button>
+            </div>
+            <div className="p-5 overflow-y-auto max-h-[calc(90vh-80px)]">
+              {/* Project Details */}
+              <div className="mb-5">
+                <p className="text-[var(--text-secondary)] text-sm mb-4">
+                  {selectedProject.description || "No description provided"}
+                </p>
+
+                <div className="grid grid-cols-1 md:grid-cols-2 gap-4 mb-4">
+                  {/* Manager Details */}
+                  <div className="bg-[var(--surface2)] rounded-lg p-3">
+                    <label className="text-xs text-[var(--muted)] flex items-center gap-1 mb-2">
+                      <i className="fas fa-user-tie text-green-500"></i> Project
+                      Manager
+                    </label>
+                    <p className="text-sm font-semibold text-[var(--text)]">
+                      {selectedProject.managerName}
+                    </p>
+                    {selectedProject.managerEmail && (
+                      <p className="text-xs text-[var(--muted)] mt-1">
+                        {selectedProject.managerEmail}
+                      </p>
+                    )}
+                  </div>
+
+                  {/* Team Lead Details */}
+                  <div className="bg-[var(--surface2)] rounded-lg p-3">
+                    <label className="text-xs text-[var(--muted)] flex items-center gap-1 mb-2">
+                      <i className="fas fa-users text-blue-500"></i> Team Lead
+                    </label>
+                    <p className="text-sm font-semibold text-[var(--text)]">
+                      {selectedProject.teamLeadName}
+                    </p>
+                    {selectedProject.teamLeadEmail && (
+                      <p className="text-xs text-[var(--muted)] mt-1">
+                        {selectedProject.teamLeadEmail}
+                      </p>
+                    )}
+                  </div>
+
+                  {/* Priority */}
+                  <div className="bg-[var(--surface2)] rounded-lg p-3">
+                    <label className="text-xs text-[var(--muted)] flex items-center gap-1 mb-2">
+                      <i className="fas fa-flag"></i> Priority
+                    </label>
+                    <p>
+                      <span
+                        className={`px-2 py-1 rounded-full text-xs font-semibold ${getPriorityColor(selectedProject.priority)}`}
+                      >
+                        {selectedProject.priority || "Medium"}
+                      </span>
+                    </p>
+                  </div>
+
+                  {/* Status */}
+                  <div className="bg-[var(--surface2)] rounded-lg p-3">
+                    <label className="text-xs text-[var(--muted)] flex items-center gap-1 mb-2">
+                      <i className="fas fa-chart-line"></i> Status
+                    </label>
+                    <p>
+                      <span
+                        className={`px-2 py-1 rounded-full text-xs font-semibold ${getStatusColor(selectedProject.status)}`}
+                      >
+                        {selectedProject.status || "Active"}
+                      </span>
+                    </p>
+                  </div>
+
+                  {/* Assigned Date */}
+                  <div className="bg-[var(--surface2)] rounded-lg p-3 md:col-span-2">
+                    <label className="text-xs text-[var(--muted)] flex items-center gap-1 mb-2">
+                      <i className="fas fa-calendar-alt text-purple-500"></i>{" "}
+                      Assigned On
+                    </label>
+                    <p className="text-sm font-semibold text-[var(--text)]">
+                      {selectedProject.assignedDate}
+                    </p>
+                  </div>
+                </div>
+              </div>
+            </div>
+          </div>
         </div>
-      </div>
+      )}
 
       {/* Recent Activity Section */}
       {dashboardData?.attendance_history &&
@@ -593,7 +703,7 @@ const Dashboard = () => {
                       Punch In
                     </th>
                     <th className="text-left py-3 px-4 text-[var(--muted)] font-semibold">
-                      Punch In Location
+                      Location
                     </th>
                     <th className="text-left py-3 px-4 text-[var(--muted)] font-semibold">
                       Punch Out
@@ -615,12 +725,9 @@ const Dashboard = () => {
                               (1000 * 60 * 60)
                             ).toFixed(1)
                           : "-";
-                      
-                      // Get location from attendance history (different format than today_attendance)
+
                       const locationAddress = attendance.punch_in_address;
-                      const locationLat = attendance.punch_in_latitude;
-                      const locationLng = attendance.punch_in_longitude;
-                      
+
                       return (
                         <tr
                           key={index}
@@ -636,17 +743,10 @@ const Dashboard = () => {
                           </td>
                           <td className="py-3 px-4">
                             {locationAddress && (
-                              <div className="text-xs">
+                              <div className="text-xs text-[var(--muted)]">
                                 <i className="fas fa-map-marker-alt text-green-500 text-xs mr-1"></i>
-                                <span className="text-[var(--muted)]" title={locationAddress}>
-                                  {locationAddress.substring(0, 40)}
-                                  {locationAddress.length > 40 ? "..." : ""}
-                                </span>
-                                {locationLat && locationLng && (
-                                  <div className="text-[10px] text-[var(--muted)] mt-1">
-                                    📍 {parseFloat(locationLat).toFixed(6)}, {parseFloat(locationLng).toFixed(6)}
-                                  </div>
-                                )}
+                                {locationAddress.substring(0, 40)}
+                                {locationAddress.length > 40 ? "..." : ""}
                               </div>
                             )}
                           </td>
@@ -688,7 +788,6 @@ const Dashboard = () => {
         loading={isSubmitting}
       />
 
-      {/* Map Modal */}
       {renderMapModal()}
 
       {/* Toast Notification */}

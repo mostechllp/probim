@@ -157,3 +157,152 @@ export const generateCompanyExpiryPDF = (companies, title, filters = {}) => {
   pdf.addFooter();
   pdf.save(`${title.toLowerCase().replace(/ /g, "_")}_${new Date().toISOString().split("T")[0]}.pdf`);
 };
+
+export const generateCompanyUpcomingRenewalsPDF = (companies, title, filters = {}) => {
+  const pdf = new PDFGenerator();
+  pdf.init("landscape");
+
+  const stats = `Total companies with upcoming renewals: ${companies.length} | Period: ${filters.minDays || 31}-${filters.maxDays || 90} days`;
+  
+  // Create filter summary text
+  let filterText = `Renewal period: ${filters.minDays || 31} to ${filters.maxDays || 90} days from today`;
+  if (filters.search) {
+    filterText += ` | Search: "${filters.search}"`;
+  }
+  
+  pdf.addHeader(title, filterText, { ...filters, stats });
+
+  const columns = [
+    "S.No", 
+    "Company Name", 
+    "Trade License", 
+    "TL Expiry", 
+    "Days Left (TL)", 
+    "Est. Card", 
+    "EC Expiry", 
+    "Days Left (EC)"
+  ];
+
+  const data = companies.map((company, index) => {
+    const tlDays = getDaysDifference(company.trade_license_expiry);
+    const ecDays = getDaysDifference(company.establishment_card_expiry);
+    
+    return [
+      index + 1,
+      company.name,
+      company.trade_license_number || "-",
+      formatDate(company.trade_license_expiry),
+      tlDays !== null && tlDays >= (filters.minDays || 31) && tlDays <= (filters.maxDays || 90) ? `${tlDays} days` : "-",
+      company.establishment_card_number || "-",
+      formatDate(company.establishment_card_expiry),
+      ecDays !== null && ecDays >= (filters.minDays || 31) && ecDays <= (filters.maxDays || 90) ? `${ecDays} days` : "-",
+    ];
+  });
+
+  pdf.addTable(columns, data, 55);
+  pdf.addFooter();
+  pdf.save(`${title.toLowerCase().replace(/ /g, "_")}_${filters.minDays || 31}_${filters.maxDays || 90}days_${new Date().toISOString().split("T")[0]}.pdf`);
+};
+
+export const generateEmployeeUpcomingRenewalsPDF = (employees, title, filters = {}) => {
+  const pdf = new PDFGenerator();
+  pdf.init("landscape");
+
+  // Calculate statistics
+  const totalEmployees = employees.length;
+  const renewing31to45 = employees.filter(emp => {
+    const earliest = getEarliestUpcomingExpiryForEmployee(emp, filters.minDays || 31, filters.maxDays || 90);
+    return earliest && earliest.days >= 31 && earliest.days <= 45;
+  }).length;
+  const renewing46to60 = employees.filter(emp => {
+    const earliest = getEarliestUpcomingExpiryForEmployee(emp, filters.minDays || 31, filters.maxDays || 90);
+    return earliest && earliest.days >= 46 && earliest.days <= 60;
+  }).length;
+  const renewing61to90 = employees.filter(emp => {
+    const earliest = getEarliestUpcomingExpiryForEmployee(emp, filters.minDays || 31, filters.maxDays || 90);
+    return earliest && earliest.days >= 61 && earliest.days <= 90;
+  }).length;
+
+  const stats = `Total: ${totalEmployees} | 31-45 days: ${renewing31to45} | 46-60 days: ${renewing46to60} | 61-90 days: ${renewing61to90}`;
+  
+  // Create filter summary text
+  let filterText = `Renewal period: ${filters.minDays || 31} to ${filters.maxDays || 90} days from today`;
+  if (filters.company && filters.company !== "all") filterText += ` | Company: ${filters.company}`;
+  if (filters.department && filters.department !== "all") filterText += ` | Department: ${filters.department}`;
+  if (filters.search) filterText += ` | Search: "${filters.search}"`;
+  
+  pdf.addHeader(title, filterText, { ...filters, stats });
+
+  const columns = [
+    "S.No", "Emp ID", "Name", "Company", "Department",
+    "Passport Expiry", "Visa Expiry", "Labor Expiry", "EID Expiry", "Days Left (Earliest)"
+  ];
+
+  const data = employees.map((emp, index) => {
+    // Find earliest upcoming expiry
+    const minDays = filters.minDays || 31;
+    const maxDays = filters.maxDays || 90;
+    
+    const expiryItems = [
+      { date: emp.passport_expiry, name: "Passport", key: "passport" },
+      { date: emp.visa_expiry, name: "Visa", key: "visa" },
+      { date: emp.labor_expiry, name: "Labor", key: "labor" },
+      { date: emp.eid_expiry, name: "EID", key: "eid" },
+    ].map(item => ({
+      ...item,
+      days: getDaysDifference(item.date)
+    })).filter(
+      item => item.days !== null && item.days >= minDays && item.days <= maxDays
+    );
+
+    const earliest = expiryItems.length > 0 ? 
+      expiryItems.reduce((min, item) => item.days < min.days ? item : min, expiryItems[0]) : 
+      null;
+
+    // Get the earliest days left display
+    let daysLeftDisplay = "-";
+    if (earliest) {
+      let bgColor = "";
+      if (earliest.days >= 31 && earliest.days <= 45) bgColor = "blue";
+      else if (earliest.days >= 46 && earliest.days <= 60) bgColor = "cyan";
+      // eslint-disable-next-line no-unused-vars
+      else if (earliest.days >= 61 && earliest.days <= 90) bgColor = "green";
+      daysLeftDisplay = `${earliest.days} days (${earliest.name})`;
+    }
+
+    return [
+      index + 1,
+      emp.emp_id || "-",
+      emp.name || "-",
+      emp.company_name || "-",
+      emp.department_name || "-",
+      formatDate(emp.passport_expiry),
+      formatDate(emp.visa_expiry),
+      formatDate(emp.labor_expiry),
+      formatDate(emp.eid_expiry),
+      daysLeftDisplay,
+    ];
+  });
+
+  pdf.addTable(columns, data, 55);
+  pdf.addFooter();
+  pdf.save(`${title.toLowerCase().replace(/ /g, "_")}_${filters.minDays || 31}_${filters.maxDays || 90}days_${new Date().toISOString().split("T")[0]}.pdf`);
+};
+
+// Helper function to get earliest upcoming expiry for an employee
+const getEarliestUpcomingExpiryForEmployee = (employee, minDays, maxDays) => {
+  const expiryItems = [
+    { date: employee.passport_expiry, name: "Passport" },
+    { date: employee.visa_expiry, name: "Visa" },
+    { date: employee.labor_expiry, name: "Labor" },
+    { date: employee.eid_expiry, name: "EID" },
+  ].map(item => ({
+    ...item,
+    days: getDaysDifference(item.date)
+  })).filter(
+    item => item.days !== null && item.days >= minDays && item.days <= maxDays
+  );
+
+  if (expiryItems.length === 0) return null;
+  return expiryItems.reduce((min, item) => item.days < min.days ? item : min, expiryItems[0]);
+};
