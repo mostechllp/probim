@@ -76,6 +76,7 @@ const OrgUpcomingRenewalReport = lazy(
 const AdminWFH = lazy(() => import("./admin/pages/WFH"));
 const Settings = lazy(() => import("./admin/pages/Settings"));
 const RoleManagement = lazy(() => import("./admin/pages/RoleManagement"));
+const Payroll = lazy(() => import("./admin/pages/Payroll"));
 const AddPayroll = lazy(() => import("./admin/pages/AddPayroll"));
 const Onboarding = lazy(() => import("./admin/pages/Onboarding"));
 
@@ -226,6 +227,7 @@ function App() {
           <Route path="leaves/leave-types" element={<LeaveTypeManagement />} />
           <Route path="leaves/allocations" element={<LeaveAllocations />} />
           <Route path="leaves/allocations/:id" element={<EditLeaveAllocation />} />
+          <Route path="payroll" element={<Payroll />} />
           <Route path="payroll/add" element={<AddPayroll />} />
           <Route path="wfh" element={<AdminWFH />} />
           <Route path="settings" element={<Settings />} />
