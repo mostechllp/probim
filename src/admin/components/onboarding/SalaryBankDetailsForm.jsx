@@ -391,7 +391,8 @@ const handleSaveSalaryStructure = () => {
   };
 
   // --- Final Form Submit ---
-  const handleSubmit = (e) => {
+ // --- Final Form Submit ---
+const handleSubmit = (e) => {
   e.preventDefault();
 
   if (!isSalarySaved) {
@@ -416,24 +417,17 @@ const handleSaveSalaryStructure = () => {
     ...computedValues,
     paymentCycle,
     currency,
-    salaryComponents: transformedComponents,  // Send transformed components
+    salaryComponents: transformedComponents,
     isSalarySaved,
-    bankAccounts: bankAccounts.map(bank => ({
-      bankCountry: bank.bankCountry,
-      bankName: bank.bankName,
-      accountNumber: bank.accountNumber,
-      bankIfsc: bank.bankIfsc,
-      bankBranch: bank.bankBranch,
-      bankIban: bank.bankIban,
-      bankSwift: bank.bankSwift
-    }))
+    bankAccounts: bankAccounts // This already has the correct structure
   };
 
+  console.log("[SalaryBankDetailsForm] Saving to Redux:", finalPayload);
+  
   dispatch(updateEmployeeDetails(finalPayload));
   dispatch(setStep(4));
   showToast("Financial details verified and saved!", "success");
 };
-
   const handleBack = () => {
     dispatch(setStep(2)); // Back to Step 2 (Employee Details Form)
   };
