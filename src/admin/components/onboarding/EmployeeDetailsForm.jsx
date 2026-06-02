@@ -39,27 +39,12 @@ const EmployeeDetailsForm = () => {
     defaultValues: employeeDetails,
   });
 
-  const watchSpecialDayEvent = watch("specialDayEvent");
-  const watchSpecialDayDate = watch("specialDayDate");
 
   // Fetch departments and designations on component mount
   useEffect(() => {
     dispatch(fetchDepartments());
     dispatch(fetchDesignations());
   }, [dispatch]);
-
-  // Re-validate fields when their counterparts change to ensure correct validation state
-  useEffect(() => {
-    if (watchSpecialDayEvent !== undefined) {
-      trigger("specialDayDate");
-    }
-  }, [watchSpecialDayEvent, trigger]);
-
-  useEffect(() => {
-    if (watchSpecialDayDate !== undefined) {
-      trigger("specialDayEvent");
-    }
-  }, [watchSpecialDayDate, trigger]);
 
   // Re-initialize form whenever Redux parsed data changes (e.g. after AI resume parsing)
   useEffect(() => {
@@ -361,70 +346,6 @@ const EmployeeDetailsForm = () => {
             
             <div className="md:col-span-2">
               <InputField label="Highest Education" name="education" placeholder="University Degree etc." />
-            </div>
-
-            <div className="space-y-1.5">
-              <label className="block text-sm font-semibold text-gray-700 dark:text-gray-300">
-                Special Day Event
-              </label>
-              <input
-                type="text"
-                placeholder="e.g. Birthday, Work Anniversary"
-                {...register("specialDayEvent", {
-                  validate: (val) => {
-                    const date = getValues("specialDayDate");
-                    if (date && !val?.trim()) {
-                      return "Event name is required when a date is provided";
-                    }
-                    return true;
-                  }
-                })}
-                className={`w-full px-4 py-2.5 bg-white dark:bg-gray-800 border rounded-xl text-gray-900 dark:text-white transition-all duration-200 outline-none ${
-                  errors.specialDayEvent
-                    ? "border-red-500 focus:ring-4 focus:ring-red-500/10 focus:border-red-500"
-                    : "border-gray-200 dark:border-gray-700 focus:border-green-500 focus:ring-4 focus:ring-green-500/10"
-                }`}
-                list="special-days-suggestions"
-              />
-              <datalist id="special-days-suggestions">
-                <option value="Birthday" />
-                <option value="Work Anniversary" />
-                <option value="Wedding Anniversary" />
-              </datalist>
-              {errors.specialDayEvent && (
-                <p className="text-xs font-medium text-red-500 mt-1">{errors.specialDayEvent.message}</p>
-              )}
-            </div>
-
-            <div className="space-y-1.5">
-              <label className="block text-sm font-semibold text-gray-700 dark:text-gray-300">
-                Special Day Date
-              </label>
-              <Controller
-                name="specialDayDate"
-                control={control}
-                rules={{
-                  validate: (val) => {
-                    const event = getValues("specialDayEvent");
-                    if (event && !val) {
-                      return "Date is required when an event is provided";
-                    }
-                    return true;
-                  }
-                }}
-                render={({ field }) => (
-                  <DateInput
-                    {...field}
-                    type="special_day"
-                    placeholder="dd/mm/yyyy"
-                    error={!!errors.specialDayDate}
-                    className="!bg-white dark:!bg-gray-800 !border-gray-200 dark:!border-gray-700 !rounded-xl !text-gray-900 dark:!text-white !px-4 !py-2.5 outline-none focus:border-green-500 focus:ring-4 focus:ring-green-500/10"
-                  />
-                )}
-              />
-              {errors.specialDayDate && (
-                <p className="text-xs font-medium text-red-500 mt-1">{errors.specialDayDate.message}</p>
-              )}
             </div>
           </div>
 
