@@ -1,17 +1,25 @@
 import { useEffect, useState } from 'react';
 import { useDispatch, useSelector } from 'react-redux';
-import { FiX, FiCheckCircle, FiClock, FiSave, FiCalendar, FiSearch, FiChevronLeft, FiChevronRight } from 'react-icons/fi';
+import { FiX, FiCheckCircle, FiClock, FiSave, FiCalendar, FiSearch, FiChevronLeft, FiChevronRight, FiAlertCircle, FiFileText, FiTarget, FiMessageSquare } from 'react-icons/fi';
 import { showToast } from '../common/Toast';
 import apiClient from '../../../utils/apiClient';
 import { TimeInput } from '../common/TimeInput';
-import { fetchTaskReports, setTaskReportsPagination, setTaskReportsSearch, clearTaskReportsError } from '../../store/slices/taskReportsSlice';
+import { fetchTaskReports, setTaskReportsPagination, setTaskReportsSearch, clearTaskReportsError, saveTaskReport } from '../../store/slices/taskReportsSlice';
 
 // Punch Out Modal Component
 const PunchOutModal = ({ isOpen, onClose, onSubmit, loading }) => {
+  const dispatch = useDispatch();
   const [projects, setProjects] = useState([]);
   const [projectTimes, setProjectTimes] = useState({});
   const [loadingProjects, setLoadingProjects] = useState(false);
   const [totalHours, setTotalHours] = useState(0);
+  const [confirmNoProjects, setConfirmNoProjects] = useState(false);
+  
+  // Task report states
+  const [tasksCompleted, setTasksCompleted] = useState('');
+  const [planTomorrow, setPlanTomorrow] = useState('');
+  const [remarks, setRemarks] = useState('');
+  const [savingTaskReport, setSavingTaskReport] = useState(false);
 
   const { user } = useSelector((state) => state.auth);
   const dashboardData = useSelector((state) => state.EmpAttendance?.dashboardData);
@@ -71,23 +79,98 @@ const PunchOutModal = ({ isOpen, onClose, onSubmit, loading }) => {
         setLoadingProjects(false);
       }
     }
+    // Reset confirmation when modal closes
+    return () => {
+      setConfirmNoProjects(false);
+      // Reset task report fields when modal closes
+      setTasksCompleted('');
+      setPlanTomorrow('');
+      setRemarks('');
+    };
   }, [isOpen, dashboardData, user]);
 
   const handleTimeChange = (projectId, time) => {
     setProjectTimes(prev => ({ ...prev, [projectId]: time }));
   };
 
-  const handleSubmit = (e) => {
+  // Handle saving task report
+  const handleSaveTaskReport = async () => {
+    if (!tasksCompleted.trim()) {
+      showToast('Please enter your completed tasks', 'error');
+      return false;
+    }
+    
+    if (!planTomorrow.trim()) {
+      showToast('Please enter your plan for tomorrow', 'error');
+      return false;
+    }
+    
+    setSavingTaskReport(true);
+    try {
+      const result = await dispatch(saveTaskReport({
+        tasks_completed: tasksCompleted,
+        plan_tomorrow: planTomorrow,
+        remarks: remarks
+      })).unwrap();
+      
+      if (result) {
+        showToast('Task report saved successfully!', 'success');
+        return true;
+      }
+      return false;
+    } catch (error) {
+      showToast(error || 'Failed to save task report', 'error');
+      return false;
+    } finally {
+      setSavingTaskReport(false);
+    }
+  };
+
+  const handleSubmit = async (e) => {
     e.preventDefault();
+    
+    // First, save the task report
+    const taskReportSaved = await handleSaveTaskReport();
+    if (!taskReportSaved) {
+      return;
+    }
+    
+    // If no projects assigned
+    if (projects.length === 0) {
+      if (!confirmNoProjects) {
+        setConfirmNoProjects(true);
+        return;
+      }
+      // User confirmed, proceed with punch out
+      onSubmit({ 
+        project_times: {}, 
+        total_hours: 0, 
+        no_projects: true,
+        task_report: {
+          tasks_completed: tasksCompleted,
+          plan_tomorrow: planTomorrow,
+          remarks: remarks
+        }
+      });
+      return;
+    }
     
     // Validate that at least one project has time entered
     const hasTime = Object.values(projectTimes).some(time => time && time !== '00:00');
     if (!hasTime) {
-      showToast('Please enter time worked for at least one project', 'warning');
+      showToast('Please enter time worked for at least one project', 'error');
       return;
     }
     
-    onSubmit({ project_times: projectTimes, total_hours: totalHours });
+    onSubmit({ 
+      project_times: projectTimes, 
+      total_hours: totalHours,
+      task_report: {
+        tasks_completed: tasksCompleted,
+        plan_tomorrow: planTomorrow,
+        remarks: remarks
+      }
+    });
   };
 
   const handleSetAllSame = () => {
@@ -127,7 +210,7 @@ const PunchOutModal = ({ isOpen, onClose, onSubmit, loading }) => {
         <div className="flex justify-between items-center p-5 border-b border-[var(--border)]">
           <div>
             <h3 className="text-xl font-bold text-[var(--text)]">Punch Out</h3>
-            <p className="text-xs text-[var(--muted)] mt-1">Record time spent on each project</p>
+            <p className="text-xs text-[var(--muted)] mt-1">Record your work and tasks for today</p>
           </div>
           <button
             onClick={onClose}
@@ -138,32 +221,93 @@ const PunchOutModal = ({ isOpen, onClose, onSubmit, loading }) => {
         </div>
 
         <form onSubmit={handleSubmit} className="p-5 flex-1 overflow-y-auto">
+          {/* Task Report Section */}
+          <div className="mb-6">
+            <label className="block text-sm font-semibold text-[var(--text)] mb-3">
+              <FiFileText className="inline mr-2 text-green-500" />
+              Daily Task Report
+            </label>
+            
+            <div className="space-y-4">
+              <div>
+                <label className="block text-xs font-medium text-[var(--text)] mb-1">
+                  Tasks Completed Today <span className="text-red-500">*</span>
+                </label>
+                <textarea
+                  value={tasksCompleted}
+                  onChange={(e) => setTasksCompleted(e.target.value)}
+                  placeholder="What tasks did you complete today?"
+                  rows="3"
+                  className="w-full px-4 py-2.5 bg-[var(--surface2)] border border-[var(--border)] rounded-xl text-[var(--text)] text-sm focus:outline-none focus:border-green-500 focus:ring-4 focus:ring-green-500/10 transition-all resize-none"
+                />
+              </div>
+              
+              <div>
+                <label className="block text-xs font-medium text-[var(--text)] mb-1">
+                  Plan for Tomorrow <span className="text-red-500">*</span>
+                </label>
+                <textarea
+                  value={planTomorrow}
+                  onChange={(e) => setPlanTomorrow(e.target.value)}
+                  placeholder="What are your plans for tomorrow?"
+                  rows="2"
+                  className="w-full px-4 py-2.5 bg-[var(--surface2)] border border-[var(--border)] rounded-xl text-[var(--text)] text-sm focus:outline-none focus:border-green-500 focus:ring-4 focus:ring-green-500/10 transition-all resize-none"
+                />
+              </div>
+              
+              <div>
+                <label className="block text-xs font-medium text-[var(--text)] mb-1">
+                  Remarks (Optional)
+                </label>
+                <textarea
+                  value={remarks}
+                  onChange={(e) => setRemarks(e.target.value)}
+                  placeholder="Any additional remarks or comments..."
+                  rows="2"
+                  className="w-full px-4 py-2.5 bg-[var(--surface2)] border border-[var(--border)] rounded-xl text-[var(--text)] text-sm focus:outline-none focus:border-green-500 focus:ring-4 focus:ring-green-500/10 transition-all resize-none"
+                />
+              </div>
+            </div>
+          </div>
+
+          {/* Divider */}
+          <div className="relative my-6">
+            <div className="absolute inset-0 flex items-center">
+              <div className="w-full border-t border-[var(--border)]"></div>
+            </div>
+            <div className="relative flex justify-center text-xs">
+              <span className="px-3 bg-[var(--surface)] text-[var(--muted)]">Project Time Tracking</span>
+            </div>
+          </div>
+
           <div className="mb-4">
             <label className="block text-sm font-semibold text-[var(--text)] mb-2">
               <FiClock className="inline mr-2 text-green-500" />
               Time Worked on Projects
             </label>
-            <p className="text-xs text-[var(--muted)] mb-3">
-              Enter the time you spent working on each project today
-            </p>
             
             {projects.length > 0 && (
-              <div className="flex gap-2 mb-3">
-                <button
-                  type="button"
-                  onClick={handleSetAllSame}
-                  className="text-xs px-3 py-1 rounded-full bg-green-500/10 text-green-500 hover:bg-green-500/20 transition-colors"
-                >
-                  Distribute 8 hours equally
-                </button>
-                <button
-                  type="button"
-                  onClick={handleClearAll}
-                  className="text-xs px-3 py-1 rounded-full bg-red-500/10 text-red-500 hover:bg-red-500/20 transition-colors"
-                >
-                  Clear All
-                </button>
-              </div>
+              <>
+                <p className="text-xs text-[var(--muted)] mb-3">
+                  Enter the time you spent working on each project today
+                </p>
+                <div className="flex gap-2 mb-3">
+                  <button
+                    type="button"
+                    onClick={handleSetAllSame}
+                    className="text-xs px-3 py-1 rounded-full bg-green-500/10 text-green-500 hover:bg-green-500/20 transition-colors"
+                  >
+                    Distribute 8 hours equally
+                  </button>
+                  <button
+                    type="button"
+                    onClick={handleClearAll}
+                    className="text-xs px-3 py-1 rounded-full bg-red-500/10 text-red-500 hover:bg-red-500/20 transition-colors"
+                  >
+                    Clear All
+                  </button>
+                </div>
+              </>
             )}
           </div>
 
@@ -175,12 +319,26 @@ const PunchOutModal = ({ isOpen, onClose, onSubmit, loading }) => {
               </div>
             ) : projects.length === 0 ? (
               <div className="text-center py-8 bg-[var(--surface2)] rounded-xl">
-                <FiClock className="text-4xl text-[var(--muted)] mx-auto mb-2" />
+                <FiAlertCircle className="text-4xl text-[var(--muted)] mx-auto mb-2" />
                 <div className="text-sm text-[var(--muted)]">No projects assigned to you</div>
-                <div className="text-xs text-[var(--muted)] mt-1">You can still punch out without recording time</div>
+                <div className="text-xs text-[var(--muted)] mt-1">You can punch out without recording project time</div>
+                
+                {/* Confirmation checkbox for no projects */}
+                <div className="mt-4 flex items-center justify-center gap-2">
+                  <input
+                    type="checkbox"
+                    id="confirmNoProjects"
+                    checked={confirmNoProjects}
+                    onChange={(e) => setConfirmNoProjects(e.target.checked)}
+                    className="w-4 h-4 text-green-500 rounded border-[var(--border)] focus:ring-green-500"
+                  />
+                  <label htmlFor="confirmNoProjects" className="text-sm text-[var(--text)]">
+                    I confirm I want to punch out (no projects assigned)
+                  </label>
+                </div>
               </div>
             ) : (
-              <div className="space-y-3 max-h-[50vh] overflow-y-auto pr-2">
+              <div className="space-y-3 max-h-[40vh] overflow-y-auto pr-2">
                 {projects.map((project) => (
                   <div 
                     key={project.id} 
@@ -210,7 +368,7 @@ const PunchOutModal = ({ isOpen, onClose, onSubmit, loading }) => {
             )}
           </div>
 
-          {/* Total Hours Summary */}
+          {/* Total Hours Summary - Only show if there are projects */}
           {projects.length > 0 && (
             <div className="mb-6 p-4 bg-green-500/10 rounded-xl border border-green-500/20">
               <div className="flex justify-between items-center">
@@ -220,6 +378,21 @@ const PunchOutModal = ({ isOpen, onClose, onSubmit, loading }) => {
               <div className="text-xs text-[var(--muted)] mt-1">
                 <i className="fas fa-info-circle mr-1"></i>
                 Make sure your total time accurately reflects your work today
+              </div>
+            </div>
+          )}
+
+          {/* Warning for no projects without confirmation */}
+          {projects.length === 0 && !confirmNoProjects && (
+            <div className="mb-6 p-4 bg-yellow-500/10 rounded-xl border border-yellow-500/20">
+              <div className="flex items-center gap-2">
+                <FiAlertCircle className="text-yellow-500" />
+                <span className="text-sm font-semibold text-yellow-600 dark:text-yellow-400">
+                  Please confirm you want to punch out
+                </span>
+              </div>
+              <div className="text-xs text-[var(--muted)] mt-1">
+                You have no projects assigned. Check the confirmation box above to proceed.
               </div>
             </div>
           )}
@@ -234,13 +407,13 @@ const PunchOutModal = ({ isOpen, onClose, onSubmit, loading }) => {
             </button>
             <button
               type="submit"
-              disabled={loading}
+              disabled={loading || savingTaskReport || (projects.length === 0 && !confirmNoProjects)}
               className="flex-1 bg-green-500 border-none text-white py-3 px-8 rounded-full font-semibold text-sm cursor-pointer transition-all flex items-center justify-center gap-2 hover:bg-green-600 hover:-translate-y-0.5 hover:shadow-md disabled:opacity-50 disabled:cursor-not-allowed"
             >
-              {loading ? (
+              {loading || savingTaskReport ? (
                 <>
                   <div className="w-4 h-4 border-2 border-white border-t-transparent rounded-full animate-spin"></div>
-                  Processing...
+                  {savingTaskReport ? 'Saving Report...' : 'Processing...'}
                 </>
               ) : (
                 <>
@@ -386,7 +559,7 @@ const TaskReportsList = () => {
               <th className="text-left py-3 px-4 text-xs font-semibold text-[var(--muted)]">Tasks Completed</th>
               <th className="text-left py-3 px-4 text-xs font-semibold text-[var(--muted)]">Plan for Tomorrow</th>
               <th className="text-left py-3 px-4 text-xs font-semibold text-[var(--muted)]">Remarks</th>
-            </tr>
+             </tr>
           </thead>
           <tbody>
             {currentReports.length === 0 ? (

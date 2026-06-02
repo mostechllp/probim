@@ -63,9 +63,14 @@ const SalaryBankDetailsForm = () => {
     if (details && Object.keys(details).length > 0) {
       if (details.currency) setCurrency(details.currency);
       if (Array.isArray(details.salaryComponents)) {
-        setSalaryComponents(details.salaryComponents);
-        setIsSalarySaved(details.isSalarySaved ?? false);
-      }
+        const localComponents = details.salaryComponents.map(comp => ({
+        id: comp.id || Date.now(),
+        name: comp.component_name || comp.name,
+        price: comp.value || comp.price
+      }));
+      setSalaryComponents(localComponents);
+      setIsSalarySaved(details.isSalarySaved ?? false);
+    }
       if (Array.isArray(details.bankAccounts) && details.bankAccounts.length > 0) {
         setBankAccounts(details.bankAccounts);
       } else if (details.bankName) {
@@ -86,34 +91,40 @@ const SalaryBankDetailsForm = () => {
 
   // --- Helper: Compute aggregate Basic, Allowance, and Total ---
   const computeAggregateSalary = () => {
-    let basicSalary = 0;
-    let otherAllowance = 0;
+  let basicSalary = 0;
+  let otherAllowance = 0;
 
-    // Look for a component name containing "basic" (case-insensitive) to map to basic_salary
-    const basicComponent = salaryComponents.find(comp => 
-      comp.name.toLowerCase().includes("basic")
-    );
+  // Get components from either format (local state has 'name', Redux may have 'component_name')
+  const components = salaryComponents.map(comp => ({
+    name: comp.component_name || comp.name,
+    price: comp.value || comp.price
+  }));
 
-    if (basicComponent) {
-      basicSalary = basicComponent.price;
-      // Other allowance is the sum of all components excluding the basic one
-      otherAllowance = salaryComponents
-        .filter(comp => comp.id !== basicComponent.id)
-        .reduce((sum, comp) => sum + comp.price, 0);
-    } else if (salaryComponents.length > 0) {
-      // Fallback: first component is basic, others are other allowance
-      basicSalary = salaryComponents[0].price;
-      otherAllowance = salaryComponents.slice(1).reduce((sum, comp) => sum + comp.price, 0);
-    }
+  // Look for a component name containing "basic" (case-insensitive) to map to basic_salary
+  const basicComponent = components.find(comp => 
+    comp.name.toLowerCase().includes("basic")
+  );
 
-    const totalMonthlySalary = salaryComponents.reduce((sum, comp) => sum + comp.price, 0);
+  if (basicComponent) {
+    basicSalary = basicComponent.price;
+    // Other allowance is the sum of all components excluding the basic one
+    otherAllowance = components
+      .filter(comp => comp.name !== basicComponent.name)
+      .reduce((sum, comp) => sum + comp.price, 0);
+  } else if (components.length > 0) {
+    // Fallback: first component is basic, others are other allowance
+    basicSalary = components[0].price;
+    otherAllowance = components.slice(1).reduce((sum, comp) => sum + comp.price, 0);
+  }
 
-    return {
-      basicSalary: String(basicSalary),
-      otherAllowance: String(otherAllowance),
-      totalMonthlySalary
-    };
+  const totalMonthlySalary = components.reduce((sum, comp) => sum + comp.price, 0);
+
+  return {
+    basicSalary: String(basicSalary),
+    otherAllowance: String(otherAllowance),
+    totalMonthlySalary
   };
+};
 
   const watchTotalSalary = salaryComponents.reduce((sum, comp) => sum + comp.price, 0);
 
@@ -151,14 +162,33 @@ const SalaryBankDetailsForm = () => {
     setSalaryComponents(prev => prev.filter(c => c.id !== id));
   };
 
-  const handleSaveSalaryStructure = () => {
-    if (salaryComponents.length === 0) {
-      showToast("Please add at least one salary component before saving", "error");
-      return;
-    }
-    setIsSalarySaved(true);
-    showToast("Salary structure saved!", "success");
-  };
+  // In SalaryBankDetailsForm.jsx, update the handleSaveSalaryStructure function:
+
+const handleSaveSalaryStructure = () => {
+  if (salaryComponents.length === 0) {
+    showToast("Please add at least one salary component before saving", "error");
+    return;
+  }
+  
+  // Transform salary components to match backend expected format
+  const transformedComponents = salaryComponents.map(comp => ({
+    component_name: comp.name, 
+    value: comp.price            
+  }));
+  
+  // Update the employeeDetails in Redux with the properly formatted components
+  const computedValues = computeAggregateSalary();
+  dispatch(updateEmployeeDetails({
+    ...computedValues,
+    paymentCycle,
+    currency,
+    salaryComponents: transformedComponents,  // Store transformed components
+    isSalarySaved: true
+  }));
+  
+  setIsSalarySaved(true);
+  showToast("Salary structure saved!", "success");
+};
 
   // --- Actions: Bank Details Validation & Changes ---
   const handleBankCountryChange = (e) => {
@@ -361,36 +391,43 @@ const SalaryBankDetailsForm = () => {
   };
 
   // --- Final Form Submit ---
-  const handleSubmit = (e) => {
-    e.preventDefault();
+ // --- Final Form Submit ---
+const handleSubmit = (e) => {
+  e.preventDefault();
 
-    if (!isSalarySaved) {
-      showToast("Please save your Salary Structure before continuing", "warning");
-      return;
-    }
+  if (!isSalarySaved) {
+    showToast("Please save your Salary Structure before continuing", "warning");
+    return;
+  }
 
-    if (bankAccounts.length === 0) {
-      showToast("Please add at least one Bank Account before continuing", "warning");
-      return;
-    }
+  if (bankAccounts.length === 0) {
+    showToast("Please add at least one Bank Account before continuing", "warning");
+    return;
+  }
 
-    const computedValues = computeAggregateSalary();
-    const cleanIban = bankIban.replace(/\s/g, "");
+  const computedValues = computeAggregateSalary();
+  
+  // Transform salary components to backend format
+  const transformedComponents = salaryComponents.map(comp => ({
+    component_name: comp.name,
+    value: comp.price
+  }));
 
-    const finalPayload = {
-      ...computedValues, // basicSalary, otherAllowance, totalMonthlySalary
-      paymentCycle,
-      currency,
-      salaryComponents,
-      isSalarySaved,
-      bankAccounts
-    };
-
-    dispatch(updateEmployeeDetails(finalPayload));
-    dispatch(setStep(4)); // Proceed to Step 4 (Offer Letter Preview)
-    showToast("Financial details verified and saved!", "success");
+  const finalPayload = {
+    ...computedValues,
+    paymentCycle,
+    currency,
+    salaryComponents: transformedComponents,
+    isSalarySaved,
+    bankAccounts: bankAccounts // This already has the correct structure
   };
 
+  console.log("[SalaryBankDetailsForm] Saving to Redux:", finalPayload);
+  
+  dispatch(updateEmployeeDetails(finalPayload));
+  dispatch(setStep(4));
+  showToast("Financial details verified and saved!", "success");
+};
   const handleBack = () => {
     dispatch(setStep(2)); // Back to Step 2 (Employee Details Form)
   };
