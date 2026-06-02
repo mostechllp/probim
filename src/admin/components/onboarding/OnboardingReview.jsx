@@ -106,7 +106,7 @@ const OnboardingReview = () => {
     
     // Prepare payload matching backend expectations
     const payload = {
-      employee_id: employeeId,
+      user_id: employeeId,
       basic_salary: salaryData.basicSalary || "0",
       other_allowance: salaryData.otherAllowance || "0",
       total_salary: salaryData.totalMonthlySalary || "0",
@@ -125,259 +125,242 @@ const OnboardingReview = () => {
   };
 
   // Step 3: Save bank details
-  const saveBankDetails = async (employeeId, bankData) => {
-    console.log("[Onboarding] Step 3: Saving bank details for employee:", employeeId);
-    
-    const bankAccounts = bankData.bankAccounts || [];
-    
-    if (bankAccounts.length === 0) {
-      console.log("[Onboarding] No bank accounts to save");
-      return { success: true, message: "No bank accounts provided" };
-    }
-    
-    const payload = {
-      employee_id: employeeId,
-      bank_accounts: bankAccounts.map(account => ({
-        bank_country: account.bankCountry,
-        bank_name: account.bankName,
-        account_number: account.accountNumber,
-        ifsc_code: account.bankIfsc || null,
-        branch_name: account.bankBranch || null,
-        iban: account.bankIban || null,
-        swift_code: account.bankSwift || null
-      }))
-    };
-    
-    console.log("[Onboarding] Bank payload:", payload);
-    const response = await apiClient.post("/admin/employees/onboard/banks", payload);
-    console.log("[Onboarding] Bank details saved:", response.data);
-    return response.data;
+  // Step 3: Save bank details - CORRECTED to match backend expectations
+const saveBankDetails = async (userId, bankData) => {
+  console.log("[Onboarding] Step 3: Saving bank details for user:", userId);
+  
+  const bankAccounts = bankData.bankAccounts || [];
+  
+  if (bankAccounts.length === 0) {
+    console.log("[Onboarding] No bank accounts to save");
+    return { success: true, message: "No bank accounts provided" };
+  }
+  
+  // Transform to match backend expected format
+  const payload = {
+    user_id: userId,
+    bank_details: bankAccounts.map(account => ({
+      bank_country: account.bankCountry,
+      bank_name: account.bankName,
+      account_number: account.accountNumber,
+      ifsc_code: account.bankIfsc || null,
+      branch_name: account.bankBranch || null,
+      iban_number: account.bankIban || null,  // Changed from 'iban' to 'iban_number'
+      swift_code: account.bankSwift || null
+    }))
   };
+  
+  console.log("[Onboarding] Bank payload:", JSON.stringify(payload, null, 2));
+  
+  try {
+    const response = await apiClient.post("/admin/employees/onboard/banks", payload);
+    console.log("[Onboarding] Bank details saved response:", response.data);
+    return response.data;
+  } catch (error) {
+    console.error("[Onboarding] Failed to save bank details:", error);
+    console.error("[Onboarding] Error response:", error.response?.data);
+    throw error;
+  }
+};
 
   // Step 4: Complete onboarding
   const completeOnboardingProcess = async (employeeId) => {
     console.log("[Onboarding] Step 4: Completing onboarding for employee:", employeeId);
     const response = await apiClient.post("/admin/employees/onboard/complete", {
-      employee_id: employeeId
+      user_id: employeeId
     });
     console.log("[Onboarding] Onboarding completed:", response.data);
     return response.data;
   };
 
   const handleSubmit = async () => {
-    if (isSubmitting) return;
-    setIsSubmitting(true);
+  if (isSubmitting) return;
+  setIsSubmitting(true);
 
-    try {
-      const hrUser = JSON.parse(localStorage.getItem("hr-user")) || {};
-      const orgId = hrUser?.employee?.organization_id || hrUser?.organization_id || (organizations[0]?.id || "");
-      let companyId = hrUser?.employee?.company_id || hrUser?.company_id || (companies[0]?.id || "");
+  try {
+    const hrUser = JSON.parse(localStorage.getItem("hr-user")) || {};
+    const orgId = hrUser?.employee?.organization_id || hrUser?.organization_id || (organizations[0]?.id || "");
+    let companyId = hrUser?.employee?.company_id || hrUser?.company_id || (companies[0]?.id || "");
 
-      if (!companyId && orgId) {
-        try {
-          const companiesRes = await apiClient.get(`/admin/companies?organization_id=${orgId}`);
-          const fetchedCompanies = companiesRes.data?.data || companiesRes.data;
-          if (Array.isArray(fetchedCompanies) && fetchedCompanies.length > 0) {
-            companyId = fetchedCompanies[0]?.id || "";
-          }
-        } catch (_) {}
-      }
-
-      // Fetch latest roles
-      let activeRoles = [...roles];
+    if (!companyId && orgId) {
       try {
-        const rolesRes = await apiClient.get("/admin/roles");
-        const fetched = rolesRes.data?.data || rolesRes.data;
-        if (Array.isArray(fetched) && fetched.length > 0) {
-          activeRoles = fetched;
+        const companiesRes = await apiClient.get(`/admin/companies?organization_id=${orgId}`);
+        const fetchedCompanies = companiesRes.data?.data || companiesRes.data;
+        if (Array.isArray(fetchedCompanies) && fetchedCompanies.length > 0) {
+          companyId = fetchedCompanies[0]?.id || "";
         }
       } catch (_) {}
+    }
 
-      // Find or create Employee role
-      let employeeRole = activeRoles.find((r) => r.name?.toLowerCase().trim() === "employee") ||
-        activeRoles.find((r) => r.name?.toLowerCase().includes("employee")) ||
-        activeRoles[0] || null;
-
-      if (!employeeRole) {
-        try {
-          const createRes = await apiClient.post("/admin/roles", {
-            name: "Employee",
-            description: "Default Employee Role",
-            status: "active",
-          });
-          const created = createRes.data?.data || createRes.data;
-          if (created?.id) {
-            employeeRole = created;
-            dispatch(fetchRoles());
-          }
-        } catch (createErr) {
-          console.error("Failed to auto-create Employee role:", createErr);
-        }
+    // Fetch latest roles
+    let activeRoles = [...roles];
+    try {
+      const rolesRes = await apiClient.get("/admin/roles");
+      const fetched = rolesRes.data?.data || rolesRes.data;
+      if (Array.isArray(fetched) && fetched.length > 0) {
+        activeRoles = fetched;
       }
+    } catch (_) {}
 
-      // Resolve IDs
-      const matchedDesignation = designations.find(
-        (d) => d.name?.toLowerCase().trim() === (employeeDetails.designation || "").toLowerCase().trim()
-      );
-      const matchedDepartment = departments.find(
-        (d) => d.name?.toLowerCase().trim() === (employeeDetails.department || "").toLowerCase().trim()
-      );
+    // Find or create Employee role
+    let employeeRole = activeRoles.find((r) => r.name?.toLowerCase().trim() === "employee") ||
+      activeRoles.find((r) => r.name?.toLowerCase().includes("employee")) ||
+      activeRoles[0] || null;
 
-      const designation_id = matchedDesignation?.id || designations[0]?.id || null;
-      const department_id = matchedDepartment?.id || departments[0]?.id || null;
-      const role_id = employeeRole?.id || null;
-
-      if (!role_id) {
-        setErrorModal({
-          isOpen: true,
-          title: "System Configuration Required",
-          errors: [{
-            field: "Employee Role Missing",
-            message: "No 'Employee' role exists in the system. Please contact HR administrator.",
-          }],
-        });
-        showToast("Onboarding failed: No Employee role found in the system.", "error");
-        setIsSubmitting(false);
-        return;
-      }
-
-      // Parse full name
-      const fullName = (employeeDetails.fullName || "").trim();
-      const parts = fullName.split(" ");
-      const first_name = parts[0] || "Unknown";
-      const last_name = parts.slice(1).join(" ") || "";
-
-      // Generate DOB and Employee ID
-      let dob = "";
-      if (employeeDetails.specialDayEvent?.toLowerCase().trim() === "birthday" && employeeDetails.specialDayDate) {
-        dob = employeeDetails.specialDayDate;
-        if (dob.match(/^\d{2}\/\d{2}\/\d{4}$/)) {
-          const [day, month, year] = dob.split("/");
-          dob = `${year}-${month}-${day}`;
-        }
-      } else {
-        dob = generateRandomDob();
-      }
-      const generatedEmployeeId = generateEmployeeId(dob, employeeDetails.joiningDate);
-
-      // Clean phone number
-      const cleanPhone = (employeeDetails.phone || "")
-        .replace(/\+/g, "")
-        .replace(/[\s\-]/g, "")
-        .trim();
-
-      // Nationality mapping
-      const nationalityMap = {
-        "india": "Indian",
-        "pakistan": "Pakistani",
-        "philippines": "Filipino",
-        "united arab emirates": "Emirati",
-        "united kingdom": "British",
-        "united states": "American",
-      };
-      const rawNationality = (employeeDetails.nationality || "Indian").trim();
-      const candidateNationality = nationalityMap[rawNationality.toLowerCase()] || rawNationality;
-
-      // Normalize joining date
-      let joiningDate = employeeDetails.joiningDate || "";
-      if (joiningDate.match(/^\d{2}\/\d{2}\/\d{4}$/)) {
-        const [day, month, year] = joiningDate.split("/");
-        joiningDate = `${year}-${month}-${day}`;
-      }
-
-      // Build employee details payload
-      const employeeFormData = new FormData();
-      employeeFormData.append("first_name", first_name);
-      employeeFormData.append("last_name", last_name);
-      employeeFormData.append("employee_id", generatedEmployeeId);
-      employeeFormData.append("gender", "female");
-      employeeFormData.append("dob", dob);
-      employeeFormData.append("marital_status", "single");
-      employeeFormData.append("personal_email", employeeDetails.email || "");
-      employeeFormData.append("phone", cleanPhone);
-      employeeFormData.append("personal_number", cleanPhone);
-      employeeFormData.append("joining_date", joiningDate);
-      employeeFormData.append("nationality", candidateNationality);
-      employeeFormData.append("organization_id", orgId ? String(parseInt(orgId)) : "");
-      employeeFormData.append("company_id", companyId ? String(parseInt(companyId)) : "");
-      employeeFormData.append("department_id", department_id ? String(parseInt(department_id)) : "");
-      employeeFormData.append("designation_id", designation_id ? String(parseInt(designation_id)) : "");
-      employeeFormData.append("role_id", String(parseInt(role_id)));
-      employeeFormData.append("type", "employee");
-      employeeFormData.append("status", "onboarding");
-      employeeFormData.append("address", employeeDetails.address || "");
-      employeeFormData.append("experience_level", employeeDetails.experience || "");
-      employeeFormData.append("key_skills", employeeDetails.skills || "");
-      employeeFormData.append("highest_education", employeeDetails.education || "");
-
-      if (employeeDetails.specialDayEvent && employeeDetails.specialDayEvent.trim() && employeeDetails.specialDayDate) {
-        let specDate = employeeDetails.specialDayDate.trim();
-        if (specDate.match(/^\d{2}\/\d{2}\/\d{4}$/)) {
-          const [day, month, year] = specDate.split("/");
-          specDate = `${year}-${month}-${day}`;
-        }
-        employeeFormData.append("special_days_name[]", employeeDetails.specialDayEvent.trim());
-        employeeFormData.append("special_days_date[]", specDate);
-      }
-
-      console.log("[Onboarding] Submitting employee details...");
-      let createdEmployee;
+    if (!employeeRole) {
       try {
-        const createRes = await saveEmployeeDetails(employeeFormData);
-        createdEmployee = createRes.data || createRes;
-        const newEmployeeId = createdEmployee.id || createdEmployee.employee_id;
-        setEmployeeId(newEmployeeId);
-        console.log("[Onboarding] Employee created with ID:", newEmployeeId);
-      } catch (error) {
-        console.error("[Onboarding] Failed to create employee:", error);
-        const errData = error?.response?.data ?? {};
-        
-        if (errData?.errors && Object.keys(errData.errors).length > 0) {
-          const fieldLabels = {
-            first_name: "First Name",
-            last_name: "Last Name",
-            employee_id: "Employee ID",
-            personal_email: "Email Address",
-            phone: "Phone Number",
-            joining_date: "Joining Date",
-            nationality: "Nationality",
-            department_id: "Department",
-            designation_id: "Designation",
-            role_id: "Role",
-          };
-          const errorList = Object.entries(errData.errors).map(([field, msgs]) => ({
-            field: fieldLabels[field] || field.replace(/_/g, " "),
-            message: Array.isArray(msgs) ? msgs[0] : msgs,
-          }));
-          setErrorModal({
-            isOpen: true,
-            title: "Unable to Create Employee",
-            errors: errorList,
-          });
-        } else {
-          setErrorModal({
-            isOpen: true,
-            title: "Unable to Create Employee",
-            errors: [{ field: "Action Required", message: errData?.message || "Failed to create employee record" }],
-          });
+        const createRes = await apiClient.post("/admin/roles", {
+          name: "Employee",
+          description: "Default Employee Role",
+          status: "active",
+        });
+        const created = createRes.data?.data || createRes.data;
+        if (created?.id) {
+          employeeRole = created;
+          dispatch(fetchRoles());
         }
-        showToast("Employee creation failed. Please fix the issue and try again.", "error");
-        setIsSubmitting(false);
-        return;
+      } catch (createErr) {
+        console.error("Failed to auto-create Employee role:", createErr);
       }
+    }
 
-      const newEmployeeId = createdEmployee.id || createdEmployee.employee_id;
+    // Resolve IDs
+    const matchedDesignation = designations.find(
+      (d) => d.name?.toLowerCase().trim() === (employeeDetails.designation || "").toLowerCase().trim()
+    );
+    const matchedDepartment = departments.find(
+      (d) => d.name?.toLowerCase().trim() === (employeeDetails.department || "").toLowerCase().trim()
+    );
+
+    const designation_id = matchedDesignation?.id || designations[0]?.id || null;
+    const department_id = matchedDepartment?.id || departments[0]?.id || null;
+    const role_id = employeeRole?.id || null;
+
+    if (!role_id) {
+      setErrorModal({
+        isOpen: true,
+        title: "System Configuration Required",
+        errors: [{
+          field: "Employee Role Missing",
+          message: "No 'Employee' role exists in the system. Please contact HR administrator.",
+        }],
+      });
+      showToast("Onboarding failed: No Employee role found in the system.", "error");
+      setIsSubmitting(false);
+      return;
+    }
+
+    // Parse full name
+    const fullName = (employeeDetails.fullName || "").trim();
+    const parts = fullName.split(" ");
+    const first_name = parts[0] || "Unknown";
+    const last_name = parts.slice(1).join(" ") || "";
+
+    // Generate DOB and Employee ID
+    let dob = "";
+    if (employeeDetails.specialDayEvent?.toLowerCase().trim() === "birthday" && employeeDetails.specialDayDate) {
+      dob = employeeDetails.specialDayDate;
+      if (dob.match(/^\d{2}\/\d{2}\/\d{4}$/)) {
+        const [day, month, year] = dob.split("/");
+        dob = `${year}-${month}-${day}`;
+      }
+    } else {
+      dob = generateRandomDob();
+    }
+    const generatedEmployeeId = generateEmployeeId(dob, employeeDetails.joiningDate);
+
+    // Clean phone number
+    const cleanPhone = (employeeDetails.phone || "")
+      .replace(/\+/g, "")
+      .replace(/[\s\-]/g, "")
+      .trim();
+
+    // Nationality mapping
+    const nationalityMap = {
+      "india": "Indian",
+      "pakistan": "Pakistani",
+      "philippines": "Filipino",
+      "united arab emirates": "Emirati",
+      "united kingdom": "British",
+      "united states": "American",
+    };
+    const rawNationality = (employeeDetails.nationality || "Indian").trim();
+    const candidateNationality = nationalityMap[rawNationality.toLowerCase()] || rawNationality;
+
+    // Normalize joining date
+    let joiningDate = employeeDetails.joiningDate || "";
+    if (joiningDate.match(/^\d{2}\/\d{2}\/\d{4}$/)) {
+      const [day, month, year] = joiningDate.split("/");
+      joiningDate = `${year}-${month}-${day}`;
+    }
+
+    // Build employee details payload
+    const employeeFormData = new FormData();
+    employeeFormData.append("first_name", first_name);
+    employeeFormData.append("last_name", last_name);
+    employeeFormData.append("employee_id", generatedEmployeeId);
+    employeeFormData.append("gender", "female");
+    employeeFormData.append("dob", dob);
+    employeeFormData.append("marital_status", "single");
+    employeeFormData.append("personal_email", employeeDetails.email || "");
+    employeeFormData.append("phone", cleanPhone);
+    employeeFormData.append("personal_number", cleanPhone);
+    employeeFormData.append("joining_date", joiningDate);
+    employeeFormData.append("nationality", candidateNationality);
+    employeeFormData.append("organization_id", orgId ? String(parseInt(orgId)) : "");
+    employeeFormData.append("company_id", companyId ? String(parseInt(companyId)) : "");
+    employeeFormData.append("department_id", department_id ? String(parseInt(department_id)) : "");
+    employeeFormData.append("designation_id", designation_id ? String(parseInt(designation_id)) : "");
+    employeeFormData.append("role_id", String(parseInt(role_id)));
+    employeeFormData.append("type", "employee");
+    employeeFormData.append("status", "onboarding");
+    employeeFormData.append("address", employeeDetails.address || "");
+    employeeFormData.append("experience_level", employeeDetails.experience || "");
+    employeeFormData.append("key_skills", employeeDetails.skills || "");
+    employeeFormData.append("highest_education", employeeDetails.education || "");
+
+    if (employeeDetails.specialDayEvent && employeeDetails.specialDayEvent.trim() && employeeDetails.specialDayDate) {
+      let specDate = employeeDetails.specialDayDate.trim();
+      if (specDate.match(/^\d{2}\/\d{2}\/\d{4}$/)) {
+        const [day, month, year] = specDate.split("/");
+        specDate = `${year}-${month}-${day}`;
+      }
+      employeeFormData.append("special_days_name[]", employeeDetails.specialDayEvent.trim());
+      employeeFormData.append("special_days_date[]", specDate);
+    }
+
+    console.log("[Onboarding] Submitting employee details...");
+    let createdEmployee;
+    try {
+      const createRes = await saveEmployeeDetails(employeeFormData);
+      createdEmployee = createRes.data || createRes;
+      const employeeId = createdEmployee.id || createdEmployee.employee_id;
+      const userId = createdEmployee.user_id; // IMPORTANT: Get the user_id
       
-      // Save salary details with the correct payload structure
+      setEmployeeId(employeeId);
+      console.log("[Onboarding] Employee created - Employee ID:", employeeId, "User ID:", userId);
+      
+      // Validate we have user_id before proceeding
+      if (!userId) {
+        throw new Error("No user_id returned from employee creation");
+      }
+      
+      // Save salary details with user_id
       console.log("[Onboarding] Saving salary details...");
       try {
-        await saveSalaryDetails(newEmployeeId, {
+        // Transform salary components to backend format if needed
+        const salaryComponentsForApi = (employeeDetails.salaryComponents || []).map(comp => ({
+          component_name: comp.component_name || comp.name,
+          value: comp.value || comp.price
+        }));
+        
+        await saveSalaryDetails(userId, {  // ✅ Use userId
           basicSalary: employeeDetails.basicSalary,
           otherAllowance: employeeDetails.otherAllowance,
           totalMonthlySalary: employeeDetails.totalMonthlySalary,
           paymentCycle: employeeDetails.paymentCycle,
           currency: employeeDetails.currency,
-          salaryComponents: employeeDetails.salaryComponents || []
+          salaryComponents: salaryComponentsForApi
         });
         console.log("[Onboarding] Salary details saved successfully");
       } catch (error) {
@@ -398,44 +381,95 @@ const OnboardingReview = () => {
         }
       }
 
-      // Save bank details
+      // Save bank details with user_id
       console.log("[Onboarding] Saving bank details...");
       try {
-        await saveBankDetails(newEmployeeId, {
+        await saveBankDetails(userId, {  // ✅ Use userId
           bankAccounts: employeeDetails.bankAccounts || []
         });
         console.log("[Onboarding] Bank details saved successfully");
       } catch (error) {
         console.error("[Onboarding] Failed to save bank details:", error);
-        showToast("Bank details saved, but there was an issue. Please review.", "warning");
+        const errorData = error?.response?.data;
+        if (errorData?.errors) {
+          const errorList = Object.entries(errorData.errors).map(([field, msgs]) => ({
+            field: field.replace(/_/g, " "),
+            message: Array.isArray(msgs) ? msgs[0] : msgs,
+          }));
+          setErrorModal({
+            isOpen: true,
+            title: "Bank Details Error",
+            errors: errorList,
+          });
+        } else {
+          showToast(errorData?.message || "Bank details saved, but there was an issue. Please review.", "warning");
+        }
       }
 
-      // Complete onboarding
+      // Complete onboarding with user_id
       console.log("[Onboarding] Completing onboarding process...");
       try {
-        await completeOnboardingProcess(newEmployeeId);
+        await completeOnboardingProcess(userId);  // ✅ Use userId
         console.log("[Onboarding] Onboarding completed successfully!");
         
         dispatch(fetchEmployees());
         dispatch(completeOnboarding());
         showToast("Onboarding completed successfully! Employee has been added to the system.", "success");
+        
       } catch (error) {
         console.error("[Onboarding] Failed to complete onboarding:", error);
-        showToast("Employee created, but onboarding completion failed. Please contact support.", "error");
+        const errorData = error?.response?.data;
+        showToast(errorData?.message || "Employee created, but onboarding completion failed. Please contact support.", "error");
         dispatch(completeOnboarding());
       }
-
+      
     } catch (error) {
-      console.error("[Onboarding] Unexpected error:", error);
-      setErrorModal({
-        isOpen: true,
-        title: "Something Went Wrong",
-        errors: [{ field: "Error", message: "An unexpected error occurred. Please try again." }],
-      });
-    } finally {
-      setIsSubmitting(false);
+      console.error("[Onboarding] Failed to create employee:", error);
+      const errData = error?.response?.data ?? {};
+      
+      if (errData?.errors && Object.keys(errData.errors).length > 0) {
+        const fieldLabels = {
+          first_name: "First Name",
+          last_name: "Last Name",
+          employee_id: "Employee ID",
+          personal_email: "Email Address",
+          phone: "Phone Number",
+          joining_date: "Joining Date",
+          nationality: "Nationality",
+          department_id: "Department",
+          designation_id: "Designation",
+          role_id: "Role",
+        };
+        const errorList = Object.entries(errData.errors).map(([field, msgs]) => ({
+          field: fieldLabels[field] || field.replace(/_/g, " "),
+          message: Array.isArray(msgs) ? msgs[0] : msgs,
+        }));
+        setErrorModal({
+          isOpen: true,
+          title: "Unable to Create Employee",
+          errors: errorList,
+        });
+      } else {
+        setErrorModal({
+          isOpen: true,
+          title: "Unable to Create Employee",
+          errors: [{ field: "Action Required", message: errData?.message || "Failed to create employee record" }],
+        });
+      }
+      showToast("Employee creation failed. Please fix the issue and try again.", "error");
     }
-  };
+
+  } catch (error) {
+    console.error("[Onboarding] Unexpected error:", error);
+    setErrorModal({
+      isOpen: true,
+      title: "Something Went Wrong",
+      errors: [{ field: "Error", message: "An unexpected error occurred. Please try again." }],
+    });
+  } finally {
+    setIsSubmitting(false);
+  }
+};
 
   const handleBack = () => {
     dispatch(setStep(4));

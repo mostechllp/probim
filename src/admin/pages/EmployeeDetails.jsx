@@ -20,11 +20,20 @@ import {
   FiHome,
   FiCalendar,
   FiAward,
+  FiDollarSign,
+  FiCreditCard as FiCreditCardIcon,
+  FiGlobe as FiGlobeIcon,
+  FiSave,
+  FiTrash2,
+  FiPlus,
+  FiX,
 } from "react-icons/fi";
 import { FaIdCard, FaVenusMars, FaPassport } from "react-icons/fa";
 import { fetchOrganizations } from "../store/slices/organizationSlice";
 import { fetchCompanies } from "../store/slices/companySlice";
 import { fetchRoles } from "../store/slices/roleSlice";
+import apiClient from "../../utils/apiClient";
+import ConfirmModal from "../components/common/ConfirmModal";
 
 const EmployeeDetails = () => {
   const navigate = useNavigate();
@@ -32,6 +41,23 @@ const EmployeeDetails = () => {
   const { id } = useParams();
   const [loading, setLoading] = useState(true);
   const [activeTab, setActiveTab] = useState("basic");
+  const [editingSalaryComponent, setEditingSalaryComponent] = useState(null);
+  const [editingBankDetail, setEditingBankDetail] = useState(null);
+  const [showAddComponent, setShowAddComponent] = useState(false);
+  const [showAddBank, setShowAddBank] = useState(false);
+  const [newComponent, setNewComponent] = useState({
+    component_name: "",
+    value: "",
+  });
+  const [newBank, setNewBank] = useState({
+    bank_country: "India",
+    bank_name: "",
+    account_number: "",
+    ifsc_code: "",
+    branch_name: "",
+    iban_number: "",
+    swift_code: "",
+  });
 
   const { currentEmployee } = useSelector((state) => state.employees || {});
   const { organizations = [] } = useSelector(
@@ -39,15 +65,22 @@ const EmployeeDetails = () => {
   );
   const { roles = [] } = useSelector((state) => state.roles || {});
 
+  const [confirmModal, setConfirmModal] = useState({
+    isOpen: false,
+    type: null, // 'salary' or 'bank'
+    id: null,
+    title: "",
+    message: "",
+    loading: false,
+  });
+
   useEffect(() => {
     if (id) {
-      // eslint-disable-next-line react-hooks/immutability
       fetchEmployeeData();
     }
   }, [dispatch, id]);
 
   useEffect(() => {
-    // Fetch organizations, companies, and roles for display
     dispatch(fetchOrganizations());
     dispatch(fetchCompanies());
     dispatch(fetchRoles());
@@ -75,6 +108,316 @@ const EmployeeDetails = () => {
       showToast("Failed to load employee details", error);
     } finally {
       setLoading(false);
+    }
+  };
+
+  const handleDeleteSalaryComponentClick = (componentId, componentName) => {
+    setConfirmModal({
+      isOpen: true,
+      type: "salary",
+      id: componentId,
+      title: "Delete Salary Component",
+      message: `Are you sure you want to delete "${componentName}"? This action cannot be undone.`,
+      loading: false,
+    });
+  };
+
+  // Bank Detail Delete - Open confirmation modal
+  const handleDeleteBankDetailClick = (bankId, bankName) => {
+    setConfirmModal({
+      isOpen: true,
+      type: "bank",
+      id: bankId,
+      title: "Delete Bank Account",
+      message: `Are you sure you want to delete "${bankName}" bank account? This action cannot be undone.`,
+      loading: false,
+    });
+  };
+
+  // Actual delete execution
+  const executeDelete = async () => {
+    const { type, id } = confirmModal;
+
+    setConfirmModal((prev) => ({ ...prev, loading: true }));
+
+    try {
+      if (type === "salary") {
+        const response = await apiClient.delete(
+          `/admin/salary-components/${id}`,
+        );
+        if (response.data.status === "success") {
+          showToast("Salary component deleted successfully", "success");
+          fetchEmployeeData(); // Refresh data
+          setConfirmModal({
+            isOpen: false,
+            type: null,
+            id: null,
+            title: "",
+            message: "",
+            loading: false,
+          });
+        } else {
+          showToast(
+            response.data.message || "Failed to delete salary component",
+            "error",
+          );
+          setConfirmModal((prev) => ({ ...prev, loading: false }));
+        }
+      } else if (type === "bank") {
+        const response = await apiClient.delete(`/admin/bank-details/${id}`);
+        if (response.data.status === "success") {
+          showToast("Bank details deleted successfully", "success");
+          fetchEmployeeData(); // Refresh data
+          setConfirmModal({
+            isOpen: false,
+            type: null,
+            id: null,
+            title: "",
+            message: "",
+            loading: false,
+          });
+        } else {
+          showToast(
+            response.data.message || "Failed to delete bank details",
+            "error",
+          );
+          setConfirmModal((prev) => ({ ...prev, loading: false }));
+        }
+      }
+    } catch (error) {
+      console.error("Error deleting:", error);
+      showToast(error.response?.data?.message || "Failed to delete", "error");
+      setConfirmModal((prev) => ({ ...prev, loading: false }));
+    }
+  };
+
+  // Close modal
+  const closeConfirmModal = () => {
+    setConfirmModal({
+      isOpen: false,
+      type: null,
+      id: null,
+      title: "",
+      message: "",
+      loading: false,
+    });
+  };
+
+  // Salary Component CRUD Operations
+  const handleUpdateSalaryComponent = async (componentId, updatedData) => {
+    try {
+      const response = await apiClient.put(
+        `/admin/salary-components/${componentId}`,
+        {
+          component_name: updatedData.component_name,
+          value: updatedData.value,
+        },
+      );
+      if (response.data.status === "success") {
+        showToast("Salary component updated successfully", "success");
+        setEditingSalaryComponent(null);
+        fetchEmployeeData(); // Refresh data
+      } else {
+        showToast(
+          response.data.message || "Failed to update salary component",
+          "error",
+        );
+      }
+    } catch (error) {
+      console.error("Error updating salary component:", error);
+      showToast(
+        error.response?.data?.message || "Failed to update salary component",
+        "error",
+      );
+    }
+  };
+
+  const handleAddSalaryComponent = async () => {
+    if (!newComponent.component_name || !newComponent.value) {
+      showToast("Please fill in all fields", "error");
+      return;
+    }
+
+    try {
+      // First, get the current salary components
+      const currentComponents = currentEmployee.salary_components || [];
+
+      // Add the new component
+      const updatedComponents = [
+        ...currentComponents,
+        {
+          component_name: newComponent.component_name,
+          value: parseFloat(newComponent.value).toFixed(2),
+        },
+      ];
+
+      // Calculate totals
+      const totalSalary = updatedComponents.reduce(
+        (sum, comp) => sum + parseFloat(comp.value),
+        0,
+      );
+
+      // Find basic salary component (or use first component as basic)
+      const basicComponent = updatedComponents.find((comp) =>
+        comp.component_name.toLowerCase().includes("basic"),
+      );
+
+      const basicSalary = basicComponent
+        ? basicComponent.value
+        : updatedComponents[0]?.value || "0";
+      const otherAllowance = updatedComponents
+        .filter((comp) => !comp.component_name.toLowerCase().includes("basic"))
+        .reduce((sum, comp) => sum + parseFloat(comp.value), 0);
+
+      // Prepare full salary payload for onboarding endpoint
+      const payload = {
+        user_id: currentEmployee.user_id || currentEmployee.user?.id,
+        basic_salary: basicSalary.toString(),
+        other_allowance: otherAllowance.toString(),
+        total_salary: totalSalary.toString(),
+        payment_cycle: currentEmployee.payment_cycle || "Monthly",
+        currency: currentEmployee.currency || "AED",
+        salary_components: updatedComponents,
+      };
+
+      console.log("Submitting salary update:", payload);
+
+      const response = await apiClient.post(
+        "/admin/employees/onboard/salary",
+        payload,
+      );
+
+      if (response.data.status === "success") {
+        showToast("Salary component added successfully", "success");
+        setShowAddComponent(false);
+        setNewComponent({ component_name: "", value: "" });
+        fetchEmployeeData(); // Refresh data
+      } else {
+        showToast(
+          response.data.message || "Failed to add salary component",
+          "error",
+        );
+      }
+    } catch (error) {
+      console.error("Error adding salary component:", error);
+      showToast(
+        error.response?.data?.message || "Failed to add salary component",
+        "error",
+      );
+    }
+  };
+
+  // Add new bank
+  // Add new bank - Preserve existing banks
+  const handleAddBankDetail = async () => {
+    if (!newBank.bank_name || !newBank.account_number) {
+      showToast("Please fill in all required fields", "error");
+      return;
+    }
+
+    // Validate based on country
+    if (newBank.bank_country === "India" && !newBank.ifsc_code) {
+      showToast("IFSC Code is required for Indian bank accounts", "error");
+      return;
+    }
+    if (newBank.bank_country === "UAE" && !newBank.iban_number) {
+      showToast("IBAN Number is required for UAE bank accounts", "error");
+      return;
+    }
+
+    try {
+      // Get existing bank details
+      const existingBanks = currentEmployee.bank_details || [];
+
+      // Format the new bank
+      const newBankFormatted = {
+        bank_country: newBank.bank_country,
+        bank_name: newBank.bank_name,
+        account_number: newBank.account_number,
+        ifsc_code: newBank.bank_country === "India" ? newBank.ifsc_code : null,
+        branch_name:
+          newBank.bank_country === "India" ? newBank.branch_name : null,
+        iban_number:
+          newBank.bank_country === "UAE" ? newBank.iban_number : null,
+        swift_code: newBank.bank_country === "UAE" ? newBank.swift_code : null,
+      };
+
+      // Combine existing banks with the new bank
+      const allBanks = [...existingBanks, newBankFormatted];
+
+      // Prepare payload with ALL bank details (existing + new)
+      const payload = {
+        user_id: currentEmployee.user_id || currentEmployee.user?.id,
+        bank_details: allBanks.map((bank) => ({
+          bank_country: bank.bank_country,
+          bank_name: bank.bank_name,
+          account_number: bank.account_number,
+          ifsc_code: bank.ifsc_code || null,
+          branch_name: bank.branch_name || null,
+          iban_number: bank.iban_number || null,
+          swift_code: bank.swift_code || null,
+        })),
+      };
+
+      console.log("Adding new bank while preserving existing ones:", payload);
+
+      const response = await apiClient.post(
+        "/admin/employees/onboard/banks",
+        payload,
+      );
+
+      if (response.data.status === "success") {
+        showToast("Bank details added successfully", "success");
+        setShowAddBank(false);
+        setNewBank({
+          bank_country: "India",
+          bank_name: "",
+          account_number: "",
+          ifsc_code: "",
+          branch_name: "",
+          iban_number: "",
+          swift_code: "",
+        });
+        fetchEmployeeData(); // Refresh data
+      } else {
+        showToast(
+          response.data.message || "Failed to add bank details",
+          "error",
+        );
+      }
+    } catch (error) {
+      console.error("Error adding bank details:", error);
+      showToast(
+        error.response?.data?.message || "Failed to add bank details",
+        "error",
+      );
+    }
+  };
+
+  // Update existing bank - Use bank-details PUT endpoint
+  const handleUpdateBankDetail = async (bankId, updatedData) => {
+    try {
+      const response = await apiClient.put(
+        `/admin/bank-details/${bankId}`,
+        updatedData,
+      );
+
+      if (response.data.status === "success") {
+        showToast("Bank details updated successfully", "success");
+        setEditingBankDetail(null);
+        fetchEmployeeData(); // Refresh data
+      } else {
+        showToast(
+          response.data.message || "Failed to update bank details",
+          "error",
+        );
+      }
+    } catch (error) {
+      console.error("Error updating bank details:", error);
+      showToast(
+        error.response?.data?.message || "Failed to update bank details",
+        "error",
+      );
     }
   };
 
@@ -206,6 +549,7 @@ const EmployeeDetails = () => {
 
   const tabs = [
     { id: "basic", label: "Basic Info", icon: <FiUser /> },
+    { id: "salary", label: "Salary & Bank", icon: <FiDollarSign /> },
     { id: "passport", label: "Passport", icon: <FaPassport /> },
     { id: "visa", label: "Visa & Labor", icon: <FiCreditCard /> },
     { id: "eid", label: "EID", icon: <FaIdCard /> },
@@ -358,15 +702,15 @@ const EmployeeDetails = () => {
                       currentEmployee.user?.status === "active"
                         ? "bg-green-100 text-green-700"
                         : currentEmployee.user?.status === "onboarding"
-                        ? "bg-amber-100 text-amber-700"
-                        : "bg-red-100 text-red-700"
+                          ? "bg-amber-100 text-amber-700"
+                          : "bg-red-100 text-red-700"
                     }`}
                   >
                     {currentEmployee.user?.status === "active"
                       ? "Active"
                       : currentEmployee.user?.status === "onboarding"
-                      ? "Onboarding"
-                      : "Inactive"}
+                        ? "Onboarding"
+                        : "Inactive"}
                   </span>
                   <span className="px-2 py-1 bg-blue-100 text-blue-700 rounded-full text-xs font-semibold">
                     ID: {currentEmployee.employee_id}
@@ -626,6 +970,673 @@ const EmployeeDetails = () => {
                     );
                   })()}
                 </div>
+              </div>
+            )}
+
+            {/* Salary & Bank Details Tab */}
+            {activeTab === "salary" && (
+              <div>
+                {/* Salary Information Section */}
+                <div className="flex justify-between items-center mb-4">
+                  <h3 className="text-lg font-semibold text-gray-800 flex items-center gap-2">
+                    <FiDollarSign className="text-green-500" /> Salary
+                    Information
+                  </h3>
+                  <button
+                    onClick={() => setShowAddComponent(true)}
+                    className="px-3 py-1.5 bg-green-500 text-white rounded-lg text-sm hover:bg-green-600 transition-colors flex items-center gap-1"
+                  >
+                    <FiPlus size={14} /> Add Component
+                  </button>
+                </div>
+
+                {/* Add Salary Component Modal */}
+                {showAddComponent && (
+                  <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50 p-4">
+                    <div className="bg-white rounded-xl max-w-md w-full p-6">
+                      <div className="flex justify-between items-center mb-4">
+                        <h3 className="text-lg font-semibold">
+                          Add Salary Component
+                        </h3>
+                        <button
+                          onClick={() => setShowAddComponent(false)}
+                          className="text-gray-400 hover:text-gray-600"
+                        >
+                          <FiX size={20} />
+                        </button>
+                      </div>
+                      <div className="space-y-4">
+                        <input
+                          type="text"
+                          placeholder="Component Name (e.g., Basic Salary)"
+                          value={newComponent.component_name}
+                          onChange={(e) =>
+                            setNewComponent({
+                              ...newComponent,
+                              component_name: e.target.value,
+                            })
+                          }
+                          className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-green-500 focus:border-green-500"
+                        />
+                        <input
+                          type="number"
+                          placeholder="Amount"
+                          value={newComponent.value}
+                          onChange={(e) =>
+                            setNewComponent({
+                              ...newComponent,
+                              value: e.target.value,
+                            })
+                          }
+                          className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-green-500 focus:border-green-500"
+                        />
+                        <button
+                          onClick={handleAddSalaryComponent}
+                          className="w-full bg-green-500 text-white py-2 rounded-lg hover:bg-green-600 transition-colors"
+                        >
+                          Add Component
+                        </button>
+                      </div>
+                    </div>
+                  </div>
+                )}
+
+                {/* Salary Summary Cards */}
+                <div className="grid grid-cols-1 sm:grid-cols-3 gap-4 mb-6">
+                  <div className="bg-gradient-to-br from-green-50 to-emerald-50 rounded-xl p-4 border border-green-100">
+                    <p className="text-xs text-gray-500 uppercase tracking-wide">
+                      Currency
+                    </p>
+                    <p className="text-2xl font-bold text-green-600 mt-1">
+                      {currentEmployee.currency || "AED"}
+                    </p>
+                  </div>
+                  <div className="bg-gradient-to-br from-blue-50 to-indigo-50 rounded-xl p-4 border border-blue-100">
+                    <p className="text-xs text-gray-500 uppercase tracking-wide">
+                      Payment Cycle
+                    </p>
+                    <p className="text-2xl font-bold text-blue-600 mt-1">
+                      {currentEmployee.payment_cycle || "Monthly"}
+                    </p>
+                  </div>
+                  <div className="bg-gradient-to-br from-purple-50 to-pink-50 rounded-xl p-4 border border-purple-100">
+                    <p className="text-xs text-gray-500 uppercase tracking-wide">
+                      Total Salary
+                    </p>
+                    <p className="text-2xl font-bold text-purple-600 mt-1">
+                      {currentEmployee.currency || "AED"}{" "}
+                      {currentEmployee.salary_components
+                        ?.reduce((sum, comp) => sum + parseFloat(comp.value), 0)
+                        .toLocaleString() || "0"}
+                    </p>
+                  </div>
+                </div>
+
+                {/* Salary Components Table */}
+                <div className="mb-8">
+                  <h4 className="text-md font-semibold text-gray-700 mb-3 flex items-center gap-2">
+                    <FiDollarSign className="text-green-500" /> Salary
+                    Components
+                  </h4>
+                  <div className="overflow-x-auto">
+                    <table className="min-w-full divide-y divide-gray-200">
+                      <thead className="bg-gray-50">
+                        <tr>
+                          <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
+                            Component Name
+                          </th>
+                          <th className="px-6 py-3 text-right text-xs font-medium text-gray-500 uppercase tracking-wider">
+                            Amount ({currentEmployee.currency || "AED"})
+                          </th>
+                          <th className="px-6 py-3 text-center text-xs font-medium text-gray-500 uppercase tracking-wider">
+                            Actions
+                          </th>
+                        </tr>
+                      </thead>
+                      <tbody className="bg-white divide-y divide-gray-200">
+                        {currentEmployee.salary_components &&
+                        currentEmployee.salary_components.length > 0 ? (
+                          <>
+                            {currentEmployee.salary_components.map(
+                              (component, index) => (
+                                <tr
+                                  key={component.id || index}
+                                  className="hover:bg-gray-50"
+                                >
+                                  <td className="px-6 py-4 whitespace-nowrap text-sm font-medium text-gray-900">
+                                    {editingSalaryComponent === component.id ? (
+                                      <input
+                                        type="text"
+                                        defaultValue={component.component_name}
+                                        className="px-2 py-1 border border-gray-300 rounded"
+                                        id={`comp-name-${component.id}`}
+                                      />
+                                    ) : (
+                                      component.component_name
+                                    )}
+                                  </td>
+                                  <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-900 text-right">
+                                    {editingSalaryComponent === component.id ? (
+                                      <input
+                                        type="number"
+                                        step="0.01"
+                                        defaultValue={component.value}
+                                        className="px-2 py-1 border border-gray-300 rounded text-right"
+                                        id={`comp-value-${component.id}`}
+                                      />
+                                    ) : (
+                                      parseFloat(
+                                        component.value,
+                                      ).toLocaleString(undefined, {
+                                        minimumFractionDigits: 2,
+                                        maximumFractionDigits: 2,
+                                      })
+                                    )}
+                                  </td>
+                                  <td className="px-6 py-4 whitespace-nowrap text-center">
+                                    {editingSalaryComponent === component.id ? (
+                                      <div className="flex items-center justify-center gap-2">
+                                        <button
+                                          onClick={() => {
+                                            const newName =
+                                              document.getElementById(
+                                                `comp-name-${component.id}`,
+                                              ).value;
+                                            const newValue =
+                                              document.getElementById(
+                                                `comp-value-${component.id}`,
+                                              ).value;
+                                            handleUpdateSalaryComponent(
+                                              component.id,
+                                              {
+                                                component_name: newName,
+                                                value: newValue,
+                                              },
+                                            );
+                                          }}
+                                          className="text-green-600 hover:text-green-800"
+                                          title="Save"
+                                        >
+                                          <FiSave size={16} />
+                                        </button>
+                                        <button
+                                          onClick={() =>
+                                            setEditingSalaryComponent(null)
+                                          }
+                                          className="text-gray-500 hover:text-gray-700"
+                                          title="Cancel"
+                                        >
+                                          <FiX size={16} />
+                                        </button>
+                                      </div>
+                                    ) : (
+                                      <div className="flex items-center justify-center gap-2">
+                                        <button
+                                          onClick={() =>
+                                            setEditingSalaryComponent(
+                                              component.id,
+                                            )
+                                          }
+                                          className="text-blue-600 hover:text-blue-800"
+                                          title="Edit"
+                                        >
+                                          <FiEdit size={16} />
+                                        </button>
+                                        <button
+                                          onClick={() =>
+                                            handleDeleteSalaryComponentClick(
+                                              component.id,
+                                              component.component_name,
+                                            )
+                                          }
+                                          className="text-red-600 hover:text-red-800"
+                                          title="Delete"
+                                        >
+                                          <FiTrash2 size={16} />
+                                        </button>
+                                      </div>
+                                    )}
+                                  </td>
+                                </tr>
+                              ),
+                            )}
+                            {/* Total Row */}
+                            <tr className="bg-gray-50 font-bold">
+                              <td className="px-6 py-4 whitespace-nowrap text-sm font-bold text-gray-900">
+                                Total Monthly Salary
+                              </td>
+                              <td className="px-6 py-4 whitespace-nowrap text-sm font-bold text-green-600 text-right">
+                                {currentEmployee.currency || "AED"}{" "}
+                                {currentEmployee.salary_components
+                                  .reduce(
+                                    (sum, comp) => sum + parseFloat(comp.value),
+                                    0,
+                                  )
+                                  .toLocaleString(undefined, {
+                                    minimumFractionDigits: 2,
+                                    maximumFractionDigits: 2,
+                                  })}
+                              </td>
+                              <td></td>
+                            </tr>
+                          </>
+                        ) : (
+                          <tr>
+                            <td
+                              colSpan="3"
+                              className="px-6 py-8 text-center text-gray-500"
+                            >
+                              No salary components found
+                            </td>
+                          </tr>
+                        )}
+                      </tbody>
+                    </table>
+                  </div>
+                </div>
+
+                {/* Bank Details Section */}
+                <div className="flex justify-between items-center mb-4">
+                  <h3 className="text-lg font-semibold text-gray-800 flex items-center gap-2">
+                    <FiCreditCardIcon className="text-green-500" /> Bank Details
+                  </h3>
+                  <button
+                    onClick={() => setShowAddBank(true)}
+                    className="px-3 py-1.5 bg-green-500 text-white rounded-lg text-sm hover:bg-green-600 transition-colors flex items-center gap-1"
+                  >
+                    <FiPlus size={14} /> Add Bank Account
+                  </button>
+                </div>
+
+                {/* Add Bank Modal */}
+                {showAddBank && (
+                  <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50 p-4 overflow-y-auto">
+                    <div className="bg-white rounded-xl max-w-2xl w-full p-6 max-h-[90vh] overflow-y-auto">
+                      <div className="flex justify-between items-center mb-4">
+                        <h3 className="text-lg font-semibold">
+                          Add Bank Account
+                        </h3>
+                        <button
+                          onClick={() => setShowAddBank(false)}
+                          className="text-gray-400 hover:text-gray-600"
+                        >
+                          <FiX size={20} />
+                        </button>
+                      </div>
+                      <div className="space-y-4">
+                        <div>
+                          <label className="block text-sm font-medium text-gray-700 mb-1">
+                            Country
+                          </label>
+                          <select
+                            value={newBank.bank_country}
+                            onChange={(e) =>
+                              setNewBank({
+                                ...newBank,
+                                bank_country: e.target.value,
+                              })
+                            }
+                            className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-green-500 focus:border-green-500"
+                          >
+                            <option value="India">India</option>
+                            <option value="UAE">United Arab Emirates</option>
+                          </select>
+                        </div>
+                        <div>
+                          <label className="block text-sm font-medium text-gray-700 mb-1">
+                            Bank Name *
+                          </label>
+                          <input
+                            type="text"
+                            value={newBank.bank_name}
+                            onChange={(e) =>
+                              setNewBank({
+                                ...newBank,
+                                bank_name: e.target.value,
+                              })
+                            }
+                            className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-green-500 focus:border-green-500"
+                          />
+                        </div>
+                        <div>
+                          <label className="block text-sm font-medium text-gray-700 mb-1">
+                            Account Number *
+                          </label>
+                          <input
+                            type="text"
+                            value={newBank.account_number}
+                            onChange={(e) =>
+                              setNewBank({
+                                ...newBank,
+                                account_number: e.target.value,
+                              })
+                            }
+                            className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-green-500 focus:border-green-500"
+                          />
+                        </div>
+                        {newBank.bank_country === "India" ? (
+                          <>
+                            <div>
+                              <label className="block text-sm font-medium text-gray-700 mb-1">
+                                IFSC Code *
+                              </label>
+                              <input
+                                type="text"
+                                value={newBank.ifsc_code}
+                                onChange={(e) =>
+                                  setNewBank({
+                                    ...newBank,
+                                    ifsc_code: e.target.value.toUpperCase(),
+                                  })
+                                }
+                                className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-green-500 focus:border-green-500"
+                              />
+                            </div>
+                            <div>
+                              <label className="block text-sm font-medium text-gray-700 mb-1">
+                                Branch Name
+                              </label>
+                              <input
+                                type="text"
+                                value={newBank.branch_name}
+                                onChange={(e) =>
+                                  setNewBank({
+                                    ...newBank,
+                                    branch_name: e.target.value,
+                                  })
+                                }
+                                className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-green-500 focus:border-green-500"
+                              />
+                            </div>
+                          </>
+                        ) : (
+                          <>
+                            <div>
+                              <label className="block text-sm font-medium text-gray-700 mb-1">
+                                IBAN Number *
+                              </label>
+                              <input
+                                type="text"
+                                value={newBank.iban_number}
+                                onChange={(e) =>
+                                  setNewBank({
+                                    ...newBank,
+                                    iban_number: e.target.value.toUpperCase(),
+                                  })
+                                }
+                                className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-green-500 focus:border-green-500"
+                              />
+                            </div>
+                            <div>
+                              <label className="block text-sm font-medium text-gray-700 mb-1">
+                                SWIFT/BIC Code
+                              </label>
+                              <input
+                                type="text"
+                                value={newBank.swift_code}
+                                onChange={(e) =>
+                                  setNewBank({
+                                    ...newBank,
+                                    swift_code: e.target.value.toUpperCase(),
+                                  })
+                                }
+                                className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-green-500 focus:border-green-500"
+                              />
+                            </div>
+                          </>
+                        )}
+                        <button
+                          onClick={handleAddBankDetail}
+                          className="w-full bg-green-500 text-white py-2 rounded-lg hover:bg-green-600 transition-colors"
+                        >
+                          Add Bank Account
+                        </button>
+                      </div>
+                    </div>
+                  </div>
+                )}
+
+                {currentEmployee.bank_details &&
+                currentEmployee.bank_details.length > 0 ? (
+                  <div className="space-y-4">
+                    {currentEmployee.bank_details.map((bank, index) => (
+                      <div
+                        key={bank.id || index}
+                        className="border border-gray-200 rounded-xl overflow-hidden"
+                      >
+                        <div className="bg-gray-50 px-6 py-3 border-b border-gray-200 flex justify-between items-center">
+                          <h4 className="font-semibold text-gray-800 flex items-center gap-2">
+                            <FiGlobeIcon className="text-green-500" />
+                            Bank Account{" "}
+                            {currentEmployee.bank_details.length > 1
+                              ? `#${index + 1}`
+                              : ""}
+                            <span className="ml-2 px-2 py-1 bg-green-100 text-green-700 rounded-full text-xs">
+                              {bank.bank_country}
+                            </span>
+                          </h4>
+                          <div className="flex items-center gap-2">
+                            <button
+                              onClick={() => setEditingBankDetail(bank.id)}
+                              className="text-blue-600 hover:text-blue-800"
+                              title="Edit"
+                            >
+                              <FiEdit size={16} />
+                            </button>
+                            <button
+                              onClick={() =>
+                                handleDeleteBankDetailClick(
+                                  bank.id,
+                                  bank.bank_name,
+                                )
+                              }
+                              className="text-red-600 hover:text-red-800"
+                              title="Delete"
+                            >
+                              <FiTrash2 size={16} />
+                            </button>
+                          </div>
+                        </div>
+                        <div className="p-6">
+                          {editingBankDetail === bank.id ? (
+                            <div className="space-y-4">
+                              <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                                <div>
+                                  <label className="block text-xs text-gray-500 mb-1">
+                                    Bank Name
+                                  </label>
+                                  <input
+                                    type="text"
+                                    defaultValue={bank.bank_name}
+                                    className="w-full px-3 py-2 border border-gray-300 rounded-lg"
+                                    id={`bank-name-${bank.id}`}
+                                  />
+                                </div>
+                                <div>
+                                  <label className="block text-xs text-gray-500 mb-1">
+                                    Account Number
+                                  </label>
+                                  <input
+                                    type="text"
+                                    defaultValue={bank.account_number}
+                                    className="w-full px-3 py-2 border border-gray-300 rounded-lg"
+                                    id={`bank-account-${bank.id}`}
+                                  />
+                                </div>
+                                {bank.bank_country === "India" ? (
+                                  <>
+                                    <div>
+                                      <label className="block text-xs text-gray-500 mb-1">
+                                        IFSC Code
+                                      </label>
+                                      <input
+                                        type="text"
+                                        defaultValue={bank.ifsc_code || ""}
+                                        className="w-full px-3 py-2 border border-gray-300 rounded-lg"
+                                        id={`bank-ifsc-${bank.id}`}
+                                      />
+                                    </div>
+                                    <div>
+                                      <label className="block text-xs text-gray-500 mb-1">
+                                        Branch Name
+                                      </label>
+                                      <input
+                                        type="text"
+                                        defaultValue={bank.branch_name || ""}
+                                        className="w-full px-3 py-2 border border-gray-300 rounded-lg"
+                                        id={`bank-branch-${bank.id}`}
+                                      />
+                                    </div>
+                                  </>
+                                ) : (
+                                  <>
+                                    <div>
+                                      <label className="block text-xs text-gray-500 mb-1">
+                                        IBAN Number
+                                      </label>
+                                      <input
+                                        type="text"
+                                        defaultValue={bank.iban_number || ""}
+                                        className="w-full px-3 py-2 border border-gray-300 rounded-lg"
+                                        id={`bank-iban-${bank.id}`}
+                                      />
+                                    </div>
+                                    <div>
+                                      <label className="block text-xs text-gray-500 mb-1">
+                                        SWIFT Code
+                                      </label>
+                                      <input
+                                        type="text"
+                                        defaultValue={bank.swift_code || ""}
+                                        className="w-full px-3 py-2 border border-gray-300 rounded-lg"
+                                        id={`bank-swift-${bank.id}`}
+                                      />
+                                    </div>
+                                  </>
+                                )}
+                              </div>
+                              <div className="flex justify-end gap-2">
+                                <button
+                                  onClick={() => setEditingBankDetail(null)}
+                                  className="px-4 py-2 bg-gray-300 text-gray-700 rounded-lg hover:bg-gray-400"
+                                >
+                                  Cancel
+                                </button>
+                                <button
+                                  onClick={() => {
+                                    const updatedData = {
+                                      bank_country: bank.bank_country,
+                                      bank_name: document.getElementById(
+                                        `bank-name-${bank.id}`,
+                                      ).value,
+                                      account_number: document.getElementById(
+                                        `bank-account-${bank.id}`,
+                                      ).value,
+                                    };
+                                    if (bank.bank_country === "India") {
+                                      updatedData.ifsc_code =
+                                        document.getElementById(
+                                          `bank-ifsc-${bank.id}`,
+                                        ).value;
+                                      updatedData.branch_name =
+                                        document.getElementById(
+                                          `bank-branch-${bank.id}`,
+                                        ).value;
+                                    } else {
+                                      updatedData.iban_number =
+                                        document.getElementById(
+                                          `bank-iban-${bank.id}`,
+                                        ).value;
+                                      updatedData.swift_code =
+                                        document.getElementById(
+                                          `bank-swift-${bank.id}`,
+                                        ).value;
+                                    }
+                                    handleUpdateBankDetail(
+                                      bank.id,
+                                      updatedData,
+                                    );
+                                  }}
+                                  className="px-4 py-2 bg-green-500 text-white rounded-lg hover:bg-green-600"
+                                >
+                                  Save Changes
+                                </button>
+                              </div>
+                            </div>
+                          ) : (
+                            <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+                              <div className="space-y-3">
+                                <div>
+                                  <label className="text-xs text-gray-500 uppercase tracking-wide">
+                                    Bank Name
+                                  </label>
+                                  <p className="text-gray-800 font-medium mt-1">
+                                    {bank.bank_name}
+                                  </p>
+                                </div>
+                                <div>
+                                  <label className="text-xs text-gray-500 uppercase tracking-wide">
+                                    Account Number
+                                  </label>
+                                  <p className="text-gray-800 font-medium mt-1 font-mono">
+                                    {bank.account_number}
+                                  </p>
+                                </div>
+                                {bank.branch_name && (
+                                  <div>
+                                    <label className="text-xs text-gray-500 uppercase tracking-wide">
+                                      Branch Name
+                                    </label>
+                                    <p className="text-gray-800 font-medium mt-1">
+                                      {bank.branch_name}
+                                    </p>
+                                  </div>
+                                )}
+                              </div>
+                              <div className="space-y-3">
+                                {bank.ifsc_code && (
+                                  <div>
+                                    <label className="text-xs text-gray-500 uppercase tracking-wide">
+                                      IFSC Code
+                                    </label>
+                                    <p className="text-gray-800 font-medium mt-1 font-mono">
+                                      {bank.ifsc_code}
+                                    </p>
+                                  </div>
+                                )}
+                                {bank.iban_number && (
+                                  <div>
+                                    <label className="text-xs text-gray-500 uppercase tracking-wide">
+                                      IBAN Number
+                                    </label>
+                                    <p className="text-gray-800 font-medium mt-1 font-mono">
+                                      {bank.iban_number}
+                                    </p>
+                                  </div>
+                                )}
+                                {bank.swift_code && (
+                                  <div>
+                                    <label className="text-xs text-gray-500 uppercase tracking-wide">
+                                      SWIFT/BIC Code
+                                    </label>
+                                    <p className="text-gray-800 font-medium mt-1 font-mono">
+                                      {bank.swift_code}
+                                    </p>
+                                  </div>
+                                )}
+                              </div>
+                            </div>
+                          )}
+                        </div>
+                      </div>
+                    ))}
+                  </div>
+                ) : (
+                  <div className="text-center py-8 bg-gray-50 rounded-xl border border-gray-200">
+                    <FiCreditCardIcon className="text-4xl text-gray-400 mx-auto mb-2" />
+                    <p className="text-gray-500">No bank details available</p>
+                  </div>
+                )}
               </div>
             )}
 
@@ -979,6 +1990,17 @@ const EmployeeDetails = () => {
           </div>
         </div>
       </main>
+      {/* Confirm Delete Modal */}
+      <ConfirmModal
+        isOpen={confirmModal.isOpen}
+        onClose={closeConfirmModal}
+        onConfirm={executeDelete}
+        title={confirmModal.title}
+        message={confirmModal.message}
+        confirmText="Delete"
+        cancelText="Cancel"
+        loading={confirmModal.loading}
+      />
     </div>
   );
 };
