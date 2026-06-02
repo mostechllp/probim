@@ -9,11 +9,14 @@ import { fetchMyProjects } from "../store/slices/employeeProjectSlice";
 import PunchOutModal from "../components/modals/PunchOutModal";
 import MapView from "../components/common/MapView";
 import LocationModal from "../components/modals/LocationModal";
+import ErrorToast from "../../components/common/ErrorToast";
+import useErrorHandler from "../../hooks/useErrorHandler";
+import errorHandler from "../../utils/errorHandler";
 
 const Dashboard = () => {
   const dispatch = useDispatch();
   const { user } = useSelector((state) => state.auth);
-  const { loading, dashboardData } = useSelector(
+  const { loading: attendanceLoading, dashboardData } = useSelector(
     (state) => state.EmpAttendance,
   );
   const {
@@ -24,6 +27,9 @@ const Dashboard = () => {
     (state) =>
       state.employeeProjects || { projects: [], stats: {}, loading: false },
   );
+
+  // Use custom error handler
+  const { error, handleError, clearError, withErrorHandling } = useErrorHandler();
 
   // Use dashboard data as source of truth (not Redux isPunchedIn)
   const todayAttendance = dashboardData?.today_attendance || {};
@@ -46,14 +52,25 @@ const Dashboard = () => {
   const [selectedMapLocation, setSelectedMapLocation] = useState(null);
 
   // Show toast notification
-  const showToastMessage = (message, type = "success") => {
-    setToast({ message, type });
-    setTimeout(() => setToast(null), 3000);
+  const showToastMessage = (message, type = "success", title = "") => {
+    setToast({ message, type, title });
+    setTimeout(() => setToast(null), 5000);
   };
 
   // Fetch dashboard data and projects on component mount
   useEffect(() => {
-    dispatch(fetchDashboardData());
+    const fetchData = async () => {
+      await withErrorHandling(
+        async () => {
+          await dispatch(fetchDashboardData()).unwrap();
+        },
+        {
+          onRetry: () => fetchData(),
+          onLogin: () => window.location.href = '/login'
+        }
+      );
+    };
+    fetchData();
   }, [dispatch]);
 
   // Separate useEffect to fetch projects when dashboard data loads
@@ -88,43 +105,11 @@ const Dashboard = () => {
     return () => clearInterval(interval);
   }, []);
 
-  // Helper function to normalize location data from different formats
-  const normalizeLocation = (locationData) => {
-    if (!locationData) return null;
-
-    if (locationData.latitude && locationData.longitude) {
-      return {
-        latitude: parseFloat(locationData.latitude),
-        longitude: parseFloat(locationData.longitude),
-        address:
-          locationData.address ||
-          `${locationData.latitude}, ${locationData.longitude}`,
-      };
-    }
-
-    if (locationData.punch_in_latitude || locationData.latitude) {
-      return {
-        latitude: parseFloat(
-          locationData.punch_in_latitude || locationData.latitude,
-        ),
-        longitude: parseFloat(
-          locationData.punch_in_longitude || locationData.longitude,
-        ),
-        address:
-          locationData.punch_in_address ||
-          locationData.address ||
-          "Location recorded",
-      };
-    }
-
-    return null;
-  };
-
   // Handle Punch In/Out
   const handlePunch = async () => {
     if (!isActuallyPunchedIn) {
       if (!canPunch) {
-        showToastMessage("❌ You cannot punch in at this time", "error");
+        showToastMessage("You cannot punch in at this time", "error", "Outside Working Hours");
         return;
       }
       setPunchType("punch-in");
@@ -141,37 +126,36 @@ const Dashboard = () => {
     setIsSubmitting(true);
 
     if (punchType === "punch-in") {
-      const result = await dispatch(punchIn({ location: locationData }));
-      setIsSubmitting(false);
-
-      if (punchIn.fulfilled.match(result)) {
-        showToastMessage(
-          "✅ Punched in successfully with location verification!",
-          "success",
-        );
-        await dispatch(fetchDashboardData());
-      } else {
-        showToastMessage(result.payload || "❌ Punch in failed", "error");
-      }
-    } else {
-      if (punchOutData) {
-        const result = await dispatch(
-          punchOut({
-            ...punchOutData,
-            location: locationData,
-          }),
-        );
-        setIsSubmitting(false);
-
-        if (punchOut.fulfilled.match(result)) {
-          showToastMessage("✅ Punched out successfully!", "success");
+      await withErrorHandling(
+        async () => {
+          const result = await dispatch(punchIn({ location: locationData })).unwrap();
+          showToastMessage("Punched in successfully with location verification!", "success", "Success");
+          await dispatch(fetchDashboardData()).unwrap();
+          return result;
+        },
+        {
+          onRetry: () => handleLocationConfirm(locationData),
+        }
+      );
+    } else if (punchOutData) {
+      await withErrorHandling(
+        async () => {
+          const result = await dispatch(
+            punchOut({
+              ...punchOutData,
+              location: locationData,
+            })
+          ).unwrap();
+          showToastMessage("Punched out successfully!", "success", "Success");
           setShowPunchOutModal(false);
           setPunchOutData(null);
-          await dispatch(fetchDashboardData());
-        } else {
-          showToastMessage(result.payload || "❌ Punch out failed", "error");
+          await dispatch(fetchDashboardData()).unwrap();
+          return result;
+        },
+        {
+          onRetry: () => handleLocationConfirm(locationData),
         }
-      }
+      );
     }
 
     setIsSubmitting(false);
@@ -213,7 +197,7 @@ const Dashboard = () => {
         hour12: true,
       });
     } catch (error) {
-      return (time, error);
+      return time;
     }
   };
 
@@ -233,13 +217,13 @@ const Dashboard = () => {
   };
 
   const isButtonDisabled = () => {
-    if (loading || isSubmitting) return true;
+    if (attendanceLoading || isSubmitting) return true;
     if (!isActuallyPunchedIn && !canPunch) return true;
     return false;
   };
 
   const getButtonText = () => {
-    if (loading || isSubmitting) return "Processing...";
+    if (attendanceLoading || isSubmitting) return "Processing...";
     return isActuallyPunchedIn ? "Punch Out" : "Punch In";
   };
 
@@ -282,6 +266,38 @@ const Dashboard = () => {
       default:
         return "bg-gray-100 text-gray-700 dark:bg-gray-800 dark:text-gray-400";
     }
+  };
+
+  // Helper function to normalize location data from different formats
+  const normalizeLocation = (locationData) => {
+    if (!locationData) return null;
+
+    if (locationData.latitude && locationData.longitude) {
+      return {
+        latitude: parseFloat(locationData.latitude),
+        longitude: parseFloat(locationData.longitude),
+        address:
+          locationData.address ||
+          `${locationData.latitude}, ${locationData.longitude}`,
+      };
+    }
+
+    if (locationData.punch_in_latitude || locationData.latitude) {
+      return {
+        latitude: parseFloat(
+          locationData.punch_in_latitude || locationData.latitude,
+        ),
+        longitude: parseFloat(
+          locationData.punch_in_longitude || locationData.longitude,
+        ),
+        address:
+          locationData.punch_in_address ||
+          locationData.address ||
+          "Location recorded",
+      };
+    }
+
+    return null;
   };
 
   // Render location info
@@ -501,6 +517,8 @@ const Dashboard = () => {
           </div>
         </div>
       </div>
+      
+      {/* Projects Section - Keep your existing code */}
       <div className="projects-section bg-[var(--surface)] border border-[var(--border)] rounded-xl p-5 mb-7">
         <h3 className="text-base font-semibold text-[var(--text)] mb-5 flex items-center gap-2">
           <i className="fas fa-project-diagram text-green-500"></i>
@@ -541,7 +559,6 @@ const Dashboard = () => {
                   {project.description || "No description provided"}
                 </p>
 
-                {/* Manager Info */}
                 <div className="flex items-center gap-2 mb-2">
                   <i className="fas fa-user-tie text-xs text-green-500"></i>
                   <span className="text-xs text-[var(--muted)]">Manager:</span>
@@ -550,7 +567,6 @@ const Dashboard = () => {
                   </span>
                 </div>
 
-                {/* Team Lead Info */}
                 <div className="flex items-center gap-2 mb-3">
                   <i className="fas fa-users text-xs text-blue-500"></i>
                   <span className="text-xs text-[var(--muted)]">
@@ -561,7 +577,6 @@ const Dashboard = () => {
                   </span>
                 </div>
 
-                {/* Assigned Date */}
                 <div className="flex items-center gap-2 mb-3 pt-2 border-t border-[var(--border)]">
                   <i className="fas fa-calendar-alt text-xs text-purple-500"></i>
                   <span className="text-xs text-[var(--muted)]">
@@ -602,14 +617,12 @@ const Dashboard = () => {
               </button>
             </div>
             <div className="p-5 overflow-y-auto max-h-[calc(90vh-80px)]">
-              {/* Project Details */}
               <div className="mb-5">
                 <p className="text-[var(--text-secondary)] text-sm mb-4">
                   {selectedProject.description || "No description provided"}
                 </p>
 
                 <div className="grid grid-cols-1 md:grid-cols-2 gap-4 mb-4">
-                  {/* Manager Details */}
                   <div className="bg-[var(--surface2)] rounded-lg p-3">
                     <label className="text-xs text-[var(--muted)] flex items-center gap-1 mb-2">
                       <i className="fas fa-user-tie text-green-500"></i> Project
@@ -618,14 +631,8 @@ const Dashboard = () => {
                     <p className="text-sm font-semibold text-[var(--text)]">
                       {selectedProject.managerName}
                     </p>
-                    {selectedProject.managerEmail && (
-                      <p className="text-xs text-[var(--muted)] mt-1">
-                        {selectedProject.managerEmail}
-                      </p>
-                    )}
                   </div>
 
-                  {/* Team Lead Details */}
                   <div className="bg-[var(--surface2)] rounded-lg p-3">
                     <label className="text-xs text-[var(--muted)] flex items-center gap-1 mb-2">
                       <i className="fas fa-users text-blue-500"></i> Team Lead
@@ -633,14 +640,8 @@ const Dashboard = () => {
                     <p className="text-sm font-semibold text-[var(--text)]">
                       {selectedProject.teamLeadName}
                     </p>
-                    {selectedProject.teamLeadEmail && (
-                      <p className="text-xs text-[var(--muted)] mt-1">
-                        {selectedProject.teamLeadEmail}
-                      </p>
-                    )}
                   </div>
 
-                  {/* Priority */}
                   <div className="bg-[var(--surface2)] rounded-lg p-3">
                     <label className="text-xs text-[var(--muted)] flex items-center gap-1 mb-2">
                       <i className="fas fa-flag"></i> Priority
@@ -654,7 +655,6 @@ const Dashboard = () => {
                     </p>
                   </div>
 
-                  {/* Status */}
                   <div className="bg-[var(--surface2)] rounded-lg p-3">
                     <label className="text-xs text-[var(--muted)] flex items-center gap-1 mb-2">
                       <i className="fas fa-chart-line"></i> Status
@@ -668,7 +668,6 @@ const Dashboard = () => {
                     </p>
                   </div>
 
-                  {/* Assigned Date */}
                   <div className="bg-[var(--surface2)] rounded-lg p-3 md:col-span-2">
                     <label className="text-xs text-[var(--muted)] flex items-center gap-1 mb-2">
                       <i className="fas fa-calendar-alt text-purple-500"></i>{" "}
@@ -790,18 +789,34 @@ const Dashboard = () => {
 
       {renderMapModal()}
 
-      {/* Toast Notification */}
+      {/* Error Toast */}
+      {error && (
+        <ErrorToast
+          error={error}
+          onClose={clearError}
+          onAction={(actionType) => {
+            if (actionType === 'login') {
+              window.location.href = '/login';
+            } else if (actionType === 'retry') {
+              window.location.reload();
+            } else if (actionType === 'contact') {
+              window.location.href = 'mailto:support@company.com';
+            }
+            clearError();
+          }}
+        />
+      )}
+
+      {/* Success Toast */}
       {toast && (
-        <div
-          className={`fixed bottom-6 right-6 bg-[var(--surface)] text-[var(--text)] py-3 px-5 rounded-full text-sm font-medium shadow-lg border-l-4 z-50 flex items-center gap-2 animate-slide-up ${
-            toast.type === "success" ? "border-green-500" : "border-red-500"
-          }`}
-        >
-          <i
-            className={`fas ${toast.type === "success" ? "fa-check-circle" : "fa-exclamation-circle"} ${toast.type === "success" ? "text-green-500" : "text-red-500"}`}
-          ></i>
-          {toast.message}
-        </div>
+        <ErrorToast
+          error={{ 
+            type: toast.type, 
+            title: toast.title || 'Success', 
+            message: toast.message 
+          }}
+          onClose={() => setToast(null)}
+        />
       )}
     </div>
   );
