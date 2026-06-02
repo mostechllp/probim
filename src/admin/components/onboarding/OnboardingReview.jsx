@@ -1,7 +1,7 @@
 /* eslint-disable react-hooks/static-components */
 import { useDispatch, useSelector } from "react-redux";
 import { FiCheckCircle, FiFileText, FiUser, FiChevronLeft, FiSend, FiShield, FiGlobe, FiBriefcase, FiAlertTriangle, FiX, FiDollarSign, FiCalendar } from "react-icons/fi";
-import { setStep, completeOnboarding } from "../../store/slices/onboardingSlice";
+import { setStep, completeOnboarding, completeOnboardingAPI } from "../../store/slices/onboardingSlice";
 import { showToast } from "../../components/common/Toast";
 import { fetchEmployees } from "../../store/slices/employeeSlice";
 import { fetchOrganizations } from "../../store/slices/organizationSlice";
@@ -102,7 +102,21 @@ const OnboardingReview = () => {
     try {
       const hrUser = JSON.parse(localStorage.getItem("hr-user")) || {};
       const orgId = hrUser?.employee?.organization_id || hrUser?.organization_id || (organizations[0]?.id || "");
-      const companyId = hrUser?.employee?.company_id || hrUser?.company_id || (companies[0]?.id || "");
+      let companyId = hrUser?.employee?.company_id || hrUser?.company_id || (companies[0]?.id || "");
+
+      // ── Fetch company_id from API if not resolved from localStorage (common when companies list hasn't loaded) ──
+      if (!companyId && orgId) {
+        try {
+          const companiesRes = await apiClient.get(`/admin/companies?organization_id=${orgId}`);
+          const fetchedCompanies = companiesRes.data?.data || companiesRes.data;
+          if (Array.isArray(fetchedCompanies) && fetchedCompanies.length > 0) {
+            companyId = fetchedCompanies[0]?.id || "";
+          }
+        } catch (_) {
+          // company_id remains empty; backend may not require it
+        }
+      }
+      console.log("[Onboarding] Resolved orgId:", orgId, "| companyId:", companyId);
 
       // ── Step 1: Fetch latest roles directly from API to avoid stale Redux state ──
       let activeRoles = [...roles];
@@ -177,6 +191,10 @@ const OnboardingReview = () => {
       let dob = "";
       if (employeeDetails.specialDayEvent?.toLowerCase().trim() === "birthday" && employeeDetails.specialDayDate) {
         dob = employeeDetails.specialDayDate;
+        if (dob.match(/^\d{2}\/\d{2}\/\d{4}$/)) {
+          const [day, month, year] = dob.split("/");
+          dob = `${year}-${month}-${day}`;
+        }
       } else {
         dob = generateRandomDob();
       }
@@ -228,26 +246,21 @@ const OnboardingReview = () => {
       if (designation_id) body.append("designation_id", String(parseInt(designation_id)));
       body.append("role_id", String(parseInt(role_id)));
       body.append("type", "employee");
-      body.append("status", "onboarding");
+      body.append("status", "active");
       body.append("address", employeeDetails.address || "");
       body.append("basic_salary", employeeDetails.basicSalary || "");
       body.append("other_allowance", employeeDetails.otherAllowance || "0");
       body.append("total_salary", employeeDetails.totalMonthlySalary || "0");
       body.append("payment_cycle", employeeDetails.paymentCycle || "Monthly");
-      
-      const primaryBank = (employeeDetails.bankAccounts && employeeDetails.bankAccounts.length > 0) 
-        ? employeeDetails.bankAccounts[0] 
-        : employeeDetails;
-        
-      body.append("bank_name", primaryBank.bankName || "");
-      body.append("account_number", primaryBank.accountNumber || "");
-      
-      if (employeeDetails.bankAccounts && employeeDetails.bankAccounts.length > 0) {
-        body.append("bank_accounts", JSON.stringify(employeeDetails.bankAccounts));
+      if (Array.isArray(employeeDetails.bankAccounts) && employeeDetails.bankAccounts.length > 0) {
+        body.append("bank_name", employeeDetails.bankAccounts[0].bankName || "");
+        body.append("account_number", employeeDetails.bankAccounts[0].accountNumber || "");
+        body.append("bank_details", JSON.stringify(employeeDetails.bankAccounts));
+      } else {
+        body.append("bank_name", employeeDetails.bankName || "");
+        body.append("account_number", employeeDetails.accountNumber || "");
       }
 
-      body.append("special_day_event", employeeDetails.specialDayEvent || "");
-      body.append("special_day_date", employeeDetails.specialDayDate || "");
 
       // Debug: log all FormData entries
       console.log("[Onboarding] FormData entries:");
@@ -273,7 +286,7 @@ const OnboardingReview = () => {
           return "The server encountered an error. Please try again in a moment.";
         if (msg.includes("role") && (msg.includes("required") || msg.includes("invalid") || msg.includes("id")))
           return "A valid role is required. Please ensure an 'Employee' role exists in Settings → Roles.";
-        return "Unable to create the employee record. Please verify the details and try again.";
+        return rawMsg;
       };
 
       // ── Field label map for error display ──
@@ -303,15 +316,81 @@ const OnboardingReview = () => {
         eid_number: "EID Number",
       };
 
-      // ── Step 12: Submit ──
+      // ── Step 12: Submit via POST /admin/onboarding/save-details ──
+      // This is the dedicated onboarding endpoint that accepts status "onboarding"
+      // directly (confirmed via Postman). The generic /admin/employees endpoint
+      // rejects "onboarding" in its validation rules.
       let apiSuccess = false;
       try {
-        await apiClient.post("/admin/employees", body);
+        const employeeFormData = new FormData();
+        employeeFormData.append("first_name", first_name);
+        employeeFormData.append("last_name", last_name);
+        employeeFormData.append("employee_id", employeeId);
+        employeeFormData.append("gender", "male");
+        employeeFormData.append("dob", dob);
+        employeeFormData.append("marital_status", "single");
+        employeeFormData.append("personal_email", employeeDetails.email || "");
+        employeeFormData.append("phone", cleanPhone);
+        employeeFormData.append("personal_number", cleanPhone);
+        employeeFormData.append("joining_date", joiningDate);
+        employeeFormData.append("nationality", candidateNationality);
+        // Always send these keys — even empty — so PHP array-access never throws "Undefined array key"
+        employeeFormData.append("organization_id", orgId ? String(parseInt(orgId)) : "");
+        employeeFormData.append("company_id", companyId ? String(parseInt(companyId)) : "");
+        employeeFormData.append("department_id", department_id ? String(parseInt(department_id)) : "");
+        employeeFormData.append("designation_id", designation_id ? String(parseInt(designation_id)) : "");
+        employeeFormData.append("role_id", String(parseInt(role_id)));
+        employeeFormData.append("type", "employee");
+        employeeFormData.append("status", "onboarding");
+        employeeFormData.append("address", employeeDetails.address || "");
+        employeeFormData.append("basic_salary", employeeDetails.basicSalary || "");
+        employeeFormData.append("other_allowance", employeeDetails.otherAllowance || "0");
+        employeeFormData.append("total_salary", String(employeeDetails.totalMonthlySalary || "0"));
+        employeeFormData.append("payment_cycle", employeeDetails.paymentCycle || "Monthly");
+        // Bank details — only send when non-empty to avoid backend validation rejecting blank strings
+        const primaryBank = Array.isArray(employeeDetails.bankAccounts) && employeeDetails.bankAccounts.length > 0
+          ? employeeDetails.bankAccounts[0]
+          : null;
+        const bankName = primaryBank?.bankName || employeeDetails.bankName || "";
+        const accountNumber = primaryBank?.accountNumber || employeeDetails.accountNumber || "";
+        if (bankName) employeeFormData.append("bank_name", bankName);
+        if (accountNumber) employeeFormData.append("account_number", accountNumber);
+        if (primaryBank) employeeFormData.append("bank_details", JSON.stringify(employeeDetails.bankAccounts));
+
+        // Special days — send as arrays (special_days_name[] and special_days_date[]) to match backend expectations
+        if (employeeDetails.specialDayEvent && employeeDetails.specialDayEvent.trim() && employeeDetails.specialDayDate) {
+          let specDate = employeeDetails.specialDayDate.trim();
+          if (specDate.match(/^\d{2}\/\d{2}\/\d{4}$/)) {
+            const [day, month, year] = specDate.split("/");
+            specDate = `${year}-${month}-${day}`;
+          }
+          employeeFormData.append("special_days_name[]", employeeDetails.specialDayEvent.trim());
+          employeeFormData.append("special_days_date[]", specDate);
+        }
+
+        // Additional fields from Postman response structure
+        employeeFormData.append("experience_level", employeeDetails.experience || "");
+        employeeFormData.append("key_skills", employeeDetails.skills || "");
+        employeeFormData.append("highest_education", employeeDetails.education || "");
+
+        console.log("[Onboarding] Submitting to POST /admin/employees/onboard/details");
+        // Log all FormData entries for debugging
+        for (let [k, v] of employeeFormData.entries()) console.log(`  ${k}: ${v}`);
+        const createRes = await apiClient.post("/admin/employees/onboard/details", employeeFormData);
+        console.log("[Onboarding] Employee created:", createRes.data);
+
         apiSuccess = true;
-        showToast("Employee record created successfully!", "success");
         dispatch(fetchEmployees());
+        showToast("Employee record created successfully!", "success");
       } catch (apiError) {
-        const errData = apiError.response?.data;
+        // Log the full Axios error so we can always see exactly what the backend returned
+        console.error("[Onboarding] Submit failed. Raw apiError:", apiError);
+        console.error("[Onboarding] Response status:", apiError?.response?.status);
+        console.error("[Onboarding] Response data:", apiError?.response?.data);
+
+        // errData contains the Laravel validation response: { message, errors: { field: [...] } }
+        const errData = apiError?.response?.data ?? {};
+        console.error("[Onboarding] Parsed errData:", errData);
 
         if (errData?.errors && Object.keys(errData.errors).length > 0) {
           const errorList = Object.entries(errData.errors).map(
@@ -326,7 +405,12 @@ const OnboardingReview = () => {
             errors: errorList,
           });
         } else {
-          const rawMsg = errData?.message || "";
+          // Show the actual backend message if no field errors
+          const rawMsg =
+            errData?.message ||
+            (typeof apiError === "string" ? apiError : "") ||
+            "Something went wrong";
+          console.error("[Onboarding] No structured errors. rawMsg:", rawMsg);
           setErrorModal({
             isOpen: true,
             title: "Unable to Create Employee",
@@ -335,6 +419,7 @@ const OnboardingReview = () => {
         }
         showToast("Employee creation failed. Please fix the issue and try again.", "error");
       }
+
 
       if (apiSuccess) {
         dispatch(completeOnboarding());
@@ -492,7 +577,12 @@ const OnboardingReview = () => {
                     <FiCalendar className="text-gray-400" />
                     <span className="text-gray-500 font-medium w-24">{employeeDetails.specialDayEvent}:</span>
                     <span className="text-gray-900 dark:text-gray-300 font-semibold">
-                      {employeeDetails.specialDayDate?.split("-").reverse().join("/")}
+                      {employeeDetails.specialDayDate?.match(/^\d{4}-\d{2}-\d{2}$/)
+                        ? (() => {
+                          const [year, month, day] = employeeDetails.specialDayDate.split("-");
+                          return `${day}/${month}/${year}`;
+                        })()
+                        : employeeDetails.specialDayDate}
                     </span>
                   </div>
                 )}
@@ -578,13 +668,16 @@ const OnboardingReview = () => {
                   </div>
                 )}
 
-                {/* Bank Accounts Info */}
-                <div className="border-t border-gray-100 dark:border-gray-700/60 pt-6 space-y-6">
-                  {Array.isArray(employeeDetails.bankAccounts) && employeeDetails.bankAccounts.length > 0 ? (
-                    employeeDetails.bankAccounts.map((bank, index) => (
-                      <div key={bank.id || index} className="space-y-4 pb-4 border-b border-gray-100 dark:border-gray-700/30 last:border-0 last:pb-0">
-                        <p className="text-xs font-bold text-gray-500 uppercase tracking-wider mb-2">Bank Account {index + 1}</p>
-                        <div className="grid grid-cols-1 sm:grid-cols-3 gap-6">
+                {/* Country-specific Bank Transfer Info */}
+                {Array.isArray(employeeDetails.bankAccounts) && employeeDetails.bankAccounts.length > 0 ? (
+                  <div className="border-t border-gray-100 dark:border-gray-700/60 pt-6 space-y-6">
+                    <p className="text-xs font-bold text-gray-400 dark:text-gray-500 uppercase tracking-wider mb-2">Bank Accounts</p>
+                    {employeeDetails.bankAccounts.map((bank, index) => (
+                      <div key={index} className="p-4 bg-gray-50 dark:bg-gray-900/35 rounded-2xl border border-gray-100 dark:border-gray-700/80 space-y-4 relative">
+                        <span className="absolute top-4 right-4 text-[10px] font-bold text-green-700 dark:text-green-400 bg-green-100 dark:bg-green-900/30 px-2.5 py-1 rounded-md uppercase tracking-wider">
+                          Account {index + 1}
+                        </span>
+                        <div className="grid grid-cols-1 sm:grid-cols-3 gap-6 pr-20">
                           <div className="space-y-1">
                             <p className="text-xs font-semibold text-gray-400 dark:text-gray-500 uppercase tracking-wider">Bank Country</p>
                             <p className="text-sm font-bold text-gray-900 dark:text-white">{bank.bankCountry || "UAE"}</p>
@@ -643,11 +736,13 @@ const OnboardingReview = () => {
                           )}
                         </div>
                       </div>
-                    ))
-                  ) : (
-                    <p className="text-sm text-gray-500 italic">No bank details added.</p>
-                  )}
-                </div>
+                    ))}
+                  </div>
+                ) : (
+                  <div className="border-t border-gray-100 dark:border-gray-700/60 pt-6 space-y-4">
+                    <p className="text-sm text-gray-500 italic">No bank accounts added.</p>
+                  </div>
+                )}
               </div>
             </SummaryCard>
           </div>

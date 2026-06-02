@@ -268,11 +268,6 @@ const SalaryBankDetailsForm = () => {
   };
 
   const handleAddBankDetails = () => {
-    if (bankAccounts.length >= 2) {
-      showToast("You can only add up to 2 bank accounts", "warning");
-      return;
-    }
-
     let errors = {};
     if (!bankName.trim()) errors.bankName = "Bank name is required";
     if (!bankAccountNumber.trim()) errors.accountNumber = "Account number is required";
@@ -681,7 +676,7 @@ const SalaryBankDetailsForm = () => {
 
           <div className="p-6 md:p-8 space-y-6">
             {/* BANK DETAILS EDIT MODE */}
-            <div className={`space-y-6 animate-fadeIn ${bankAccounts.length >= 2 ? 'opacity-50 pointer-events-none' : ''}`}>
+            <div className="space-y-6 animate-fadeIn">
                 <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
                   {/* Country Selector */}
                   <div className="space-y-2">

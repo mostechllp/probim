@@ -3,6 +3,8 @@ import { useParams, useNavigate, Link } from "react-router-dom";
 import { useDispatch, useSelector } from "react-redux";
 import { PROJECT_MODULE_NAME } from "../utils/constants";
 import { showToast } from "../../components/common/Toast";
+import { getPhotoUrl, getFallbackAvatar } from "../../utils/imageHelper";
+
 
 // Redux Actions
 import {
@@ -63,8 +65,9 @@ const ProjectDetails = () => {
   const getEmployeeAvatar = (empId) => {
     if (!empId) return null;
     const emp = employees.find((e) => String(e.id) === String(empId));
-    return emp ? emp.avatar : null;
+    return emp ? getPhotoUrl(emp.avatar) : null;
   };
+
 
   const getInitials = (name) => {
     return name && name !== "Not Assigned" ? name.charAt(0).toUpperCase() : "N";
@@ -232,7 +235,15 @@ const ProjectDetails = () => {
             <div className="flex items-center gap-3">
               <div className="w-12 h-12 rounded-xl overflow-hidden bg-gradient-to-br from-blue-500/20 to-indigo-500/20 flex items-center justify-center border border-gray-100 dark:border-gray-750 flex-shrink-0 shadow-sm">
                 {getEmployeeAvatar(currentProject.managerId) ? (
-                  <img src={getEmployeeAvatar(currentProject.managerId)} alt="PM Avatar" className="w-full h-full object-cover" />
+                  <img
+                    src={getEmployeeAvatar(currentProject.managerId)}
+                    alt="PM Avatar"
+                    className="w-full h-full object-cover"
+                    onError={(e) => {
+                      e.target.onerror = null;
+                      e.target.src = getFallbackAvatar(getEmployeeName(currentProject.managerId));
+                    }}
+                  />
                 ) : (
                   <span className="text-sm font-bold text-blue-600 dark:text-blue-400">
                     {getInitials(getEmployeeName(currentProject.managerId))}
@@ -259,7 +270,15 @@ const ProjectDetails = () => {
             <div className="flex items-center gap-3">
               <div className="w-12 h-12 rounded-xl overflow-hidden bg-gradient-to-br from-purple-500/20 to-pink-500/20 flex items-center justify-center border border-gray-100 dark:border-gray-750 flex-shrink-0 shadow-sm">
                 {getEmployeeAvatar(currentProject.teamLeadId) ? (
-                  <img src={getEmployeeAvatar(currentProject.teamLeadId)} alt="TL Avatar" className="w-full h-full object-cover" />
+                  <img
+                    src={getEmployeeAvatar(currentProject.teamLeadId)}
+                    alt="TL Avatar"
+                    className="w-full h-full object-cover"
+                    onError={(e) => {
+                      e.target.onerror = null;
+                      e.target.src = getFallbackAvatar(getEmployeeName(currentProject.teamLeadId));
+                    }}
+                  />
                 ) : (
                   <span className="text-sm font-bold text-purple-600 dark:text-purple-400">
                     {getInitials(getEmployeeName(currentProject.teamLeadId))}

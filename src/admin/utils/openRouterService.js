@@ -60,7 +60,7 @@ ${resumeText}
   try {
     const completion = await openRouter.chat.send({
       chatRequest: {
-        model: 'openrouter/free',
+        model: 'openai/gpt-oss-120b:free',
         messages: [
           {
             role: 'user',
