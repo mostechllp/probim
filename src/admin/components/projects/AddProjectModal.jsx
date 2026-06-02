@@ -25,6 +25,7 @@ const AddProjectModal = ({
     const fetchEligibleManagers = async () => {
       try {
         const response = await apiClient.get("/admin/projects/eligible-managers");
+        console.log("Project res: ", response)
         if (response.data && response.data.status === "success") {
           setEligibleManagers(response.data.data || []);
         } else if (response.data && Array.isArray(response.data)) {
