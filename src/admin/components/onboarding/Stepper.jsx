@@ -1,7 +1,11 @@
 import React from "react";
 import { FiCheck } from "react-icons/fi";
+import { useDispatch } from "react-redux";
+import { setStep } from "../../store/slices/onboardingSlice";
 
 const Stepper = ({ currentStep }) => {
+  const dispatch = useDispatch();
+
   const steps = [
     { id: 1, title: "Resume Upload", subtitle: "AI Parsing" },
     { id: 2, title: "Employee Details", subtitle: "Verify Info" },
@@ -10,12 +14,29 @@ const Stepper = ({ currentStep }) => {
     { id: 5, title: "Review & Submit", subtitle: "Finalization" },
   ];
 
+  const handleStepClick = (stepId) => {
+    // Allow navigation only to steps that are completed or the next logical step
+    // Don't allow skipping ahead to unreached steps
+    if (stepId <= currentStep + 1 || stepId <= currentStep) {
+      dispatch(setStep(stepId));
+    }
+  };
+
+  const canNavigateToStep = (stepId) => {
+    // Can navigate to current step, previous steps, or next step only
+    return stepId <= currentStep + 1;
+  };
+
   return (
     <div className="flex items-center justify-between w-full max-w-4xl mx-auto">
       {steps.map((step, index) => (
         <React.Fragment key={step.id}>
           {/* Step Item */}
-          <div className="flex flex-col items-center relative z-10">
+          <div 
+            className="flex flex-col items-center relative z-10"
+            onClick={() => canNavigateToStep(step.id) && handleStepClick(step.id)}
+            style={{ cursor: canNavigateToStep(step.id) ? 'pointer' : 'not-allowed' }}
+          >
             <div
               className={`w-10 h-10 rounded-full flex items-center justify-center transition-all duration-300 border-2 ${
                 currentStep > step.id
@@ -23,7 +44,7 @@ const Stepper = ({ currentStep }) => {
                   : currentStep === step.id
                   ? "bg-white dark:bg-gray-800 border-green-600 text-green-600 ring-4 ring-green-50 dark:ring-green-950/30"
                   : "bg-white dark:bg-gray-800 border-gray-200 dark:border-gray-700 text-gray-400"
-              }`}
+              } ${canNavigateToStep(step.id) ? 'hover:scale-105 hover:shadow-md' : 'opacity-60'}`}
             >
               {currentStep > step.id ? (
                 <FiCheck size={20} strokeWidth={3} />

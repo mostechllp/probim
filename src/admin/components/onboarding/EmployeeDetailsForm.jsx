@@ -1,16 +1,29 @@
 /* eslint-disable react-hooks/static-components */
-import React, { useEffect } from "react";
+import React, { useEffect, useState } from "react";
 import { useForm, Controller } from "react-hook-form";
 import { useDispatch, useSelector } from "react-redux";
-import { FiEdit3, FiInfo, FiChevronRight, FiChevronLeft, FiSave } from "react-icons/fi";
+import { FiEdit3, FiInfo, FiChevronRight, FiChevronLeft, FiSave, FiPlus, FiLoader } from "react-icons/fi";
 import { setStep, updateEmployeeDetails, resetOnboarding } from "../../store/slices/onboardingSlice";
 import { showToast } from "../../components/common/Toast";
 import DateInput from "../common/DateInput";
+import { fetchDepartments } from "../../store/slices/departmentSlice";
+import { fetchDesignations } from "../../store/slices/designationSlice";
 
 const EmployeeDetailsForm = () => {
   const dispatch = useDispatch();
   const onboardingState = useSelector((state) => state.onboarding) || {};
   const { employeeDetails = {} } = onboardingState;
+  
+  // Get departments and designations from Redux store
+  const { departments = [], loading: departmentsLoading } = useSelector((state) => state.departments || {});
+  const { designations = [], loading: designationsLoading } = useSelector((state) => state.designations || {});
+  
+  const [showAddDepartment, setShowAddDepartment] = useState(false);
+  const [showAddDesignation, setShowAddDesignation] = useState(false);
+  const [newDepartmentName, setNewDepartmentName] = useState("");
+  const [newDesignationName, setNewDesignationName] = useState("");
+  const [isAddingDepartment, setIsAddingDepartment] = useState(false);
+  const [isAddingDesignation, setIsAddingDesignation] = useState(false);
 
   const {
     register,
@@ -20,6 +33,7 @@ const EmployeeDetailsForm = () => {
     getValues,
     watch,
     trigger,
+    setValue,
     formState: { errors },
   } = useForm({
     defaultValues: employeeDetails,
@@ -27,6 +41,12 @@ const EmployeeDetailsForm = () => {
 
   const watchSpecialDayEvent = watch("specialDayEvent");
   const watchSpecialDayDate = watch("specialDayDate");
+
+  // Fetch departments and designations on component mount
+  useEffect(() => {
+    dispatch(fetchDepartments());
+    dispatch(fetchDesignations());
+  }, [dispatch]);
 
   // Re-validate fields when their counterparts change to ensure correct validation state
   useEffect(() => {
@@ -42,7 +62,6 @@ const EmployeeDetailsForm = () => {
   }, [watchSpecialDayDate, trigger]);
 
   // Re-initialize form whenever Redux parsed data changes (e.g. after AI resume parsing)
-  // Using reset() ensures ALL fields including phone are properly populated
   useEffect(() => {
     if (employeeDetails && Object.keys(employeeDetails).length > 0) {
       reset(employeeDetails);
@@ -68,43 +87,192 @@ const EmployeeDetailsForm = () => {
     showToast("Draft saved successfully!", "success");
   };
 
-  const InputField = ({ label, name, type = "text", placeholder, options = null }) => (
+  // Add new department
+  const handleAddDepartment = async () => {
+    if (!newDepartmentName.trim()) {
+      showToast("Please enter department name", "error");
+      return;
+    }
+    
+    setIsAddingDepartment(true);
+    try {
+      const { addDepartment } = await import("../../store/slices/departmentSlice");
+      const result = await dispatch(addDepartment({ name: newDepartmentName.trim() })).unwrap();
+      if (result) {
+        showToast("Department added successfully!", "success");
+        setNewDepartmentName("");
+        setShowAddDepartment(false);
+        // Auto-select the newly added department
+        setValue("department", result.name);
+      }
+    } catch (error) {
+      showToast(error || "Failed to add department", "error");
+    } finally {
+      setIsAddingDepartment(false);
+    }
+  };
+
+  // Add new designation
+  const handleAddDesignation = async () => {
+    if (!newDesignationName.trim()) {
+      showToast("Please enter designation name", "error");
+      return;
+    }
+    
+    setIsAddingDesignation(true);
+    try {
+      const { addDesignation } = await import("../../store/slices/designationSlice");
+      const result = await dispatch(addDesignation({ name: newDesignationName.trim() })).unwrap();
+      if (result) {
+        showToast("Designation added successfully!", "success");
+        setNewDesignationName("");
+        setShowAddDesignation(false);
+        // Auto-select the newly added designation
+        setValue("designation", result.name);
+      }
+    } catch (error) {
+      showToast(error || "Failed to add designation", "error");
+    } finally {
+      setIsAddingDesignation(false);
+    }
+  };
+
+  const InputField = ({ label, name, type = "text", placeholder, options = null, loading = false }) => (
     <div className="space-y-1.5">
       <label className="block text-sm font-semibold text-gray-700 dark:text-gray-300">
         {label}
       </label>
       <div className="relative group">
         {options ? (
-          <select
-            {...register(name, { required: `${label} is required` })}
-            className={`w-full px-4 py-2.5 bg-white dark:bg-gray-800 border rounded-xl text-gray-900 dark:text-white transition-all duration-200 outline-none ${errors[name]
-              ? "border-red-500 focus:ring-4 focus:ring-red-500/10"
-              : "border-gray-200 dark:border-gray-700 focus:border-green-500 focus:ring-4 focus:ring-green-500/10"
+          <div className="relative">
+            <select
+              {...register(name, { required: `${label} is required` })}
+              className={`w-full px-4 py-2.5 bg-white dark:bg-gray-800 border rounded-xl text-gray-900 dark:text-white transition-all duration-200 outline-none appearance-none ${
+                errors[name]
+                  ? "border-red-500 focus:ring-4 focus:ring-red-500/10"
+                  : "border-gray-200 dark:border-gray-700 focus:border-green-500 focus:ring-4 focus:ring-green-500/10"
               }`}
-          >
-            <option value="">Select {label}</option>
-            {options.map(opt => <option key={opt} value={opt}>{opt}</option>)}
-          </select>
+              disabled={loading}
+            >
+              <option value="">Select {label}</option>
+              {options.map(opt => (
+                <option key={typeof opt === 'object' ? opt.id : opt} value={typeof opt === 'object' ? opt.name : opt}>
+                  {typeof opt === 'object' ? opt.name : opt}
+                </option>
+              ))}
+            </select>
+            
+            {/* Add button for department/designation */}
+            {(name === "department" || name === "designation") && (
+              <button
+                type="button"
+                onClick={() => name === "department" ? setShowAddDepartment(true) : setShowAddDesignation(true)}
+                className="absolute right-2 top-1/2 -translate-y-1/2 p-1.5 text-green-600 hover:bg-green-50 dark:hover:bg-green-900/20 rounded-lg transition-colors"
+                title={`Add new ${label}`}
+              >
+                <FiPlus size={16} />
+              </button>
+            )}
+          </div>
         ) : (
           <input
             type={type}
             placeholder={placeholder}
             {...register(name, { required: `${label} is required` })}
-            className={`w-full px-4 py-2.5 bg-white dark:bg-gray-800 border rounded-xl text-gray-900 dark:text-white transition-all duration-200 outline-none ${errors[name]
-              ? "border-red-500 focus:ring-4 focus:ring-red-500/10"
-              : "border-gray-200 dark:border-gray-700 focus:border-green-500 focus:ring-4 focus:ring-green-500/10"
-              }`}
+            className={`w-full px-4 py-2.5 bg-white dark:bg-gray-800 border rounded-xl text-gray-900 dark:text-white transition-all duration-200 outline-none ${
+              errors[name]
+                ? "border-red-500 focus:ring-4 focus:ring-red-500/10"
+                : "border-gray-200 dark:border-gray-700 focus:border-green-500 focus:ring-4 focus:ring-green-500/10"
+            }`}
           />
         )}
       </div>
       {errors[name] && (
         <p className="text-xs font-medium text-red-500 mt-1">{errors[name].message}</p>
       )}
+      {loading && (
+        <p className="text-xs text-gray-400 mt-1 flex items-center gap-1">
+          <FiLoader size={12} className="animate-spin" />
+          Loading...
+        </p>
+      )}
     </div>
   );
 
   return (
     <div className="max-w-5xl mx-auto animate-fadeIn">
+      {/* Add Department Modal */}
+      {showAddDepartment && (
+        <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50 p-4">
+          <div className="bg-white dark:bg-gray-800 rounded-2xl max-w-md w-full p-6 shadow-xl">
+            <h3 className="text-lg font-bold mb-4 text-gray-900 dark:text-white">Add New Department</h3>
+            <input
+              type="text"
+              value={newDepartmentName}
+              onChange={(e) => setNewDepartmentName(e.target.value)}
+              placeholder="Enter department name"
+              className="w-full px-4 py-2 border border-gray-200 dark:border-gray-700 rounded-xl mb-4 bg-white dark:bg-gray-800 text-gray-900 dark:text-white"
+              onKeyPress={(e) => e.key === 'Enter' && handleAddDepartment()}
+            />
+            <div className="flex gap-3 justify-end">
+              <button
+                onClick={() => {
+                  setShowAddDepartment(false);
+                  setNewDepartmentName("");
+                }}
+                className="px-4 py-2 text-gray-600 dark:text-gray-400 hover:bg-gray-100 dark:hover:bg-gray-700 rounded-lg transition-colors"
+              >
+                Cancel
+              </button>
+              <button
+                onClick={handleAddDepartment}
+                disabled={isAddingDepartment}
+                className="px-4 py-2 bg-green-500 hover:bg-green-600 text-white rounded-lg transition-colors disabled:opacity-50 flex items-center gap-2"
+              >
+                {isAddingDepartment ? <FiLoader className="animate-spin" size={16} /> : <FiPlus size={16} />}
+                {isAddingDepartment ? "Adding..." : "Add Department"}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Add Designation Modal */}
+      {showAddDesignation && (
+        <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50 p-4">
+          <div className="bg-white dark:bg-gray-800 rounded-2xl max-w-md w-full p-6 shadow-xl">
+            <h3 className="text-lg font-bold mb-4 text-gray-900 dark:text-white">Add New Designation</h3>
+            <input
+              type="text"
+              value={newDesignationName}
+              onChange={(e) => setNewDesignationName(e.target.value)}
+              placeholder="Enter designation name"
+              className="w-full px-4 py-2 border border-gray-200 dark:border-gray-700 rounded-xl mb-4 bg-white dark:bg-gray-800 text-gray-900 dark:text-white"
+              onKeyPress={(e) => e.key === 'Enter' && handleAddDesignation()}
+            />
+            <div className="flex gap-3 justify-end">
+              <button
+                onClick={() => {
+                  setShowAddDesignation(false);
+                  setNewDesignationName("");
+                }}
+                className="px-4 py-2 text-gray-600 dark:text-gray-400 hover:bg-gray-100 dark:hover:bg-gray-700 rounded-lg transition-colors"
+              >
+                Cancel
+              </button>
+              <button
+                onClick={handleAddDesignation}
+                disabled={isAddingDesignation}
+                className="px-4 py-2 bg-green-500 hover:bg-green-600 text-white rounded-lg transition-colors disabled:opacity-50 flex items-center gap-2"
+              >
+                {isAddingDesignation ? <FiLoader className="animate-spin" size={16} /> : <FiPlus size={16} />}
+                {isAddingDesignation ? "Adding..." : "Add Designation"}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
       <form onSubmit={handleSubmit(onSubmit)} className="space-y-6">
         <div className="bg-white dark:bg-gray-800 rounded-2xl shadow-soft border border-gray-100 dark:border-gray-700 overflow-hidden">
           {/* Form Header */}
@@ -145,12 +313,23 @@ const EmployeeDetailsForm = () => {
             <div className="md:col-span-2">
               <InputField label="Current Address" name="address" placeholder="Residential address" />
             </div>
-            <InputField label="Designation" name="designation" placeholder="e.g. Project Manager" />
-            <InputField
-              label="Department"
-              name="department"
-              options={["Engineering", "Human Resources", "Marketing", "Sales", "Finance", "Operations"]}
+            
+            {/* Designation Field with API data */}
+            <InputField 
+              label="Designation" 
+              name="designation" 
+              options={designations.map(d => d.name)}
+              loading={designationsLoading}
             />
+            
+            {/* Department Field with API data */}
+            <InputField 
+              label="Department" 
+              name="department" 
+              options={departments.map(d => d.name)}
+              loading={departmentsLoading}
+            />
+            
             <div className="space-y-1.5">
               <label className="block text-sm font-semibold text-gray-700 dark:text-gray-300">
                 Joining Date
@@ -173,10 +352,13 @@ const EmployeeDetailsForm = () => {
                 <p className="text-xs font-medium text-red-500 mt-1">{errors.joiningDate.message}</p>
               )}
             </div>
+            
             <InputField label="Experience Level" name="experience" placeholder="e.g. 5 Years" />
+            
             <div className="md:col-span-2">
               <InputField label="Key Skills" name="skills" placeholder="React, Tailwind, Node.js etc." />
             </div>
+            
             <div className="md:col-span-2">
               <InputField label="Highest Education" name="education" placeholder="University Degree etc." />
             </div>
@@ -272,4 +454,3 @@ const EmployeeDetailsForm = () => {
 };
 
 export default EmployeeDetailsForm;
-
