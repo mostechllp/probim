@@ -1,11 +1,11 @@
 /* eslint-disable react-hooks/static-components */
 import { useState } from "react";
 import { useDispatch, useSelector } from "react-redux";
-import { FiUploadCloud, FiFileText, FiCheckCircle, FiLoader, FiAlertCircle, FiKey, FiRefreshCw } from "react-icons/fi";
+import { FiUploadCloud, FiFileText, FiCheckCircle, FiLoader, FiAlertCircle, FiKey, FiRefreshCw, FiSkipForward } from "react-icons/fi";
 import { parseResume, resetOnboarding } from "../../store/slices/onboardingSlice";
 import { isOpenRouterConfigured } from "../../utils/openRouterService";
 
-const ResumeUpload = () => {
+const ResumeUpload = ({ onSkip }) => {  
   const dispatch = useDispatch();
   const { isLoading, error, resumeData } = useSelector((state) => state.onboarding);
   const [isDragging, setIsDragging] = useState(false);
@@ -80,6 +80,7 @@ const ResumeUpload = () => {
         <div className="text-center mb-8">
           <h2 className="text-xl font-bold text-gray-900 dark:text-white mb-2">Upload Candidate Resume</h2>
           <p className="text-gray-500 dark:text-gray-400">Our AI will automatically extract details for you.</p>
+          <p className="text-sm text-gray-400 dark:text-gray-500 mt-1">Or skip this step and enter details manually</p>
         </div>
 
         {/* API Key warning if not set */}
@@ -87,38 +88,51 @@ const ResumeUpload = () => {
 
         {/* Upload Zone */}
         {!resumeData && !isLoading && (
-          <div
-            onDragOver={handleDragOver}
-            onDragLeave={handleDragLeave}
-            onDrop={handleDrop}
-            className={`relative border-2 border-dashed rounded-3xl p-12 transition-all duration-300 flex flex-col items-center justify-center cursor-pointer group ${
-              isDragging
-                ? "border-green-500 bg-green-50 dark:bg-green-950/15"
-                : "border-gray-200 dark:border-gray-700 hover:border-green-400 dark:hover:border-green-500 hover:bg-gray-50 dark:hover:bg-gray-800/50"
-            }`}
-          >
-            <input
-              type="file"
-              onChange={handleFileChange}
-              className="absolute inset-0 w-full h-full opacity-0 cursor-pointer z-10"
-              accept=".pdf,.docx"
-            />
-            
-            <div className={`w-20 h-20 rounded-2xl flex items-center justify-center mb-6 transition-transform duration-300 group-hover:scale-110 pointer-events-none ${
-              isDragging ? "bg-green-500 text-white" : "bg-green-50 dark:bg-green-950/30 text-green-600"
-            }`}>
-              <FiUploadCloud size={40} />
+          <>
+            <div
+              onDragOver={handleDragOver}
+              onDragLeave={handleDragLeave}
+              onDrop={handleDrop}
+              className={`relative border-2 border-dashed rounded-3xl p-12 transition-all duration-300 flex flex-col items-center justify-center cursor-pointer group ${
+                isDragging
+                  ? "border-green-500 bg-green-50 dark:bg-green-950/15"
+                  : "border-gray-200 dark:border-gray-700 hover:border-green-400 dark:hover:border-green-500 hover:bg-gray-50 dark:hover:bg-gray-800/50"
+              }`}
+            >
+              <input
+                type="file"
+                onChange={handleFileChange}
+                className="absolute inset-0 w-full h-full opacity-0 cursor-pointer z-10"
+                accept=".pdf,.docx"
+              />
+              
+              <div className={`w-20 h-20 rounded-2xl flex items-center justify-center mb-6 transition-transform duration-300 group-hover:scale-110 pointer-events-none ${
+                isDragging ? "bg-green-500 text-white" : "bg-green-50 dark:bg-green-950/30 text-green-600"
+              }`}>
+                <FiUploadCloud size={40} />
+              </div>
+              
+              <div className="text-center pointer-events-none">
+                <p className="text-lg font-semibold text-gray-900 dark:text-white">
+                  Drag and drop resume here
+                </p>
+                <p className="text-sm text-gray-500 dark:text-gray-400 mt-2">
+                  Supported formats: <span className="font-medium text-gray-700 dark:text-gray-300 underline underline-offset-4 decoration-green-500/30">PDF, DOCX</span>
+                </p>
+              </div>
             </div>
-            
-            <div className="text-center pointer-events-none">
-              <p className="text-lg font-semibold text-gray-900 dark:text-white">
-                Drag and drop resume here
-              </p>
-              <p className="text-sm text-gray-500 dark:text-gray-400 mt-2">
-                Supported formats: <span className="font-medium text-gray-700 dark:text-gray-300 underline underline-offset-4 decoration-green-500/30">PDF, DOCX</span>
-              </p>
+
+            {/* Skip Button */}
+            <div className="mt-6 flex justify-center">
+              <button
+                onClick={onSkip}
+                className="px-6 py-2.5 bg-gray-100 dark:bg-gray-700 text-gray-600 dark:text-gray-300 rounded-xl font-medium hover:bg-gray-200 dark:hover:bg-gray-600 transition-all duration-200 flex items-center gap-2 group"
+              >
+                <FiSkipForward size={16} className="group-hover:translate-x-0.5 transition-transform" />
+                Skip Resume Upload
+              </button>
             </div>
-          </div>
+          </>
         )}
 
         {/* Loading / Parsing State */}
@@ -166,13 +180,23 @@ const ResumeUpload = () => {
               </p>
             </div>
 
-            <button
-              onClick={() => dispatch(resetOnboarding())}
-              className="flex items-center gap-2 px-5 py-2.5 text-sm font-semibold text-green-600 bg-green-50 dark:bg-green-900/20 rounded-xl hover:bg-green-100 dark:hover:bg-green-900/40 transition-colors border border-green-200/50 dark:border-green-800/50 shadow-sm"
-            >
-              <FiRefreshCw size={16} />
-              Upload a Different Resume
-            </button>
+            <div className="flex gap-3">
+              <button
+                onClick={() => dispatch(resetOnboarding())}
+                className="flex items-center gap-2 px-5 py-2.5 text-sm font-semibold text-green-600 bg-green-50 dark:bg-green-900/20 rounded-xl hover:bg-green-100 dark:hover:bg-green-900/40 transition-colors border border-green-200/50 dark:border-green-800/50 shadow-sm"
+              >
+                <FiRefreshCw size={16} />
+                Upload Different Resume
+              </button>
+              
+              <button
+                onClick={onSkip}
+                className="flex items-center gap-2 px-5 py-2.5 text-sm font-semibold text-gray-600 bg-gray-50 dark:bg-gray-800 rounded-xl hover:bg-gray-100 dark:hover:bg-gray-700 transition-colors border border-gray-200 dark:border-gray-700 shadow-sm"
+              >
+                <FiSkipForward size={16} />
+                Continue Without Upload
+              </button>
+            </div>
           </div>
         )}
 

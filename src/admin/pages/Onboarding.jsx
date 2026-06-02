@@ -1,8 +1,8 @@
-import  { useEffect } from "react";
+import { useEffect } from "react";
 import { useSelector, useDispatch } from "react-redux";
 import { useNavigate } from "react-router-dom";
 import { FiCheck } from "react-icons/fi";
-import { resetOnboarding, restoreDraft } from "../store/slices/onboardingSlice";
+import { resetOnboarding, restoreDraft, setStep } from "../store/slices/onboardingSlice";
 import ResumeUpload from "../components/onboarding/ResumeUpload";
 import EmployeeDetailsForm from "../components/onboarding/EmployeeDetailsForm";
 import SalaryBankDetailsForm from "../components/onboarding/SalaryBankDetailsForm";
@@ -39,6 +39,10 @@ const Onboarding = () => {
     }
   }, [onboardingComplete, dispatch, navigate]);
 
+  // Handle skip resume upload
+  const handleSkipResume = () => {
+    dispatch(setStep(2)); // Move to Employee Details Form
+  };
 
   const renderStep = () => {
     if (onboardingComplete) {
@@ -55,7 +59,7 @@ const Onboarding = () => {
     
     switch (currentStep) {
       case 1:
-        return <ResumeUpload />;
+        return <ResumeUpload onSkip={handleSkipResume} />;
       case 2:
         return <EmployeeDetailsForm />;
       case 3:
@@ -65,7 +69,7 @@ const Onboarding = () => {
       case 5:
         return <OnboardingReview />;
       default:
-        return <ResumeUpload />;
+        return <ResumeUpload onSkip={handleSkipResume} />;
     }
   };
 

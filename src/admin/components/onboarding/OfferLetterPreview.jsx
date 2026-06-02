@@ -2,100 +2,35 @@ import { useState, useEffect } from "react";
 import { useDispatch, useSelector } from "react-redux";
 import { FiFileText, FiDownload, FiChevronRight, FiChevronLeft, FiPrinter, FiSettings, FiLoader } from "react-icons/fi";
 import { setStep, updateOfferLetter } from "../../store/slices/onboardingSlice";
+import { TEMPLATES, generateOfferLetterContent, getTemplateById } from "../../utils/offerLetterTemplates";
+import TemplateSelector from "./TemplateSelector";
 import jsPDF from "jspdf";
 
 const OfferLetterPreview = () => {
   const dispatch = useDispatch();
 
-  // Use a more robust selector to prevent crashes
   const onboarding = useSelector((state) => state.onboarding);
   const employeeDetails = onboarding?.employeeDetails || {};
   const offerLetter = onboarding?.offerLetter || {};
 
-  const [template, setTemplate] = useState(offerLetter.template || "standard");
+  const [selectedTemplate, setSelectedTemplate] = useState(offerLetter.template || "corporate");
+  const [content, setContent] = useState("");
   const [isGenerating, setIsGenerating] = useState(false);
 
-  const generateContent = (empName, pos, date, basicSalary, otherAllowance, totalSalary, paymentCycle) => {
-    let formattedDate = date;
-    if (date && date.match(/^\d{4}-\d{2}-\d{2}$/)) {
-      const [year, month, day] = date.split("-");
-      formattedDate = `${day}/${month}/${year}`;
+  // Generate content when template or employee details change
+  useEffect(() => {
+    if (selectedTemplate && employeeDetails) {
+      const newContent = generateOfferLetterContent(selectedTemplate, employeeDetails);
+      setContent(newContent);
     }
+  }, [selectedTemplate, employeeDetails]);
 
-    const formattedBasic = basicSalary ? `AED ${parseFloat(basicSalary).toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}` : "[Basic Salary]";
-    const formattedAllowance = otherAllowance ? `AED ${parseFloat(otherAllowance).toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}` : "AED 0.00";
-    const formattedTotal = totalSalary ? `AED ${parseFloat(totalSalary).toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}` : "[Total Salary]";
-    const cycle = paymentCycle || "Monthly";
-
-    return `Date: ${new Date().toLocaleDateString('en-GB')}
-
-PRIVATE & CONFIDENTIAL
-
-To: ${empName || "[Candidate Name]"}
-Position Offered: ${pos || "[Job Title]"}
-
-Subject: Offer of Employment
-
-Dear ${empName || "Candidate"},
-
-On behalf of the Company, we are pleased to extend this formal offer of employment for the position of ${pos || "[Job Title]"}. We were highly impressed by your qualifications and experience, and we believe your skills will be a valuable addition to our organization.
-
-Below are the key terms and conditions of your employment offer:
-
-1. POSITION AND RESPONSIBILITIES
-Your initial designation will be ${pos || "[Job Title]"}, reporting directly to the Department Head. Your duties and responsibilities will be as standard for this position, along with any other assignments delegated by the management.
-
-2. PROBATIONARY PERIOD
-In accordance with the UAE Labor Law, you will serve a probationary period of six (6) months starting from your date of joining, which is proposed to be ${formattedDate || "[Joining Date]"}. During this period, your performance will be evaluated, and employment may be terminated by either party with written notice as per standard regulations.
-
-3. COMPENSATION AND BENEFITS
-Your compensation package is structured on a ${cycle.toLowerCase()} cycle as follows:
-   - Basic Salary: ${formattedBasic}
-   - Housing and Other Allowances: ${formattedAllowance}
-   - Total Gross Monthly Salary: ${formattedTotal}
-   
-All payments will be processed via bank transfer through the Wages Protection System (WPS) in accordance with UAE regulations. You will also be eligible for standard benefits, including comprehensive medical insurance and annual flight allowance, as per company policy.
-
-4. LEAVE ENTITLEMENTS
-You will be entitled to paid annual leave of 30 calendar days per completed year of service, in addition to standard public holidays announced by the UAE government.
-
-5. CONFIDENTIALITY AND CODE OF CONDUCT
-During and after your employment, you agree to maintain the strict confidentiality of all proprietary business, customer, and operational information. You will also be expected to adhere to the company's code of conduct and professional standards.
-
-This offer of employment is contingent upon the successful validation of your references, educational credentials, and the procurement of a valid UAE work permit and residency visa.
-
-Please indicate your acceptance of this offer by signing and returning a copy of this letter. We are thrilled at the prospect of you joining our team and look forward to building a successful future together.
-
-Sincerely,
-
-Human Resources Department
-UAE Operations
-
----------------------------------------------------------
-ACCEPTANCE OF OFFER:
-I, ${empName || "[Candidate Name]"}, hereby accept the terms and conditions of employment as detailed above.
-
-Signature: ____________________      Date: ____________________`;
+  const handleTemplateChange = (templateId) => {
+    setSelectedTemplate(templateId);
   };
 
-  const [content, setContent] = useState("");
-
-  useEffect(() => {
-    const initialContent = offerLetter.content || generateContent(
-      employeeDetails.fullName,
-      employeeDetails.designation,
-      employeeDetails.joiningDate,
-      employeeDetails.basicSalary,
-      employeeDetails.otherAllowance,
-      employeeDetails.totalMonthlySalary,
-      employeeDetails.paymentCycle
-    );
-    // eslint-disable-next-line react-hooks/set-state-in-effect
-    setContent(initialContent);
-  }, [employeeDetails, offerLetter.content]);
-
   const handleNext = () => {
-    dispatch(updateOfferLetter({ content, template, generated: true }));
+    dispatch(updateOfferLetter({ content, template: selectedTemplate, generated: true }));
     dispatch(setStep(5));
   };
 
@@ -115,127 +50,164 @@ Signature: ____________________      Date: ____________________`;
       const margin = 20;
       const pageWidth = doc.internal.pageSize.getWidth();
       const maxLineWidth = pageWidth - (margin * 2);
-
-      // Apply styling based on template
-      if (template === "modern") {
-        // Modern Minimalist Template
-        doc.setFont("Helvetica", "bold");
-        doc.setFontSize(22);
-        doc.setTextColor(44, 62, 80);
-        doc.text("OFFER OF EMPLOYMENT", margin, 25);
-
-        doc.setDrawColor(52, 152, 219); // Blue accent
-        doc.setLineWidth(1.5);
-        doc.line(margin, 29, 60, 29);
-      } else {
-        // Standard Classic Template
-        doc.setFont("Helvetica", "bold");
-        doc.setFontSize(18);
-        doc.setTextColor(44, 62, 80);
-        doc.text("OFFER OF EMPLOYMENT", pageWidth / 2, 25, { align: "center" });
-
-        doc.setDrawColor(46, 204, 113); // Green accent
-        doc.setLineWidth(0.8);
-        doc.line(margin, 29, pageWidth - margin, 29);
-      }
-
-      doc.setFont("Helvetica", "normal");
-      doc.setFontSize(10.5);
-      doc.setTextColor(60, 60, 60);
-
-      const splitText = doc.splitTextToSize(content, maxLineWidth);
+      const lineHeight = 6.5;
       
-      let y = 40;
-      splitText.forEach(line => {
-        if (y > 275) {
-          doc.addPage();
-          y = 20;
+      // Clean the content - remove any special characters that might cause issues
+      let cleanContent = content
+        .replace(/[%]/g, '') // Remove % symbols
+        .replace(/[•]/g, '-') // Replace bullets with hyphens
+        .replace(/[`]/g, "'") // Replace backticks
+        .replace(/[“”]/g, '"') // Replace smart quotes
+        .replace(/[‘’]/g, "'"); // Replace smart apostrophes
+      
+      // Set initial styles
+      doc.setFont("helvetica", "normal");
+      doc.setFontSize(11);
+      doc.setTextColor(40, 40, 40);
+      
+      // Split content into lines
+      const splitText = doc.splitTextToSize(cleanContent, maxLineWidth);
+      
+      let y = margin;
+      
+      // Add each line to PDF with page breaks
+      for (let i = 0; i < splitText.length; i++) {
+        const line = splitText[i];
+        const lineText = line.trim();
+        
+        // Skip empty lines but add spacing
+        if (lineText === "") {
+          y += lineHeight / 2;
+          continue;
         }
-        doc.text(line, margin, y);
-        y += 6.5;
-      });
+        
+        // Check if we need a new page
+        if (y + lineHeight > doc.internal.pageSize.getHeight() - margin) {
+          doc.addPage();
+          y = margin;
+        }
+        
+        // Detect and style different line types
+        const isMainHeader = lineText.match(/^OFFER OF EMPLOYMENT$|^=========================================$/);
+        const isSectionHeader = lineText.match(/^\d+\.\s+[A-Z]/) || lineText.match(/^TERMS OF APPOINTMENT$/) || lineText.match(/^ACCEPTANCE OF OFFER:$/);
+        const isSubHeader = lineText.match(/^PRIVATE & CONFIDENTIAL$/) || lineText.match(/^RE: /i);
+        const isLabel = lineText.match(/^(To:|Date:|Ref:|Dear|Subject:|Re:)/i);
+        const isSignature = lineText.includes("Signature:") || lineText.includes("____________________");
+        
+        if (isMainHeader) {
+          doc.setFont("helvetica", "bold");
+          doc.setFontSize(14);
+          doc.text(lineText, pageWidth / 2, y, { align: "center" });
+          doc.setFontSize(11);
+        } 
+        else if (isSectionHeader) {
+          doc.setFont("helvetica", "bold");
+          doc.setFontSize(12);
+          doc.text(lineText, margin, y);
+          doc.setFontSize(11);
+        }
+        else if (isSubHeader) {
+          doc.setFont("helvetica", "bold");
+          doc.text(lineText, margin, y);
+        }
+        else if (isLabel) {
+          doc.setFont("helvetica", "bold");
+          doc.text(lineText, margin, y);
+        }
+        else if (isSignature) {
+          doc.setFont("helvetica", "italic");
+          doc.text(lineText, margin, y);
+        }
+        else {
+          doc.setFont("helvetica", "normal");
+          // Handle bullet points
+          if (lineText.match(/^[-•]/) || lineText.match(/^[0-9]+\./)) {
+            doc.text(lineText, margin + 5, y);
+          } else {
+            doc.text(lineText, margin, y);
+          }
+        }
+        
+        // Reset font
+        doc.setFont("helvetica", "normal");
+        doc.setFontSize(11);
+        
+        y += lineHeight;
+      }
 
       const filename = `Offer_Letter_${employeeDetails.fullName?.replace(/\s+/g, "_") || "Candidate"}.pdf`;
       doc.save(filename);
     } catch (err) {
-      console.error(err);
-      alert("Failed to generate PDF offer letter.");
+      console.error("PDF generation error:", err);
+      alert("Failed to generate PDF. Please try again.");
     } finally {
       setIsGenerating(false);
     }
   };
 
   const handlePrint = () => {
-    // Create an iframe dynamically
-    const iframe = document.createElement("iframe");
-    iframe.style.position = "absolute";
-    iframe.style.width = "0px";
-    iframe.style.height = "0px";
-    iframe.style.border = "none";
-    document.body.appendChild(iframe);
-
-    const doc = iframe.contentDocument || iframe.contentWindow.document;
+    const printWindow = window.open('', '_blank');
+    const templateConfig = getTemplateById(selectedTemplate);
     
-    // Format the text into HTML paragraphs
-    const formattedHtml = content
-      .split("\n")
-      .map(para => para.trim() ? `<p style="margin-bottom: 12px; line-height: 1.6; font-size: 14px; font-family: 'Times New Roman', Times, serif; color: #333;">${para}</p>` : `<div style="height: 12px;"></div>`)
-      .join("");
-
-    const isModern = template === "modern";
-
-    doc.open();
-    doc.write(`
+    // Clean content for printing
+    let cleanContent = content
+      .replace(/[%]/g, '')
+      .replace(/[`]/g, "'");
+    
+    printWindow.document.write(`
+      <!DOCTYPE html>
       <html>
         <head>
-          <title>Offer Letter - ${employeeDetails.fullName || "Candidate"}</title>
+          <title>Offer Letter - ${employeeDetails.fullName || 'Candidate'}</title>
           <style>
-            @page {
-              size: A4;
-              margin: 20mm;
-            }
             body {
-              font-family: 'Times New Roman', Times, serif;
+              font-family: ${templateConfig.fontFamily || 'Times New Roman, serif'};
+              margin: 20mm;
               color: #333;
-              padding: 10px;
+              line-height: 1.5;
+              font-size: 11pt;
             }
-            .header {
-              text-align: ${isModern ? 'left' : 'center'};
-              border-bottom: 2px solid ${isModern ? '#3498db' : '#2ecc71'};
-              padding-bottom: 10px;
-              margin-bottom: 30px;
+            .content {
+              white-space: pre-wrap;
             }
-            .header h1 {
-              font-size: ${isModern ? '28px' : '24px'};
-              margin: 0;
-              color: #2c3e50;
-              text-transform: uppercase;
-              letter-spacing: 1px;
+            h1 {
+              text-align: center;
+              font-size: 18pt;
+              margin-bottom: 20px;
+            }
+            h2 {
+              font-size: 14pt;
+              margin-top: 15px;
+              margin-bottom: 10px;
+            }
+            .signature-line {
+              margin-top: 40px;
+            }
+            @media print {
+              body {
+                margin: 20mm;
+              }
+              .page-break {
+                page-break-before: always;
+              }
             }
           </style>
         </head>
         <body>
-          <div class="header">
-            <h1>Offer of Employment</h1>
-          </div>
-          <div class="content">
-            ${formattedHtml}
-          </div>
+          <div class="content">${cleanContent.replace(/\n/g, '<br>')}</div>
           <script>
-            window.onload = function() {
+            window.onload = () => {
               window.print();
-              setTimeout(function() {
-                window.frameElement.remove();
-              }, 100);
-            }
-          </script>
+              setTimeout(() => window.close(), 500);
+            };
+          <\/script>
         </body>
       </html>
     `);
-    doc.close();
+    printWindow.document.close();
   };
 
-  if (!onboarding) return <div className="p-10 text-center">Loading Onboarding Data...</div>;
+  const currentTemplate = getTemplateById(selectedTemplate);
 
   return (
     <div className="max-w-6xl mx-auto grid grid-cols-1 lg:grid-cols-3 gap-8 animate-fadeIn">
@@ -244,22 +216,17 @@ Signature: ____________________      Date: ____________________`;
         <div className="bg-white dark:bg-gray-800 rounded-2xl shadow-soft border border-gray-100 dark:border-gray-700 p-6">
           <h3 className="text-lg font-bold text-gray-900 dark:text-white mb-6 flex items-center gap-2">
             <FiSettings className="text-green-600" />
-            Settings
+            Template Selection
           </h3>
-          <div className="space-y-4">
-            <label className="text-xs font-bold text-gray-400 uppercase">Template</label>
-            <select
-              value={template}
-              onChange={(e) => setTemplate(e.target.value)}
-              className="w-full px-4 py-2 bg-gray-50 dark:bg-gray-900 border border-gray-200 dark:border-gray-700 rounded-xl text-sm"
-            >
-              <option value="standard">Standard UAE</option>
-              <option value="modern">Modern</option>
-            </select>
-          </div>
+          
+          <TemplateSelector 
+            selectedTemplate={selectedTemplate}
+            onSelectTemplate={handleTemplateChange}
+          />
         </div>
 
-        <div className="bg-white dark:bg-gray-800 rounded-2xl shadow-soft border border-gray-100 dark:border-gray-700 p-6 text-center">
+        <div className="bg-white dark:bg-gray-800 rounded-2xl shadow-soft border border-gray-100 dark:border-gray-700 p-6">
+          <h3 className="text-sm font-bold text-gray-900 dark:text-white mb-4">Actions</h3>
           <div className="grid grid-cols-2 gap-4">
             <button 
               onClick={downloadPDF} 
@@ -271,7 +238,7 @@ Signature: ____________________      Date: ____________________`;
               ) : (
                 <FiDownload size={20} className="text-gray-400" />
               )}
-              <span className="text-[10px] font-bold">{isGenerating ? "SAVING..." : "PDF"}</span>
+              <span className="text-[10px] font-bold">{isGenerating ? "GENERATING..." : "DOWNLOAD PDF"}</span>
             </button>
             <button 
               onClick={handlePrint}
@@ -282,6 +249,15 @@ Signature: ____________________      Date: ____________________`;
             </button>
           </div>
         </div>
+
+        <div className="bg-blue-50 dark:bg-blue-950/20 rounded-xl p-4 border border-blue-100 dark:border-blue-900/30">
+          <p className="text-xs text-blue-800 dark:text-blue-300 leading-relaxed">
+            <strong>📄 Template Info:</strong> {currentTemplate.description}
+          </p>
+          <p className="text-xs text-blue-800 dark:text-blue-300 leading-relaxed mt-2">
+            <strong>💡 Tip:</strong> You can edit the content below before downloading.
+          </p>
+        </div>
       </div>
 
       {/* Editor Area */}
@@ -290,27 +266,38 @@ Signature: ____________________      Date: ____________________`;
           <div className="px-8 py-4 border-b border-gray-100 dark:border-gray-700 flex items-center justify-between">
             <div className="flex items-center gap-2">
               <FiFileText className="text-green-600" />
-              <span className="text-sm font-bold">Offer Letter Preview</span>
+              <span className="text-sm font-bold">Offer Letter Editor</span>
             </div>
+            <span className="text-xs text-gray-400 flex items-center gap-1">
+              <span className="inline-block w-2 h-2 bg-green-500 rounded-full"></span>
+              Editable Content
+            </span>
           </div>
 
           <div className="p-6 md:p-10">
             <textarea
               value={content}
               onChange={(e) => setContent(e.target.value)}
-              className="w-full min-h-[500px] p-8 bg-white dark:bg-gray-900 border border-gray-100 dark:border-gray-800 rounded-lg shadow-inner outline-none resize-none font-serif text-sm md:text-base leading-relaxed text-gray-800 dark:text-gray-200"
+              className="w-full min-h-[600px] p-6 bg-white dark:bg-gray-900 border border-gray-200 dark:border-gray-700 rounded-lg shadow-inner outline-none resize-y font-mono text-sm leading-relaxed text-gray-800 dark:text-gray-200"
+              style={{
+                fontFamily: currentTemplate.fontFamily
+              }}
+              placeholder="Offer letter content will appear here..."
             />
           </div>
 
           <div className="px-8 py-6 bg-gray-50 dark:bg-gray-800/50 border-t border-gray-100 dark:border-gray-700 flex justify-between">
-            <button onClick={handleBack} className="flex items-center gap-2 font-bold text-gray-500 hover:text-gray-900">
+            <button 
+              onClick={handleBack} 
+              className="flex items-center gap-2 font-bold text-gray-500 hover:text-gray-900 transition-colors"
+            >
               <FiChevronLeft size={20} /> Back
             </button>
             <button
               onClick={handleNext}
-              className="bg-green-500 hover:bg-green-600 text-white px-6 py-2 rounded-full text-sm font-semibold flex items-center justify-center gap-2 transition-all shadow-md hover:shadow-lg whitespace-nowrap"
+              className="bg-green-500 hover:bg-green-600 text-white px-6 py-2 rounded-full text-sm font-semibold flex items-center justify-center gap-2 transition-all shadow-md hover:shadow-lg"
             >
-              Review <FiChevronRight size={18} />
+              Review Application <FiChevronRight size={18} />
             </button>
           </div>
         </div>
