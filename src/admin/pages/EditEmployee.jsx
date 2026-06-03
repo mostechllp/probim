@@ -1553,6 +1553,37 @@ const EditEmployee = () => {
                     />
                   </div>
 
+                  <div>
+                    <label className="block text-xs md:text-sm font-semibold text-gray-700 mb-1 md:mb-2">
+                      Role <span className="text-red-500">*</span>
+                    </label>
+                    <Controller
+                      name="role"
+                      control={control}
+                      rules={{ required: "Role is required" }}
+                      render={({ field }) => (
+                        <>
+                          <select
+                            {...field}
+                            value={field.value || ""}
+                            onChange={(e) => {
+                              console.log("Role changed to:", e.target.value);
+                              field.onChange(e.target.value);
+                            }}
+                            className="w-full px-3 md:px-4 py-2 md:py-3 bg-gray-50 border border-gray-200 rounded-lg"
+                          >
+                            <option value="">Select Role</option>
+                            {roles.map((role) => (
+                              <option key={role.id} value={role.id.toString()}>
+                                {role.name}
+                              </option>
+                            ))}
+                          </select>
+                        </>
+                      )}
+                    />
+                  </div>
+
                   {/* Special Days */}
                   <div className="md:col-span-2">
                     <label className="block text-xs md:text-sm font-semibold text-gray-700 mb-2">
@@ -2531,37 +2562,6 @@ const EditEmployee = () => {
                               {errors.personal_email.message}
                             </p>
                           )}
-                        </>
-                      )}
-                    />
-                  </div>
-
-                  <div>
-                    <label className="block text-xs md:text-sm font-semibold text-gray-700 mb-1 md:mb-2">
-                      Role <span className="text-red-500">*</span>
-                    </label>
-                    <Controller
-                      name="role"
-                      control={control}
-                      rules={{ required: "Role is required" }}
-                      render={({ field }) => (
-                        <>
-                          <select
-                            {...field}
-                            value={field.value || ""}
-                            onChange={(e) => {
-                              console.log("Role changed to:", e.target.value);
-                              field.onChange(e.target.value);
-                            }}
-                            className="w-full px-3 md:px-4 py-2 md:py-3 bg-gray-50 border border-gray-200 rounded-lg"
-                          >
-                            <option value="">Select Role</option>
-                            {roles.map((role) => (
-                              <option key={role.id} value={role.id.toString()}>
-                                {role.name}
-                              </option>
-                            ))}
-                          </select>
                         </>
                       )}
                     />
