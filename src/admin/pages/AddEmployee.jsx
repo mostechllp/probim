@@ -1064,10 +1064,6 @@ const AddEmployee = () => {
     today.setHours(0, 0, 0, 0);
     const expiry = new Date(expiryDate);
 
-    if (expiry < today) {
-      return `${fieldName} cannot be in the past`;
-    }
-
     if (issueDate && expiry <= new Date(issueDate)) {
       return `Expiry date must be after issued date`;
     }
