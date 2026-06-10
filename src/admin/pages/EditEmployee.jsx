@@ -966,10 +966,6 @@ const EditEmployee = () => {
     // Compare dates (reset time part for accurate comparison)
     expiry.setHours(0, 0, 0, 0);
 
-    if (expiry < today) {
-      return `${fieldName} cannot be in the past`;
-    }
-
     // Parse issue date if provided
     if (issueDate) {
       let issue;
