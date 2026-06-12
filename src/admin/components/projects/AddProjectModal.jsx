@@ -23,20 +23,30 @@ const AddProjectModal = ({
 
   useEffect(() => {
     const fetchEligibleManagers = async () => {
-      try {
-        const response = await apiClient.get("/admin/projects/eligible-managers");
-        console.log("Project res: ", response)
-        if (response.data && response.data.status === "success") {
-          setEligibleManagers(response.data.data || []);
-        } else if (response.data && Array.isArray(response.data)) {
-          setEligibleManagers(response.data);
-        } else if (response.data && response.data.data && Array.isArray(response.data.data)) {
-          setEligibleManagers(response.data.data);
-        }
-      } catch (err) {
-        console.error("Failed to fetch eligible managers:", err);
-      }
-    };
+  try {
+    const response = await apiClient.get("/admin/projects/eligible-managers");
+    console.log("Project res: ", response)
+    if (response.data && response.data.status === "success") {
+      // Map the employees to use user_id instead of id
+      const managers = (response.data.data || []).map(emp => {
+        console.log("Original employee:", { 
+          id: emp.id, 
+          user_id: emp.user_id, 
+          name: emp.full_name 
+        });
+        return {
+          ...emp,
+          id: emp.user_id, // Use user_id as the id for selection
+          original_employee_id: emp.id, // Keep original for reference
+        };
+      });
+      console.log("Mapped managers with user_id as id:", managers);
+      setEligibleManagers(managers);
+    }
+  } catch (err) {
+    console.error("Failed to fetch eligible managers:", err);
+  }
+};
     if (isOpen) {
       fetchEligibleManagers();
     }
@@ -69,30 +79,42 @@ const AddProjectModal = ({
 
   if (!isOpen) return null;
 
-  const handleSubmit = (e) => {
-    e.preventDefault();
-    setError("");
+ const handleSubmit = (e) => {
+  e.preventDefault();
+  setError("");
 
-    const trimmedName = name.trim();
-    if (!trimmedName) {
-      setError(`${PROJECT_MODULE_NAME} Name is required.`);
-      return;
-    }
+  const trimmedName = name.trim();
+  if (!trimmedName) {
+    setError(`${PROJECT_MODULE_NAME} Name is required.`);
+    return;
+  }
 
-    if (trimmedName.length < 3) {
-      setError(`${PROJECT_MODULE_NAME} Name must be at least 3 characters.`);
-      return;
-    }
+  if (trimmedName.length < 3) {
+    setError(`${PROJECT_MODULE_NAME} Name must be at least 3 characters.`);
+    return;
+  }
 
-    onSave({
-      id: project?.id,
-      name: trimmedName,
-      description: description.trim(),
-      status,
-      managerId,
-      teamLeadId
-    });
-  };
+  // Add debug logs
+  console.log("=== SUBMITTING PROJECT DATA ===");
+  console.log("Project Name:", trimmedName);
+  console.log("Description:", description.trim());
+  console.log("Status:", status);
+  console.log("Manager ID (project_manager_id):", managerId);
+  console.log("Team Lead ID (team_lead_id):", teamLeadId);
+  console.log("Manager ID type:", typeof managerId);
+  console.log("Team Lead ID type:", typeof teamLeadId);
+  console.log("Is Edit Mode:", isEditMode);
+  console.log("Project ID:", project?.id);
+
+  onSave({
+    id: project?.id,
+    name: trimmedName,
+    description: description.trim(),
+    status,
+    managerId,
+    teamLeadId
+  });
+};
 
   return (
     <div className="fixed inset-0 bg-black/10 backdrop-blur-sm flex items-center justify-center z-[1100] p-4 animate-fadeIn">
