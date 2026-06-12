@@ -1,3 +1,4 @@
+// attendanceSlice.js
 import { createAsyncThunk, createSlice } from "@reduxjs/toolkit";
 import apiClient from "../../../utils/apiClient";
 
@@ -23,24 +24,39 @@ export const fetchDashboardData = createAsyncThunk(
   }
 );
 
+// Punch In with location and timezone
+// attendanceSlice.js - Updated punchIn and punchOut
 export const punchIn = createAsyncThunk(
   "attendance/punchIn",
   async (data, { rejectWithValue }) => {
     try {
-      const payload = {
-        ...(data?.location && { location: data.location })
-      };
+      const payload = {};
+      
+      if (data?.location) {
+        payload.punch_in_latitude = data.location.latitude;
+        payload.punch_in_longitude = data.location.longitude;
+        payload.punch_in_address = data.location.address;
+        
+        // Option 1: Send PHP-compatible timezone name
+        if (data.location.timezone) {
+          payload.timezone = data.location.timezone;
+        }
+        
+        // Option 2: Also send offset in minutes (useful for backend)
+        if (data.location.timezone_offset_minutes) {
+          payload.timezone_offset_minutes = data.location.timezone_offset_minutes;
+        }
+      }
 
+      console.log("Punch In Payload:", payload);
       const response = await apiClient.post("/employee/punch-in", payload);
 
       if (response.data && response.data.status === "success") {
-        // Save to localStorage
         localStorage.setItem("attendance-punched-in", "true");
         localStorage.setItem("attendance-punch-in-time", response.data.data.punch_in);
         if (data?.location) {
           localStorage.setItem("attendance-punch-location", JSON.stringify(data.location));
         }
-
         return response.data.data;
       } else {
         return rejectWithValue(response.data?.message || "Punch in failed");
@@ -54,12 +70,11 @@ export const punchIn = createAsyncThunk(
   }
 );
 
-// empAttendanceSlice.js
+// Punch Out with location and timezone
 export const punchOut = createAsyncThunk(
   "attendance/punchOut",
   async ({ project_times, total_hours, location }, { rejectWithValue }) => {
     try {
-      // Convert { "7": "05:00" } → [{ project_id: 7, time_minutes: 300 }]
       const formattedProjectTimes = Object.entries(project_times || {}).map(
         ([projectId, time]) => {
           const [hours, minutes] = time.split(":").map(Number);
@@ -73,12 +88,24 @@ export const punchOut = createAsyncThunk(
       const payload = {
         project_times: formattedProjectTimes,
         total_hours,
-        ...(location && { location }),
       };
+      
+      if (location) {
+        payload.punch_out_latitude = location.latitude;
+        payload.punch_out_longitude = location.longitude;
+        payload.punch_out_address = location.address;
+        
+        // Add timezone information
+        if (location.timezone) {
+          payload.timezone = location.timezone;
+        }
+        if (location.timezone_offset_minutes) {
+          payload.timezone_offset_minutes = location.timezone_offset_minutes;
+        }
+      }
 
       console.log("PUNCH OUT PAYLOAD:", JSON.stringify(payload, null, 2));
       const response = await apiClient.post("/employee/punch-out", payload);
-      // ...rest unchanged
 
       if (response.data && response.data.status === "success") {
         const data = response.data.data;
@@ -96,7 +123,7 @@ export const punchOut = createAsyncThunk(
       }
     } catch (error) {
       console.error("Punch out error:", error);
-      console.error("Validation errors:", JSON.stringify(error.response?.data, null, 2)); // ← HERE
+      console.error("Validation errors:", JSON.stringify(error.response?.data, null, 2));
       return rejectWithValue(
         error.response?.data?.message || "Punch out failed"
       );
@@ -110,7 +137,7 @@ const initialState = {
   punchOutTime: null,
   loading: false,
   error: null,
-  dashboardData: null, // Store dashboard data
+  dashboardData: null,
 };
 
 const attendanceSlice = createSlice({
@@ -128,7 +155,7 @@ const attendanceSlice = createSlice({
   },
   extraReducers: (builder) => {
     builder
-      // ✅ Fetch Dashboard Data
+      // Fetch Dashboard Data
       .addCase(fetchDashboardData.pending, (state) => {
         state.loading = true;
         state.error = null;
@@ -136,7 +163,6 @@ const attendanceSlice = createSlice({
       .addCase(fetchDashboardData.fulfilled, (state, action) => {
         state.loading = false;
         state.dashboardData = action.payload;
-        // Update punch status from dashboard data if not already set
         if (action.payload.today_attendance) {
           state.isPunchedIn = action.payload.today_attendance.punched_in || false;
           state.punchInTime = action.payload.today_attendance.punch_in_time || null;
@@ -148,7 +174,7 @@ const attendanceSlice = createSlice({
         state.error = action.payload;
       })
 
-      // ✅ Punch In
+      // Punch In
       .addCase(punchIn.pending, (state) => {
         state.loading = true;
         state.error = null;
@@ -164,7 +190,7 @@ const attendanceSlice = createSlice({
         state.error = action.payload;
       })
 
-      // ✅ Punch Out
+      // Punch Out
       .addCase(punchOut.pending, (state) => {
         state.loading = true;
         state.error = null;
