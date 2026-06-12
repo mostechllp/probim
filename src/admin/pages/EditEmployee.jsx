@@ -6,6 +6,7 @@ import "react-datepicker/dist/react-datepicker.css";
 import { showToast } from "../../components/common/Toast";
 import {
   fetchEmployeeById,
+  resetCurrentEmployee,
   updateEmployee,
 } from "../store/slices/employeeSlice";
 import { fetchOrganizations } from "../store/slices/organizationSlice";
@@ -150,6 +151,55 @@ const EditEmployee = () => {
     dispatch(fetchDepartments());
     dispatch(fetchRoles());
   }, [dispatch]);
+
+  useEffect(() => {
+  // Reset form initialization flag when ID changes
+  setFormInitialized(false);
+  setIsInitializing(true);
+  setCurrentStep(0);
+  
+  // Clear any errors
+  setStepErrors({});
+  
+  // Reset document states
+  setDocuments({
+    avatar: null,
+    avatarFile: null,
+    passport_size_photo: null,
+    passport_1st_page: null,
+    passport_2nd_page: null,
+    passport_outer_page: null,
+    passport_id_page: null,
+    visa_page: null,
+    labor_card: null,
+    labor_contract: null,
+    eid_1st_page: null,
+    eid_2nd_page: null,
+    educational_1st_page: null,
+    educational_2nd_page: null,
+    home_country_id_proof: null,
+  });
+  setDocumentPreviews({});
+  setExistingDocuments({});
+  setRemovedDocuments({});
+  
+  // Clear selected company/organization details
+  setSelectedOrgDetails(null);
+  setSelectedCompanyDetails(null);
+  
+  // Fetch new employee data
+  if (id) {
+    dispatch(fetchEmployeeById(id)).then(() => {
+      setInitialLoading(false);
+    });
+  }
+  
+  // Cleanup function - reset Redux state when component unmounts
+  return () => {
+    dispatch(resetCurrentEmployee());
+    setFormInitialized(false);
+  };
+}, [id, dispatch]);
 
   // Fetch companies when organization changes
   useEffect(() => {

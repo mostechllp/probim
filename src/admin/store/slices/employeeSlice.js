@@ -230,6 +230,11 @@ const employeeSlice = createSlice({
       state.filters = initialState.filters;
       state.currentPage = 1;
     },
+    resetCurrentEmployee: (state) => {
+      state.currentEmployee = null;
+      state.loading = false;
+      state.error = null;
+    },
   },
   extraReducers: (builder) => {
     builder
@@ -356,6 +361,6 @@ const employeeSlice = createSlice({
   },
 });
 
-export const { setCurrentPage, setPerPage, setFilters, resetFilters } =
+export const { setCurrentPage, setPerPage, setFilters, resetFilters, resetCurrentEmployee } =
   employeeSlice.actions;
 export default employeeSlice.reducer;
