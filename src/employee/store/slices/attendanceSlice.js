@@ -73,9 +73,9 @@ export const punchIn = createAsyncThunk(
 // Punch Out with location and timezone
 export const punchOut = createAsyncThunk(
   "attendance/punchOut",
-  async ({ project_times, total_hours, location }, { rejectWithValue }) => {
+  async (data, { rejectWithValue }) => {
     try {
-      const formattedProjectTimes = Object.entries(project_times || {}).map(
+      const formattedProjectTimes = Object.entries(data.project_times || {}).map(
         ([projectId, time]) => {
           const [hours, minutes] = time.split(":").map(Number);
           return {
@@ -87,9 +87,20 @@ export const punchOut = createAsyncThunk(
 
       const payload = {
         project_times: formattedProjectTimes,
-        total_hours,
+        total_hours: data.total_hours,
       };
+
+      if (data.punch_out_date) {
+        payload.punch_out_date = data.punch_out_date;
+      }
+      if (data.no_projects) {
+        payload.no_projects = data.no_projects;
+      }
+      if (data.task_report) {
+        payload.task_report = data.task_report;
+      }
       
+      const location = data.location;
       if (location) {
         payload.punch_out_latitude = location.latitude;
         payload.punch_out_longitude = location.longitude;
