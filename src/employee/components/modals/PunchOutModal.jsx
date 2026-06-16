@@ -133,7 +133,7 @@ const PunchOutModal = ({ isOpen, onClose, onSubmit, loading, punchOutDate }) => 
 
   const handleSubmit = async (e) => {
     e.preventDefault();
-    
+    console.log("projectTimes", projectTimes);
     // First, save the task report
     const taskReportSaved = await handleSaveTaskReport();
     if (!taskReportSaved) {
