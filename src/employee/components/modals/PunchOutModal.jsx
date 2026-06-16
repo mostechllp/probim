@@ -26,16 +26,15 @@ const PunchOutModal = ({ isOpen, onClose, onSubmit, loading, punchOutDate }) => 
 
   // Calculate total hours whenever project times change
   useEffect(() => {
-    let total = 0;
-    Object.values(projectTimes).forEach(time => {
-      if (time) {
-        const [hours, minutes] = time.split(':');
-        const hoursDecimal = parseInt(hours) + (parseInt(minutes) / 60);
-        total += hoursDecimal;
-      }
-    });
-    setTotalHours(Math.round(total * 10) / 10);
-  }, [projectTimes]);
+  let total = 0;
+  Object.values(projectTimes).forEach(time => {
+    if (time) {
+      const num = parseFloat(time);
+      if (!isNaN(num)) total += num;
+    }
+  });
+  setTotalHours(Math.round(total * 100) / 100);
+}, [projectTimes]);
 
   // Fetch projects when modal opens - using the same endpoint as dashboard
   useEffect(() => {
@@ -199,17 +198,17 @@ const PunchOutModal = ({ isOpen, onClose, onSubmit, loading, punchOutDate }) => 
   };
 
   const formatTimeDisplay = (time) => {
-    if (!time) return '0 hrs';
-    const [hours, minutes] = time.split(':');
-    const hourNum = parseInt(hours);
-    const minNum = parseInt(minutes);
-    
-    if (hourNum === 0 && minNum === 0) return '0 hrs';
-    if (hourNum === 0) return `${minNum} min`;
-    if (minNum === 0) return `${hourNum} hr${hourNum > 1 ? 's' : ''}`;
-    return `${hourNum} hr ${minNum} min`;
-  };
-
+  if (!time) return '0 hrs';
+  const num = parseFloat(time);
+  if (isNaN(num) || num === 0) return '0 hrs';
+  
+  const hours = Math.floor(num);
+  const minutes = Math.round((num - hours) * 60);
+  
+  if (hours === 0) return `${minutes} min`;
+  if (minutes === 0) return `${hours} hr${hours > 1 ? 's' : ''}`;
+  return `${hours} hr ${minutes} min`;
+};
   if (!isOpen) return null;
 
   return (
