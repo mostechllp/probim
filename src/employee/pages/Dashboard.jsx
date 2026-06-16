@@ -51,6 +51,9 @@ const Dashboard = () => {
   const [showLocationHistory, setShowLocationHistory] = useState(false);
   const [selectedMapLocation, setSelectedMapLocation] = useState(null);
 
+  const [showPendingErrorModal, setShowPendingErrorModal] = useState(false);
+  const [pendingPunchOutDate, setPendingPunchOutDate] = useState("");
+
   // Show toast notification
   const showToastMessage = (message, type = "success", title = "") => {
     setToast({ message, type, title });
@@ -65,7 +68,6 @@ const Dashboard = () => {
           await dispatch(fetchDashboardData()).unwrap();
         },
         {
-          onRetry: () => fetchData(),
           onLogin: () => window.location.href = '/login'
         }
       );
@@ -126,18 +128,27 @@ const Dashboard = () => {
     setIsSubmitting(true);
 
     if (punchType === "punch-in") {
-      await withErrorHandling(
-        async () => {
-          const result = await dispatch(punchIn({ location: locationData })).unwrap();
-          showToastMessage("Punched in successfully with location verification!", "success", "Success");
-          await dispatch(fetchDashboardData()).unwrap();
-          return result;
-        },
-        {
-          onRetry: () => handleLocationConfirm(locationData),
+      try {
+        await withErrorHandling(
+          async () => {
+            const result = await dispatch(punchIn({ location: locationData })).unwrap();
+            showToastMessage("Punched in successfully with location verification!", "success", "Success");
+            await dispatch(fetchDashboardData()).unwrap();
+            return result;
+          }
+        );
+      } catch (err) {
+        const errorMsg = typeof err === "string" ? err : (err?.message || "");
+        if (errorMsg.includes("pending punch-out") || errorMsg.includes("punch out for that day")) {
+          clearError();
+          const match = errorMsg.match(/for (\d{4}-\d{2}-\d{2})/);
+          const date = match ? match[1] : "that day";
+          setPendingPunchOutDate(date);
+          setShowPendingErrorModal(true);
         }
-      );
+      }
     } else if (punchOutData) {
+      const isPastDatePunchOut = punchType === "punch-out-then-punchin";
       await withErrorHandling(
         async () => {
           const result = await dispatch(
@@ -146,14 +157,25 @@ const Dashboard = () => {
               location: locationData,
             })
           ).unwrap();
-          showToastMessage("Punched out successfully!", "success", "Success");
+          showToastMessage(
+            isPastDatePunchOut
+              ? `Punched out for ${pendingPunchOutDate} successfully! Now punch in for today.`
+              : "Punched out successfully!",
+            "success",
+            "Success"
+          );
           setShowPunchOutModal(false);
           setPunchOutData(null);
           await dispatch(fetchDashboardData()).unwrap();
+
+          if (isPastDatePunchOut) {
+            setPendingPunchOutDate("");
+            setPunchType("punch-in");
+            setTimeout(() => setShowLocationModal(true), 800);
+          } else {
+            setPendingPunchOutDate("");
+          }
           return result;
-        },
-        {
-          onRetry: () => handleLocationConfirm(locationData),
         }
       );
     }
@@ -164,6 +186,7 @@ const Dashboard = () => {
   const handlePunchOutSubmit = async (data) => {
     setPunchOutData(data);
     setShowPunchOutModal(false);
+    setPunchType(pendingPunchOutDate ? "punch-out-then-punchin" : "punch-out");
     setShowLocationModal(true);
   };
 
@@ -782,10 +805,51 @@ const Dashboard = () => {
         onClose={() => {
           setShowPunchOutModal(false);
           setPunchOutData(null);
+          setPendingPunchOutDate("");
         }}
         onSubmit={handlePunchOutSubmit}
         loading={isSubmitting}
+        punchOutDate={pendingPunchOutDate}
       />
+
+      {/* Pending Punch Out Error Modal */}
+      {showPendingErrorModal && (
+        <div className="fixed inset-0 bg-black/70 flex items-center justify-center z-[60] p-4 animate-fade-in">
+          <div className="bg-[var(--surface)] rounded-xl max-w-md w-full p-6 shadow-2xl animate-slide-up">
+            <div className="flex flex-col items-center text-center">
+              <div className="w-16 h-16 bg-red-100 dark:bg-red-900/30 text-red-500 rounded-full flex items-center justify-center text-3xl mb-4">
+                <i className="fas fa-exclamation-triangle"></i>
+              </div>
+              <h3 className="text-xl font-bold text-[var(--text)] mb-2">Pending Punch Out</h3>
+              <p className="text-[var(--text-secondary)] mb-6 text-sm">
+                You didn't punch out on <span className="font-bold text-[var(--text)]">{pendingPunchOutDate}</span>. You have to complete the previous day's punch out. After that you can punch in for today.
+              </p>
+              
+              <div className="flex w-full gap-3">
+                <button
+                  onClick={() => {
+                    setShowPendingErrorModal(false);
+                    setPendingPunchOutDate("");
+                  }}
+                  className="flex-1 py-2.5 px-4 bg-[var(--surface2)] border border-[var(--border)] rounded-lg text-[var(--text)] font-medium text-sm hover:bg-[var(--surface3)] transition-colors"
+                >
+                  Cancel
+                </button>
+                <button
+                  onClick={() => {
+                    setShowPendingErrorModal(false);
+                    setPunchType("punch-out");
+                    setShowPunchOutModal(true);
+                  }}
+                  className="flex-1 py-2.5 px-4 bg-red-500 text-white rounded-lg font-medium text-sm hover:bg-red-600 transition-colors"
+                >
+                  Continue to Punch Out
+                </button>
+              </div>
+            </div>
+          </div>
+        </div>
+      )}
 
       {renderMapModal()}
 

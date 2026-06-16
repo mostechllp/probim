@@ -26,7 +26,7 @@ import {
 } from "../../store/slices/taskReportsSlice";
 
 // Punch Out Modal Component
-const PunchOutModal = ({ isOpen, onClose, onSubmit, loading }) => {
+const PunchOutModal = ({ isOpen, onClose, onSubmit, loading, punchOutDate }) => {
   const dispatch = useDispatch();
   const [projects, setProjects] = useState([]);
   const [projectTimes, setProjectTimes] = useState({});
@@ -167,6 +167,7 @@ const PunchOutModal = ({ isOpen, onClose, onSubmit, loading }) => {
         project_times: {},
         total_hours: 0,
         no_projects: true,
+        punch_out_date: punchOutDate || null,
         task_report: {
           tasks_completed: tasksCompleted,
           plan_tomorrow: planTomorrow,
@@ -188,6 +189,7 @@ const PunchOutModal = ({ isOpen, onClose, onSubmit, loading }) => {
     onSubmit({
       project_times: projectTimes,
       total_hours: totalHours,
+      punch_out_date: punchOutDate || null,
       task_report: {
         tasks_completed: tasksCompleted,
         plan_tomorrow: planTomorrow,
@@ -233,10 +235,8 @@ const PunchOutModal = ({ isOpen, onClose, onSubmit, loading }) => {
       <div className="bg-[var(--surface)] rounded-xl w-full max-w-2xl mx-4 shadow-2xl animate-slide-up max-h-[90vh] flex flex-col">
         <div className="flex justify-between items-center p-5 border-b border-[var(--border)]">
           <div>
-            <h3 className="text-xl font-bold text-[var(--text)]">Punch Out</h3>
-            <p className="text-xs text-[var(--muted)] mt-1">
-              Record your work and tasks for today
-            </p>
+            <h3 className="text-xl font-bold text-[var(--text)]">Punch Out {punchOutDate ? `for ${punchOutDate}` : ''}</h3>
+            <p className="text-xs text-[var(--muted)] mt-1">Record your work and tasks for {punchOutDate ? 'that day' : 'today'}</p>
           </div>
           <button
             onClick={onClose}
@@ -251,31 +251,48 @@ const PunchOutModal = ({ isOpen, onClose, onSubmit, loading }) => {
           <div className="mb-6">
             <label className="block text-sm font-semibold text-[var(--text)] mb-3">
               <FiFileText className="inline mr-2 text-green-500" />
-              Daily Task Report
+              Task Report {punchOutDate ? `for ${punchOutDate}` : 'Daily'}
             </label>
-            <div>
-              <label className="block text-xs font-medium text-[var(--text)] mb-1">
-                Tasks Completed Today (Optional)
-              </label>
-              <textarea
-                value={tasksCompleted}
-                onChange={(e) => setTasksCompleted(e.target.value)}
-                placeholder="What tasks did you complete today? (Optional)"
-                rows="3"
-                className="w-full px-4 py-2.5 bg-[var(--surface2)] border border-[var(--border)] rounded-xl text-[var(--text)] text-sm focus:outline-none focus:border-green-500 focus:ring-4 focus:ring-green-500/10 transition-all resize-none"
-              />
-            </div>
-            <div>
-              <label className="block text-xs font-medium text-[var(--text)] mb-1">
-                Plan for Tomorrow (Optional)
-              </label>
-              <textarea
-                value={planTomorrow}
-                onChange={(e) => setPlanTomorrow(e.target.value)}
-                placeholder="What are your plans for tomorrow? (Optional)"
-                rows="2"
-                className="w-full px-4 py-2.5 bg-[var(--surface2)] border border-[var(--border)] rounded-xl text-[var(--text)] text-sm focus:outline-none focus:border-green-500 focus:ring-4 focus:ring-green-500/10 transition-all resize-none"
-              />
+            
+            <div className="space-y-4">
+              <div>
+                <label className="block text-xs font-medium text-[var(--text)] mb-1">
+                  Tasks Completed {punchOutDate ? 'That Day' : 'Today'} <span className="text-red-500">*</span>
+                </label>
+                <textarea
+                  value={tasksCompleted}
+                  onChange={(e) => setTasksCompleted(e.target.value)}
+                  placeholder="What tasks did you complete today?"
+                  rows="3"
+                  className="w-full px-4 py-2.5 bg-[var(--surface2)] border border-[var(--border)] rounded-xl text-[var(--text)] text-sm focus:outline-none focus:border-green-500 focus:ring-4 focus:ring-green-500/10 transition-all resize-none"
+                />
+              </div>
+              
+              <div>
+                <label className="block text-xs font-medium text-[var(--text)] mb-1">
+                  Plan for Tomorrow <span className="text-red-500">*</span>
+                </label>
+                <textarea
+                  value={planTomorrow}
+                  onChange={(e) => setPlanTomorrow(e.target.value)}
+                  placeholder="What are your plans for tomorrow?"
+                  rows="2"
+                  className="w-full px-4 py-2.5 bg-[var(--surface2)] border border-[var(--border)] rounded-xl text-[var(--text)] text-sm focus:outline-none focus:border-green-500 focus:ring-4 focus:ring-green-500/10 transition-all resize-none"
+                />
+              </div>
+              
+              <div>
+                <label className="block text-xs font-medium text-[var(--text)] mb-1">
+                  Remarks (Optional)
+                </label>
+                <textarea
+                  value={remarks}
+                  onChange={(e) => setRemarks(e.target.value)}
+                  placeholder="Any additional remarks or comments..."
+                  rows="2"
+                  className="w-full px-4 py-2.5 bg-[var(--surface2)] border border-[var(--border)] rounded-xl text-[var(--text)] text-sm focus:outline-none focus:border-green-500 focus:ring-4 focus:ring-green-500/10 transition-all resize-none"
+                />
+              </div>
             </div>
           </div>
 
@@ -300,7 +317,7 @@ const PunchOutModal = ({ isOpen, onClose, onSubmit, loading }) => {
             {projects.length > 0 && (
               <>
                 <p className="text-xs text-[var(--muted)] mb-3">
-                  Enter the time you spent working on each project today
+                  Enter the time you spent working on each project {punchOutDate ? 'that day' : 'today'}
                 </p>
                 <div className="flex gap-2 mb-3">
                   <button
@@ -407,7 +424,7 @@ const PunchOutModal = ({ isOpen, onClose, onSubmit, loading }) => {
               </div>
               <div className="text-xs text-[var(--muted)] mt-1">
                 <i className="fas fa-info-circle mr-1"></i>
-                Make sure your total time accurately reflects your work today
+                Make sure your total time accurately reflects your work {punchOutDate ? 'for that day' : 'today'}
               </div>
             </div>
           )}
