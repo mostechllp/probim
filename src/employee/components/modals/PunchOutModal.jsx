@@ -157,11 +157,11 @@ const PunchOutModal = ({ isOpen, onClose, onSubmit, loading, punchOutDate }) => 
     }
     
     // Validate that at least one project has time entered
-    const hasTime = Object.values(projectTimes).some(time => time && time !== '00:00');
-    if (!hasTime) {
-      showToast('Please enter time worked for at least one project', 'error');
-      return;
-    }
+    // const hasTime = Object.values(projectTimes).some(time => time && time !== '00:00');
+    // if (!hasTime) {
+    //   showToast('Please enter time worked for at least one project', 'error');
+    //   return;
+    // }
     
     onSubmit({ 
       project_times: projectTimes, 
