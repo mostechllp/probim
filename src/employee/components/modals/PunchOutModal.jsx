@@ -95,15 +95,15 @@ const PunchOutModal = ({ isOpen, onClose, onSubmit, loading, punchOutDate }) => 
 
   // Handle saving task report
   const handleSaveTaskReport = async () => {
-    if (!tasksCompleted.trim()) {
-      showToast('Please enter your completed tasks', 'error');
-      return false;
-    }
+    // if (!tasksCompleted.trim()) {
+    //   showToast('Please enter your completed tasks', 'error');
+    //   return false;
+    // }
     
-    if (!planTomorrow.trim()) {
-      showToast('Please enter your plan for tomorrow', 'error');
-      return false;
-    }
+    // if (!planTomorrow.trim()) {
+    //   showToast('Please enter your plan for tomorrow', 'error');
+    //   return false;
+    // }
     
     setSavingTaskReport(true);
     try {
