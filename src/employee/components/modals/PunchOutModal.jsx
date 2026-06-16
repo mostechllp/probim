@@ -239,7 +239,8 @@ const PunchOutModal = ({ isOpen, onClose, onSubmit, loading, punchOutDate }) => 
             <div className="space-y-4">
               <div>
                 <label className="block text-xs font-medium text-[var(--text)] mb-1">
-                  Tasks Completed {punchOutDate ? 'That Day' : 'Today'} <span className="text-red-500">*</span>
+                  Tasks Completed {punchOutDate ? 'That Day' : 'Today'} 
+                  {/* <span className="text-red-500">*</span> */}
                 </label>
                 <textarea
                   value={tasksCompleted}
@@ -252,7 +253,8 @@ const PunchOutModal = ({ isOpen, onClose, onSubmit, loading, punchOutDate }) => 
               
               <div>
                 <label className="block text-xs font-medium text-[var(--text)] mb-1">
-                  Plan for Tomorrow <span className="text-red-500">*</span>
+                  Plan for Tomorrow 
+                  {/* <span className="text-red-500">*</span> */}
                 </label>
                 <textarea
                   value={planTomorrow}
