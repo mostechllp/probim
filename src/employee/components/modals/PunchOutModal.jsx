@@ -104,6 +104,12 @@ const PunchOutModal = ({ isOpen, onClose, onSubmit, loading, punchOutDate }) => 
     //   showToast('Please enter your plan for tomorrow', 'error');
     //   return false;
     // }
+
+    const hasTaskReport = tasksCompleted.trim() || planTomorrow.trim() || remarks.trim();
+  
+    if (!hasTaskReport) {
+      return true; // No task report entered, skip silently
+    }
     
     setSavingTaskReport(true);
     try {
