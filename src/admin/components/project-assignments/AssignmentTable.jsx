@@ -116,11 +116,10 @@ const EmployeeProjectsModal = ({
                       <h4 className="text-sm font-bold text-gray-850 dark:text-gray-200 leading-snug">
                         {proj.name}
                       </h4>
-                      <h4 className="text-sm font-bold text-gray-850 dark:text-gray-200 leading-snug">
+                    </div>
+                      <h4 className="text-sm font-bold text-gray-850 dark:text-gray-200">
                         {proj.project_time}
                       </h4>
-                    </div>
-
                     {proj.description && (
                       <p className="text-[11px] text-gray-550 dark:text-gray-450 leading-relaxed font-medium">
                         {proj.description}
