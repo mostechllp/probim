@@ -301,14 +301,14 @@ const PunchOutModal = ({ isOpen, onClose, onSubmit, loading, punchOutDate }) => 
                 <p className="text-xs text-[var(--muted)] mb-3">
                   Enter the time you spent working on each project {punchOutDate ? 'that day' : 'today'}
                 </p>
-                <div className="flex gap-2 mb-3">
-                  <button
+                <div className="flex justify-end gap-2 mb-3">
+                  {/* <button
                     type="button"
                     onClick={handleSetAllSame}
                     className="text-xs px-3 py-1 rounded-full bg-green-500/10 text-green-500 hover:bg-green-500/20 transition-colors"
                   >
                     Distribute 8 hours equally
-                  </button>
+                  </button> */}
                   <button
                     type="button"
                     onClick={handleClearAll}
