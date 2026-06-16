@@ -105,7 +105,7 @@ const PunchOutModal = ({ isOpen, onClose, onSubmit, loading, punchOutDate }) => 
     //   return false;
     // }
 
-    const hasTaskReport = tasksCompleted.trim() || planTomorrow.trim() || remarks.trim();
+  const hasTaskReport = tasksCompleted.trim() || planTomorrow.trim() || remarks.trim();
   
     if (!hasTaskReport) {
       return true; // No task report entered, skip silently
