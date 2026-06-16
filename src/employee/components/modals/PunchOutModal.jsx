@@ -1,10 +1,29 @@
-import { useEffect, useState } from 'react';
-import { useDispatch, useSelector } from 'react-redux';
-import { FiX, FiCheckCircle, FiClock, FiSave, FiCalendar, FiSearch, FiChevronLeft, FiChevronRight, FiAlertCircle, FiFileText, FiTarget, FiMessageSquare } from 'react-icons/fi';
-import { showToast } from '../common/Toast';
-import apiClient from '../../../utils/apiClient';
-import { TimeInput } from '../common/TimeInput';
-import { fetchTaskReports, setTaskReportsPagination, setTaskReportsSearch, clearTaskReportsError, saveTaskReport } from '../../store/slices/taskReportsSlice';
+import { useEffect, useState } from "react";
+import { useDispatch, useSelector } from "react-redux";
+import {
+  FiX,
+  FiCheckCircle,
+  FiClock,
+  FiSave,
+  FiCalendar,
+  FiSearch,
+  FiChevronLeft,
+  FiChevronRight,
+  FiAlertCircle,
+  FiFileText,
+  FiTarget,
+  FiMessageSquare,
+} from "react-icons/fi";
+import { showToast } from "../common/Toast";
+import apiClient from "../../../utils/apiClient";
+import { TimeInput } from "../common/TimeInput";
+import {
+  fetchTaskReports,
+  setTaskReportsPagination,
+  setTaskReportsSearch,
+  clearTaskReportsError,
+  saveTaskReport,
+} from "../../store/slices/taskReportsSlice";
 
 // Punch Out Modal Component
 const PunchOutModal = ({ isOpen, onClose, onSubmit, loading }) => {
@@ -14,23 +33,25 @@ const PunchOutModal = ({ isOpen, onClose, onSubmit, loading }) => {
   const [loadingProjects, setLoadingProjects] = useState(false);
   const [totalHours, setTotalHours] = useState(0);
   const [confirmNoProjects, setConfirmNoProjects] = useState(false);
-  
+
   // Task report states
-  const [tasksCompleted, setTasksCompleted] = useState('');
-  const [planTomorrow, setPlanTomorrow] = useState('');
-  const [remarks, setRemarks] = useState('');
+  const [tasksCompleted, setTasksCompleted] = useState("");
+  const [planTomorrow, setPlanTomorrow] = useState("");
+  const [remarks, setRemarks] = useState("");
   const [savingTaskReport, setSavingTaskReport] = useState(false);
 
   const { user } = useSelector((state) => state.auth);
-  const dashboardData = useSelector((state) => state.EmpAttendance?.dashboardData);
+  const dashboardData = useSelector(
+    (state) => state.EmpAttendance?.dashboardData,
+  );
 
   // Calculate total hours whenever project times change
   useEffect(() => {
     let total = 0;
-    Object.values(projectTimes).forEach(time => {
+    Object.values(projectTimes).forEach((time) => {
       if (time) {
-        const [hours, minutes] = time.split(':');
-        const hoursDecimal = parseInt(hours) + (parseInt(minutes) / 60);
+        const [hours, minutes] = time.split(":");
+        const hoursDecimal = parseInt(hours) + parseInt(minutes) / 60;
         total += hoursDecimal;
       }
     });
@@ -40,22 +61,30 @@ const PunchOutModal = ({ isOpen, onClose, onSubmit, loading }) => {
   // Fetch projects when modal opens - using the same endpoint as dashboard
   useEffect(() => {
     if (isOpen) {
-      const employeeId = dashboardData?.employee?.id
-        || user?.employee?.id
-        || user?.id
-        || dashboardData?.employee?.employee_id;
-      
+      const employeeId =
+        dashboardData?.employee?.id ||
+        user?.employee?.id ||
+        user?.id ||
+        dashboardData?.employee?.employee_id;
+
       if (employeeId) {
         setLoadingProjects(true);
-        
+
         // Use the same endpoint that dashboard uses: /admin/project-assignments/{id}
-        apiClient.get(`/admin/project-assignments/${employeeId}`)
+        apiClient
+          .get(`/admin/project-assignments/${employeeId}`)
           .then((res) => {
-            console.log("Projects API response from project-assignments:", res.data);
-            
+            console.log(
+              "Projects API response from project-assignments:",
+              res.data,
+            );
+
             let projectsData = [];
-            
-            if (res.data?.data?.projects && Array.isArray(res.data.data.projects)) {
+
+            if (
+              res.data?.data?.projects &&
+              Array.isArray(res.data.data.projects)
+            ) {
               projectsData = res.data.data.projects;
             } else if (res.data?.projects && Array.isArray(res.data.projects)) {
               projectsData = res.data.projects;
@@ -64,13 +93,13 @@ const PunchOutModal = ({ isOpen, onClose, onSubmit, loading }) => {
             } else if (Array.isArray(res.data)) {
               projectsData = res.data;
             }
-            
+
             console.log("Extracted projects:", projectsData);
             setProjects(projectsData);
           })
           .catch((err) => {
-            console.error('Failed to fetch projects:', err);
-            showToast('Failed to load projects', 'error');
+            console.error("Failed to fetch projects:", err);
+            showToast("Failed to load projects", "error");
             setProjects([]);
           })
           .finally(() => setLoadingProjects(false));
@@ -83,43 +112,35 @@ const PunchOutModal = ({ isOpen, onClose, onSubmit, loading }) => {
     return () => {
       setConfirmNoProjects(false);
       // Reset task report fields when modal closes
-      setTasksCompleted('');
-      setPlanTomorrow('');
-      setRemarks('');
+      setTasksCompleted("");
+      setPlanTomorrow("");
+      setRemarks("");
     };
   }, [isOpen, dashboardData, user]);
 
   const handleTimeChange = (projectId, time) => {
-    setProjectTimes(prev => ({ ...prev, [projectId]: time }));
+    setProjectTimes((prev) => ({ ...prev, [projectId]: time }));
   };
 
   // Handle saving task report
   const handleSaveTaskReport = async () => {
-    if (!tasksCompleted.trim()) {
-      showToast('Please enter your completed tasks', 'error');
-      return false;
-    }
-    
-    if (!planTomorrow.trim()) {
-      showToast('Please enter your plan for tomorrow', 'error');
-      return false;
-    }
-    
     setSavingTaskReport(true);
     try {
-      const result = await dispatch(saveTaskReport({
-        tasks_completed: tasksCompleted,
-        plan_tomorrow: planTomorrow,
-        remarks: remarks
-      })).unwrap();
-      
+      const result = await dispatch(
+        saveTaskReport({
+          tasks_completed: tasksCompleted || "",
+          plan_tomorrow: planTomorrow || "",
+          remarks: remarks || "",
+        }),
+      ).unwrap();
+
       if (result) {
-        showToast('Task report saved successfully!', 'success');
+        showToast("Task report saved successfully!", "success");
         return true;
       }
       return false;
     } catch (error) {
-      showToast(error || 'Failed to save task report', 'error');
+      showToast(error || "Failed to save task report", "error");
       return false;
     } finally {
       setSavingTaskReport(false);
@@ -128,13 +149,13 @@ const PunchOutModal = ({ isOpen, onClose, onSubmit, loading }) => {
 
   const handleSubmit = async (e) => {
     e.preventDefault();
-    
+
     // First, save the task report
     const taskReportSaved = await handleSaveTaskReport();
     if (!taskReportSaved) {
       return;
     }
-    
+
     // If no projects assigned
     if (projects.length === 0) {
       if (!confirmNoProjects) {
@@ -142,34 +163,36 @@ const PunchOutModal = ({ isOpen, onClose, onSubmit, loading }) => {
         return;
       }
       // User confirmed, proceed with punch out
-      onSubmit({ 
-        project_times: {}, 
-        total_hours: 0, 
+      onSubmit({
+        project_times: {},
+        total_hours: 0,
         no_projects: true,
         task_report: {
           tasks_completed: tasksCompleted,
           plan_tomorrow: planTomorrow,
-          remarks: remarks
-        }
+          remarks: remarks,
+        },
       });
       return;
     }
-    
+
     // Validate that at least one project has time entered
-    const hasTime = Object.values(projectTimes).some(time => time && time !== '00:00');
+    const hasTime = Object.values(projectTimes).some(
+      (time) => time && time !== "00:00",
+    );
     if (!hasTime) {
-      showToast('Please enter time worked for at least one project', 'error');
+      showToast("Please enter time worked for at least one project", "error");
       return;
     }
-    
-    onSubmit({ 
-      project_times: projectTimes, 
+
+    onSubmit({
+      project_times: projectTimes,
       total_hours: totalHours,
       task_report: {
         tasks_completed: tasksCompleted,
         plan_tomorrow: planTomorrow,
-        remarks: remarks
-      }
+        remarks: remarks,
+      },
     });
   };
 
@@ -178,10 +201,11 @@ const PunchOutModal = ({ isOpen, onClose, onSubmit, loading }) => {
     // Calculate equal distribution of 8 hours across projects
     const hoursPerProject = 8 / projects.length;
     const newTimes = {};
-    projects.forEach(project => {
+    projects.forEach((project) => {
       const hours = Math.floor(hoursPerProject);
       const minutes = Math.round((hoursPerProject % 1) * 60);
-      newTimes[project.id] = `${hours.toString().padStart(2, '0')}:${minutes.toString().padStart(2, '0')}`;
+      newTimes[project.id] =
+        `${hours.toString().padStart(2, "0")}:${minutes.toString().padStart(2, "0")}`;
     });
     setProjectTimes(newTimes);
   };
@@ -191,14 +215,14 @@ const PunchOutModal = ({ isOpen, onClose, onSubmit, loading }) => {
   };
 
   const formatTimeDisplay = (time) => {
-    if (!time) return '0 hrs';
-    const [hours, minutes] = time.split(':');
+    if (!time) return "0 hrs";
+    const [hours, minutes] = time.split(":");
     const hourNum = parseInt(hours);
     const minNum = parseInt(minutes);
-    
-    if (hourNum === 0 && minNum === 0) return '0 hrs';
+
+    if (hourNum === 0 && minNum === 0) return "0 hrs";
     if (hourNum === 0) return `${minNum} min`;
-    if (minNum === 0) return `${hourNum} hr${hourNum > 1 ? 's' : ''}`;
+    if (minNum === 0) return `${hourNum} hr${hourNum > 1 ? "s" : ""}`;
     return `${hourNum} hr ${minNum} min`;
   };
 
@@ -210,7 +234,9 @@ const PunchOutModal = ({ isOpen, onClose, onSubmit, loading }) => {
         <div className="flex justify-between items-center p-5 border-b border-[var(--border)]">
           <div>
             <h3 className="text-xl font-bold text-[var(--text)]">Punch Out</h3>
-            <p className="text-xs text-[var(--muted)] mt-1">Record your work and tasks for today</p>
+            <p className="text-xs text-[var(--muted)] mt-1">
+              Record your work and tasks for today
+            </p>
           </div>
           <button
             onClick={onClose}
@@ -227,46 +253,29 @@ const PunchOutModal = ({ isOpen, onClose, onSubmit, loading }) => {
               <FiFileText className="inline mr-2 text-green-500" />
               Daily Task Report
             </label>
-            
-            <div className="space-y-4">
-              <div>
-                <label className="block text-xs font-medium text-[var(--text)] mb-1">
-                  Tasks Completed Today <span className="text-red-500">*</span>
-                </label>
-                <textarea
-                  value={tasksCompleted}
-                  onChange={(e) => setTasksCompleted(e.target.value)}
-                  placeholder="What tasks did you complete today?"
-                  rows="3"
-                  className="w-full px-4 py-2.5 bg-[var(--surface2)] border border-[var(--border)] rounded-xl text-[var(--text)] text-sm focus:outline-none focus:border-green-500 focus:ring-4 focus:ring-green-500/10 transition-all resize-none"
-                />
-              </div>
-              
-              <div>
-                <label className="block text-xs font-medium text-[var(--text)] mb-1">
-                  Plan for Tomorrow <span className="text-red-500">*</span>
-                </label>
-                <textarea
-                  value={planTomorrow}
-                  onChange={(e) => setPlanTomorrow(e.target.value)}
-                  placeholder="What are your plans for tomorrow?"
-                  rows="2"
-                  className="w-full px-4 py-2.5 bg-[var(--surface2)] border border-[var(--border)] rounded-xl text-[var(--text)] text-sm focus:outline-none focus:border-green-500 focus:ring-4 focus:ring-green-500/10 transition-all resize-none"
-                />
-              </div>
-              
-              <div>
-                <label className="block text-xs font-medium text-[var(--text)] mb-1">
-                  Remarks (Optional)
-                </label>
-                <textarea
-                  value={remarks}
-                  onChange={(e) => setRemarks(e.target.value)}
-                  placeholder="Any additional remarks or comments..."
-                  rows="2"
-                  className="w-full px-4 py-2.5 bg-[var(--surface2)] border border-[var(--border)] rounded-xl text-[var(--text)] text-sm focus:outline-none focus:border-green-500 focus:ring-4 focus:ring-green-500/10 transition-all resize-none"
-                />
-              </div>
+            <div>
+              <label className="block text-xs font-medium text-[var(--text)] mb-1">
+                Tasks Completed Today (Optional)
+              </label>
+              <textarea
+                value={tasksCompleted}
+                onChange={(e) => setTasksCompleted(e.target.value)}
+                placeholder="What tasks did you complete today? (Optional)"
+                rows="3"
+                className="w-full px-4 py-2.5 bg-[var(--surface2)] border border-[var(--border)] rounded-xl text-[var(--text)] text-sm focus:outline-none focus:border-green-500 focus:ring-4 focus:ring-green-500/10 transition-all resize-none"
+              />
+            </div>
+            <div>
+              <label className="block text-xs font-medium text-[var(--text)] mb-1">
+                Plan for Tomorrow (Optional)
+              </label>
+              <textarea
+                value={planTomorrow}
+                onChange={(e) => setPlanTomorrow(e.target.value)}
+                placeholder="What are your plans for tomorrow? (Optional)"
+                rows="2"
+                className="w-full px-4 py-2.5 bg-[var(--surface2)] border border-[var(--border)] rounded-xl text-[var(--text)] text-sm focus:outline-none focus:border-green-500 focus:ring-4 focus:ring-green-500/10 transition-all resize-none"
+              />
             </div>
           </div>
 
@@ -276,7 +285,9 @@ const PunchOutModal = ({ isOpen, onClose, onSubmit, loading }) => {
               <div className="w-full border-t border-[var(--border)]"></div>
             </div>
             <div className="relative flex justify-center text-xs">
-              <span className="px-3 bg-[var(--surface)] text-[var(--muted)]">Project Time Tracking</span>
+              <span className="px-3 bg-[var(--surface)] text-[var(--muted)]">
+                Project Time Tracking
+              </span>
             </div>
           </div>
 
@@ -285,7 +296,7 @@ const PunchOutModal = ({ isOpen, onClose, onSubmit, loading }) => {
               <FiClock className="inline mr-2 text-green-500" />
               Time Worked on Projects
             </label>
-            
+
             {projects.length > 0 && (
               <>
                 <p className="text-xs text-[var(--muted)] mb-3">
@@ -315,14 +326,20 @@ const PunchOutModal = ({ isOpen, onClose, onSubmit, loading }) => {
             {loadingProjects ? (
               <div className="text-center py-8">
                 <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-green-500 mx-auto mb-3"></div>
-                <div className="text-sm text-[var(--muted)]">Loading your projects...</div>
+                <div className="text-sm text-[var(--muted)]">
+                  Loading your projects...
+                </div>
               </div>
             ) : projects.length === 0 ? (
               <div className="text-center py-8 bg-[var(--surface2)] rounded-xl">
                 <FiAlertCircle className="text-4xl text-[var(--muted)] mx-auto mb-2" />
-                <div className="text-sm text-[var(--muted)]">No projects assigned to you</div>
-                <div className="text-xs text-[var(--muted)] mt-1">You can punch out without recording project time</div>
-                
+                <div className="text-sm text-[var(--muted)]">
+                  No projects assigned to you
+                </div>
+                <div className="text-xs text-[var(--muted)] mt-1">
+                  You can punch out without recording project time
+                </div>
+
                 {/* Confirmation checkbox for no projects */}
                 <div className="mt-4 flex items-center justify-center gap-2">
                   <input
@@ -332,7 +349,10 @@ const PunchOutModal = ({ isOpen, onClose, onSubmit, loading }) => {
                     onChange={(e) => setConfirmNoProjects(e.target.checked)}
                     className="w-4 h-4 text-green-500 rounded border-[var(--border)] focus:ring-green-500"
                   />
-                  <label htmlFor="confirmNoProjects" className="text-sm text-[var(--text)]">
+                  <label
+                    htmlFor="confirmNoProjects"
+                    className="text-sm text-[var(--text)]"
+                  >
                     I confirm I want to punch out (no projects assigned)
                   </label>
                 </div>
@@ -340,21 +360,27 @@ const PunchOutModal = ({ isOpen, onClose, onSubmit, loading }) => {
             ) : (
               <div className="space-y-3 max-h-[40vh] overflow-y-auto pr-2">
                 {projects.map((project) => (
-                  <div 
-                    key={project.id} 
+                  <div
+                    key={project.id}
                     className="flex items-center justify-between bg-[var(--surface2)] p-4 rounded-xl border border-[var(--border)] hover:border-green-500/30 transition-all"
                   >
                     <div className="flex-1">
-                      <span className="text-sm font-semibold text-[var(--text)]">{project.name}</span>
+                      <span className="text-sm font-semibold text-[var(--text)]">
+                        {project.name}
+                      </span>
                       {project.description && (
-                        <p className="text-xs text-[var(--muted)] mt-0.5 line-clamp-1">{project.description}</p>
+                        <p className="text-xs text-[var(--muted)] mt-0.5 line-clamp-1">
+                          {project.description}
+                        </p>
                       )}
                     </div>
                     <div className="flex items-center gap-3">
                       <div className="w-32">
                         <TimeInput
-                          value={projectTimes[project.id] || ''}
-                          onChange={(e) => handleTimeChange(project.id, e.target.value)}
+                          value={projectTimes[project.id] || ""}
+                          onChange={(e) =>
+                            handleTimeChange(project.id, e.target.value)
+                          }
                           className="text-sm"
                         />
                       </div>
@@ -372,8 +398,12 @@ const PunchOutModal = ({ isOpen, onClose, onSubmit, loading }) => {
           {projects.length > 0 && (
             <div className="mb-6 p-4 bg-green-500/10 rounded-xl border border-green-500/20">
               <div className="flex justify-between items-center">
-                <span className="text-sm font-semibold text-[var(--text)]">Total Time Recorded:</span>
-                <span className="text-xl font-bold text-green-500">{totalHours} hours</span>
+                <span className="text-sm font-semibold text-[var(--text)]">
+                  Total Time Recorded:
+                </span>
+                <span className="text-xl font-bold text-green-500">
+                  {totalHours} hours
+                </span>
               </div>
               <div className="text-xs text-[var(--muted)] mt-1">
                 <i className="fas fa-info-circle mr-1"></i>
@@ -392,7 +422,8 @@ const PunchOutModal = ({ isOpen, onClose, onSubmit, loading }) => {
                 </span>
               </div>
               <div className="text-xs text-[var(--muted)] mt-1">
-                You have no projects assigned. Check the confirmation box above to proceed.
+                You have no projects assigned. Check the confirmation box above
+                to proceed.
               </div>
             </div>
           )}
@@ -407,13 +438,17 @@ const PunchOutModal = ({ isOpen, onClose, onSubmit, loading }) => {
             </button>
             <button
               type="submit"
-              disabled={loading || savingTaskReport || (projects.length === 0 && !confirmNoProjects)}
+              disabled={
+                loading ||
+                savingTaskReport ||
+                (projects.length === 0 && !confirmNoProjects)
+              }
               className="flex-1 bg-green-500 border-none text-white py-3 px-8 rounded-full font-semibold text-sm cursor-pointer transition-all flex items-center justify-center gap-2 hover:bg-green-600 hover:-translate-y-0.5 hover:shadow-md disabled:opacity-50 disabled:cursor-not-allowed"
             >
               {loading || savingTaskReport ? (
                 <>
                   <div className="w-4 h-4 border-2 border-white border-t-transparent rounded-full animate-spin"></div>
-                  {savingTaskReport ? 'Saving Report...' : 'Processing...'}
+                  {savingTaskReport ? "Saving Report..." : "Processing..."}
                 </>
               ) : (
                 <>
@@ -437,8 +472,8 @@ const TaskReportsList = () => {
     taskReports = [],
     loading = false,
     pagination = { currentPage: 1, perPage: 10 },
-    search = '',
-    error = null
+    search = "",
+    error = null,
   } = taskReportsState;
 
   // Fetch task reports on component mount
@@ -455,15 +490,17 @@ const TaskReportsList = () => {
   }, [error, dispatch]);
 
   // Filter and paginate reports
-  const filteredReports = Array.isArray(taskReports) ? taskReports.filter(report => {
-    if (!search) return true;
-    const searchLower = search.toLowerCase();
-    return (
-      (report.tasks_completed || "").toLowerCase().includes(searchLower) ||
-      (report.plan_tomorrow || "").toLowerCase().includes(searchLower) ||
-      (report.remarks || "").toLowerCase().includes(searchLower)
-    );
-  }) : [];
+  const filteredReports = Array.isArray(taskReports)
+    ? taskReports.filter((report) => {
+        if (!search) return true;
+        const searchLower = search.toLowerCase();
+        return (
+          (report.tasks_completed || "").toLowerCase().includes(searchLower) ||
+          (report.plan_tomorrow || "").toLowerCase().includes(searchLower) ||
+          (report.remarks || "").toLowerCase().includes(searchLower)
+        );
+      })
+    : [];
 
   const perPage = pagination?.perPage || 10;
   const currentPage = pagination?.currentPage || 1;
@@ -475,10 +512,10 @@ const TaskReportsList = () => {
     if (!dateString) return "-";
     try {
       const date = new Date(dateString);
-      return date.toLocaleDateString('en-GB', {
-        day: '2-digit',
-        month: 'short',
-        year: 'numeric'
+      return date.toLocaleDateString("en-GB", {
+        day: "2-digit",
+        month: "short",
+        year: "numeric",
       });
     } catch {
       return "-";
@@ -487,7 +524,9 @@ const TaskReportsList = () => {
 
   const handlePageChange = (page) => {
     if (page >= 1 && page <= totalPages) {
-      dispatch(setTaskReportsPagination({ currentPage: page, perPage: perPage }));
+      dispatch(
+        setTaskReportsPagination({ currentPage: page, perPage: perPage }),
+      );
       window.scrollTo({ top: 0, behavior: "smooth" });
     }
   };
@@ -497,7 +536,12 @@ const TaskReportsList = () => {
   };
 
   const handleEntriesChange = (e) => {
-    dispatch(setTaskReportsPagination({ currentPage: 1, perPage: parseInt(e.target.value) }));
+    dispatch(
+      setTaskReportsPagination({
+        currentPage: 1,
+        perPage: parseInt(e.target.value),
+      }),
+    );
   };
 
   if (loading && taskReports.length === 0) {
@@ -505,7 +549,9 @@ const TaskReportsList = () => {
       <div className="flex items-center justify-center h-64">
         <div className="text-center">
           <div className="w-12 h-12 border-4 border-green-500 border-t-transparent rounded-full animate-spin mx-auto mb-4"></div>
-          <p className="text-gray-500 dark:text-gray-400">Loading task reports...</p>
+          <p className="text-gray-500 dark:text-gray-400">
+            Loading task reports...
+          </p>
         </div>
       </div>
     );
@@ -554,17 +600,30 @@ const TaskReportsList = () => {
         <table className="task-reports-table w-full border-collapse text-xs min-w-[800px]">
           <thead>
             <tr className="bg-[var(--surface2)] border-b border-[var(--border)]">
-              <th className="text-left py-3 px-4 text-xs font-semibold text-[var(--muted)]">#</th>
-              <th className="text-left py-3 px-4 text-xs font-semibold text-[var(--muted)]">Date</th>
-              <th className="text-left py-3 px-4 text-xs font-semibold text-[var(--muted)]">Tasks Completed</th>
-              <th className="text-left py-3 px-4 text-xs font-semibold text-[var(--muted)]">Plan for Tomorrow</th>
-              <th className="text-left py-3 px-4 text-xs font-semibold text-[var(--muted)]">Remarks</th>
-             </tr>
+              <th className="text-left py-3 px-4 text-xs font-semibold text-[var(--muted)]">
+                #
+              </th>
+              <th className="text-left py-3 px-4 text-xs font-semibold text-[var(--muted)]">
+                Date
+              </th>
+              <th className="text-left py-3 px-4 text-xs font-semibold text-[var(--muted)]">
+                Tasks Completed
+              </th>
+              <th className="text-left py-3 px-4 text-xs font-semibold text-[var(--muted)]">
+                Plan for Tomorrow
+              </th>
+              <th className="text-left py-3 px-4 text-xs font-semibold text-[var(--muted)]">
+                Remarks
+              </th>
+            </tr>
           </thead>
           <tbody>
             {currentReports.length === 0 ? (
               <tr>
-                <td colSpan="5" className="text-center py-8 text-[var(--muted)]">
+                <td
+                  colSpan="5"
+                  className="text-center py-8 text-[var(--muted)]"
+                >
                   <div className="flex flex-col items-center gap-2">
                     <FiClock className="text-4xl text-[var(--muted)]" />
                     <p>No task reports found.</p>
@@ -573,8 +632,13 @@ const TaskReportsList = () => {
               </tr>
             ) : (
               currentReports.map((report, idx) => (
-                <tr key={report.id} className="hover:bg-[var(--surface2)] transition-colors border-b border-[var(--border)]">
-                  <td className="py-3.5 px-4 text-[var(--text-secondary)]">{start + idx + 1}</td>
+                <tr
+                  key={report.id}
+                  className="hover:bg-[var(--surface2)] transition-colors border-b border-[var(--border)]"
+                >
+                  <td className="py-3.5 px-4 text-[var(--text-secondary)]">
+                    {start + idx + 1}
+                  </td>
                   <td className="py-3.5 px-4">
                     <div className="flex items-center gap-2">
                       <FiCalendar className="text-[var(--muted)] text-xs" />
@@ -583,13 +647,22 @@ const TaskReportsList = () => {
                       </span>
                     </div>
                   </td>
-                  <td className="py-3.5 px-4 text-[var(--text-secondary)] max-w-[250px] truncate" title={report.tasks_completed}>
+                  <td
+                    className="py-3.5 px-4 text-[var(--text-secondary)] max-w-[250px] truncate"
+                    title={report.tasks_completed}
+                  >
                     {report.tasks_completed || "-"}
                   </td>
-                  <td className="py-3.5 px-4 text-[var(--text-secondary)] max-w-[250px] truncate" title={report.plan_tomorrow}>
+                  <td
+                    className="py-3.5 px-4 text-[var(--text-secondary)] max-w-[250px] truncate"
+                    title={report.plan_tomorrow}
+                  >
                     {report.plan_tomorrow || "-"}
                   </td>
-                  <td className="py-3.5 px-4 text-[var(--text-secondary)] max-w-[150px] truncate" title={report.remarks}>
+                  <td
+                    className="py-3.5 px-4 text-[var(--text-secondary)] max-w-[150px] truncate"
+                    title={report.remarks}
+                  >
                     {report.remarks || "-"}
                   </td>
                 </tr>
@@ -603,7 +676,9 @@ const TaskReportsList = () => {
       {filteredReports.length > 0 && (
         <div className="pagination-container flex flex-col sm:flex-row justify-between items-center gap-3 mt-5">
           <div className="text-xs text-[var(--muted)]">
-            Showing {start + 1} to {Math.min(start + perPage, filteredReports.length)} of {filteredReports.length} entries
+            Showing {start + 1} to{" "}
+            {Math.min(start + perPage, filteredReports.length)} of{" "}
+            {filteredReports.length} entries
           </div>
           <div className="page-buttons flex gap-1.5 flex-wrap">
             <button
@@ -619,10 +694,11 @@ const TaskReportsList = () => {
                 <button
                   key={i}
                   onClick={() => handlePageChange(pageNum)}
-                  className={`w-9 h-9 rounded-lg border text-xs transition-all ${currentPage === pageNum
+                  className={`w-9 h-9 rounded-lg border text-xs transition-all ${
+                    currentPage === pageNum
                       ? "bg-green-500 border-green-500 text-white"
                       : "border-[var(--border)] bg-[var(--surface)] text-[var(--text)] hover:bg-[var(--surface2)]"
-                    }`}
+                  }`}
                 >
                   {pageNum}
                 </button>
