@@ -82,6 +82,8 @@ export const punchOut = createAsyncThunk(
         })
       );
 
+      console.log("time", data);
+
       const payload = {
         project_times: formattedProjectTimes,
         total_hours: data.total_hours,
