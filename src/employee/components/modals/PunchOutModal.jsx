@@ -13,6 +13,8 @@ import {
   FiFileText,
   FiTarget,
   FiMessageSquare,
+  FiInfo,
+  FiWatch,
 } from "react-icons/fi";
 import { showToast } from "../common/Toast";
 import apiClient from "../../../utils/apiClient";
@@ -34,6 +36,9 @@ const PunchOutModal = ({ isOpen, onClose, onSubmit, loading, punchOutDate }) => 
   const [totalHours, setTotalHours] = useState(0);
   const [confirmNoProjects, setConfirmNoProjects] = useState(false);
 
+  // Punch out time state
+  const [punchOutTime, setPunchOutTime] = useState("");
+
   // Task report states
   const [tasksCompleted, setTasksCompleted] = useState("");
   const [planTomorrow, setPlanTomorrow] = useState("");
@@ -47,30 +52,25 @@ const PunchOutModal = ({ isOpen, onClose, onSubmit, loading, punchOutDate }) => 
 
   // Calculate total hours whenever project times change
   useEffect(() => {
-<<<<<<< HEAD
     let total = 0;
     Object.values(projectTimes).forEach((time) => {
-      if (time) {
-        const [hours, minutes] = time.split(":");
-        const hoursDecimal = parseInt(hours) + parseInt(minutes) / 60;
-        total += hoursDecimal;
+      if (time && time !== "00:00" && time !== "") {
+        const parts = time.split(":");
+        if (parts.length === 2) {
+          const hours = parseInt(parts[0], 10);
+          const minutes = parseInt(parts[1], 10);
+          if (!isNaN(hours) && !isNaN(minutes)) {
+            const hoursDecimal = hours + minutes / 60;
+            total += hoursDecimal;
+          }
+        }
       }
     });
+    // Round to 1 decimal place
     setTotalHours(Math.round(total * 10) / 10);
   }, [projectTimes]);
-=======
-  let total = 0;
-  Object.values(projectTimes).forEach(time => {
-    if (time) {
-      const num = parseFloat(time);
-      if (!isNaN(num)) total += num;
-    }
-  });
-  setTotalHours(Math.round(total * 100) / 100);
-}, [projectTimes]);
->>>>>>> dev
 
-  // Fetch projects when modal opens - using the same endpoint as dashboard
+  // Fetch projects when modal opens
   useEffect(() => {
     if (isOpen) {
       const employeeId =
@@ -81,18 +81,10 @@ const PunchOutModal = ({ isOpen, onClose, onSubmit, loading, punchOutDate }) => 
 
       if (employeeId) {
         setLoadingProjects(true);
-
-        // Use the same endpoint that dashboard uses: /admin/project-assignments/{id}
         apiClient
           .get(`/admin/project-assignments/${employeeId}`)
           .then((res) => {
-            console.log(
-              "Projects API response from project-assignments:",
-              res.data,
-            );
-
             let projectsData = [];
-
             if (
               res.data?.data?.projects &&
               Array.isArray(res.data.data.projects)
@@ -105,8 +97,6 @@ const PunchOutModal = ({ isOpen, onClose, onSubmit, loading, punchOutDate }) => 
             } else if (Array.isArray(res.data)) {
               projectsData = res.data;
             }
-
-            console.log("Extracted projects:", projectsData);
             setProjects(projectsData);
           })
           .catch((err) => {
@@ -115,20 +105,25 @@ const PunchOutModal = ({ isOpen, onClose, onSubmit, loading, punchOutDate }) => 
             setProjects([]);
           })
           .finally(() => setLoadingProjects(false));
-      } else {
-        console.error("No employee ID found:", { dashboardData, user });
-        setLoadingProjects(false);
       }
     }
-    // Reset confirmation when modal closes
+    // Reset all fields when modal closes
     return () => {
       setConfirmNoProjects(false);
-      // Reset task report fields when modal closes
       setTasksCompleted("");
       setPlanTomorrow("");
       setRemarks("");
+      setPunchOutTime("");
     };
   }, [isOpen, dashboardData, user]);
+
+  // Set default punch out time when modal opens
+  useEffect(() => {
+    if (isOpen && punchOutDate) {
+      const defaultTime = "18:00";
+      setPunchOutTime(defaultTime);
+    }
+  }, [isOpen, punchOutDate]);
 
   const handleTimeChange = (projectId, time) => {
     setProjectTimes((prev) => ({ ...prev, [projectId]: time }));
@@ -136,25 +131,6 @@ const PunchOutModal = ({ isOpen, onClose, onSubmit, loading, punchOutDate }) => 
 
   // Handle saving task report
   const handleSaveTaskReport = async () => {
-<<<<<<< HEAD
-=======
-    // if (!tasksCompleted.trim()) {
-    //   showToast('Please enter your completed tasks', 'error');
-    //   return false;
-    // }
-    
-    // if (!planTomorrow.trim()) {
-    //   showToast('Please enter your plan for tomorrow', 'error');
-    //   return false;
-    // }
-
-  const hasTaskReport = tasksCompleted.trim() || planTomorrow.trim() || remarks.trim();
-  
-    if (!hasTaskReport) {
-      return true; // No task report entered, skip silently
-    }
-    
->>>>>>> dev
     setSavingTaskReport(true);
     try {
       const result = await dispatch(
@@ -162,6 +138,7 @@ const PunchOutModal = ({ isOpen, onClose, onSubmit, loading, punchOutDate }) => 
           tasks_completed: tasksCompleted || "",
           plan_tomorrow: planTomorrow || "",
           remarks: remarks || "",
+          date: punchOutDate || new Date().toISOString().split('T')[0],
         }),
       ).unwrap();
 
@@ -180,11 +157,13 @@ const PunchOutModal = ({ isOpen, onClose, onSubmit, loading, punchOutDate }) => 
 
   const handleSubmit = async (e) => {
     e.preventDefault();
-<<<<<<< HEAD
 
-=======
-    console.log("projectTimes", projectTimes);
->>>>>>> dev
+    // Validate punch out time
+    if (!punchOutTime || punchOutTime === "00:00") {
+      showToast("Please enter the punch out time", "error");
+      return;
+    }
+
     // First, save the task report
     const taskReportSaved = await handleSaveTaskReport();
     if (!taskReportSaved) {
@@ -197,12 +176,12 @@ const PunchOutModal = ({ isOpen, onClose, onSubmit, loading, punchOutDate }) => 
         setConfirmNoProjects(true);
         return;
       }
-      // User confirmed, proceed with punch out
       onSubmit({
         project_times: {},
         total_hours: 0,
         no_projects: true,
         punch_out_date: punchOutDate || null,
+        punch_out_time: punchOutTime,
         task_report: {
           tasks_completed: tasksCompleted,
           plan_tomorrow: planTomorrow,
@@ -214,7 +193,7 @@ const PunchOutModal = ({ isOpen, onClose, onSubmit, loading, punchOutDate }) => 
 
     // Validate that at least one project has time entered
     const hasTime = Object.values(projectTimes).some(
-      (time) => time && time !== "00:00",
+      (time) => time && time !== "00:00" && time !== "",
     );
     if (!hasTime) {
       showToast("Please enter time worked for at least one project", "error");
@@ -225,6 +204,7 @@ const PunchOutModal = ({ isOpen, onClose, onSubmit, loading, punchOutDate }) => 
       project_times: projectTimes,
       total_hours: totalHours,
       punch_out_date: punchOutDate || null,
+      punch_out_time: punchOutTime,
       task_report: {
         tasks_completed: tasksCompleted,
         plan_tomorrow: planTomorrow,
@@ -233,50 +213,44 @@ const PunchOutModal = ({ isOpen, onClose, onSubmit, loading, punchOutDate }) => 
     });
   };
 
-  const handleSetAllSame = () => {
-    if (projects.length === 0) return;
-    // Calculate equal distribution of 8 hours across projects
-    const hoursPerProject = 8 / projects.length;
-    const newTimes = {};
-    projects.forEach((project) => {
-      const hours = Math.floor(hoursPerProject);
-      const minutes = Math.round((hoursPerProject % 1) * 60);
-      newTimes[project.id] =
-        `${hours.toString().padStart(2, "0")}:${minutes.toString().padStart(2, "0")}`;
-    });
-    setProjectTimes(newTimes);
-  };
-
   const handleClearAll = () => {
     setProjectTimes({});
   };
 
+  // Fixed formatTimeDisplay function
   const formatTimeDisplay = (time) => {
-<<<<<<< HEAD
-    if (!time) return "0 hrs";
-    const [hours, minutes] = time.split(":");
-    const hourNum = parseInt(hours);
-    const minNum = parseInt(minutes);
-
-    if (hourNum === 0 && minNum === 0) return "0 hrs";
-    if (hourNum === 0) return `${minNum} min`;
-    if (minNum === 0) return `${hourNum} hr${hourNum > 1 ? "s" : ""}`;
-    return `${hourNum} hr ${minNum} min`;
+    if (!time || time === "00:00" || time === "") return "0 hrs";
+    
+    const parts = time.split(":");
+    if (parts.length !== 2) return "0 hrs";
+    
+    const hours = parseInt(parts[0], 10);
+    const minutes = parseInt(parts[1], 10);
+    
+    if (isNaN(hours) || isNaN(minutes)) return "0 hrs";
+    if (hours === 0 && minutes === 0) return "0 hrs";
+    
+    if (hours === 0) return `${minutes} min`;
+    if (minutes === 0) return `${hours} hr${hours > 1 ? "s" : ""}`;
+    return `${hours} hr ${minutes} min`;
   };
 
-=======
-  if (!time) return '0 hrs';
-  const num = parseFloat(time);
-  if (isNaN(num) || num === 0) return '0 hrs';
-  
-  const hours = Math.floor(num);
-  const minutes = Math.round((num - hours) * 60);
-  
-  if (hours === 0) return `${minutes} min`;
-  if (minutes === 0) return `${hours} hr${hours > 1 ? 's' : ''}`;
-  return `${hours} hr ${minutes} min`;
-};
->>>>>>> dev
+  // Format date for display
+  const formatDisplayDate = (dateString) => {
+    if (!dateString) return "";
+    try {
+      const date = new Date(dateString);
+      return date.toLocaleDateString("en-US", {
+        weekday: "long",
+        year: "numeric",
+        month: "long",
+        day: "numeric",
+      });
+    } catch {
+      return dateString;
+    }
+  };
+
   if (!isOpen) return null;
 
   return (
@@ -284,8 +258,14 @@ const PunchOutModal = ({ isOpen, onClose, onSubmit, loading, punchOutDate }) => 
       <div className="bg-[var(--surface)] rounded-xl w-full max-w-2xl mx-4 shadow-2xl animate-slide-up max-h-[90vh] flex flex-col">
         <div className="flex justify-between items-center p-5 border-b border-[var(--border)]">
           <div>
-            <h3 className="text-xl font-bold text-[var(--text)]">Punch Out {punchOutDate ? `for ${punchOutDate}` : ''}</h3>
-            <p className="text-xs text-[var(--muted)] mt-1">Record your work and tasks for {punchOutDate ? 'that day' : 'today'}</p>
+            <h3 className="text-xl font-bold text-[var(--text)]">
+              {punchOutDate ? `Punch Out for ${formatDisplayDate(punchOutDate)}` : "Punch Out"}
+            </h3>
+            <p className="text-xs text-[var(--muted)] mt-1">
+              {punchOutDate 
+                ? `Record your work and tasks for ${formatDisplayDate(punchOutDate)}` 
+                : "Record your work and tasks for today"}
+            </p>
           </div>
           <button
             onClick={onClose}
@@ -296,18 +276,44 @@ const PunchOutModal = ({ isOpen, onClose, onSubmit, loading, punchOutDate }) => 
         </div>
 
         <form onSubmit={handleSubmit} className="p-5 flex-1 overflow-y-auto">
+          {/* Punch Out Time - NEW SECTION */}
+          <div className="mb-6 p-4 bg-yellow-500/10 rounded-xl border border-yellow-500/20">
+            <label className="block text-sm font-semibold text-[var(--text)] mb-2">
+              <FiWatch className="inline mr-2 text-yellow-500" />
+              Punch Out Time {punchOutDate && <span className="text-yellow-500 text-xs">(for {formatDisplayDate(punchOutDate)})</span>}
+              <span className="text-red-500">*</span>
+            </label>
+            <div className="flex items-center gap-3">
+              <input
+                type="time"
+                value={punchOutTime}
+                onChange={(e) => setPunchOutTime(e.target.value)}
+                className="w-40 px-4 py-2.5 bg-[var(--surface2)] border border-[var(--border)] rounded-xl text-[var(--text)] text-sm focus:outline-none focus:border-yellow-500 focus:ring-4 focus:ring-yellow-500/10 transition-all"
+                required
+              />
+              <span className="text-xs text-[var(--muted)]">
+                {punchOutDate ? "Select the time you left on that day" : "Select your punch out time"}
+              </span>
+            </div>
+            {punchOutDate && (
+              <div className="mt-2 flex items-center gap-2 text-xs text-yellow-600 dark:text-yellow-400">
+                <FiInfo className="w-4 h-4" />
+                <span>You are punching out for a previous date. Please select the exact time you left on that day.</span>
+              </div>
+            )}
+          </div>
+
           {/* Task Report Section */}
           <div className="mb-6">
             <label className="block text-sm font-semibold text-[var(--text)] mb-3">
               <FiFileText className="inline mr-2 text-green-500" />
-              Task Report {punchOutDate ? `for ${punchOutDate}` : 'Daily'}
+              Task Report {punchOutDate ? `for ${formatDisplayDate(punchOutDate)}` : 'Daily'}
             </label>
             
             <div className="space-y-4">
               <div>
                 <label className="block text-xs font-medium text-[var(--text)] mb-1">
-                  Tasks Completed {punchOutDate ? 'That Day' : 'Today'} 
-                  {/* <span className="text-red-500">*</span> */}
+                  Tasks Completed {punchOutDate ? 'That Day' : 'Today'}
                 </label>
                 <textarea
                   value={tasksCompleted}
@@ -320,8 +326,7 @@ const PunchOutModal = ({ isOpen, onClose, onSubmit, loading, punchOutDate }) => 
               
               <div>
                 <label className="block text-xs font-medium text-[var(--text)] mb-1">
-                  Plan for Tomorrow 
-                  {/* <span className="text-red-500">*</span> */}
+                  Plan for Tomorrow
                 </label>
                 <textarea
                   value={planTomorrow}
@@ -371,13 +376,6 @@ const PunchOutModal = ({ isOpen, onClose, onSubmit, loading, punchOutDate }) => 
                   Enter the time you spent working on each project {punchOutDate ? 'that day' : 'today'}
                 </p>
                 <div className="flex justify-end gap-2 mb-3">
-                  {/* <button
-                    type="button"
-                    onClick={handleSetAllSame}
-                    className="text-xs px-3 py-1 rounded-full bg-green-500/10 text-green-500 hover:bg-green-500/20 transition-colors"
-                  >
-                    Distribute 8 hours equally
-                  </button> */}
                   <button
                     type="button"
                     onClick={handleClearAll}
@@ -407,8 +405,6 @@ const PunchOutModal = ({ isOpen, onClose, onSubmit, loading, punchOutDate }) => 
                 <div className="text-xs text-[var(--muted)] mt-1">
                   You can punch out without recording project time
                 </div>
-
-                {/* Confirmation checkbox for no projects */}
                 <div className="mt-4 flex items-center justify-center gap-2">
                   <input
                     type="checkbox"
@@ -427,42 +423,45 @@ const PunchOutModal = ({ isOpen, onClose, onSubmit, loading, punchOutDate }) => 
               </div>
             ) : (
               <div className="space-y-3 max-h-[40vh] overflow-y-auto pr-2">
-                {projects.map((project) => (
-                  <div
-                    key={project.id}
-                    className="flex items-center justify-between bg-[var(--surface2)] p-4 rounded-xl border border-[var(--border)] hover:border-green-500/30 transition-all"
-                  >
-                    <div className="flex-1">
-                      <span className="text-sm font-semibold text-[var(--text)]">
-                        {project.name}
-                      </span>
-                      {project.description && (
-                        <p className="text-xs text-[var(--muted)] mt-0.5 line-clamp-1">
-                          {project.description}
-                        </p>
-                      )}
-                    </div>
-                    <div className="flex items-center gap-3">
-                      <div className="w-32">
-                        <TimeInput
-                          value={projectTimes[project.id] || ""}
-                          onChange={(e) =>
-                            handleTimeChange(project.id, e.target.value)
-                          }
-                          className="text-sm"
-                        />
+                {projects.map((project) => {
+                  const timeValue = projectTimes[project.id] || "";
+                  return (
+                    <div
+                      key={project.id}
+                      className="flex items-center justify-between bg-[var(--surface2)] p-4 rounded-xl border border-[var(--border)] hover:border-green-500/30 transition-all"
+                    >
+                      <div className="flex-1">
+                        <span className="text-sm font-semibold text-[var(--text)]">
+                          {project.name}
+                        </span>
+                        {project.description && (
+                          <p className="text-xs text-[var(--muted)] mt-0.5 line-clamp-1">
+                            {project.description}
+                          </p>
+                        )}
                       </div>
-                      <span className="text-xs text-[var(--muted)] w-20">
-                        {formatTimeDisplay(projectTimes[project.id])}
-                      </span>
+                      <div className="flex items-center gap-3">
+                        <div className="w-32">
+                          <TimeInput
+                            value={timeValue}
+                            onChange={(e) =>
+                              handleTimeChange(project.id, e.target.value)
+                            }
+                            className="text-sm"
+                          />
+                        </div>
+                        <span className="text-xs text-[var(--muted)] w-20">
+                          {formatTimeDisplay(timeValue)}
+                        </span>
+                      </div>
                     </div>
-                  </div>
-                ))}
+                  );
+                })}
               </div>
             )}
           </div>
 
-          {/* Total Hours Summary - Only show if there are projects */}
+          {/* Total Hours Summary */}
           {projects.length > 0 && (
             <div className="mb-6 p-4 bg-green-500/10 rounded-xl border border-green-500/20">
               <div className="flex justify-between items-center">
@@ -470,11 +469,11 @@ const PunchOutModal = ({ isOpen, onClose, onSubmit, loading, punchOutDate }) => 
                   Total Time Recorded:
                 </span>
                 <span className="text-xl font-bold text-green-500">
-                  {totalHours} hours
+                  {isNaN(totalHours) ? "0" : totalHours} hours
                 </span>
               </div>
               <div className="text-xs text-[var(--muted)] mt-1">
-                <i className="fas fa-info-circle mr-1"></i>
+                <FiInfo className="inline mr-1" />
                 Make sure your total time accurately reflects your work {punchOutDate ? 'for that day' : 'today'}
               </div>
             </div>
@@ -509,9 +508,11 @@ const PunchOutModal = ({ isOpen, onClose, onSubmit, loading, punchOutDate }) => 
               disabled={
                 loading ||
                 savingTaskReport ||
-                (projects.length === 0 && !confirmNoProjects)
+                (projects.length === 0 && !confirmNoProjects) ||
+                !punchOutTime ||
+                punchOutTime === "00:00"
               }
-              className="flex-1 bg-green-500 border-none text-white py-3 px-8 rounded-full font-semibold text-sm cursor-pointer transition-all flex items-center justify-center gap-2 hover:bg-green-600 hover:-translate-y-0.5 hover:shadow-md disabled:opacity-50 disabled:cursor-not-allowed"
+              className="flex-1 bg-yellow-500 border-none text-white py-3 px-8 rounded-full font-semibold text-sm cursor-pointer transition-all flex items-center justify-center gap-2 hover:bg-yellow-600 hover:-translate-y-0.5 hover:shadow-md disabled:opacity-50 disabled:cursor-not-allowed"
             >
               {loading || savingTaskReport ? (
                 <>
@@ -521,7 +522,7 @@ const PunchOutModal = ({ isOpen, onClose, onSubmit, loading, punchOutDate }) => 
               ) : (
                 <>
                   <FiSave />
-                  Confirm Punch Out
+                  {punchOutDate ? `Confirm Punch Out for ${formatDisplayDate(punchOutDate)}` : "Confirm Punch Out"}
                 </>
               )}
             </button>
@@ -544,12 +545,10 @@ const TaskReportsList = () => {
     error = null,
   } = taskReportsState;
 
-  // Fetch task reports on component mount
   useEffect(() => {
     dispatch(fetchTaskReports());
   }, [dispatch]);
 
-  // Handle errors
   useEffect(() => {
     if (error) {
       showToast(error, "error");
@@ -557,7 +556,6 @@ const TaskReportsList = () => {
     }
   }, [error, dispatch]);
 
-  // Filter and paginate reports
   const filteredReports = Array.isArray(taskReports)
     ? taskReports.filter((report) => {
         if (!search) return true;
@@ -627,14 +625,12 @@ const TaskReportsList = () => {
 
   return (
     <div className="task-reports-container">
-      {/* Header */}
       <div className="flex flex-col md:flex-row justify-between items-start md:items-center gap-5 mb-7">
         <h2 className="text-xl md:text-2xl font-semibold bg-gradient-to-r from-[var(--text)] to-green-600 bg-clip-text text-transparent">
           My Task Reports
         </h2>
       </div>
 
-      {/* Action Bar */}
       <div className="files-actions flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4 mb-5">
         <div className="entries-select flex items-center gap-2.5 bg-[var(--surface)] border border-[var(--border)] rounded-full px-3.5 py-1.5 text-xs text-[var(--text-secondary)]">
           <span>Show entries</span>
@@ -663,7 +659,6 @@ const TaskReportsList = () => {
         </div>
       </div>
 
-      {/* Task Reports Table */}
       <div className="task-reports-table-wrapper bg-[var(--surface)] rounded-xl border border-[var(--border)] overflow-x-auto shadow-sm">
         <table className="task-reports-table w-full border-collapse text-xs min-w-[800px]">
           <thead>
@@ -688,10 +683,7 @@ const TaskReportsList = () => {
           <tbody>
             {currentReports.length === 0 ? (
               <tr>
-                <td
-                  colSpan="5"
-                  className="text-center py-8 text-[var(--muted)]"
-                >
+                <td colSpan="5" className="text-center py-8 text-[var(--muted)]">
                   <div className="flex flex-col items-center gap-2">
                     <FiClock className="text-4xl text-[var(--muted)]" />
                     <p>No task reports found.</p>
@@ -715,22 +707,13 @@ const TaskReportsList = () => {
                       </span>
                     </div>
                   </td>
-                  <td
-                    className="py-3.5 px-4 text-[var(--text-secondary)] max-w-[250px] truncate"
-                    title={report.tasks_completed}
-                  >
+                  <td className="py-3.5 px-4 text-[var(--text-secondary)] max-w-[250px] truncate" title={report.tasks_completed}>
                     {report.tasks_completed || "-"}
                   </td>
-                  <td
-                    className="py-3.5 px-4 text-[var(--text-secondary)] max-w-[250px] truncate"
-                    title={report.plan_tomorrow}
-                  >
+                  <td className="py-3.5 px-4 text-[var(--text-secondary)] max-w-[250px] truncate" title={report.plan_tomorrow}>
                     {report.plan_tomorrow || "-"}
                   </td>
-                  <td
-                    className="py-3.5 px-4 text-[var(--text-secondary)] max-w-[150px] truncate"
-                    title={report.remarks}
-                  >
+                  <td className="py-3.5 px-4 text-[var(--text-secondary)] max-w-[150px] truncate" title={report.remarks}>
                     {report.remarks || "-"}
                   </td>
                 </tr>
@@ -740,12 +723,10 @@ const TaskReportsList = () => {
         </table>
       </div>
 
-      {/* Pagination */}
       {filteredReports.length > 0 && (
         <div className="pagination-container flex flex-col sm:flex-row justify-between items-center gap-3 mt-5">
           <div className="text-xs text-[var(--muted)]">
-            Showing {start + 1} to{" "}
-            {Math.min(start + perPage, filteredReports.length)} of{" "}
+            Showing {start + 1} to {Math.min(start + perPage, filteredReports.length)} of{" "}
             {filteredReports.length} entries
           </div>
           <div className="page-buttons flex gap-1.5 flex-wrap">
