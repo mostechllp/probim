@@ -1,4 +1,3 @@
-// src/utils/apiClient.js
 import axios from 'axios';
 
 const API_BASE_URL = import.meta.env.VITE_API_URL;
@@ -6,83 +5,187 @@ const API_BASE_URL = import.meta.env.VITE_API_URL;
 const apiClient = axios.create({
   baseURL: API_BASE_URL,
   headers: {
-    'Accept': 'application/json',
+    Accept: 'application/json',
   },
 });
 
-// Helper function to get full storage URL for files
 export const getStorageUrl = (path) => {
   if (!path) return null;
-  
-  // If it's already a full URL, return it
-  if (path.startsWith('http://') || path.startsWith('https://')) {
-    return path;
-  }
-  
-  // If it's a data URL, return it
-  if (path.startsWith('data:')) {
-    return path;
-  }
-  
-  // Remove /api from base URL if present
+  if (path.startsWith('http://') || path.startsWith('https://')) return path;
+  if (path.startsWith('data:')) return path;
   const baseUrl = API_BASE_URL?.replace('/api', '') || '';
-  
-  // Remove leading slash if present
   const cleanPath = path.startsWith('/') ? path.slice(1) : path;
-  
-  // Construct full URL
   return `${baseUrl}/storage/${cleanPath}`;
 };
 
-// Request interceptor to add token (works for both admin and employee)
-apiClient.interceptors.request.use(
-  (config) => {
-    // Try to get token in priority order:
-    // 1. Unified auth-token (new)
-    // 2. Admin hr-token (backward compatibility)
-    // 3. Employee token (backward compatibility)
-    const token = localStorage.getItem('auth-token') || 
-                  localStorage.getItem('hr-token') || 
-                  localStorage.getItem('employee-token');
-    
-    if (token) {
-      config.headers.Authorization = `Bearer ${token}`;
+// ---- Token storage helpers -------------------------------------------
+// Same three login flows as before, but funneled through one place so a
+// refresh always writes back to the exact key it was read from.
+const TOKEN_KEYS = ['employee-token', 'auth-token', 'hr-token'];
+
+const isEmptyToken = (value) => !value || value === 'null' || value === 'undefined';
+
+const getActiveTokenKey = () =>
+  TOKEN_KEYS.find((key) => !isEmptyToken(localStorage.getItem(key)));
+
+const getToken = () => {
+  const key = getActiveTokenKey();
+  return key ? localStorage.getItem(key) : null;
+};
+
+const persistToken = (newToken) => {
+  const key = getActiveTokenKey();
+  if (key) localStorage.setItem(key, newToken);
+};
+
+const clearAuthAndRedirect = () => {
+  localStorage.removeItem('auth-token');
+  localStorage.removeItem('user-type');
+  localStorage.removeItem('user-data');
+  localStorage.removeItem('hr-token');
+  localStorage.removeItem('hr-user');
+  localStorage.removeItem('employee-token');
+  localStorage.removeItem('employee-user');
+  localStorage.removeItem('remember-me');
+  localStorage.removeItem('remembered-email');
+  localStorage.removeItem('userType');
+  // Let the app react (router redirect, toast, etc.) instead of forcing a
+  // hard navigation from inside the API layer.
+  window.dispatchEvent(new CustomEvent('auth-expired'));
+  // window.location.href = '/Mostech-HRMS/';
+};
+
+// ---- JWT helpers (no extra dependency needed) --------------------------
+const decodeJwt = (token) => {
+  try {
+    const payload = token.split('.')[1];
+    const base64 = payload.replace(/-/g, '+').replace(/_/g, '/');
+    const json = decodeURIComponent(
+      atob(base64)
+        .split('')
+        .map((c) => '%' + c.charCodeAt(0).toString(16).padStart(2, '0'))
+        .join('')
+    );
+    return JSON.parse(json);
+  } catch {
+    return null;
+  }
+};
+
+const isExpiringSoon = (token, bufferSeconds = 30) => {
+  const payload = decodeJwt(token);
+  if (!payload?.exp) return false; // can't read exp, don't block the request
+  return Date.now() >= payload.exp * 1000 - bufferSeconds * 1000;
+};
+
+// ---- Shared refresh logic ------------------------------------------------
+// Both the proactive (before-request) and reactive (on-401) paths call this.
+// Only one network call to /auth/refresh is ever in flight at a time; every
+// other caller just awaits the same promise instead of firing its own.
+let refreshPromise = null;
+
+const doRefresh = async () => {
+  const expiredToken = getToken();
+  if (isEmptyToken(expiredToken)) {
+    clearAuthAndRedirect();
+    throw new Error('No token available to refresh');
+  }
+
+  try {
+    const response = await axios.post(
+      `${API_BASE_URL}/auth/refresh`,
+      { token: expiredToken },
+      {
+        headers: {
+          Authorization: `Bearer ${expiredToken}`,
+          Accept: 'application/json',
+        },
+      }
+    );
+
+    const newToken =
+      response.data?.data?.access_token ||
+      response.data?.access_token ||
+      response.data?.token;
+
+    if (isEmptyToken(newToken)) {
+      throw new Error('Refresh response did not contain a token');
     }
-    
-    // Handle FormData properly (for file uploads)
+
+    persistToken(newToken);
+    apiClient.defaults.headers.common.Authorization = `Bearer ${newToken}`;
+    return newToken;
+  } catch (err) {
+    console.log('Refresh failed:', err.response?.data || err.message);
+    clearAuthAndRedirect();
+    throw err;
+  }
+};
+
+const refreshAccessToken = () => {
+  if (!refreshPromise) {
+    refreshPromise = doRefresh().finally(() => {
+      refreshPromise = null;
+    });
+  }
+  return refreshPromise;
+};
+
+// ---- Request interceptor: refresh BEFORE the token actually expires ------
+apiClient.interceptors.request.use(
+  async (config) => {
     if (config.data instanceof FormData) {
-      // Let browser set Content-Type with boundary for FormData
       delete config.headers['Content-Type'];
     } else {
-      // For JSON data, set Content-Type to application/json
       config.headers['Content-Type'] = 'application/json';
     }
-    
+
+    if (config.url?.includes('/auth/refresh')) return config;
+
+    let token = getToken();
+
+    if (token && isExpiringSoon(token)) {
+      try {
+        token = await refreshAccessToken();
+      } catch {
+        // already cleared auth state inside doRefresh; let the request go
+        // out without a valid token so it fails naturally instead of
+        // throwing here and breaking the caller's flow.
+      }
+    }
+
+    if (token) config.headers.Authorization = `Bearer ${token}`;
+
     return config;
   },
   (error) => Promise.reject(error)
 );
 
-// Response interceptor for error handling
+// ---- Response interceptor: fallback for what proactive refresh can't
+// catch (clock skew, app reopened after the token already expired) --------
 apiClient.interceptors.response.use(
   (response) => response,
-  (error) => {
-    if (error.response?.status === 401) {
-      // Clear all auth data from localStorage
-      localStorage.removeItem('auth-token');
-      localStorage.removeItem('user-type');
-      localStorage.removeItem('user-data');
-      localStorage.removeItem('hr-token');
-      localStorage.removeItem('hr-user');
-      localStorage.removeItem('employee-token');
-      localStorage.removeItem('employee-user');
-      localStorage.removeItem('remember-me');
-      localStorage.removeItem('remembered-email');
-      
-      // Redirect to login page
-      window.location.href = '/login';
+  async (error) => {
+    const originalRequest = error.config;
+
+    if (error.response?.status !== 401 || !originalRequest) {
+      return Promise.reject(error);
     }
-    return Promise.reject(error);
+
+    if (originalRequest.url?.includes('/auth/refresh') || originalRequest._retry) {
+      clearAuthAndRedirect();
+      return Promise.reject(error);
+    }
+
+    originalRequest._retry = true;
+
+    try {
+      const newToken = await refreshAccessToken();
+      originalRequest.headers.Authorization = `Bearer ${newToken}`;
+      return apiClient(originalRequest);
+    } catch (refreshError) {
+      return Promise.reject(refreshError);
+    }
   }
 );
 
