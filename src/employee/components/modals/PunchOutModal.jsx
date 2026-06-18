@@ -28,22 +28,14 @@ import {
 import { TimeInput } from "../common/TimeInput";
 import { TimeInputWorking } from "../common/TimeInputForWorkingHrs";
 
-// Helper to convert decimal hours to 12-hour time string
-const decimalTo12Hour = (decimal) => {
-  if (!decimal && decimal !== 0) return '';
-  const hours = Math.floor(decimal);
-  const minutes = Math.round((decimal - hours) * 60);
-  const h12 = hours % 12 || 12;
-  const ampm = hours >= 12 ? 'PM' : 'AM';
-  return `${h12}:${String(minutes).padStart(2, '0')} ${ampm}`;
-};
-
-// Helper to convert decimal hours to 24-hour string
-const decimalTo24Hour = (decimal) => {
-  if (!decimal && decimal !== 0) return '';
-  const hours = Math.floor(decimal);
-  const minutes = Math.round((decimal - hours) * 60);
-  return `${String(hours).padStart(2, '0')}:${String(minutes).padStart(2, '0')}`;
+// Helper to convert 24-hour time to 12-hour format for display
+const convertTo12Hour = (time24) => {
+  if (!time24) return '';
+  const [hours, minutes] = time24.split(':');
+  const h = parseInt(hours, 10);
+  const ampm = h >= 12 ? 'PM' : 'AM';
+  const h12 = h % 12 || 12;
+  return `${h12}:${minutes} ${ampm}`;
 };
 
 // Punch Out Modal Component
@@ -61,8 +53,8 @@ const PunchOutModal = ({
   const [totalHours, setTotalHours] = useState(0);
   const [confirmNoProjects, setConfirmNoProjects] = useState(false);
 
-  // Punch out time state - stored as decimal hours
-  const [punchOutTimeDecimal, setPunchOutTimeDecimal] = useState(null);
+  // Punch out time state - stored as 24-hour time string
+  const [punchOutTime, setPunchOutTime] = useState("");
 
   // Task report states
   const [tasksCompleted, setTasksCompleted] = useState("");
@@ -132,7 +124,7 @@ const PunchOutModal = ({
       setTasksCompleted("");
       setPlanTomorrow("");
       setRemarks("");
-      setPunchOutTimeDecimal(null);
+      setPunchOutTime("");
     };
   }, [isOpen, dashboardData, user]);
 
@@ -140,33 +132,20 @@ const PunchOutModal = ({
   useEffect(() => {
     if (isOpen) {
       if (punchOutDate) {
-        // For past date, default to 6:00 PM (18.0 decimal)
-        const defaultDecimal = 18.0;
-        setPunchOutTimeDecimal(defaultDecimal);
+        // For past date, default to 6:00 PM (18:00)
+        setPunchOutTime("18:00");
       } else {
         // For today, use current time
         const now = new Date();
-        const hours = now.getHours();
-        const minutes = now.getMinutes();
-        const decimal = hours + (minutes / 60);
-        setPunchOutTimeDecimal(decimal);
+        const hours = String(now.getHours()).padStart(2, "0");
+        const minutes = String(now.getMinutes()).padStart(2, "0");
+        setPunchOutTime(`${hours}:${minutes}`);
       }
     }
   }, [isOpen, punchOutDate]);
 
   const handleTimeChange = (projectId, time) => {
     setProjectTimes((prev) => ({ ...prev, [projectId]: time }));
-  };
-
-  // Handle punch out time change from TimeInput
-  const handlePunchOutTimeChange = (e) => {
-    const val = e.target.value;
-    const num = parseFloat(val);
-    if (val === "" || val === ".") {
-      setPunchOutTimeDecimal(null);
-    } else if (!isNaN(num) && num >= 0 && num <= 24) {
-      setPunchOutTimeDecimal(num);
-    }
   };
 
   // Handle saving task report
@@ -205,7 +184,7 @@ const PunchOutModal = ({
     e.preventDefault();
 
     // Validate punch out time for past date
-    if (punchOutDate && (punchOutTimeDecimal === null || punchOutTimeDecimal === 0)) {
+    if (punchOutDate && (!punchOutTime || punchOutTime === "00:00")) {
       showToast("Please enter the punch out time for " + punchOutDate, "error");
       return;
     }
@@ -215,11 +194,6 @@ const PunchOutModal = ({
     if (!taskReportSaved) {
       return;
     }
-
-    // Convert decimal to 24-hour time string
-    const punchOutTime24 = punchOutTimeDecimal !== null 
-      ? decimalTo24Hour(punchOutTimeDecimal) 
-      : null;
 
     // If no projects assigned
     if (projects.length === 0) {
@@ -232,7 +206,7 @@ const PunchOutModal = ({
         total_hours: 0,
         no_projects: true,
         punch_out_date: punchOutDate || null,
-        punch_out_time: punchOutTime24,
+        punch_out_time: punchOutTime || null,
         task_report: {
           tasks_completed: tasksCompleted,
           plan_tomorrow: planTomorrow,
@@ -246,7 +220,7 @@ const PunchOutModal = ({
       project_times: projectTimes,
       total_hours: totalHours,
       punch_out_date: punchOutDate || null,
-      punch_out_time: punchOutTime24,
+      punch_out_time: punchOutTime || null,
       task_report: {
         tasks_completed: tasksCompleted,
         plan_tomorrow: planTomorrow,
@@ -315,7 +289,7 @@ const PunchOutModal = ({
         </div>
 
         <form onSubmit={handleSubmit} className="p-5 flex-1 overflow-y-auto">
-          {/* Punch Out Time Field - Using TimeInput */}
+          {/* Punch Out Time Field - Using TimeInput with HH:MM format */}
           <div
             className={`mb-6 p-4 ${punchOutDate ? "bg-yellow-500/10 border-yellow-500/20" : "bg-blue-500/10 border-blue-500/20"} rounded-xl border`}
           >
@@ -334,20 +308,20 @@ const PunchOutModal = ({
             <div className="flex items-center gap-3">
               <div className="w-40">
                 <TimeInput
-                  value={punchOutTimeDecimal !== null ? String(punchOutTimeDecimal) : ""}
-                  onChange={handlePunchOutTimeChange}
+                  value={punchOutTime}
+                  onChange={(e) => setPunchOutTime(e.target.value)}
                   className="text-sm"
                   required={!!punchOutDate}
                 />
               </div>
               <span className="text-xs text-[var(--muted)]">
-                {punchOutTimeDecimal !== null 
-                  ? `12-hour: ${decimalTo12Hour(punchOutTimeDecimal)}` 
-                  : "Enter time in decimal (e.g., 18.0 = 6:00 PM)"}
+                {punchOutTime 
+                  ? `12-hour: ${convertTo12Hour(punchOutTime)}` 
+                  : "Select your punch out time"}
               </span>
             </div>
             <div className="mt-2 text-xs text-[var(--muted)]">
-              Enter hours in decimal format (e.g., 18.0 for 6:00 PM, 18.5 for 6:30 PM)
+              Select the time you punched out (24-hour format)
             </div>
             {punchOutDate && (
               <div className="mt-2 flex items-center gap-2 text-xs text-yellow-600 dark:text-yellow-400">
@@ -360,7 +334,7 @@ const PunchOutModal = ({
             )}
           </div>
 
-          {/* Task Report Section */}
+          {/* Task Report Section - Same as before */}
           <div className="mb-6">
             <label className="block text-sm font-semibold text-[var(--text)] mb-3">
               <FiFileText className="inline mr-2 text-green-500" />
