@@ -71,6 +71,7 @@ export const punchIn = createAsyncThunk(
 );
 
 // Punch Out with location and timezone
+// attendanceSlice.js - Updated punchOut
 export const punchOut = createAsyncThunk(
   "attendance/punchOut",
   async (data, { rejectWithValue }) => {
@@ -89,6 +90,11 @@ export const punchOut = createAsyncThunk(
         total_hours: data.total_hours,
       };
 
+      // Add punch_out_time to payload
+      if (data.punch_out_time) {
+        payload.punch_out_time = data.punch_out_time;
+      }
+
       if (data.punch_out_date) {
         payload.punch_out_date = data.punch_out_date;
       }
@@ -105,7 +111,6 @@ export const punchOut = createAsyncThunk(
         payload.punch_out_longitude = location.longitude;
         payload.punch_out_address = location.address;
         
-        // Add timezone information
         if (location.timezone) {
           payload.timezone = location.timezone;
         }

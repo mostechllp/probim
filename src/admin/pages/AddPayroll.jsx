@@ -3,16 +3,16 @@ import { Link } from "react-router-dom";
 import { jsPDF } from "jspdf";
 import autoTable from "jspdf-autotable";
 import toast from "react-hot-toast";
+
 function AddPayroll() {
   const [currentStep, setCurrentStep] = useState(1);
 
   const steps = [
     { id: 1, label: "Basic Info" },
-    { id: 2, label: "Salary Structure" },
-    { id: 3, label: "Country Split" },
-    { id: 4, label: "Overtime" },
-    { id: 5, label: "Deductions" },
-    { id: 6, label: "Summary" },
+    { id: 2, label: "Country Split" },
+    { id: 3, label: "Overtime" },
+    { id: 4, label: "Deductions" },
+    { id: 5, label: "Summary" },
   ];
 
   // eslint-disable-next-line no-unused-vars
@@ -64,23 +64,9 @@ function AddPayroll() {
     doc.text(`Pay Period: May 2026`, 14, 38);
     doc.text(`Generated On: ${new Date().toLocaleDateString()}`, 14, 44);
 
-    // Salary Structure
-    autoTable(doc, {
-      startY: 50,
-      head: [['Salary Component', 'Amount (INR)']],
-      body: [
-        ['Basic Salary', '50,000'],
-        ['HRA', '20,000'],
-        ['Conveyance', '1,600'],
-        ['Special Allowance', '5,150'],
-      ],
-      theme: 'grid',
-      headStyles: { fillColor: [34, 197, 94] }
-    });
-
     // Multi-Location Packages
     autoTable(doc, {
-      startY: doc.lastAutoTable.finalY + 10,
+      startY: 50,
       head: [['Package / Location', 'Days Logged', 'Daily Rate', 'Amount (INR)']],
       body: [
         ['Package 2 - Dubai Onsite', '10', 'AED 600', '1,35,000'],
@@ -146,7 +132,7 @@ function AddPayroll() {
         </p>
       </div>
 
-      {/* Stepper */}
+      {/* Stepper - Updated with 5 steps */}
       <div className="flex flex-wrap gap-2 mb-6">
         {steps.map((step) => (
           <button
@@ -373,139 +359,8 @@ function AddPayroll() {
             </>
           )}
 
-          {/* Step 2 - Salary Structure */}
+          {/* Step 2 - Country Split / Packages (was Step 3) */}
           {currentStep === 2 && (
-            <div>
-              <div className="flex items-center gap-2 pb-3 border-b-2 border-green-100 dark:border-green-900/30 mb-4 md:mb-6">
-                <div className="w-6 h-6 md:w-8 md:h-8 bg-green-100 dark:bg-green-900/30 rounded-lg flex items-center justify-center">
-                  <i className="fas fa-coins text-green-600 dark:text-green-400 text-xs md:text-sm"></i>
-                </div>
-                <h3 className="text-base md:text-lg font-bold text-gray-800 dark:text-gray-200">
-                  Salary Structure — Earnings
-                </h3>
-              </div>
-              
-              <div className="grid grid-cols-1 md:grid-cols-3 gap-4 md:gap-5">
-                <div>
-                  <label className="block text-xs md:text-sm font-semibold text-gray-700 dark:text-gray-300 mb-1 md:mb-2">
-                    <i className="fas fa-chart-line text-green-500 mr-1"></i>
-                    Annual CTC <span className="text-red-500">*</span>
-                  </label>
-                  <div className="relative">
-                    <span className="absolute left-3 top-1/2 -translate-y-1/2 text-gray-400 text-sm">₹</span>
-                    <input type="text" value="12,00,000" className="w-full pl-7 pr-3 py-2 md:py-3 bg-gray-50 dark:bg-gray-800 border border-gray-200 dark:border-gray-700 rounded-lg text-sm md:text-base text-gray-800 dark:text-gray-200 focus:outline-none focus:border-green-500 focus:ring-2 focus:ring-green-500/20" />
-                  </div>
-                </div>
-                <div>
-                  <label className="block text-xs md:text-sm font-semibold text-gray-700 dark:text-gray-300 mb-1 md:mb-2">
-                    <i className="fas fa-money-bill text-green-500 mr-1"></i>
-                    Basic Salary <span className="text-red-500">*</span>
-                  </label>
-                  <div className="relative">
-                    <span className="absolute left-3 top-1/2 -translate-y-1/2 text-gray-400 text-sm">₹</span>
-                    <input type="text" value="50,000" className="w-full pl-7 pr-3 py-2 md:py-3 bg-gray-50 dark:bg-gray-800 border border-gray-200 dark:border-gray-700 rounded-lg text-sm md:text-base text-gray-800 dark:text-gray-200 focus:outline-none focus:border-green-500 focus:ring-2 focus:ring-green-500/20" />
-                  </div>
-                </div>
-                <div>
-                  <label className="block text-xs md:text-sm font-semibold text-gray-700 dark:text-gray-300 mb-1 md:mb-2">
-                    <i className="fas fa-home text-green-500 mr-1"></i>
-                    HRA <span className="text-red-500">*</span>
-                  </label>
-                  <div className="relative">
-                    <span className="absolute left-3 top-1/2 -translate-y-1/2 text-gray-400 text-sm">₹</span>
-                    <input type="text" value="20,000" className="w-full pl-7 pr-3 py-2 md:py-3 bg-gray-50 dark:bg-gray-800 border border-gray-200 dark:border-gray-700 rounded-lg text-sm md:text-base text-gray-800 dark:text-gray-200 focus:outline-none focus:border-green-500 focus:ring-2 focus:ring-green-500/20" />
-                  </div>
-                </div>
-                <div>
-                  <label className="block text-xs md:text-sm font-semibold text-gray-700 dark:text-gray-300 mb-1 md:mb-2">
-                    <i className="fas fa-car text-green-500 mr-1"></i>
-                    Conveyance Allowance
-                  </label>
-                  <div className="relative">
-                    <span className="absolute left-3 top-1/2 -translate-y-1/2 text-gray-400 text-sm">₹</span>
-                    <input type="text" value="1,600" className="w-full pl-7 pr-3 py-2 md:py-3 bg-gray-50 dark:bg-gray-800 border border-gray-200 dark:border-gray-700 rounded-lg text-sm md:text-base text-gray-800 dark:text-gray-200 focus:outline-none focus:border-green-500 focus:ring-2 focus:ring-green-500/20" />
-                  </div>
-                </div>
-                <div>
-                  <label className="block text-xs md:text-sm font-semibold text-gray-700 dark:text-gray-300 mb-1 md:mb-2">
-                    <i className="fas fa-notes-medical text-green-500 mr-1"></i>
-                    Medical Allowance
-                  </label>
-                  <div className="relative">
-                    <span className="absolute left-3 top-1/2 -translate-y-1/2 text-gray-400 text-sm">₹</span>
-                    <input type="text" value="1,250" className="w-full pl-7 pr-3 py-2 md:py-3 bg-gray-50 dark:bg-gray-800 border border-gray-200 dark:border-gray-700 rounded-lg text-sm md:text-base text-gray-800 dark:text-gray-200 focus:outline-none focus:border-green-500 focus:ring-2 focus:ring-green-500/20" />
-                  </div>
-                </div>
-                <div>
-                  <label className="block text-xs md:text-sm font-semibold text-gray-700 dark:text-gray-300 mb-1 md:mb-2">
-                    <i className="fas fa-star text-green-500 mr-1"></i>
-                    Special Allowance
-                  </label>
-                  <div className="relative">
-                    <span className="absolute left-3 top-1/2 -translate-y-1/2 text-gray-400 text-sm">₹</span>
-                    <input type="text" value="5,150" className="w-full pl-7 pr-3 py-2 md:py-3 bg-gray-50 dark:bg-gray-800 border border-gray-200 dark:border-gray-700 rounded-lg text-sm md:text-base text-gray-800 dark:text-gray-200 focus:outline-none focus:border-green-500 focus:ring-2 focus:ring-green-500/20" />
-                  </div>
-                </div>
-                <div>
-                  <label className="block text-xs md:text-sm font-semibold text-gray-700 dark:text-gray-300 mb-1 md:mb-2">
-                    <i className="fas fa-plane text-green-500 mr-1"></i>
-                    LTA
-                  </label>
-                  <div className="relative">
-                    <span className="absolute left-3 top-1/2 -translate-y-1/2 text-gray-400 text-sm">₹</span>
-                    <input type="text" value="2,000" className="w-full pl-7 pr-3 py-2 md:py-3 bg-gray-50 dark:bg-gray-800 border border-gray-200 dark:border-gray-700 rounded-lg text-sm md:text-base text-gray-800 dark:text-gray-200 focus:outline-none focus:border-green-500 focus:ring-2 focus:ring-green-500/20" />
-                  </div>
-                </div>
-                <div>
-                  <label className="block text-xs md:text-sm font-semibold text-gray-700 dark:text-gray-300 mb-1 md:mb-2">
-                    <i className="fas fa-trophy text-green-500 mr-1"></i>
-                    Performance Bonus
-                  </label>
-                  <div className="relative">
-                    <span className="absolute left-3 top-1/2 -translate-y-1/2 text-gray-400 text-sm">₹</span>
-                    <input type="text" value="0" className="w-full pl-7 pr-3 py-2 md:py-3 bg-gray-50 dark:bg-gray-800 border border-gray-200 dark:border-gray-700 rounded-lg text-sm md:text-base text-gray-800 dark:text-gray-200 focus:outline-none focus:border-green-500 focus:ring-2 focus:ring-green-500/20" />
-                  </div>
-                </div>
-                <div>
-                  <label className="block text-xs md:text-sm font-semibold text-gray-700 dark:text-gray-300 mb-1 md:mb-2">
-                    <i className="fas fa-clock text-green-500 mr-1"></i>
-                    Overtime Pay
-                  </label>
-                  <div className="relative">
-                    <span className="absolute left-3 top-1/2 -translate-y-1/2 text-gray-400 text-sm">₹</span>
-                    <input type="text" value="0" className="w-full pl-7 pr-3 py-2 md:py-3 bg-gray-50 dark:bg-gray-800 border border-gray-200 dark:border-gray-700 rounded-lg text-sm md:text-base text-gray-800 dark:text-gray-200 focus:outline-none focus:border-green-500 focus:ring-2 focus:ring-green-500/20" />
-                  </div>
-                </div>
-              </div>
-
-              {/* Summary Cards */}
-              <div className="grid grid-cols-2 md:grid-cols-4 gap-3 md:gap-4 mt-6 pt-4 border-t border-gray-200 dark:border-gray-700">
-                <div className="p-3 md:p-4 rounded-xl bg-gray-50 dark:bg-gray-700/50 border border-gray-200 dark:border-gray-600">
-                  <div className="text-[10px] md:text-xs text-gray-500 dark:text-gray-400 font-medium mb-1">Gross Earnings</div>
-                  <div className="text-lg md:text-xl font-bold text-gray-800 dark:text-gray-200">₹80,000</div>
-                  <div className="text-[9px] md:text-[10px] text-gray-400 mt-0.5">Before deductions</div>
-                </div>
-                <div className="p-3 md:p-4 rounded-xl bg-gray-50 dark:bg-gray-700/50 border border-gray-200 dark:border-gray-600">
-                  <div className="text-[10px] md:text-xs text-gray-500 dark:text-gray-400 font-medium mb-1">Total Deductions</div>
-                  <div className="text-lg md:text-xl font-bold text-red-500">₹12,315</div>
-                  <div className="text-[9px] md:text-[10px] text-gray-400 mt-0.5">PF + ESI + PT + TDS</div>
-                </div>
-                <div className="p-3 md:p-4 rounded-xl bg-gray-50 dark:bg-gray-700/50 border border-gray-200 dark:border-gray-600">
-                  <div className="text-[10px] md:text-xs text-gray-500 dark:text-gray-400 font-medium mb-1">Employee PF</div>
-                  <div className="text-lg md:text-xl font-bold text-gray-800 dark:text-gray-200">₹6,000</div>
-                  <div className="text-[9px] md:text-[10px] text-gray-400 mt-0.5">12% of basic</div>
-                </div>
-                <div className="p-3 md:p-4 rounded-xl bg-green-50 dark:bg-green-900/20 border border-green-200 dark:border-green-800">
-                  <div className="text-[10px] md:text-xs text-green-600 dark:text-green-400 font-medium mb-1">Net Take-Home</div>
-                  <div className="text-lg md:text-xl font-bold text-green-600 dark:text-green-400">₹67,685</div>
-                  <div className="text-[9px] md:text-[10px] text-green-500/70 mt-0.5">INR this month</div>
-                </div>
-              </div>
-            </div>
-          )}
-
-          {/* Step 3 - Country Split / Packages */}
-          {currentStep === 3 && (
             <div>
               <div className="flex items-center gap-2 pb-3 border-b-2 border-green-100 dark:border-green-900/30 mb-4 md:mb-6">
                 <div className="w-6 h-6 md:w-8 md:h-8 bg-green-100 dark:bg-green-900/30 rounded-lg flex items-center justify-center">
@@ -596,8 +451,8 @@ function AddPayroll() {
             </div>
           )}
 
-          {/* Step 4 - Overtime */}
-          {currentStep === 4 && (
+          {/* Step 3 - Overtime (was Step 4) */}
+          {currentStep === 3 && (
             <div>
               <div className="flex items-center gap-2 pb-3 border-b-2 border-green-100 dark:border-green-900/30 mb-4 md:mb-6">
                 <div className="w-6 h-6 md:w-8 md:h-8 bg-green-100 dark:bg-green-900/30 rounded-lg flex items-center justify-center">
@@ -703,8 +558,8 @@ function AddPayroll() {
             </div>
           )}
 
-          {/* Step 5 - Deductions */}
-          {currentStep === 5 && (
+          {/* Step 4 - Deductions (was Step 5) */}
+          {currentStep === 4 && (
             <div>
               <div className="flex items-center gap-2 pb-3 border-b-2 border-green-100 dark:border-green-900/30 mb-4 md:mb-6">
                 <div className="w-6 h-6 md:w-8 md:h-8 bg-green-100 dark:bg-green-900/30 rounded-lg flex items-center justify-center">
@@ -776,8 +631,8 @@ function AddPayroll() {
             </div>
           )}
 
-          {/* Step 6 - Summary */}
-          {currentStep === 6 && (
+          {/* Step 5 - Summary (was Step 6) */}
+          {currentStep === 5 && (
             <div>
               <div className="flex items-center gap-2 pb-3 border-b-2 border-green-100 dark:border-green-900/30 mb-4 md:mb-6">
                 <div className="w-6 h-6 md:w-8 md:h-8 bg-green-100 dark:bg-green-900/30 rounded-lg flex items-center justify-center">
@@ -844,7 +699,7 @@ function AddPayroll() {
                 <span>Save as Draft</span>
               </button>
               
-              {currentStep < 6 ? (
+              {currentStep < 5 ? (
                 <button 
                   onClick={() => setCurrentStep(currentStep + 1)}
                   className="px-4 md:px-6 py-2 md:py-2.5 rounded-full font-semibold bg-green-500 text-white hover:bg-green-600 transition-all flex items-center justify-center gap-2 text-sm md:text-base"
