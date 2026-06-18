@@ -47,6 +47,7 @@ const PunchOutModal = ({ isOpen, onClose, onSubmit, loading, punchOutDate }) => 
 
   // Calculate total hours whenever project times change
   useEffect(() => {
+<<<<<<< HEAD
     let total = 0;
     Object.values(projectTimes).forEach((time) => {
       if (time) {
@@ -57,6 +58,17 @@ const PunchOutModal = ({ isOpen, onClose, onSubmit, loading, punchOutDate }) => 
     });
     setTotalHours(Math.round(total * 10) / 10);
   }, [projectTimes]);
+=======
+  let total = 0;
+  Object.values(projectTimes).forEach(time => {
+    if (time) {
+      const num = parseFloat(time);
+      if (!isNaN(num)) total += num;
+    }
+  });
+  setTotalHours(Math.round(total * 100) / 100);
+}, [projectTimes]);
+>>>>>>> dev
 
   // Fetch projects when modal opens - using the same endpoint as dashboard
   useEffect(() => {
@@ -124,6 +136,25 @@ const PunchOutModal = ({ isOpen, onClose, onSubmit, loading, punchOutDate }) => 
 
   // Handle saving task report
   const handleSaveTaskReport = async () => {
+<<<<<<< HEAD
+=======
+    // if (!tasksCompleted.trim()) {
+    //   showToast('Please enter your completed tasks', 'error');
+    //   return false;
+    // }
+    
+    // if (!planTomorrow.trim()) {
+    //   showToast('Please enter your plan for tomorrow', 'error');
+    //   return false;
+    // }
+
+  const hasTaskReport = tasksCompleted.trim() || planTomorrow.trim() || remarks.trim();
+  
+    if (!hasTaskReport) {
+      return true; // No task report entered, skip silently
+    }
+    
+>>>>>>> dev
     setSavingTaskReport(true);
     try {
       const result = await dispatch(
@@ -149,7 +180,11 @@ const PunchOutModal = ({ isOpen, onClose, onSubmit, loading, punchOutDate }) => 
 
   const handleSubmit = async (e) => {
     e.preventDefault();
+<<<<<<< HEAD
 
+=======
+    console.log("projectTimes", projectTimes);
+>>>>>>> dev
     // First, save the task report
     const taskReportSaved = await handleSaveTaskReport();
     if (!taskReportSaved) {
@@ -217,6 +252,7 @@ const PunchOutModal = ({ isOpen, onClose, onSubmit, loading, punchOutDate }) => 
   };
 
   const formatTimeDisplay = (time) => {
+<<<<<<< HEAD
     if (!time) return "0 hrs";
     const [hours, minutes] = time.split(":");
     const hourNum = parseInt(hours);
@@ -228,6 +264,19 @@ const PunchOutModal = ({ isOpen, onClose, onSubmit, loading, punchOutDate }) => 
     return `${hourNum} hr ${minNum} min`;
   };
 
+=======
+  if (!time) return '0 hrs';
+  const num = parseFloat(time);
+  if (isNaN(num) || num === 0) return '0 hrs';
+  
+  const hours = Math.floor(num);
+  const minutes = Math.round((num - hours) * 60);
+  
+  if (hours === 0) return `${minutes} min`;
+  if (minutes === 0) return `${hours} hr${hours > 1 ? 's' : ''}`;
+  return `${hours} hr ${minutes} min`;
+};
+>>>>>>> dev
   if (!isOpen) return null;
 
   return (
@@ -257,7 +306,8 @@ const PunchOutModal = ({ isOpen, onClose, onSubmit, loading, punchOutDate }) => 
             <div className="space-y-4">
               <div>
                 <label className="block text-xs font-medium text-[var(--text)] mb-1">
-                  Tasks Completed {punchOutDate ? 'That Day' : 'Today'} <span className="text-red-500">*</span>
+                  Tasks Completed {punchOutDate ? 'That Day' : 'Today'} 
+                  {/* <span className="text-red-500">*</span> */}
                 </label>
                 <textarea
                   value={tasksCompleted}
@@ -270,7 +320,8 @@ const PunchOutModal = ({ isOpen, onClose, onSubmit, loading, punchOutDate }) => 
               
               <div>
                 <label className="block text-xs font-medium text-[var(--text)] mb-1">
-                  Plan for Tomorrow <span className="text-red-500">*</span>
+                  Plan for Tomorrow 
+                  {/* <span className="text-red-500">*</span> */}
                 </label>
                 <textarea
                   value={planTomorrow}
@@ -319,14 +370,14 @@ const PunchOutModal = ({ isOpen, onClose, onSubmit, loading, punchOutDate }) => 
                 <p className="text-xs text-[var(--muted)] mb-3">
                   Enter the time you spent working on each project {punchOutDate ? 'that day' : 'today'}
                 </p>
-                <div className="flex gap-2 mb-3">
-                  <button
+                <div className="flex justify-end gap-2 mb-3">
+                  {/* <button
                     type="button"
                     onClick={handleSetAllSame}
                     className="text-xs px-3 py-1 rounded-full bg-green-500/10 text-green-500 hover:bg-green-500/20 transition-colors"
                   >
                     Distribute 8 hours equally
-                  </button>
+                  </button> */}
                   <button
                     type="button"
                     onClick={handleClearAll}

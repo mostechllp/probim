@@ -76,14 +76,13 @@ export const punchOut = createAsyncThunk(
   async (data, { rejectWithValue }) => {
     try {
       const formattedProjectTimes = Object.entries(data.project_times || {}).map(
-        ([projectId, time]) => {
-          const [hours, minutes] = time.split(":").map(Number);
-          return {
-            project_id: parseInt(projectId),
-            time_minutes: hours * 60 + minutes,
-          };
-        }
+        ([projectId, time]) => ({
+          project_id: parseInt(projectId),
+          time_minutes: Math.round(parseFloat(time) * 60),
+        })
       );
+
+      console.log("time", data);
 
       const payload = {
         project_times: formattedProjectTimes,

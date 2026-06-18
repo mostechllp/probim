@@ -739,15 +739,7 @@ const Dashboard = () => {
                   {dashboardData.attendance_history
                     .slice(0, 5)
                     .map((attendance, index) => {
-                      const hours =
-                        attendance.punch_in && attendance.punch_out
-                          ? (
-                              (new Date(attendance.punch_out) -
-                                new Date(attendance.punch_in)) /
-                              (1000 * 60 * 60)
-                            ).toFixed(1)
-                          : "-";
-
+                    
                       const locationAddress = attendance.punch_in_address;
 
                       return (
@@ -778,7 +770,7 @@ const Dashboard = () => {
                               : "-"}
                           </td>
                           <td className="py-3 px-4 text-[var(--text)] font-semibold">
-                            {hours !== "-" ? `${hours} hrs` : "-"}
+                            {attendance.working_hours}
                           </td>
                         </tr>
                       );

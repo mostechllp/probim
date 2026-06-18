@@ -31,7 +31,7 @@ const TaskReports = ({ isOpen, onClose, onSubmit, loading }) => {
         <form onSubmit={handleSubmit} className="p-5">
           <div className="mb-5">
             <label className="block text-sm font-semibold text-[var(--text)] mb-2">
-              Tasks Completed Today *
+              Tasks Completed Today 
             </label>
             <textarea
               value={tasksCompleted}
@@ -45,7 +45,7 @@ const TaskReports = ({ isOpen, onClose, onSubmit, loading }) => {
 
           <div className="mb-6">
             <label className="block text-sm font-semibold text-[var(--text)] mb-2">
-              Plan for Tomorrow *
+              Plan for Tomorrow 
             </label>
             <textarea
               value={planTomorrow}

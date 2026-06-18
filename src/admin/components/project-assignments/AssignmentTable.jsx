@@ -117,7 +117,9 @@ const EmployeeProjectsModal = ({
                         {proj.name}
                       </h4>
                     </div>
-
+                      <h4 className="text-sm font-bold text-gray-850 dark:text-gray-200">
+                        {proj.project_time}
+                      </h4>
                     {proj.description && (
                       <p className="text-[11px] text-gray-550 dark:text-gray-450 leading-relaxed font-medium">
                         {proj.description}
