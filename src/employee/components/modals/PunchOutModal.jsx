@@ -181,53 +181,62 @@ const PunchOutModal = ({
   };
 
   const handleSubmit = async (e) => {
-    e.preventDefault();
+  e.preventDefault();
 
-    // Validate punch out time for past date
-    if (punchOutDate && (!punchOutTime || punchOutTime === "00:00")) {
-      showToast("Please enter the punch out time for " + punchOutDate, "error");
+  // Validate punch out time for past date
+  if (punchOutDate && (!punchOutTime || punchOutTime === "00:00")) {
+    showToast("Please enter the punch out time for " + punchOutDate, "error");
+    return;
+  }
+
+  // First, save the task report
+  const taskReportSaved = await handleSaveTaskReport();
+  if (!taskReportSaved) {
+    return;
+  }
+
+  // Create full datetime with timezone
+  let punchOutDateTime = null;
+  if (punchOutTime && punchOutDate) {
+    // Create a date object with the local time
+    // The timezone is Asia/Kolkata (UTC+5:30)
+    const dateStr = `${punchOutDate}T${punchOutTime}:00+05:30`;
+    punchOutDateTime = dateStr;
+  }
+
+  // If no projects assigned
+  if (projects.length === 0) {
+    if (!confirmNoProjects) {
+      setConfirmNoProjects(true);
       return;
     }
-
-    // First, save the task report
-    const taskReportSaved = await handleSaveTaskReport();
-    if (!taskReportSaved) {
-      return;
-    }
-
-    // If no projects assigned
-    if (projects.length === 0) {
-      if (!confirmNoProjects) {
-        setConfirmNoProjects(true);
-        return;
-      }
-      onSubmit({
-        project_times: {},
-        total_hours: 0,
-        no_projects: true,
-        punch_out_date: punchOutDate || null,
-        punch_out_time: punchOutTime || null,
-        task_report: {
-          tasks_completed: tasksCompleted,
-          plan_tomorrow: planTomorrow,
-          remarks: remarks,
-        },
-      });
-      return;
-    }
-
     onSubmit({
-      project_times: projectTimes,
-      total_hours: totalHours,
+      project_times: {},
+      total_hours: 0,
+      no_projects: true,
       punch_out_date: punchOutDate || null,
-      punch_out_time: punchOutTime || null,
+      punch_out_time: punchOutDateTime, // Send full datetime with timezone
       task_report: {
         tasks_completed: tasksCompleted,
         plan_tomorrow: planTomorrow,
         remarks: remarks,
       },
     });
-  };
+    return;
+  }
+
+  onSubmit({
+    project_times: projectTimes,
+    total_hours: totalHours,
+    punch_out_date: punchOutDate || null,
+    punch_out_time: punchOutDateTime, // Send full datetime with timezone
+    task_report: {
+      tasks_completed: tasksCompleted,
+      plan_tomorrow: planTomorrow,
+      remarks: remarks,
+    },
+  });
+};
 
   const handleClearAll = () => {
     setProjectTimes({});
