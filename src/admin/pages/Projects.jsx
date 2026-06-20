@@ -76,10 +76,12 @@ const Projects = () => {
   try {
     if (projectData.id) {
       console.log("Updating project with ID:", projectData.id);
+      // Send the data as-is (it already has the correct field names)
       await dispatch(updateProject(projectData)).unwrap();
       showToast(`${PROJECT_MODULE_NAME} updated successfully!`, "success");
     } else {
       console.log("Creating new project");
+      // Send the data as-is (it already has the correct field names)
       await dispatch(addProject(projectData)).unwrap();
       showToast(`${PROJECT_MODULE_NAME} created successfully!`, "success");
     }

@@ -39,6 +39,8 @@ const convertTo12Hour = (time24) => {
 };
 
 // Punch Out Modal Component
+// PunchOutModal.jsx - Updated with frontend calculation
+
 const PunchOutModal = ({
   isOpen,
   onClose,
@@ -52,6 +54,7 @@ const PunchOutModal = ({
   const [loadingProjects, setLoadingProjects] = useState(false);
   const [totalHours, setTotalHours] = useState(0);
   const [confirmNoProjects, setConfirmNoProjects] = useState(false);
+  const [maxWorkingHours, setMaxWorkingHours] = useState(0);
 
   // Punch out time state - stored as 24-hour time string
   const [punchOutTime, setPunchOutTime] = useState("");
@@ -67,6 +70,149 @@ const PunchOutModal = ({
     (state) => state.EmpAttendance?.dashboardData,
   );
 
+  // Get today's attendance data
+  const todayAttendance = dashboardData?.today_attendance || {};
+  const punchInTime = todayAttendance.punch_in_time;
+  const punchInDate = todayAttendance.date;
+
+  // Calculate working hours when modal opens or punch out time changes
+  useEffect(() => {
+    if (isOpen) {
+      calculateWorkingHours();
+      fetchProjects();
+    }
+    return () => {
+      setConfirmNoProjects(false);
+      setTasksCompleted("");
+      setPlanTomorrow("");
+      setRemarks("");
+      setPunchOutTime("");
+      setTotalHours(0);
+      setMaxWorkingHours(0);
+    };
+  }, [isOpen]);
+
+  // Recalculate when punch out time changes
+  useEffect(() => {
+    if (isOpen && punchOutTime) {
+      calculateWorkingHours();
+    }
+  }, [punchOutTime, isOpen]);
+
+  // Calculate working hours from punch in time and punch out time
+  const calculateWorkingHours = () => {
+    if (!punchInTime) {
+      setMaxWorkingHours(0);
+      return;
+    }
+
+    let punchInDateObj, punchOutDateObj;
+
+    // Parse punch in time
+    if (typeof punchInTime === 'string') {
+      if (punchInTime.includes('T')) {
+        punchInDateObj = new Date(punchInTime);
+      } else {
+        // Format: "09:00:00" or "09:00"
+        const [hours, minutes, seconds] = punchInTime.split(':');
+        const now = new Date();
+        punchInDateObj = new Date(
+          now.getFullYear(),
+          now.getMonth(),
+          now.getDate(),
+          parseInt(hours),
+          parseInt(minutes),
+          seconds ? parseInt(seconds) : 0
+        );
+      }
+    } else {
+      punchInDateObj = new Date(punchInTime);
+    }
+
+    // If no punch in time, can't calculate
+    if (isNaN(punchInDateObj.getTime())) {
+      setMaxWorkingHours(0);
+      return;
+    }
+
+    // Determine punch out time
+    let punchOutTimeStr = punchOutTime;
+    if (!punchOutTimeStr && todayAttendance.punch_out_time) {
+      punchOutTimeStr = todayAttendance.punch_out_time;
+    }
+
+    if (!punchOutTimeStr) {
+      // If no punch out time yet, use current time
+      punchOutDateObj = new Date();
+    } else {
+      // Parse punch out time
+      if (punchOutTimeStr.includes('T')) {
+        punchOutDateObj = new Date(punchOutTimeStr);
+      } else {
+        const [hours, minutes, seconds] = punchOutTimeStr.split(':');
+        punchOutDateObj = new Date(
+          punchInDateObj.getFullYear(),
+          punchInDateObj.getMonth(),
+          punchInDateObj.getDate(),
+          parseInt(hours),
+          parseInt(minutes),
+          seconds ? parseInt(seconds) : 0
+        );
+      }
+    }
+
+    // If punch out is before punch in (next day), add 24 hours
+    if (punchOutDateObj < punchInDateObj) {
+      punchOutDateObj.setDate(punchOutDateObj.getDate() + 1);
+    }
+
+    // Calculate difference in hours
+    const diffMs = punchOutDateObj - punchInDateObj;
+    const diffHours = diffMs / (1000 * 60 * 60);
+    
+    // Round to 2 decimal places
+    const roundedHours = Math.round(diffHours * 100) / 100;
+    
+    // Ensure minimum 0 and maximum reasonable (e.g., 24 hours)
+    const maxHours = Math.max(0, Math.min(roundedHours, 24));
+    setMaxWorkingHours(maxHours);
+  };
+
+  // Fetch projects
+  const fetchProjects = async () => {
+    const employeeId = dashboardData?.employee?.id || user?.employee?.id || user?.id;
+    
+    if (!employeeId) {
+      console.warn("No employee ID available for projects");
+      setProjects([]);
+      return;
+    }
+
+    setLoadingProjects(true);
+    try {
+      const res = await apiClient.get(`/admin/project-assignments/${employeeId}`);
+      let projectsData = [];
+
+      if (res.data?.data?.projects && Array.isArray(res.data.data.projects)) {
+        projectsData = res.data.data.projects;
+      } else if (res.data?.projects && Array.isArray(res.data.projects)) {
+        projectsData = res.data.projects;
+      } else if (res.data?.data && Array.isArray(res.data.data)) {
+        projectsData = res.data.data;
+      } else if (Array.isArray(res.data)) {
+        projectsData = res.data;
+      }
+
+      setProjects(projectsData);
+    } catch (err) {
+      console.error("Failed to fetch projects:", err);
+      showToast("Failed to load projects", "error");
+      setProjects([]);
+    } finally {
+      setLoadingProjects(false);
+    }
+  };
+
   // Calculate total hours whenever project times change
   useEffect(() => {
     let total = 0;
@@ -76,57 +222,9 @@ const PunchOutModal = ({
         if (!isNaN(num)) total += num;
       }
     });
-    setTotalHours(Math.round(total * 100) / 100);
+    const roundedTotal = Math.round(total * 100) / 100;
+    setTotalHours(roundedTotal);
   }, [projectTimes]);
-
-  // Fetch projects when modal opens
-  useEffect(() => {
-    if (isOpen) {
-      const employeeId =
-        dashboardData?.employee?.id ||
-        user?.employee?.id ||
-        user?.id ||
-        dashboardData?.employee?.employee_id;
-
-      if (employeeId) {
-        setLoadingProjects(true);
-
-        apiClient
-          .get(`/admin/project-assignments/${employeeId}`)
-          .then((res) => {
-            let projectsData = [];
-
-            if (
-              res.data?.data?.projects &&
-              Array.isArray(res.data.data.projects)
-            ) {
-              projectsData = res.data.data.projects;
-            } else if (res.data?.projects && Array.isArray(res.data.projects)) {
-              projectsData = res.data.projects;
-            } else if (res.data?.data && Array.isArray(res.data.data)) {
-              projectsData = res.data.data;
-            } else if (Array.isArray(res.data)) {
-              projectsData = res.data;
-            }
-
-            setProjects(projectsData);
-          })
-          .catch((err) => {
-            console.error("Failed to fetch projects:", err);
-            showToast("Failed to load projects", "error");
-            setProjects([]);
-          })
-          .finally(() => setLoadingProjects(false));
-      }
-    }
-    return () => {
-      setConfirmNoProjects(false);
-      setTasksCompleted("");
-      setPlanTomorrow("");
-      setRemarks("");
-      setPunchOutTime("");
-    };
-  }, [isOpen, dashboardData, user]);
 
   // Set default punch out time when modal opens
   useEffect(() => {
@@ -150,22 +248,16 @@ const PunchOutModal = ({
 
   // Handle saving task report
   const handleSaveTaskReport = async () => {
-    const hasTaskReport =
-      tasksCompleted.trim() || planTomorrow.trim() || remarks.trim();
-
-    if (!hasTaskReport) {
-      return true;
-    }
+    const hasTaskReport = tasksCompleted.trim() || planTomorrow.trim() || remarks.trim();
+    if (!hasTaskReport) return true;
 
     setSavingTaskReport(true);
     try {
-      const result = await dispatch(
-        saveTaskReport({
-          tasks_completed: tasksCompleted,
-          plan_tomorrow: planTomorrow,
-          remarks: remarks,
-        }),
-      ).unwrap();
+      const result = await dispatch(saveTaskReport({
+        tasks_completed: tasksCompleted,
+        plan_tomorrow: planTomorrow,
+        remarks: remarks,
+      })).unwrap();
 
       if (result) {
         showToast("Task report saved successfully!", "success");
@@ -181,62 +273,65 @@ const PunchOutModal = ({
   };
 
   const handleSubmit = async (e) => {
-  e.preventDefault();
+    e.preventDefault();
 
-  // Validate punch out time for past date
-  if (punchOutDate && (!punchOutTime || punchOutTime === "00:00")) {
-    showToast("Please enter the punch out time for " + punchOutDate, "error");
-    return;
-  }
-
-  // First, save the task report
-  const taskReportSaved = await handleSaveTaskReport();
-  if (!taskReportSaved) {
-    return;
-  }
-
-  // Create full datetime with timezone
-  let punchOutDateTime = null;
-  if (punchOutTime && punchOutDate) {
-    // Create a date object with the local time
-    // The timezone is Asia/Kolkata (UTC+5:30)
-    const dateStr = `${punchOutDate}T${punchOutTime}:00+05:30`;
-    punchOutDateTime = dateStr;
-  }
-
-  // If no projects assigned
-  if (projects.length === 0) {
-    if (!confirmNoProjects) {
-      setConfirmNoProjects(true);
+    // Validate total hours against max working hours
+    if (maxWorkingHours > 0 && totalHours > maxWorkingHours) {
+      showToast(`Total hours (${totalHours}) exceeds your working hours (${maxWorkingHours})`, "error");
       return;
     }
+
+    // Validate punch out time for past date
+    if (punchOutDate && (!punchOutTime || punchOutTime === "00:00")) {
+      showToast("Please enter the punch out time for " + punchOutDate, "error");
+      return;
+    }
+
+    // First, save the task report
+    const taskReportSaved = await handleSaveTaskReport();
+    if (!taskReportSaved) return;
+
+    // Create full datetime with timezone
+    let punchOutDateTime = null;
+    if (punchOutTime && punchOutDate) {
+      const dateStr = `${punchOutDate}T${punchOutTime}:00+05:30`;
+      punchOutDateTime = dateStr;
+    }
+
+    // If no projects assigned
+    if (projects.length === 0) {
+      if (!confirmNoProjects) {
+        setConfirmNoProjects(true);
+        return;
+      }
+      onSubmit({
+        project_times: {},
+        total_hours: 0,
+        no_projects: true,
+        punch_out_date: punchOutDate || null,
+        punch_out_time: punchOutDateTime,
+        task_report: {
+          tasks_completed: tasksCompleted,
+          plan_tomorrow: planTomorrow,
+          remarks: remarks,
+        },
+      });
+      return;
+    }
+
     onSubmit({
-      project_times: {},
-      total_hours: 0,
-      no_projects: true,
+      project_times: projectTimes,
+      total_hours: totalHours,
+      max_working_hours: maxWorkingHours,
       punch_out_date: punchOutDate || null,
-      punch_out_time: punchOutDateTime, // Send full datetime with timezone
+      punch_out_time: punchOutDateTime,
       task_report: {
         tasks_completed: tasksCompleted,
         plan_tomorrow: planTomorrow,
         remarks: remarks,
       },
     });
-    return;
-  }
-
-  onSubmit({
-    project_times: projectTimes,
-    total_hours: totalHours,
-    punch_out_date: punchOutDate || null,
-    punch_out_time: punchOutDateTime, // Send full datetime with timezone
-    task_report: {
-      tasks_completed: tasksCompleted,
-      plan_tomorrow: planTomorrow,
-      remarks: remarks,
-    },
-  });
-};
+  };
 
   const handleClearAll = () => {
     setProjectTimes({});
@@ -271,6 +366,51 @@ const PunchOutModal = ({
     }
   };
 
+  // Helper to format punch time
+const formatPunchTime = (time) => {
+  if (!time) return "—";
+  try {
+    let date;
+    if (typeof time === "string" && time.match(/^\d{2}:\d{2}:\d{2}$/)) {
+      const now = new Date();
+      const [hours, minutes, seconds] = time.split(":");
+      date = new Date(
+        now.getFullYear(),
+        now.getMonth(),
+        now.getDate(),
+        parseInt(hours),
+        parseInt(minutes),
+        parseInt(seconds)
+      );
+    } else if (typeof time === "string" && time.includes("T")) {
+      date = new Date(time);
+    } else if (time instanceof Date) {
+      date = time;
+    } else {
+      date = new Date(time);
+    }
+
+    if (isNaN(date.getTime())) return time;
+    return date.toLocaleTimeString("en-US", {
+      hour: "2-digit",
+      minute: "2-digit",
+      hour12: true,
+    });
+  } catch (error) {
+    return time;
+  }
+};
+
+  // Helper to convert 24-hour time to 12-hour format for display
+  const convertTo12Hour = (time24) => {
+    if (!time24) return '';
+    const [hours, minutes] = time24.split(':');
+    const h = parseInt(hours, 10);
+    const ampm = h >= 12 ? 'PM' : 'AM';
+    const h12 = h % 12 || 12;
+    return `${h12}:${minutes} ${ampm}`;
+  };
+
   if (!isOpen) return null;
 
   return (
@@ -298,7 +438,7 @@ const PunchOutModal = ({
         </div>
 
         <form onSubmit={handleSubmit} className="p-5 flex-1 overflow-y-auto">
-          {/* Punch Out Time Field - Using TimeInput with HH:MM format */}
+          {/* Punch Out Time Field */}
           <div
             className={`mb-6 p-4 ${punchOutDate ? "bg-yellow-500/10 border-yellow-500/20" : "bg-blue-500/10 border-blue-500/20"} rounded-xl border`}
           >
@@ -332,31 +472,19 @@ const PunchOutModal = ({
             <div className="mt-2 text-xs text-[var(--muted)]">
               Select the time you punched out (24-hour format)
             </div>
-            {punchOutDate && (
-              <div className="mt-2 flex items-center gap-2 text-xs text-yellow-600 dark:text-yellow-400">
-                <FiInfo className="w-4 h-4" />
-                <span>
-                  You are punching out for a previous date. Please select the
-                  exact time you left on that day.
-                </span>
-              </div>
-            )}
           </div>
 
-          {/* Task Report Section - Same as before */}
+          {/* Task Report Section */}
           <div className="mb-6">
             <label className="block text-sm font-semibold text-[var(--text)] mb-3">
               <FiFileText className="inline mr-2 text-green-500" />
-              Task Report{" "}
-              {punchOutDate
-                ? `for ${formatDisplayDate(punchOutDate)}`
-                : "Daily"}
+              Task Report
             </label>
 
             <div className="space-y-4">
               <div>
                 <label className="block text-xs font-medium text-[var(--text)] mb-1">
-                  Tasks Completed {punchOutDate ? "That Day" : "Today"}
+                  Tasks Completed
                 </label>
                 <textarea
                   value={tasksCompleted}
@@ -413,22 +541,65 @@ const PunchOutModal = ({
               Time Worked on Projects
             </label>
 
-            {projects.length > 0 && (
-              <>
-                <p className="text-xs text-[var(--muted)] mb-3">
-                  Enter the time you spent working on each project{" "}
-                  {punchOutDate ? "that day" : "today"}
-                </p>
-                <div className="flex justify-end gap-2 mb-3">
-                  <button
-                    type="button"
-                    onClick={handleClearAll}
-                    className="text-xs px-3 py-1 rounded-full bg-red-500/10 text-red-500 hover:bg-red-500/20 transition-colors"
-                  >
-                    Clear All
-                  </button>
+            {/* Working Hours Summary */}
+            <div className="mb-4 p-4 bg-blue-500/10 rounded-xl border border-blue-500/20">
+              <div className="flex justify-between items-center">
+                <div>
+                  <span className="text-sm font-semibold text-[var(--text)]">
+                    Punch In Time:
+                  </span>
+                  <span className="ml-2 text-sm text-[var(--text)]">
+                    {punchInTime ? formatPunchTime(punchInTime) : '—'}
+                  </span>
                 </div>
-              </>
+                <div>
+                  <span className="text-sm font-semibold text-[var(--text)]">
+                    Punch Out Time:
+                  </span>
+                  <span className="ml-2 text-sm text-[var(--text)]">
+                    {punchOutTime ? convertTo12Hour(punchOutTime) : '—'}
+                  </span>
+                </div>
+              </div>
+              <div className="flex justify-between items-center mt-3 pt-3 border-t border-blue-500/20">
+                <div>
+                  <span className="text-sm font-semibold text-[var(--text)]">
+                    Total Working Hours:
+                  </span>
+                  <span className="ml-2 text-lg font-bold text-blue-500">
+                    {maxWorkingHours > 0 ? `${maxWorkingHours} hours` : '—'}
+                  </span>
+                </div>
+                <div>
+                  <span className="text-sm font-semibold text-[var(--text)]">
+                    Allocated:
+                  </span>
+                  <span className={`ml-2 text-lg font-bold ${totalHours > maxWorkingHours ? 'text-red-500' : 'text-green-500'}`}>
+                    {isNaN(totalHours) ? "0" : totalHours} hours
+                  </span>
+                </div>
+              </div>
+              {maxWorkingHours > 0 && (
+                <div className="mt-2">
+                  <div className="w-full h-2 bg-gray-200 dark:bg-gray-700 rounded-full overflow-hidden">
+                    <div 
+                      className={`h-full transition-all duration-300 ${totalHours > maxWorkingHours ? 'bg-red-500' : 'bg-green-500'}`}
+                      style={{ width: `${Math.min((totalHours / maxWorkingHours) * 100, 100)}%` }}
+                    ></div>
+                  </div>
+                  <div className="text-xs text-[var(--muted)] mt-1">
+                    {totalHours > maxWorkingHours 
+                      ? `⚠️ Over by ${(totalHours - maxWorkingHours).toFixed(2)} hours`
+                      : `${(maxWorkingHours - totalHours).toFixed(2)} hours remaining`}
+                  </div>
+                </div>
+              )}
+            </div>
+
+            {projects.length > 0 && (
+              <p className="text-xs text-[var(--muted)] mb-3">
+                Enter the time you spent working on each project (max {maxWorkingHours} hours total)
+              </p>
             )}
           </div>
 
@@ -491,6 +662,7 @@ const PunchOutModal = ({
                             handleTimeChange(project.id, e.target.value)
                           }
                           className="text-sm"
+                          maxHours={maxWorkingHours}
                         />
                       </div>
                       <span className="text-xs text-[var(--muted)] w-20">
@@ -503,25 +675,6 @@ const PunchOutModal = ({
             )}
           </div>
 
-          {/* Total Hours Summary */}
-          {projects.length > 0 && (
-            <div className="mb-6 p-4 bg-green-500/10 rounded-xl border border-green-500/20">
-              <div className="flex justify-between items-center">
-                <span className="text-sm font-semibold text-[var(--text)]">
-                  Total Time Recorded:
-                </span>
-                <span className="text-xl font-bold text-green-500">
-                  {isNaN(totalHours) ? "0" : totalHours} hours
-                </span>
-              </div>
-              <div className="text-xs text-[var(--muted)] mt-1">
-                <i className="fas fa-info-circle mr-1"></i>
-                Make sure your total time accurately reflects your work{" "}
-                {punchOutDate ? "for that day" : "today"}
-              </div>
-            </div>
-          )}
-
           {/* Warning for no projects */}
           {projects.length === 0 && !confirmNoProjects && (
             <div className="mb-6 p-4 bg-yellow-500/10 rounded-xl border border-yellow-500/20">
@@ -532,8 +685,7 @@ const PunchOutModal = ({
                 </span>
               </div>
               <div className="text-xs text-[var(--muted)] mt-1">
-                You have no projects assigned. Check the confirmation box above
-                to proceed.
+                You have no projects assigned. Check the confirmation box above to proceed.
               </div>
             </div>
           )}
@@ -551,7 +703,8 @@ const PunchOutModal = ({
               disabled={
                 loading ||
                 savingTaskReport ||
-                (projects.length === 0 && !confirmNoProjects)
+                (projects.length === 0 && !confirmNoProjects) ||
+                (maxWorkingHours > 0 && totalHours > maxWorkingHours)
               }
               className="flex-1 bg-green-500 border-none text-white py-3 px-8 rounded-full font-semibold text-sm cursor-pointer transition-all flex items-center justify-center gap-2 hover:bg-green-600 hover:-translate-y-0.5 hover:shadow-md disabled:opacity-50 disabled:cursor-not-allowed"
             >
