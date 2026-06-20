@@ -3,15 +3,37 @@ import { createSlice, createAsyncThunk } from "@reduxjs/toolkit";
 import apiClient from "../../../utils/apiClient";
 
 // Helper function to transform task report data from API
+// Helper function to transform task report data from API
 const transformTaskReportData = (report) => {
+  // Get employee name from the employee object
+  let employeeName = "N/A";
+
+  if (report.employee) {
+    if (typeof report.employee === "object") {
+      // Combine first_name and last_name
+      const firstName = report.employee.first_name || "";
+      const lastName = report.employee.last_name || "";
+      employeeName = `${firstName} ${lastName}`.trim();
+
+      // If no name found, use employee_id as fallback
+      if (!employeeName) {
+        employeeName =
+          report.employee.employee_id || `Employee #${report.employee_id}`;
+      }
+    } else if (typeof report.employee === "string") {
+      // If employee is already a string, use it
+      employeeName = report.employee;
+    }
+  } else {
+    // If no employee object, use employee_id
+    employeeName = `Employee #${report.employee_id || "Unknown"}`;
+  }
+
   return {
     id: report.id,
     date: report.date,
     employee_id: report.employee_id,
-    employee: report.employee?.name || 
-              report.employee?.full_name || 
-              `Employee #${report.employee_id}` || 
-              "-",
+    employee: employeeName,
     tasksCompleted: report.tasks_completed || "-",
     planForTomorrow: report.plan_tomorrow || "-",
     remarks: report.remarks || "",
@@ -69,10 +91,10 @@ export const fetchTaskReports = createAsyncThunk(
     } catch (error) {
       console.error("Fetch task reports error:", error);
       return rejectWithValue(
-        error.response?.data?.message || "Failed to fetch task reports"
+        error.response?.data?.message || "Failed to fetch task reports",
       );
     }
-  }
+  },
 );
 
 // Get single task report (Admin - Show)
@@ -85,10 +107,10 @@ export const fetchTaskReportById = createAsyncThunk(
       return transformTaskReportData(reportData);
     } catch (error) {
       return rejectWithValue(
-        error.response?.data?.message || "Failed to fetch task report"
+        error.response?.data?.message || "Failed to fetch task report",
       );
     }
-  }
+  },
 );
 
 // Update remarks only (Admin can add/update remarks)
@@ -104,10 +126,10 @@ export const updateTaskReportRemarks = createAsyncThunk(
       return transformTaskReportData(updatedReport);
     } catch (error) {
       return rejectWithValue(
-        error.response?.data?.message || "Failed to update remarks"
+        error.response?.data?.message || "Failed to update remarks",
       );
     }
-  }
+  },
 );
 
 // Add new task report (Admin)
@@ -118,7 +140,7 @@ export const addTaskReport = createAsyncThunk(
       // Find employee ID from state.employees.employees
       const employees = getState().employees?.employees || [];
       const matchedEmployee = employees.find(
-        (emp) => emp.name?.toLowerCase() === formData.employee?.toLowerCase()
+        (emp) => emp.name?.toLowerCase() === formData.employee?.toLowerCase(),
       );
 
       const payload = {
@@ -134,10 +156,10 @@ export const addTaskReport = createAsyncThunk(
       return transformTaskReportData(newReport);
     } catch (error) {
       return rejectWithValue(
-        error.response?.data?.message || "Failed to add task report"
+        error.response?.data?.message || "Failed to add task report",
       );
     }
-  }
+  },
 );
 
 // Update existing task report (Admin)
@@ -148,7 +170,7 @@ export const updateTaskReport = createAsyncThunk(
       // Find employee ID from state.employees.employees
       const employees = getState().employees?.employees || [];
       const matchedEmployee = employees.find(
-        (emp) => emp.name?.toLowerCase() === data.employee?.toLowerCase()
+        (emp) => emp.name?.toLowerCase() === data.employee?.toLowerCase(),
       );
 
       const payload = {
@@ -159,15 +181,18 @@ export const updateTaskReport = createAsyncThunk(
         remarks: data.remarks || null,
       };
 
-      const response = await apiClient.put(`/admin/task-reports/${id}`, payload);
+      const response = await apiClient.put(
+        `/admin/task-reports/${id}`,
+        payload,
+      );
       let updatedReport = response.data?.data || response.data;
       return transformTaskReportData(updatedReport);
     } catch (error) {
       return rejectWithValue(
-        error.response?.data?.message || "Failed to update task report"
+        error.response?.data?.message || "Failed to update task report",
       );
     }
-  }
+  },
 );
 
 // Delete task report (Admin - Delete)
@@ -179,10 +204,10 @@ export const deleteTaskReport = createAsyncThunk(
       return id;
     } catch (error) {
       return rejectWithValue(
-        error.response?.data?.message || "Failed to delete task report"
+        error.response?.data?.message || "Failed to delete task report",
       );
     }
-  }
+  },
 );
 
 const taskReportSlice = createSlice({
@@ -247,7 +272,9 @@ const taskReportSlice = createSlice({
       .addCase(updateTaskReportRemarks.fulfilled, (state, action) => {
         state.loading = false;
         const updatedReport = action.payload;
-        const index = state.taskReports.findIndex(r => r.id === updatedReport.id);
+        const index = state.taskReports.findIndex(
+          (r) => r.id === updatedReport.id,
+        );
         if (index !== -1) {
           state.taskReports[index] = updatedReport;
         }
@@ -283,7 +310,9 @@ const taskReportSlice = createSlice({
       .addCase(updateTaskReport.fulfilled, (state, action) => {
         state.loading = false;
         const updatedReport = action.payload;
-        const index = state.taskReports.findIndex(r => r.id === updatedReport.id);
+        const index = state.taskReports.findIndex(
+          (r) => r.id === updatedReport.id,
+        );
         if (index !== -1) {
           state.taskReports[index] = updatedReport;
         }
@@ -303,7 +332,9 @@ const taskReportSlice = createSlice({
       })
       .addCase(deleteTaskReport.fulfilled, (state, action) => {
         state.loading = false;
-        state.taskReports = state.taskReports.filter(r => r.id !== action.payload);
+        state.taskReports = state.taskReports.filter(
+          (r) => r.id !== action.payload,
+        );
         state.totalCount -= 1;
       })
       .addCase(deleteTaskReport.rejected, (state, action) => {

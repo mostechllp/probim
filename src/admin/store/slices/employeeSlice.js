@@ -6,7 +6,16 @@ export const fetchEmployees = createAsyncThunk(
   async (_, { rejectWithValue }) => {
     try {
       const response = await apiClient.get("/admin/employees");
-      return response.data;
+      const employees = response.data || response || [];
+
+      // Map employees to include user_id
+      return employees.map((emp) => ({
+        ...emp,
+        // Ensure user_id is set - use user_id if available, otherwise use id
+        user_id: emp.user_id || emp.id, // This is the key fix!
+        // Keep original id as employee_id for reference
+        employee_id: emp.id,
+      }));
     } catch (error) {
       console.error("FETCH EMPLOYEES ERROR:", error.response?.data);
       return rejectWithValue(
@@ -137,7 +146,6 @@ export const updateEmployee = createAsyncThunk(
     try {
       let response;
 
-
       // Log the data being sent for debugging
       if (data instanceof FormData) {
         const formDataObj = {};
@@ -167,7 +175,6 @@ export const updateEmployee = createAsyncThunk(
         response = await apiClient.put(`/admin/employees/${id}`, data);
       }
 
-
       if (response.data && response.data.status === "success") {
         return response.data.data;
       } else {
@@ -180,7 +187,6 @@ export const updateEmployee = createAsyncThunk(
         );
       }
     } catch (error) {
-
       if (error.response?.data?.errors) {
         console.error("Validation errors:", error.response.data.errors);
         return rejectWithValue({
@@ -242,6 +248,7 @@ const employeeSlice = createSlice({
         state.loading = true;
         state.error = null;
       })
+      // In employeeSlice.js - Fix the fetchEmployees.fulfilled handler
       .addCase(fetchEmployees.fulfilled, (state, action) => {
         state.loading = false;
         const apiData = action.payload.data?.data || [];
@@ -259,8 +266,14 @@ const employeeSlice = createSlice({
 
           return {
             id: emp.id,
+            user_id: emp.user?.id || emp.id, // <-- THIS IS THE KEY FIX!
             name: [emp.first_name, emp.last_name].filter(Boolean).join(" "),
-            status: emp.user?.status === "active" ? "Active" : emp.user?.status === "onboarding" ? "Onboarding" : "Inactive",
+            status:
+              emp.user?.status === "active"
+                ? "Active"
+                : emp.user?.status === "onboarding"
+                  ? "Onboarding"
+                  : "Inactive",
             designation: emp.user?.designation?.name || "-",
             department: emp.user?.department?.name || "-",
             company: emp.user?.company?.name || "-",
@@ -278,7 +291,12 @@ const employeeSlice = createSlice({
         state.error = action.payload;
       })
       .addCase(addEmployee.fulfilled, (state, action) => {
-        state.employees.unshift(action.payload);
+        const emp = action.payload;
+        // Make sure new employees also have user_id
+        state.employees.unshift({
+          ...emp,
+          user_id: emp.user?.id || emp.id,
+        });
         state.totalCount += 1;
       })
       .addCase(deleteEmployee.fulfilled, (state, action) => {
@@ -334,20 +352,21 @@ const employeeSlice = createSlice({
       // Update Employee
       .addCase(updateEmployee.fulfilled, (state, action) => {
         state.loading = false;
-        console.log(
-          "📦 REDUX - updateEmployee fulfilled, updating state with:",
-          action.payload,
-        );
-        // Now action.payload is the actual employee data, not the wrapper
         if (action.payload && action.payload.id) {
-          // Update the employee in the employees list if it exists
           const index = state.employees.findIndex(
             (emp) => emp.id === action.payload.id,
           );
           if (index !== -1) {
-            state.employees[index] = action.payload;
+            // Ensure user_id is preserved
+            state.employees[index] = {
+              ...action.payload,
+              user_id: action.payload.user?.id || action.payload.id,
+            };
           }
-          state.currentEmployee = action.payload;
+          state.currentEmployee = {
+            ...action.payload,
+            user_id: action.payload.user?.id || action.payload.id,
+          };
         }
       })
       .addCase(updateEmployee.rejected, (state, action) => {
@@ -361,6 +380,11 @@ const employeeSlice = createSlice({
   },
 });
 
-export const { setCurrentPage, setPerPage, setFilters, resetFilters, resetCurrentEmployee } =
-  employeeSlice.actions;
+export const {
+  setCurrentPage,
+  setPerPage,
+  setFilters,
+  resetFilters,
+  resetCurrentEmployee,
+} = employeeSlice.actions;
 export default employeeSlice.reducer;
