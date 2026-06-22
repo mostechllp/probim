@@ -6,16 +6,7 @@ export const fetchEmployees = createAsyncThunk(
   async (_, { rejectWithValue }) => {
     try {
       const response = await apiClient.get("/admin/employees");
-      const employees = response.data || response || [];
-
-      // Map employees to include user_id
-      return employees.map((emp) => ({
-        ...emp,
-        // Ensure user_id is set - use user_id if available, otherwise use id
-        user_id: emp.user_id || emp.id, // This is the key fix!
-        // Keep original id as employee_id for reference
-        employee_id: emp.id,
-      }));
+      return response.data;
     } catch (error) {
       console.error("FETCH EMPLOYEES ERROR:", error.response?.data);
       return rejectWithValue(
@@ -24,6 +15,7 @@ export const fetchEmployees = createAsyncThunk(
     }
   },
 );
+
 
 // In your addEmployee async thunk
 export const addEmployee = createAsyncThunk(
