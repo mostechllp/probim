@@ -11,8 +11,16 @@ import {
 } from "../store/slices/employeeSlice";
 import { fetchOrganizations } from "../store/slices/organizationSlice";
 import { fetchCompanies } from "../store/slices/companySlice";
-import { fetchDesignations } from "../store/slices/designationSlice";
-import { fetchDepartments } from "../store/slices/departmentSlice";
+import DepartmentModal from "../components/department/DepartmentModal";
+import DesignationModal from "../components/designations/designationModal";
+import {
+  addDepartment,
+  fetchDepartments,
+} from "../store/slices/departmentSlice";
+import {
+  addDesignation,
+  fetchDesignations,
+} from "../store/slices/designationSlice";
 import { fetchRoles } from "../store/slices/roleSlice";
 import apiClient from "../../utils/apiClient";
 import DateInput from "../components/common/DateInput";
@@ -30,6 +38,10 @@ const EditEmployee = () => {
   const [selectedOrgDetails, setSelectedOrgDetails] = useState(null);
   const [selectedCompanyDetails, setSelectedCompanyDetails] = useState(null);
   const [isInitializing, setIsInitializing] = useState(true);
+  const [isDepartmentModalOpen, setIsDepartmentModalOpen] = useState(false);
+  const [isDesignationModalOpen, setIsDesignationModalOpen] = useState(false);
+  const [departmentModalLoading, setDepartmentModalLoading] = useState(false);
+  const [designationModalLoading, setDesignationModalLoading] = useState(false);
 
   // Document file states - matching AddEmployee structure
   const [documents, setDocuments] = useState({
@@ -153,53 +165,100 @@ const EditEmployee = () => {
   }, [dispatch]);
 
   useEffect(() => {
-  // Reset form initialization flag when ID changes
-  setFormInitialized(false);
-  setIsInitializing(true);
-  setCurrentStep(0);
-  
-  // Clear any errors
-  setStepErrors({});
-  
-  // Reset document states
-  setDocuments({
-    avatar: null,
-    avatarFile: null,
-    passport_size_photo: null,
-    passport_1st_page: null,
-    passport_2nd_page: null,
-    passport_outer_page: null,
-    passport_id_page: null,
-    visa_page: null,
-    labor_card: null,
-    labor_contract: null,
-    eid_1st_page: null,
-    eid_2nd_page: null,
-    educational_1st_page: null,
-    educational_2nd_page: null,
-    home_country_id_proof: null,
-  });
-  setDocumentPreviews({});
-  setExistingDocuments({});
-  setRemovedDocuments({});
-  
-  // Clear selected company/organization details
-  setSelectedOrgDetails(null);
-  setSelectedCompanyDetails(null);
-  
-  // Fetch new employee data
-  if (id) {
-    dispatch(fetchEmployeeById(id)).then(() => {
-      setInitialLoading(false);
-    });
-  }
-  
-  // Cleanup function - reset Redux state when component unmounts
-  return () => {
-    dispatch(resetCurrentEmployee());
+    // Reset form initialization flag when ID changes
     setFormInitialized(false);
+    setIsInitializing(true);
+    setCurrentStep(0);
+
+    // Clear any errors
+    setStepErrors({});
+
+    // Reset document states
+    setDocuments({
+      avatar: null,
+      avatarFile: null,
+      passport_size_photo: null,
+      passport_1st_page: null,
+      passport_2nd_page: null,
+      passport_outer_page: null,
+      passport_id_page: null,
+      visa_page: null,
+      labor_card: null,
+      labor_contract: null,
+      eid_1st_page: null,
+      eid_2nd_page: null,
+      educational_1st_page: null,
+      educational_2nd_page: null,
+      home_country_id_proof: null,
+    });
+    setDocumentPreviews({});
+    setExistingDocuments({});
+    setRemovedDocuments({});
+
+    // Clear selected company/organization details
+    setSelectedOrgDetails(null);
+    setSelectedCompanyDetails(null);
+
+    // Fetch new employee data
+    if (id) {
+      dispatch(fetchEmployeeById(id)).then(() => {
+        setInitialLoading(false);
+      });
+    }
+
+    // Cleanup function - reset Redux state when component unmounts
+    return () => {
+      dispatch(resetCurrentEmployee());
+      setFormInitialized(false);
+    };
+  }, [id, dispatch]);
+
+  // Add these handler functions after the existing handlers
+  const handleAddDepartment = async (data) => {
+    setDepartmentModalLoading(true);
+    try {
+      const result = await dispatch(addDepartment(data));
+      if (addDepartment.fulfilled.match(result)) {
+        showToast("Department added successfully", "success");
+        setIsDepartmentModalOpen(false);
+        // Refresh departments list
+        await dispatch(fetchDepartments());
+        // Auto-select the newly created department
+        if (result.payload?.id) {
+          setValue("department_id", String(result.payload.id));
+        }
+      } else {
+        showToast(result.payload || "Failed to add department", "error");
+      }
+    } catch (error) {
+      showToast("An error occurred", "error");
+    } finally {
+      setDepartmentModalLoading(false);
+    }
   };
-}, [id, dispatch]);
+
+  const handleAddDesignation = async (data) => {
+    setDesignationModalLoading(true);
+    try {
+      const result = await dispatch(addDesignation(data));
+      if (addDesignation.fulfilled.match(result)) {
+        showToast("Designation added successfully", "success");
+        setIsDesignationModalOpen(false);
+        // Refresh designations list
+        await dispatch(fetchDesignations());
+        // Auto-select the newly created designation
+        if (result.payload?.id) {
+          setValue("designation_id", String(result.payload.id));
+        }
+      } else {
+        showToast(result.payload || "Failed to add designation", "error");
+      }
+    } catch (error) {
+      showToast("An error occurred", "error");
+    } finally {
+      setDesignationModalLoading(false);
+    }
+  };
 
   // Fetch companies when organization changes
   useEffect(() => {
@@ -1441,9 +1500,19 @@ const EditEmployee = () => {
 
                   {/* Designation */}
                   <div>
-                    <label className="block text-xs md:text-sm font-semibold text-gray-700 mb-1 md:mb-2">
-                      Designation <span className="text-red-500">*</span>
-                    </label>
+                    <div className="flex items-center justify-between mb-1 md:mb-2">
+                      <label className="block text-xs md:text-sm font-semibold text-gray-700">
+                        Designation <span className="text-red-500">*</span>
+                      </label>
+                      <button
+                        type="button"
+                        onClick={() => setIsDesignationModalOpen(true)}
+                        className="text-green-500 hover:text-green-600 text-xs font-normal transition-colors flex items-center gap-1"
+                        title="Add new designation"
+                      >
+                        <i className="fas fa-plus-circle text-sm"></i>
+                      </button>
+                    </div>
                     <Controller
                       name="designation_id"
                       control={control}
@@ -1473,9 +1542,19 @@ const EditEmployee = () => {
 
                   {/* Department */}
                   <div>
-                    <label className="block text-xs md:text-sm font-semibold text-gray-700 mb-1 md:mb-2">
-                      Department <span className="text-red-500">*</span>
-                    </label>
+                    <div className="flex items-center justify-between mb-1 md:mb-2">
+                      <label className="block text-xs md:text-sm font-semibold text-gray-700">
+                        Department <span className="text-red-500">*</span>
+                      </label>
+                      <button
+                        type="button"
+                        onClick={() => setIsDepartmentModalOpen(true)}
+                        className="text-green-500 hover:text-green-600 text-xs font-normal transition-colors flex items-center gap-1"
+                        title="Add new department"
+                      >
+                        <i className="fas fa-plus-circle text-sm"></i>
+                      </button>
+                    </div>
                     <Controller
                       name="department_id"
                       control={control}
@@ -1502,7 +1581,6 @@ const EditEmployee = () => {
                       )}
                     />
                   </div>
-
                   {/* User Type */}
                   <div>
                     <label className="block text-xs md:text-sm font-semibold text-gray-700 mb-1 md:mb-2">
@@ -2659,6 +2737,22 @@ const EditEmployee = () => {
           </div>
         </form>
       </div>
+      {/* Department Modal */}
+      <DepartmentModal
+        isOpen={isDepartmentModalOpen}
+        onClose={() => setIsDepartmentModalOpen(false)}
+        onSubmit={handleAddDepartment}
+        isLoading={departmentModalLoading}
+      />
+
+      {/* Designation Modal */}
+      <DesignationModal
+        isOpen={isDesignationModalOpen}
+        onClose={() => setIsDesignationModalOpen(false)}
+        onSubmit={handleAddDesignation}
+        isLoading={designationModalLoading}
+        editingDesignation={null}
+      />
     </div>
   );
 };
