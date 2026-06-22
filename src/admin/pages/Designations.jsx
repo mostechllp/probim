@@ -30,16 +30,14 @@ const Designations = () => {
   }, [dispatch]);
 
   const getFilteredDesignations = () => {
-    let filtered = [...designations]; // Create a copy
+    let filtered = [...designations];
     
-    // Apply search filter
     if (searchTerm) {
       filtered = filtered.filter((des) =>
         des.name.toLowerCase().includes(searchTerm.toLowerCase()),
       );
     }
     
-    // Sort by id in descending order (newest first)
     filtered.sort((a, b) => b.id - a.id);
     
     return filtered;
@@ -92,8 +90,8 @@ const Designations = () => {
   return (
     <div className="w-full overflow-x-hidden">
       <main className="content px-4 py-4 md:px-6 md:py-6 w-full overflow-x-hidden">
-        {/* Stats Cards */}
-        <div className="stats-grid grid grid-cols-1 sm:grid-cols-2 gap-3 md:gap-5 mb-6">
+        {/* Stats Cards - Updated to only show total designations */}
+        <div className="stats-grid grid grid-cols-1 sm:grid-cols-1 gap-3 md:gap-5 mb-6">
           <div className="bg-white dark:bg-gray-800 rounded-xl p-3 md:p-5 border border-gray-200 dark:border-gray-700 transition-all hover:-translate-y-0.5 hover:shadow-soft">
             <div className="flex justify-between items-start mb-2 md:mb-3">
               <div className="w-10 h-10 md:w-12 md:h-12 bg-green-100 dark:bg-green-900/30 rounded-xl flex items-center justify-center">
@@ -105,20 +103,6 @@ const Designations = () => {
             </div>
             <div className="text-[10px] md:text-xs text-gray-500 dark:text-gray-400 font-medium mt-1">
               Total Designations
-            </div>
-          </div>
-
-          <div className="bg-white dark:bg-gray-800 rounded-xl p-3 md:p-5 border border-gray-200 dark:border-gray-700 transition-all hover:-translate-y-0.5 hover:shadow-soft">
-            <div className="flex justify-between items-start mb-2 md:mb-3">
-              <div className="w-10 h-10 md:w-12 md:h-12 bg-blue-100 dark:bg-blue-900/30 rounded-xl flex items-center justify-center">
-                <i className="fas fa-fingerprint text-blue-600 dark:text-blue-400 text-base md:text-xl"></i>
-              </div>
-            </div>
-            <div className="text-2xl md:text-3xl font-extrabold text-blue-600 dark:text-blue-400">
-              {designations.filter((d) => d.defaultPunchAccess === true).length}
-            </div>
-            <div className="text-[10px] md:text-xs text-gray-500 dark:text-gray-400 font-medium mt-1">
-              Default Punch Access
             </div>
           </div>
         </div>
@@ -148,9 +132,9 @@ const Designations = () => {
           </div>
         </div>
 
-        {/* Designations Table */}
+        {/* Designations Table - Removed Default Punch Access column */}
         <div className="bg-white dark:bg-gray-800 rounded-xl border border-gray-200 dark:border-gray-700 overflow-x-auto shadow-soft">
-          <div className="min-w-[600px] md:min-w-0">
+          <div className="min-w-[500px] md:min-w-0">
             <table className="w-full border-collapse">
               <thead>
                 <tr className="bg-gray-50 dark:bg-gray-700/50 border-b border-gray-200 dark:border-gray-700">
@@ -159,9 +143,6 @@ const Designations = () => {
                   </th>
                   <th className="px-3 md:px-4 py-2 md:py-3 text-left text-[10px] md:text-xs font-semibold text-gray-500 dark:text-gray-400">
                     Name
-                  </th>
-                  <th className="px-3 md:px-4 py-2 md:py-3 text-left text-[10px] md:text-xs font-semibold text-gray-500 dark:text-gray-400">
-                    Default Punch Access
                   </th>
                   <th className="px-3 md:px-4 py-2 md:py-3 text-left text-[10px] md:text-xs font-semibold text-gray-500 dark:text-gray-400">
                     Actions
@@ -181,19 +162,6 @@ const Designations = () => {
                       {des.name}
                     </td>
                     <td className="px-3 md:px-4 py-2 md:py-3">
-                      {des.defaultPunchAccess ? (
-                        <span className="inline-flex items-center gap-1.5 px-2 md:px-3 py-1 md:py-1.5 rounded-full text-[10px] md:text-xs font-semibold bg-green-100 text-green-600 dark:bg-green-900/30 dark:text-green-400">
-                          <i className="fas fa-check-circle text-[10px] md:text-xs"></i>
-                          Yes
-                        </span>
-                      ) : (
-                        <span className="inline-flex items-center gap-1.5 px-2 md:px-3 py-1 md:py-1.5 rounded-full text-[10px] md:text-xs font-semibold bg-gray-100 text-gray-600 dark:bg-gray-700 dark:text-gray-400">
-                          <i className="fas fa-times-circle text-[10px] md:text-xs"></i>
-                          No
-                        </span>
-                      )}
-                    </td>
-                    <td className="px-3 md:px-4 py-2 md:py-3">
                       <div className="flex gap-1 md:gap-2">
                         <button
                           onClick={() => handleEdit(des)}
@@ -202,13 +170,13 @@ const Designations = () => {
                         >
                           <i className="fas fa-edit text-xs md:text-sm"></i>
                         </button>
-                        <button
+                        {/* <button
                           onClick={() => handleDeleteClick(des)}
                           className="p-1.5 rounded-lg hover:bg-gray-100 dark:hover:bg-gray-700 text-red-500 transition-colors"
                           title="Delete"
                         >
                           <i className="fas fa-trash text-xs md:text-sm"></i>
-                        </button>
+                        </button> */}
                       </div>
                     </td>
                   </tr>
@@ -216,7 +184,7 @@ const Designations = () => {
                 {pageDesignations.length === 0 && (
                   <tr>
                     <td
-                      colSpan="4"
+                      colSpan="3"
                       className="px-4 py-8 text-center text-gray-500 dark:text-gray-400"
                     >
                       No designations found
