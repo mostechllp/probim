@@ -32,22 +32,35 @@ const Attendances = () => {
     stats,
     totalCount,
     lastPage,
+    currentPage: reduxCurrentPage,
+    perPage: reduxPerPage,
   } = useSelector((state) => state.attendance);
 
   const [showUploadModal, setShowUploadModal] = useState(false);
   const [companyFilter, setCompanyFilter] = useState("all");
   const [nameFilter, setNameFilter] = useState("");
   const [searchTerm, setSearchTerm] = useState("");
-  const [currentPage, setCurrentPage] = useState(1);
-  const [perPage, setPerPage] = useState(15);
   const [refreshLoading, setRefreshLoading] = useState(false);
 
   const pollingRef = useRef(null);
   // Always holds latest filter values — no stale closure issues
-  const filtersRef = useRef({ currentPage, perPage, companyFilter, searchTerm, nameFilter });
-  useEffect(() => {
-    filtersRef.current = { currentPage, perPage, companyFilter, searchTerm, nameFilter };
+  const filtersRef = useRef({ 
+    currentPage: reduxCurrentPage || 1, 
+    perPage: reduxPerPage || 15, 
+    companyFilter, 
+    searchTerm, 
+    nameFilter 
   });
+  
+  useEffect(() => {
+    filtersRef.current = { 
+      currentPage: reduxCurrentPage || 1, 
+      perPage: reduxPerPage || 15, 
+      companyFilter, 
+      searchTerm, 
+      nameFilter 
+    };
+  }, [reduxCurrentPage, reduxPerPage, companyFilter, searchTerm, nameFilter]);
 
   // ─── Core fetch function — always reads live filters from ref ─────────────
   const fetchAll = useCallback(() => {
@@ -71,7 +84,7 @@ const Attendances = () => {
   // ─── Load data on filter / page change ───────────────────────────────────
   useEffect(() => {
     fetchAll();
-  }, [currentPage, perPage, companyFilter, searchTerm, nameFilter]);
+  }, [reduxCurrentPage, reduxPerPage, companyFilter, searchTerm, nameFilter]);
 
   // ─── Stop polling helper ──────────────────────────────────────────────────
   const stopPolling = useCallback(() => {
@@ -93,7 +106,6 @@ const Attendances = () => {
   }, [uploadStatusId, uploadStatus]);
 
   // ─── React to upload status changes — use ref to avoid stale closure ─────
-  // We track the "handled" uploadStatusId so we never double-fire
   const handledUploadRef = useRef(null);
 
   // ─── React to upload status changes ─────────────────────────────────────────
@@ -105,12 +117,9 @@ const Attendances = () => {
       handledUploadRef.current = uploadStatusId;
       stopPolling();
       showToast("Attendance file processed successfully!", "success");
-
-      // ✅ Reset to page 1 so new records are visible
-      setCurrentPage(1);
-      // fetchAll() will auto-trigger from the currentPage useEffect above
+      // Re-fetch data
+      fetchAll();
       dispatch(clearUploadStatus());
-
     } else if (uploadStatus === "failed") {
       handledUploadRef.current = uploadStatusId;
       stopPolling();
@@ -118,6 +127,7 @@ const Attendances = () => {
       dispatch(clearUploadStatus());
     }
   }, [uploadStatus, uploadStatusId]);
+
   // ─── Manual refresh ───────────────────────────────────────────────────────
   const refreshAllData = async () => {
     setRefreshLoading(true);
@@ -132,7 +142,6 @@ const Attendances = () => {
   };
 
   // ─── Upload submit ────────────────────────────────────────────────────────
-  // ✅ Fix
   const handleUploadComplete = async ({ file }) => {
     try {
       const result = await dispatch(uploadAttendanceFile({ file })).unwrap();
@@ -140,8 +149,8 @@ const Attendances = () => {
 
       if (result.status === "completed") {
         showToast("Attendance file uploaded successfully!", "success");
-        setCurrentPage(1); // ✅ reset to page 1
-        // fetchAll triggers automatically via useEffect
+        // Reset to page 1
+        handlePageChange(1);
       } else {
         showToast("File uploaded! Processing in background…", "info");
       }
@@ -152,18 +161,70 @@ const Attendances = () => {
 
   // ─── Filter / pagination handlers ────────────────────────────────────────
   const handlePageChange = (page) => {
-    setCurrentPage(page);
+    // We need to re-fetch with the new page
+    dispatch(fetchAttendanceRecords({
+      page: page,
+      per_page: reduxPerPage || 15,
+      company: companyFilter !== "all" ? companyFilter : undefined,
+      search: searchTerm || undefined,
+      name: nameFilter || undefined,
+    }));
     window.scrollTo({ top: 0, behavior: "smooth" });
   };
-  const handlePerPageChange = (value) => { setPerPage(value); setCurrentPage(1); };
-  const handleCompanyFilterChange = (e) => { setCompanyFilter(e.target.value); setCurrentPage(1); };
-  const handleNameFilterChange = (e) => { setNameFilter(e.target.value); setCurrentPage(1); };
-  const handleSearchChange = (value) => { setSearchTerm(value); setCurrentPage(1); };
+
+  const handlePerPageChange = (value) => {
+    // Reset to page 1 when changing items per page
+    dispatch(fetchAttendanceRecords({
+      page: 1,
+      per_page: value,
+      company: companyFilter !== "all" ? companyFilter : undefined,
+      search: searchTerm || undefined,
+      name: nameFilter || undefined,
+    }));
+  };
+
+  const handleCompanyFilterChange = (e) => {
+    const value = e.target.value;
+    setCompanyFilter(value);
+    // Fetch with new filter, reset to page 1
+    dispatch(fetchAttendanceRecords({
+      page: 1,
+      per_page: reduxPerPage || 15,
+      company: value !== "all" ? value : undefined,
+      search: searchTerm || undefined,
+      name: nameFilter || undefined,
+    }));
+  };
+
+  const handleNameFilterChange = (e) => {
+    const value = e.target.value;
+    setNameFilter(value);
+    // Fetch with new filter, reset to page 1
+    dispatch(fetchAttendanceRecords({
+      page: 1,
+      per_page: reduxPerPage || 15,
+      company: companyFilter !== "all" ? companyFilter : undefined,
+      search: searchTerm || undefined,
+      name: value || undefined,
+    }));
+  };
+
+  const handleSearchChange = (value) => {
+    setSearchTerm(value);
+    // Fetch with new search, reset to page 1
+    dispatch(fetchAttendanceRecords({
+      page: 1,
+      per_page: reduxPerPage || 15,
+      company: companyFilter !== "all" ? companyFilter : undefined,
+      search: value || undefined,
+      name: nameFilter || undefined,
+    }));
+  };
 
   // ─── Derived display values ───────────────────────────────────────────────
   const totalFiltered = totalCount || records.length;
-  const totalPages = lastPage || Math.ceil(totalFiltered / perPage);
-  const start = (currentPage - 1) * perPage;
+  const totalPages = lastPage || Math.ceil(totalFiltered / (reduxPerPage || 15));
+  const start = ((reduxCurrentPage || 1) - 1) * (reduxPerPage || 15);
   const isUploading = uploadLoading || uploadStatus === "processing";
 
   const totalEmployees = stats?.totalActiveEmployees || 0;
@@ -204,7 +265,7 @@ const Attendances = () => {
 
       {/* ── Stats Cards ─────────────────────────────────────────────────────── */}
       <div className="stats-grid grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-5 gap-3 md:gap-4 mb-6">
-
+        {/* ... stats cards remain the same ... */}
         <div className="bg-white dark:bg-gray-800 rounded-xl p-3 md:p-4 border border-gray-200 dark:border-gray-700 transition-all hover:-translate-y-0.5 hover:shadow-soft">
           <div className="w-8 h-8 md:w-10 md:h-10 bg-green-100 dark:bg-green-900/30 rounded-xl flex items-center justify-center mb-1 md:mb-2">
             <i className="fas fa-users text-green-600 dark:text-green-400 text-sm md:text-lg"></i>
@@ -308,20 +369,16 @@ const Attendances = () => {
 
       {/* ── Actions bar ─────────────────────────────────────────────────────── */}
       <div className="flex flex-col sm:flex-row justify-between items-stretch sm:items-center gap-4 mb-5">
-        <EntriesSelector value={perPage} onChange={handlePerPageChange} />
+        <EntriesSelector 
+          value={reduxPerPage || 15} 
+          onChange={handlePerPageChange} 
+        />
         <div className="flex flex-col sm:flex-row gap-3 w-full sm:w-auto">
-          <SearchBar value={searchTerm} onChange={handleSearchChange} placeholder="Search records..." />
-          {/* <button
-            onClick={() => setShowUploadModal(true)}
-            disabled={isUploading}
-            className="bg-green-500 hover:bg-green-600 text-white px-4 py-2 rounded-full text-sm font-semibold flex items-center justify-center gap-2 transition-all shadow-md hover:shadow-lg w-full sm:w-auto disabled:opacity-60 disabled:cursor-not-allowed"
-          >
-            {isUploading ? (
-              <><i className="fas fa-spinner fa-spin"></i> Processing…</>
-            ) : (
-              <><i className="fas fa-plus-circle"></i> Upload Logs</>
-            )}
-          </button> */}
+          <SearchBar 
+            value={searchTerm} 
+            onChange={handleSearchChange} 
+            placeholder="Search records..." 
+          />
         </div>
       </div>
 
@@ -379,10 +436,11 @@ const Attendances = () => {
                         )}
                       </td>
                       <td className="px-3 md:px-4 py-2 md:py-3 text-xs md:text-sm">
-                        <span className={`inline-block px-2 py-0.5 rounded-full text-[9px] md:text-xs font-medium ${record.status === "Present"
-                          ? "bg-green-100 dark:bg-green-900/30 text-green-600 dark:text-green-400"
-                          : "bg-red-100 dark:bg-red-900/30 text-red-600 dark:text-red-400"
-                          }`}>
+                        <span className={`inline-block px-2 py-0.5 rounded-full text-[9px] md:text-xs font-medium ${
+                          record.status === "Present"
+                            ? "bg-green-100 dark:bg-green-900/30 text-green-600 dark:text-green-400"
+                            : "bg-red-100 dark:bg-red-900/30 text-red-600 dark:text-red-400"
+                        }`}>
                           {record.status}
                         </span>
                       </td>
@@ -400,13 +458,16 @@ const Attendances = () => {
             </div>
           </div>
 
-          <Pagination
-            currentPage={currentPage}
-            totalPages={totalPages}
-            onPageChange={handlePageChange}
-            totalItems={totalFiltered}
-            itemsPerPage={perPage}
-          />
+          {/* Pagination - Only show if there are items */}
+          {totalFiltered > 0 && (
+            <Pagination
+              currentPage={reduxCurrentPage || 1}
+              totalPages={totalPages}
+              onPageChange={handlePageChange}
+              totalItems={totalFiltered}
+              itemsPerPage={reduxPerPage || 15}
+            />
+          )}
         </>
       )}
 

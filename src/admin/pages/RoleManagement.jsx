@@ -10,6 +10,7 @@ import {
     updateRolePermissions,
     fetchModules
 } from "../store/slices/roleSlice";
+import { useNavigate } from "react-router-dom";
 
 const FALLBACK_MODULES = [
     { id: 1, name: "Dashboard" },
@@ -20,11 +21,12 @@ const FALLBACK_MODULES = [
     { id: 6, name: "Leaves" },
     { id: 7, name: "Reports" },
     { id: 8, name: "Settings" },
-    { id: 9, name: "Role management" }
+    { id: 9, name: "Roles" }
 ];
 
 function RoleManagement() {
     const dispatch = useDispatch();
+    const navigate = useNavigate()
     const { roles, rolePermissions, modules } = useSelector((state) => state.roles);
 
     const [newRoleName, setNewRoleName] = useState("");
@@ -160,8 +162,14 @@ function RoleManagement() {
                 {/* Page Header*/}
                 <div className="flex flex-wrap justify-between items-center mb-4 md:mb-6">
                     <h2 className="text-lg md:text-2xl font-bold bg-gradient-to-r from-gray-800 to-green-600 dark:from-gray-200 dark:to-green-400 bg-clip-text text-transparent">
-                        Role Management
+                        Roles
                     </h2>
+                    <button
+                    onClick={() => navigate("/admin/modules")}
+                    className="flex items-center gap-2 px-4 py-2 bg-green-500 hover:bg-green-600 text-white text-sm font-semibold rounded-lg shadow transition-all"
+                >
+                    <i className="fas fa-plus"></i> Add Module
+                </button>
                 </div>
 
                 <div className="grid grid-cols-1 xl:grid-cols-2 gap-5 md:gap-6">

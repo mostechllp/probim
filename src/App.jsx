@@ -49,6 +49,7 @@ const Designations = lazy(() => import("./admin/pages/Designations"));
 const Departments = lazy(() => import("./admin/pages/Departments"));
 const TaskReports = lazy(() => import("./admin/pages/TaskReports"));
 const Reports = lazy(() => import("./admin/pages/Reports"));
+const ModuleManagement = lazy(() => import("./admin/pages/ModuleManagement"));
 const EmployeeDetailsReport = lazy(
   () => import("./admin/components/reports/EmployeeDetailsReport"),
 );
@@ -231,7 +232,8 @@ function App() {
           <Route path="payroll/add" element={<AddPayroll />} />
           <Route path="wfh" element={<AdminWFH />} />
           <Route path="settings" element={<Settings />} />
-          <Route path="role-management" element={<RoleManagement />} />
+          <Route path="roles" element={<RoleManagement />} />
+          <Route path="modules" element={<ModuleManagement />} />
         </Route>
 
         {/* Employee Routes - Layout wrapper */}
