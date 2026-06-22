@@ -7,12 +7,20 @@ import { showToast } from "../../components/common/Toast";
 import { addEmployee } from "../store/slices/employeeSlice";
 import { fetchOrganizations } from "../store/slices/organizationSlice";
 import { fetchCompanies } from "../store/slices/companySlice";
-import { fetchDesignations } from "../store/slices/designationSlice";
-import { fetchDepartments } from "../store/slices/departmentSlice";
 import { fetchRoles } from "../store/slices/roleSlice";
 import apiClient from "../../utils/apiClient";
 import DateInput from "../components/common/DateInput";
 import DocumentModal from "../components/common/DocumentModal";
+import DepartmentModal from "../components/department/DepartmentModal";
+import DesignationModal from "../components/designations/designationModal";
+import {
+  addDepartment,
+  fetchDepartments,
+} from "../store/slices/departmentSlice";
+import {
+  addDesignation,
+  fetchDesignations,
+} from "../store/slices/designationSlice";
 
 const AddEmployee = () => {
   const navigate = useNavigate();
@@ -56,6 +64,11 @@ const AddEmployee = () => {
   const [idFormat, setIdFormat] = useState("prefix+year+month+day+random"); // template
   const [manualEmployeeId, setManualEmployeeId] = useState("");
   const [generatedPreview, setGeneratedPreview] = useState("");
+
+  const [isDepartmentModalOpen, setIsDepartmentModalOpen] = useState(false);
+  const [isDesignationModalOpen, setIsDesignationModalOpen] = useState(false);
+  const [departmentModalLoading, setDepartmentModalLoading] = useState(false);
+  const [designationModalLoading, setDesignationModalLoading] = useState(false);
 
   // Fetch data from slices
   const { organizations = [] } = useSelector(
@@ -318,6 +331,45 @@ const AddEmployee = () => {
   const [customFormat, setCustomFormat] = useState(
     "prefix+year+month+day+timestamp",
   );
+
+  // Add these handler functions
+  const handleAddDepartment = async (data) => {
+    setDepartmentModalLoading(true);
+    try {
+      const result = await dispatch(addDepartment(data));
+      if (addDepartment.fulfilled.match(result)) {
+        showToast("Department added successfully", "success");
+        setIsDepartmentModalOpen(false);
+        // Refresh departments list
+        dispatch(fetchDepartments());
+      } else {
+        showToast(result.payload || "Failed to add department", "error");
+      }
+    } catch (error) {
+      showToast("An error occurred", "error");
+    } finally {
+      setDepartmentModalLoading(false);
+    }
+  };
+
+  const handleAddDesignation = async (data) => {
+    setDesignationModalLoading(true);
+    try {
+      const result = await dispatch(addDesignation(data));
+      if (addDesignation.fulfilled.match(result)) {
+        showToast("Designation added successfully", "success");
+        setIsDesignationModalOpen(false);
+        // Refresh designations list
+        dispatch(fetchDesignations());
+      } else {
+        showToast(result.payload || "Failed to add designation", "error");
+      }
+    } catch (error) {
+      showToast("An error occurred", "error");
+    } finally {
+      setDesignationModalLoading(false);
+    }
+  };
 
   const getFormatPreview = (format) => {
     if (format === "custom") return customFormat;
@@ -1329,10 +1381,20 @@ const AddEmployee = () => {
                     )}
 
                   <div>
-                    <label className="block text-xs md:text-sm font-semibold text-gray-700 mb-1 md:mb-2">
-                      <i className="fas fa-diagram-project text-green-500 mr-1"></i>{" "}
-                      Department <span className="text-red-500">*</span>
-                    </label>
+                    <div className="flex items-center justify-between mb-1 md:mb-2">
+                      <label className="block text-xs md:text-sm font-semibold text-gray-700">
+                        <i className="fas fa-diagram-project text-green-500 mr-1"></i>{" "}
+                        Department <span className="text-red-500">*</span>
+                      </label>
+                      <button
+                        type="button"
+                        onClick={() => setIsDepartmentModalOpen(true)}
+                        className="text-green-500 hover:text-green-600 text-xs font-normal transition-colors flex items-center gap-1"
+                        title="Add new department"
+                      >
+                        <i className="fas fa-plus-circle text-sm"></i>
+                      </button>
+                    </div>
                     <Controller
                       name="department_id"
                       control={control}
@@ -1359,12 +1421,21 @@ const AddEmployee = () => {
                       )}
                     />
                   </div>
-
                   <div>
-                    <label className="block text-xs md:text-sm font-semibold text-gray-700 mb-1 md:mb-2">
-                      <i className="fas fa-briefcase text-green-500 mr-1"></i>{" "}
-                      Designation <span className="text-red-500">*</span>
-                    </label>
+                    <div className="flex items-center justify-between mb-1 md:mb-2">
+                      <label className="block text-xs md:text-sm font-semibold text-gray-700">
+                        <i className="fas fa-briefcase text-green-500 mr-1"></i>{" "}
+                        Designation <span className="text-red-500">*</span>
+                      </label>
+                      <button
+                        type="button"
+                        onClick={() => setIsDesignationModalOpen(true)}
+                        className="text-green-500 hover:text-green-600 text-xs font-normal transition-colors flex items-center gap-1"
+                        title="Add new designation"
+                      >
+                        <i className="fas fa-plus-circle text-sm"></i>
+                      </button>
+                    </div>
                     <Controller
                       name="designation_id"
                       control={control}
@@ -2370,7 +2441,7 @@ const AddEmployee = () => {
                         <div>
                           <label className="block text-xs md:text-sm font-semibold text-gray-700 mb-1 md:mb-2">
                             <i className="fas fa-briefcase text-green-500 mr-1"></i>{" "}
-                            Labor Number 
+                            Labor Number
                           </label>
                           <Controller
                             name="labor_number"
@@ -2879,8 +2950,6 @@ const AddEmployee = () => {
                       )}
                     />
                   </div>
-
-                  
                 </div>
               </div>
             </div>
@@ -2933,6 +3002,22 @@ const AddEmployee = () => {
         onClose={() => setShowDocumentModal(false)}
         onSave={handleAddDocument}
         uploading={uploadingDoc}
+      />
+      {/* Department Modal */}
+      <DepartmentModal
+        isOpen={isDepartmentModalOpen}
+        onClose={() => setIsDepartmentModalOpen(false)}
+        onSubmit={handleAddDepartment}
+        isLoading={departmentModalLoading}
+      />
+
+      {/* Designation Modal */}
+      <DesignationModal
+        isOpen={isDesignationModalOpen}
+        onClose={() => setIsDesignationModalOpen(false)}
+        onSubmit={handleAddDesignation}
+        isLoading={designationModalLoading}
+        editingDesignation={null}
       />
     </div>
   );

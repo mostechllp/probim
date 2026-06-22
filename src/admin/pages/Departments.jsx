@@ -31,7 +31,6 @@ const Departments = () => {
   const [selectedDepartment, setSelectedDepartment] = useState(null);
   const [modalLoading, setModalLoading] = useState(false);
 
-
   useEffect(() => {
     dispatch(fetchDepartments());
   }, [dispatch]);
@@ -45,14 +44,14 @@ const Departments = () => {
 
   const getFilteredDepartments = () => {
     let filtered = [...(departments || [])]; // Create a copy
-    
+
     // Apply search filter
     if (searchTerm) {
       filtered = filtered.filter((dept) =>
         (dept.name || "").toLowerCase().includes(searchTerm.toLowerCase()),
       );
     }
-    
+
     // Sort by id in descending order (newest first)
     filtered.sort((a, b) => {
       // If using numeric IDs
@@ -61,7 +60,7 @@ const Departments = () => {
       }
       return 0;
     });
-    
+
     return filtered;
   };
 
@@ -143,175 +142,173 @@ const Departments = () => {
 
   return (
     <div className="w-full overflow-x-hidden">
-    <main className="content px-4 py-4 md:px-6 md:py-6 w-full overflow-x-hidden">
-          {/* Stats Cards */}
-          <div className="stats-grid grid grid-cols-1 sm:grid-cols-2 gap-3 md:gap-5 mb-6">
-            <div className="bg-white dark:bg-gray-800 rounded-xl p-3 md:p-5 border border-gray-200 dark:border-gray-700 transition-all hover:-translate-y-0.5 hover:shadow-soft">
-              <div className="flex justify-between items-start mb-2 md:mb-3">
-                <div className="w-10 h-10 md:w-12 md:h-12 bg-green-100 dark:bg-green-900/30 rounded-xl flex items-center justify-center">
-                  <i className="fas fa-building text-green-600 dark:text-green-400 text-base md:text-xl"></i>
-                </div>
-              </div>
-              <div className="text-2xl md:text-3xl font-extrabold text-green-600 dark:text-green-400">
-                {totalDepartments}
-              </div>
-              <div className="text-[10px] md:text-xs text-gray-500 dark:text-gray-400 font-medium mt-1">
-                Total Departments
+      <main className="content px-4 py-4 md:px-6 md:py-6 w-full overflow-x-hidden">
+        {/* Stats Cards */}
+        <div className="stats-grid grid grid-cols-1 sm:grid-cols-2 gap-3 md:gap-5 mb-6">
+          <div className="bg-white dark:bg-gray-800 rounded-xl p-3 md:p-5 border border-gray-200 dark:border-gray-700 transition-all hover:-translate-y-0.5 hover:shadow-soft">
+            <div className="flex justify-between items-start mb-2 md:mb-3">
+              <div className="w-10 h-10 md:w-12 md:h-12 bg-green-100 dark:bg-green-900/30 rounded-xl flex items-center justify-center">
+                <i className="fas fa-building text-green-600 dark:text-green-400 text-base md:text-xl"></i>
               </div>
             </div>
-
-            <div className="bg-white dark:bg-gray-800 rounded-xl p-3 md:p-5 border border-gray-200 dark:border-gray-700 transition-all hover:-translate-y-0.5 hover:shadow-soft">
-              <div className="flex justify-between items-start mb-2 md:mb-3">
-                <div className="w-10 h-10 md:w-12 md:h-12 bg-blue-100 dark:bg-blue-900/30 rounded-xl flex items-center justify-center">
-                  <i className="fas fa-chart-line text-blue-600 dark:text-blue-400 text-base md:text-xl"></i>
-                </div>
-              </div>
-              <div className="text-2xl md:text-3xl font-extrabold text-blue-600 dark:text-blue-400">
-                Active
-              </div>
-              <div className="text-[10px] md:text-xs text-gray-500 dark:text-gray-400 font-medium mt-1">
-                Department Status
-              </div>
+            <div className="text-2xl md:text-3xl font-extrabold text-green-600 dark:text-green-400">
+              {totalDepartments}
+            </div>
+            <div className="text-[10px] md:text-xs text-gray-500 dark:text-gray-400 font-medium mt-1">
+              Total Departments
             </div>
           </div>
 
-          {/* Header */}
-          <div className="flex flex-wrap justify-between items-center mb-4 md:mb-6">
-            <h2 className="text-lg md:text-2xl font-bold gradient-heading bg-clip-text text-transparent">
-              Department Management
-            </h2>
-          </div>
-
-          {/* Actions Bar */}
-          <div className="flex flex-col sm:flex-row justify-between items-stretch sm:items-center gap-4 mb-5">
-            <EntriesSelector value={perPage} onChange={setPerPage} />
-            <div className="flex flex-col sm:flex-row gap-3 w-full sm:w-auto">
-              <SearchBar
-                value={searchTerm}
-                onChange={setSearchTerm}
-                placeholder="Search by department name..."
-              />
-              <button
-                onClick={() => setIsAddModalOpen(true)}
-                className="bg-green-500 hover:bg-green-600 text-white px-4 py-2 rounded-full text-sm font-semibold flex items-center justify-center gap-2 transition-all shadow-md hover:shadow-lg w-full sm:w-auto"
-              >
-                <i className="fas fa-plus-circle"></i> Add Department
-              </button>
+          <div className="bg-white dark:bg-gray-800 rounded-xl p-3 md:p-5 border border-gray-200 dark:border-gray-700 transition-all hover:-translate-y-0.5 hover:shadow-soft">
+            <div className="flex justify-between items-start mb-2 md:mb-3">
+              <div className="w-10 h-10 md:w-12 md:h-12 bg-blue-100 dark:bg-blue-900/30 rounded-xl flex items-center justify-center">
+                <i className="fas fa-chart-line text-blue-600 dark:text-blue-400 text-base md:text-xl"></i>
+              </div>
+            </div>
+            <div className="text-2xl md:text-3xl font-extrabold text-blue-600 dark:text-blue-400">
+              Active
+            </div>
+            <div className="text-[10px] md:text-xs text-gray-500 dark:text-gray-400 font-medium mt-1">
+              Department Status
             </div>
           </div>
+        </div>
 
-          {/* Departments Table */}
-          <div className="bg-white dark:bg-gray-800 rounded-xl border border-gray-200 dark:border-gray-700 overflow-x-auto shadow-soft">
-            {loading ? (
-              <div className="flex justify-center items-center py-12">
-                <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-green-500"></div>
-              </div>
-            ) : (
-              <div className="min-w-[600px] md:min-w-0">
-                <table className="w-full border-collapse">
-                  <thead>
-                    <tr className="bg-gray-50 dark:bg-gray-700/50 border-b border-gray-200 dark:border-gray-700">
-                      <th className="px-3 md:px-4 py-2 md:py-3 text-left text-[10px] md:text-xs font-semibold text-gray-500 dark:text-gray-400">
-                        Sl.No.
-                      </th>
-                      <th className="px-3 md:px-4 py-2 md:py-3 text-left text-[10px] md:text-xs font-semibold text-gray-500 dark:text-gray-400">
-                        Department Name
-                      </th>
-                      <th className="px-3 md:px-4 py-2 md:py-3 text-left text-[10px] md:text-xs font-semibold text-gray-500 dark:text-gray-400">
-                        Created At
-                      </th>
-                      <th className="px-3 md:px-4 py-2 md:py-3 text-left text-[10px] md:text-xs font-semibold text-gray-500 dark:text-gray-400">
-                        Updated At
-                      </th>
-                      <th className="px-3 md:px-4 py-2 md:py-3 text-left text-[10px] md:text-xs font-semibold text-gray-500 dark:text-gray-400">
-                        Actions
-                      </th>
-                    </tr>
-                  </thead>
-                  <tbody>
-                    {pageDepartments.map((department, idx) => (
-                      <tr
-                        key={department.id}
-                        className="border-b border-gray-200 dark:border-gray-700 hover:bg-gray-50 dark:hover:bg-gray-700/50 transition-colors"
-                      >
-                        <td className="px-3 md:px-4 py-2 md:py-3 text-xs md:text-sm text-gray-600 dark:text-gray-400">
-                          {start + idx + 1}
-                         </td>
-                        <td className="px-3 md:px-4 py-2 md:py-3 text-xs md:text-sm font-semibold text-gray-800 dark:text-gray-200">
-                          {department.name}
-                         </td>
-                        <td className="px-3 md:px-4 py-2 md:py-3 text-xs md:text-sm text-gray-600 dark:text-gray-400">
-                          {department.createdAt}
-                         </td>
-                        <td className="px-3 md:px-4 py-2 md:py-3 text-xs md:text-sm text-gray-600 dark:text-gray-400">
-                          {department.updatedAt}
-                         </td>
-                        <td className="px-3 md:px-4 py-2 md:py-3">
-                          <div className="flex gap-1 md:gap-2">
-                            <button
-                              onClick={() => openEditModal(department)}
-                              className="p-1.5 rounded-lg hover:bg-gray-100 dark:hover:bg-gray-700 text-amber-500 transition-colors"
-                              title="Edit"
-                            >
-                              <i className="fas fa-edit text-xs md:text-sm"></i>
-                            </button>
-                            <button
-                              onClick={() => openDeleteModal(department)}
-                              className="p-1.5 rounded-lg hover:bg-gray-100 dark:hover:bg-gray-700 text-red-500 transition-colors"
-                              title="Delete"
-                            >
-                              <i className="fas fa-trash text-xs md:text-sm"></i>
-                            </button>
-                          </div>
-                         </td>
-                       </tr>
-                    ))}
-                    {pageDepartments.length === 0 && (
-                      <tr>
-                        <td
-                          colSpan="5"
-                          className="px-4 py-8 text-center text-gray-500 dark:text-gray-400"
-                        >
-                          {searchTerm
-                            ? "No departments found matching your search"
-                            : "No departments found"}
-                         </td>
-                       </tr>
-                    )}
-                  </tbody>
-                </table>
-              </div>
-            )}
-          </div>
+        {/* Header */}
+        <div className="flex flex-wrap justify-between items-center mb-4 md:mb-6">
+          <h2 className="text-lg md:text-2xl font-bold gradient-heading bg-clip-text text-transparent">
+            Department
+          </h2>
+        </div>
 
-          {totalDepartments > 0 && (
-            <Pagination
-              currentPage={currentPage}
-              totalPages={totalPages}
-              onPageChange={setCurrentPage}
-              totalItems={totalFiltered}
-              itemsPerPage={perPage}
+        {/* Actions Bar */}
+        <div className="flex flex-col sm:flex-row justify-between items-stretch sm:items-center gap-4 mb-5">
+          <EntriesSelector value={perPage} onChange={setPerPage} />
+          <div className="flex flex-col sm:flex-row gap-3 w-full sm:w-auto">
+            <SearchBar
+              value={searchTerm}
+              onChange={setSearchTerm}
+              placeholder="Search by department name..."
             />
+            <button
+              onClick={() => setIsAddModalOpen(true)}
+              className="bg-green-500 hover:bg-green-600 text-white px-4 py-2 rounded-full text-sm font-semibold flex items-center justify-center gap-2 transition-all shadow-md hover:shadow-lg w-full sm:w-auto"
+            >
+              <i className="fas fa-plus-circle"></i> Add Department
+            </button>
+          </div>
+        </div>
+
+        {/* Departments Table */}
+        <div className="bg-white dark:bg-gray-800 rounded-xl border border-gray-200 dark:border-gray-700 overflow-x-auto shadow-soft">
+          {loading ? (
+            <div className="flex justify-center items-center py-12">
+              <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-green-500"></div>
+            </div>
+          ) : (
+            <div className="min-w-[600px] md:min-w-0">
+              <table className="w-full border-collapse">
+                <thead>
+                  <tr className="bg-gray-50 dark:bg-gray-700/50 border-b border-gray-200 dark:border-gray-700">
+                    <th className="px-3 md:px-4 py-2 md:py-3 text-left text-[10px] md:text-xs font-semibold text-gray-500 dark:text-gray-400">
+                      Sl.No.
+                    </th>
+                    <th className="px-3 md:px-4 py-2 md:py-3 text-left text-[10px] md:text-xs font-semibold text-gray-500 dark:text-gray-400">
+                      Department Name
+                    </th>
+                    <th className="px-3 md:px-4 py-2 md:py-3 text-left text-[10px] md:text-xs font-semibold text-gray-500 dark:text-gray-400">
+                      Created At
+                    </th>
+                    <th className="px-3 md:px-4 py-2 md:py-3 text-left text-[10px] md:text-xs font-semibold text-gray-500 dark:text-gray-400">
+                      Updated At
+                    </th>
+                    <th className="px-3 md:px-4 py-2 md:py-3 text-left text-[10px] md:text-xs font-semibold text-gray-500 dark:text-gray-400">
+                      Actions
+                    </th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {pageDepartments.map((department, idx) => (
+                    <tr
+                      key={department.id}
+                      className="border-b border-gray-200 dark:border-gray-700 hover:bg-gray-50 dark:hover:bg-gray-700/50 transition-colors"
+                    >
+                      <td className="px-3 md:px-4 py-2 md:py-3 text-xs md:text-sm text-gray-600 dark:text-gray-400">
+                        {start + idx + 1}
+                      </td>
+                      <td className="px-3 md:px-4 py-2 md:py-3 text-xs md:text-sm font-semibold text-gray-800 dark:text-gray-200">
+                        {department.name}
+                      </td>
+                      <td className="px-3 md:px-4 py-2 md:py-3 text-xs md:text-sm text-gray-600 dark:text-gray-400">
+                        {department.createdAt}
+                      </td>
+                      <td className="px-3 md:px-4 py-2 md:py-3 text-xs md:text-sm text-gray-600 dark:text-gray-400">
+                        {department.updatedAt}
+                      </td>
+                      <td className="px-3 md:px-4 py-2 md:py-3">
+                        <div className="flex gap-1 md:gap-2">
+                          <button
+                            onClick={() => openEditModal(department)}
+                            className="p-1.5 rounded-lg hover:bg-gray-100 dark:hover:bg-gray-700 text-amber-500 transition-colors"
+                            title="Edit"
+                          >
+                            <i className="fas fa-edit text-xs md:text-sm"></i>
+                          </button>
+                          {/* <button
+                            onClick={() => openDeleteModal(department)}
+                            className="p-1.5 rounded-lg hover:bg-gray-100 dark:hover:bg-gray-700 text-red-500 transition-colors"
+                            title="Delete"
+                          >
+                            <i className="fas fa-trash text-xs md:text-sm"></i>
+                          </button> */}
+                        </div>
+                      </td>
+                    </tr>
+                  ))}
+                  {pageDepartments.length === 0 && (
+                    <tr>
+                      <td
+                        colSpan="5"
+                        className="px-4 py-8 text-center text-gray-500 dark:text-gray-400"
+                      >
+                        {searchTerm
+                          ? "No departments found matching your search"
+                          : "No departments found"}
+                      </td>
+                    </tr>
+                  )}
+                </tbody>
+              </table>
+            </div>
           )}
-        </main>
+        </div>
+
+        {totalDepartments > 0 && (
+          <Pagination
+            currentPage={currentPage}
+            totalPages={totalPages}
+            onPageChange={setCurrentPage}
+            totalItems={totalFiltered}
+            itemsPerPage={perPage}
+          />
+        )}
+      </main>
 
       {/* Modals */}
       <DepartmentModal
         isOpen={isAddModalOpen}
         onClose={() => setIsAddModalOpen(false)}
-        onSubmit={handleAddDepartment}
-        isLoading={modalLoading}
+        // No editingDepartment prop for add mode
       />
 
+      {/* Edit Department Modal */}
       <DepartmentModal
         isOpen={isEditModalOpen}
         onClose={() => {
           setIsEditModalOpen(false);
           setSelectedDepartment(null);
         }}
-        onSubmit={handleEditDepartment}
-        department={selectedDepartment}
-        isLoading={modalLoading}
+        editingDepartment={selectedDepartment} // 
       />
 
       <ConfirmModal

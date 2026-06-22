@@ -2,22 +2,43 @@ import React from "react";
 import { PROJECT_MODULE_NAME } from "../../utils/constants";
 import { getPhotoUrl, getFallbackAvatar } from "../../../utils/imageHelper";
 
-
 const ProjectDetailsModal = ({ isOpen, onClose, project, employees = [] }) => {
   if (!isOpen || !project) return null;
 
-  const getEmployeeDetails = (empId) => {
-    if (!empId) return { name: "Not Assigned", avatar: null, designation: "-" };
-    const emp = employees.find((e) => String(e.id) === String(empId));
-    return emp ? {
-      name: emp.name,
-      avatar: getPhotoUrl(emp.avatar),
-      designation: emp.designation
-    } : { name: "Not Assigned", avatar: null, designation: "-" };
-  };
+  // In ProjectDetailsModal.jsx - Updated getEmployeeDetails function
+const getEmployeeDetails = (empId) => {
+  if (!empId) return { name: "Not Assigned", avatar: null, designation: "-" };
+  
+  console.log(`Looking for employee details with ID: ${empId}`);
+  
+  // IMPORTANT: Search by user_id FIRST since that's what projects store
+  let emp = employees.find((e) => String(e.user_id) === String(empId));
+  
+  // If not found by user_id, try by id
+  if (!emp) {
+    emp = employees.find((e) => String(e.id) === String(empId));
+  }
+  
+  // If still not found, try by employee_id
+  if (!emp) {
+    emp = employees.find((e) => String(e.employee_id) === String(empId));
+  }
+  
+  if (emp) {
+    console.log(`✅ Found employee details: ${emp.name}`);
+  } else {
+    console.log(`❌ No employee found with ID: ${empId}`);
+  }
+  
+  return emp ? {
+    name: emp.name,
+    avatar: getPhotoUrl(emp.avatar),
+    designation: emp.designation
+  } : { name: "Not Assigned", avatar: null, designation: "-" };
+};
 
-
-  const getInitials = (name) => (name && name !== "Not Assigned" ? name.charAt(0).toUpperCase() : "N");
+  const getInitials = (name) =>
+    name && name !== "Not Assigned" ? name.charAt(0).toUpperCase() : "N";
 
   const pm = getEmployeeDetails(project.managerId);
   const tl = getEmployeeDetails(project.teamLeadId);
@@ -50,7 +71,8 @@ const ProjectDetailsModal = ({ isOpen, onClose, project, employees = [] }) => {
                   {project.name}
                 </h3>
                 <p className="text-[10.5px] text-gray-400 dark:text-gray-500 font-semibold mt-1.5 leading-none">
-                  Project Code: #{project.id} &bull; Created: {project.createdDate}
+                  Project Code: #{project.id} &bull; Created:{" "}
+                  {project.createdDate}
                 </p>
               </div>
             </div>
@@ -65,7 +87,6 @@ const ProjectDetailsModal = ({ isOpen, onClose, project, employees = [] }) => {
 
           {/* Description & Leadership Hierarchy */}
           <div className="flex-1 overflow-y-auto p-6 space-y-5 bg-gray-50/50 dark:bg-gray-900/10 scrollbar-thin text-left">
-            
             {/* Description Card */}
             <div className="bg-white dark:bg-gray-805 rounded-2xl border border-gray-100 dark:border-gray-700/60 p-5 space-y-3 shadow-sm">
               <h4 className="text-[9px] font-bold text-gray-405 dark:text-gray-500 uppercase tracking-widest block border-b border-gray-50 dark:border-gray-750 pb-2 font-extrabold">
@@ -73,20 +94,22 @@ const ProjectDetailsModal = ({ isOpen, onClose, project, employees = [] }) => {
               </h4>
               <p className="text-[12.5px] text-gray-650 dark:text-gray-300 leading-relaxed font-semibold">
                 {project.description || (
-                  <span className="italic text-gray-400 font-medium">No project scope or description has been written for this directory yet.</span>
+                  <span className="italic text-gray-400 font-medium">
+                    No project scope or description has been written for this
+                    directory yet.
+                  </span>
                 )}
               </p>
             </div>
 
             {/* Leadership Cards Group */}
             <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-              
               {/* Project Manager Card */}
               <div className="bg-white dark:bg-gray-855 rounded-2xl border border-gray-100 dark:border-gray-700/60 p-5 space-y-4 shadow-sm hover:shadow-soft transition-all duration-200">
                 <span className="text-[9px] font-extrabold uppercase tracking-widest text-blue-500 bg-blue-500/10 px-2 py-0.5 rounded">
                   Project Manager
                 </span>
-                
+
                 <div className="flex items-center gap-3">
                   <div className="w-12 h-12 rounded-xl overflow-hidden bg-gradient-to-br from-blue-500/20 to-indigo-500/20 flex items-center justify-center border border-gray-100 dark:border-gray-750 flex-shrink-0 shadow-sm">
                     {pm.avatar ? (
@@ -121,7 +144,7 @@ const ProjectDetailsModal = ({ isOpen, onClose, project, employees = [] }) => {
                 <span className="text-[9px] font-extrabold uppercase tracking-widest text-purple-500 bg-purple-500/10 px-2 py-0.5 rounded">
                   Team Lead
                 </span>
-                
+
                 <div className="flex items-center gap-3">
                   <div className="w-12 h-12 rounded-xl overflow-hidden bg-gradient-to-br from-purple-500/20 to-pink-500/20 flex items-center justify-center border border-gray-100 dark:border-gray-750 flex-shrink-0 shadow-sm">
                     {tl.avatar ? (
@@ -150,27 +173,29 @@ const ProjectDetailsModal = ({ isOpen, onClose, project, employees = [] }) => {
                   </div>
                 </div>
               </div>
-
             </div>
 
             {/* Additional Project Metadata */}
             <div className="bg-white dark:bg-gray-805 rounded-2xl border border-gray-100 dark:border-gray-700/60 p-5 shadow-sm grid grid-cols-2 gap-4 text-xs font-semibold text-gray-700 dark:text-gray-300">
               <div>
-                <span className="text-gray-405 dark:text-gray-500 font-bold uppercase tracking-wider block text-[9px] font-extrabold">Created Date</span>
+                <span className="text-gray-405 dark:text-gray-500 font-bold uppercase tracking-wider block text-[9px] font-extrabold">
+                  Created Date
+                </span>
                 <span className="font-semibold text-gray-750 dark:text-gray-250 mt-1 block">
                   <i className="far fa-calendar-alt text-gray-400 mr-1.5"></i>
                   {project.createdDate || "-"}
                 </span>
               </div>
               <div>
-                <span className="text-gray-405 dark:text-gray-500 font-bold uppercase tracking-wider block text-[9px] font-extrabold">Last Updated</span>
+                <span className="text-gray-405 dark:text-gray-500 font-bold uppercase tracking-wider block text-[9px] font-extrabold">
+                  Last Updated
+                </span>
                 <span className="font-semibold text-gray-750 dark:text-gray-250 mt-1 block">
                   <i className="far fa-clock text-gray-400 mr-1.5"></i>
                   {project.updatedDate || "-"}
                 </span>
               </div>
             </div>
-
           </div>
 
           {/* Modal Footer with elegant Close button */}

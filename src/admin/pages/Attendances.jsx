@@ -32,22 +32,35 @@ const Attendances = () => {
     stats,
     totalCount,
     lastPage,
+    currentPage: reduxCurrentPage,
+    perPage: reduxPerPage,
   } = useSelector((state) => state.attendance);
 
   const [showUploadModal, setShowUploadModal] = useState(false);
   const [companyFilter, setCompanyFilter] = useState("all");
   const [nameFilter, setNameFilter] = useState("");
   const [searchTerm, setSearchTerm] = useState("");
-  const [currentPage, setCurrentPage] = useState(1);
-  const [perPage, setPerPage] = useState(15);
   const [refreshLoading, setRefreshLoading] = useState(false);
 
   const pollingRef = useRef(null);
   // Always holds latest filter values — no stale closure issues
-  const filtersRef = useRef({ currentPage, perPage, companyFilter, searchTerm, nameFilter });
-  useEffect(() => {
-    filtersRef.current = { currentPage, perPage, companyFilter, searchTerm, nameFilter };
+  const filtersRef = useRef({ 
+    currentPage: reduxCurrentPage || 1, 
+    perPage: reduxPerPage || 15, 
+    companyFilter, 
+    searchTerm, 
+    nameFilter 
   });
+  
+  useEffect(() => {
+    filtersRef.current = { 
+      currentPage: reduxCurrentPage || 1, 
+      perPage: reduxPerPage || 15, 
+      companyFilter, 
+      searchTerm, 
+      nameFilter 
+    };
+  }, [reduxCurrentPage, reduxPerPage, companyFilter, searchTerm, nameFilter]);
 
   // ─── Core fetch function — always reads live filters from ref ─────────────
   const fetchAll = useCallback(() => {
@@ -71,7 +84,7 @@ const Attendances = () => {
   // ─── Load data on filter / page change ───────────────────────────────────
   useEffect(() => {
     fetchAll();
-  }, [currentPage, perPage, companyFilter, searchTerm, nameFilter]);
+  }, [reduxCurrentPage, reduxPerPage, companyFilter, searchTerm, nameFilter]);
 
   // ─── Stop polling helper ──────────────────────────────────────────────────
   const stopPolling = useCallback(() => {
@@ -93,7 +106,6 @@ const Attendances = () => {
   }, [uploadStatusId, uploadStatus]);
 
   // ─── React to upload status changes — use ref to avoid stale closure ─────
-  // We track the "handled" uploadStatusId so we never double-fire
   const handledUploadRef = useRef(null);
 
   // ─── React to upload status changes ─────────────────────────────────────────
@@ -105,12 +117,9 @@ const Attendances = () => {
       handledUploadRef.current = uploadStatusId;
       stopPolling();
       showToast("Attendance file processed successfully!", "success");
-
-      // ✅ Reset to page 1 so new records are visible
-      setCurrentPage(1);
-      // fetchAll() will auto-trigger from the currentPage useEffect above
+      // Re-fetch data
+      fetchAll();
       dispatch(clearUploadStatus());
-
     } else if (uploadStatus === "failed") {
       handledUploadRef.current = uploadStatusId;
       stopPolling();
@@ -118,6 +127,7 @@ const Attendances = () => {
       dispatch(clearUploadStatus());
     }
   }, [uploadStatus, uploadStatusId]);
+
   // ─── Manual refresh ───────────────────────────────────────────────────────
   const refreshAllData = async () => {
     setRefreshLoading(true);
@@ -132,7 +142,6 @@ const Attendances = () => {
   };
 
   // ─── Upload submit ────────────────────────────────────────────────────────
-  // ✅ Fix
   const handleUploadComplete = async ({ file }) => {
     try {
       const result = await dispatch(uploadAttendanceFile({ file })).unwrap();
@@ -140,8 +149,8 @@ const Attendances = () => {
 
       if (result.status === "completed") {
         showToast("Attendance file uploaded successfully!", "success");
-        setCurrentPage(1); // ✅ reset to page 1
-        // fetchAll triggers automatically via useEffect
+        // Reset to page 1
+        handlePageChange(1);
       } else {
         showToast("File uploaded! Processing in background…", "info");
       }
@@ -152,18 +161,70 @@ const Attendances = () => {
 
   // ─── Filter / pagination handlers ────────────────────────────────────────
   const handlePageChange = (page) => {
-    setCurrentPage(page);
+    // We need to re-fetch with the new page
+    dispatch(fetchAttendanceRecords({
+      page: page,
+      per_page: reduxPerPage || 15,
+      company: companyFilter !== "all" ? companyFilter : undefined,
+      search: searchTerm || undefined,
+      name: nameFilter || undefined,
+    }));
     window.scrollTo({ top: 0, behavior: "smooth" });
   };
-  const handlePerPageChange = (value) => { setPerPage(value); setCurrentPage(1); };
-  const handleCompanyFilterChange = (e) => { setCompanyFilter(e.target.value); setCurrentPage(1); };
-  const handleNameFilterChange = (e) => { setNameFilter(e.target.value); setCurrentPage(1); };
-  const handleSearchChange = (value) => { setSearchTerm(value); setCurrentPage(1); };
+
+  const handlePerPageChange = (value) => {
+    // Reset to page 1 when changing items per page
+    dispatch(fetchAttendanceRecords({
+      page: 1,
+      per_page: value,
+      company: companyFilter !== "all" ? companyFilter : undefined,
+      search: searchTerm || undefined,
+      name: nameFilter || undefined,
+    }));
+  };
+
+  const handleCompanyFilterChange = (e) => {
+    const value = e.target.value;
+    setCompanyFilter(value);
+    // Fetch with new filter, reset to page 1
+    dispatch(fetchAttendanceRecords({
+      page: 1,
+      per_page: reduxPerPage || 15,
+      company: value !== "all" ? value : undefined,
+      search: searchTerm || undefined,
+      name: nameFilter || undefined,
+    }));
+  };
+
+  const handleNameFilterChange = (e) => {
+    const value = e.target.value;
+    setNameFilter(value);
+    // Fetch with new filter, reset to page 1
+    dispatch(fetchAttendanceRecords({
+      page: 1,
+      per_page: reduxPerPage || 15,
+      company: companyFilter !== "all" ? companyFilter : undefined,
+      search: searchTerm || undefined,
+      name: value || undefined,
+    }));
+  };
+
+  const handleSearchChange = (value) => {
+    setSearchTerm(value);
+    // Fetch with new search, reset to page 1
+    dispatch(fetchAttendanceRecords({
+      page: 1,
+      per_page: reduxPerPage || 15,
+      company: companyFilter !== "all" ? companyFilter : undefined,
+      search: value || undefined,
+      name: nameFilter || undefined,
+    }));
+  };
 
   // ─── Derived display values ───────────────────────────────────────────────
   const totalFiltered = totalCount || records.length;
-  const totalPages = lastPage || Math.ceil(totalFiltered / perPage);
-  const start = (currentPage - 1) * perPage;
+  const totalPages = lastPage || Math.ceil(totalFiltered / (reduxPerPage || 15));
+  const start = ((reduxCurrentPage || 1) - 1) * (reduxPerPage || 15);
   const isUploading = uploadLoading || uploadStatus === "processing";
 
   const totalEmployees = stats?.totalActiveEmployees || 0;
@@ -173,38 +234,117 @@ const Attendances = () => {
   const punchOutCount = stats?.punchedOutToday || 0;
 
   const getSafeArray = (data) => {
-    if (!data) return [];
-    if (Array.isArray(data)) return data;
-    if (data.data && Array.isArray(data.data)) return data.data;
-    return [];
+  if (!data) return [];
+  if (Array.isArray(data)) return data;
+  
+  // Handle case where data might be an object with a data property
+  if (data.data && Array.isArray(data.data)) return data.data;
+  
+  // Handle case where data might be an object with an employees property
+  if (data.employees && Array.isArray(data.employees)) return data.employees;
+  
+  // Handle case where data might be an object with a users property
+  if (data.users && Array.isArray(data.users)) return data.users;
+  
+  // Handle case where data might have a list property
+  if (data.list && Array.isArray(data.list)) return data.list;
+  
+  // If data is an object but not an array, try to find any array property
+  if (typeof data === 'object') {
+    for (const key in data) {
+      if (Array.isArray(data[key]) && data[key].length > 0) {
+        return data[key];
+      }
+    }
+  }
+  
+  return [];
+};
+
+const renderEmployeeList = (employees, title) => {
+  const arr = getSafeArray(employees);
+  if (!arr.length) return null;
+  
+  // Helper to get employee name from various data structures
+  const getEmployeeDisplayName = (emp) => {
+    if (!emp) return "Unknown";
+    
+    // If it's a string, return it
+    if (typeof emp === "string") return emp;
+    
+    // Check for direct first_name/last_name
+    if (emp.first_name || emp.last_name) {
+      return `${emp.first_name || ''} ${emp.last_name || ''}`.trim() || emp.name || "Unknown";
+    }
+    
+    // Check for name fields
+    if (emp.name) return emp.name;
+    if (emp.employeeName) return emp.employeeName;
+    if (emp.employee_name) return emp.employee_name;
+    if (emp.full_name) return emp.full_name;
+    if (emp.display_name) return emp.display_name;
+    
+    // Check for user.employee structure
+    if (emp.user?.employee?.first_name) {
+      return `${emp.user.employee.first_name} ${emp.user.employee.last_name || ''}`.trim();
+    }
+    if (emp.user?.employee?.name) return emp.user.employee.name;
+    if (emp.user?.employee?.full_name) return emp.user.employee.full_name;
+    
+    // Check for user structure
+    if (emp.user?.first_name) {
+      return `${emp.user.first_name} ${emp.user.last_name || ''}`.trim();
+    }
+    if (emp.user?.name) return emp.user.name;
+    if (emp.user?.full_name) return emp.user.full_name;
+    if (emp.user?.username) return emp.user.username;
+    
+    // Check for employee structure
+    if (emp.employee?.first_name) {
+      return `${emp.employee.first_name} ${emp.employee.last_name || ''}`.trim();
+    }
+    if (emp.employee?.name) return emp.employee.name;
+    if (emp.employee?.full_name) return emp.employee.full_name;
+    
+    // Check for raw data
+    if (emp.raw?.employee?.first_name) {
+      return `${emp.raw.employee.first_name} ${emp.raw.employee.last_name || ''}`.trim();
+    }
+    if (emp.raw?.user?.first_name) {
+      return `${emp.raw.user.first_name} ${emp.raw.user.last_name || ''}`.trim();
+    }
+    
+    // Check for employee_id or user_id
+    if (emp.employee_id) return `Employee #${emp.employee_id}`;
+    if (emp.user_id) return `Employee #${emp.user_id}`;
+    if (emp.id) return `Employee #${emp.id}`;
+    
+    return "Unknown";
   };
 
-  const renderEmployeeList = (employees, title) => {
-    const arr = getSafeArray(employees);
-    if (!arr.length) return null;
-    return (
-      <div className="absolute hidden group-hover:block z-20 mt-2 p-3 bg-gray-900 dark:bg-gray-800 text-white text-xs rounded-lg shadow-xl min-w-[200px] top-full left-0">
-        <p className="font-semibold mb-2 text-gray-300 border-b border-gray-700 pb-1">{title}:</p>
-        <div className="flex flex-wrap gap-1.5 max-h-48 overflow-y-auto">
-          {arr.slice(0, 10).map((emp, idx) => (
-            <span key={idx} className="text-xs bg-gray-700 px-2 py-1 rounded-full">
-              {typeof emp === "string" ? emp : emp.name || emp.employeeName || emp.employee_name || "Unknown"}
-            </span>
-          ))}
-          {arr.length > 10 && (
-            <span className="text-xs text-gray-400 mt-1 block">+{arr.length - 10} more</span>
-          )}
-        </div>
+  return (
+    <div className="absolute hidden group-hover:block z-20 mt-2 p-3 bg-gray-900 dark:bg-gray-800 text-white text-xs rounded-lg shadow-xl min-w-[200px] top-full left-0">
+      <p className="font-semibold mb-2 text-gray-300 border-b border-gray-700 pb-1">{title}:</p>
+      <div className="flex flex-wrap gap-1.5 max-h-48 overflow-y-auto">
+        {arr.slice(0, 10).map((emp, idx) => (
+          <span key={idx} className="text-xs bg-gray-700 px-2 py-1 rounded-full">
+            {getEmployeeDisplayName(emp)}
+          </span>
+        ))}
+        {arr.length > 10 && (
+          <span className="text-xs text-gray-400 mt-1 block">+{arr.length - 10} more</span>
+        )}
       </div>
-    );
-  };
+    </div>
+  );
+};
 
   return (
     <div className="w-full overflow-x-hidden">
 
       {/* ── Stats Cards ─────────────────────────────────────────────────────── */}
       <div className="stats-grid grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-5 gap-3 md:gap-4 mb-6">
-
+        {/* ... stats cards remain the same ... */}
         <div className="bg-white dark:bg-gray-800 rounded-xl p-3 md:p-4 border border-gray-200 dark:border-gray-700 transition-all hover:-translate-y-0.5 hover:shadow-soft">
           <div className="w-8 h-8 md:w-10 md:h-10 bg-green-100 dark:bg-green-900/30 rounded-xl flex items-center justify-center mb-1 md:mb-2">
             <i className="fas fa-users text-green-600 dark:text-green-400 text-sm md:text-lg"></i>
@@ -228,7 +368,7 @@ const Attendances = () => {
           </div>
           <div className="text-xl md:text-2xl font-bold text-amber-600 dark:text-amber-400">{lateTodayCount}</div>
           <div className="text-[10px] md:text-xs text-gray-500 dark:text-gray-400 font-medium">Late Today</div>
-          {renderEmployeeList(lateComers, "Late Comers")}
+          {/* {renderEmployeeList(lateComers, "Late Comers")} */}
         </div>
 
         <div className="group relative bg-white dark:bg-gray-800 rounded-xl p-3 md:p-4 border border-gray-200 dark:border-gray-700 transition-all hover:-translate-y-0.5 hover:shadow-soft">
@@ -237,7 +377,7 @@ const Attendances = () => {
           </div>
           <div className="text-xl md:text-2xl font-bold text-red-600 dark:text-red-400">{absentTodayCount}</div>
           <div className="text-[10px] md:text-xs text-gray-500 dark:text-gray-400 font-medium">Absent Today</div>
-          {renderEmployeeList(absentees, "Absentees")}
+          {/* {renderEmployeeList(absentees, "Absentees")} */}
         </div>
 
         <div className="col-span-2 sm:col-span-3 lg:col-span-1 bg-white dark:bg-gray-800 rounded-xl p-3 md:p-4 border border-gray-200 dark:border-gray-700 transition-all hover:-translate-y-0.5 hover:shadow-soft">
@@ -274,54 +414,18 @@ const Attendances = () => {
         </h2>
       </div>
 
-      {/* ── Filters ─────────────────────────────────────────────────────────── */}
-      <div className="flex flex-col sm:flex-row flex-wrap gap-3 mb-5">
-        <select
-          value={companyFilter}
-          onChange={handleCompanyFilterChange}
-          className="px-3 md:px-4 py-2 bg-white dark:bg-gray-800 border border-gray-200 dark:border-gray-700 rounded-full text-xs md:text-sm text-gray-700 dark:text-gray-300 focus:outline-none focus:border-green-500"
-        >
-          <option value="all">All Companies</option>
-          <option value="THESAY">THESAY</option>
-          <option value="SAYGEN">SAYGEN</option>
-          <option value="warehouse">Warehouse</option>
-          <option value="farmassay">Farmassay</option>
-        </select>
-
-        <input
-          type="text"
-          value={nameFilter}
-          onChange={handleNameFilterChange}
-          placeholder="Employee Name..."
-          className="flex-1 sm:flex-none px-3 md:px-4 py-2 bg-white dark:bg-gray-800 border border-gray-200 dark:border-gray-700 rounded-full text-xs md:text-sm text-gray-700 dark:text-gray-300 focus:outline-none focus:border-green-500 w-full sm:w-48"
-        />
-
-        <button
-          onClick={refreshAllData}
-          disabled={refreshLoading}
-          className="px-3 md:px-4 py-2 bg-white dark:bg-gray-800 border border-gray-200 dark:border-gray-700 rounded-full text-xs md:text-sm text-gray-700 dark:text-gray-300 flex items-center justify-center gap-2 hover:bg-gray-50 dark:hover:bg-gray-700 transition-colors disabled:opacity-50"
-        >
-          <i className={`fas fa-sync-alt text-xs md:text-sm ${refreshLoading ? "fa-spin" : ""}`}></i>
-          <span className="hidden sm:inline">Refresh</span>
-        </button>
-      </div>
-
       {/* ── Actions bar ─────────────────────────────────────────────────────── */}
       <div className="flex flex-col sm:flex-row justify-between items-stretch sm:items-center gap-4 mb-5">
-        <EntriesSelector value={perPage} onChange={handlePerPageChange} />
+        <EntriesSelector 
+          value={reduxPerPage || 15} 
+          onChange={handlePerPageChange} 
+        />
         <div className="flex flex-col sm:flex-row gap-3 w-full sm:w-auto">
-          <SearchBar value={searchTerm} onChange={handleSearchChange} placeholder="Search records..." />
-          {/* <button
-            onClick={() => setShowUploadModal(true)}
-            disabled={isUploading}
-            className="bg-green-500 hover:bg-green-600 text-white px-4 py-2 rounded-full text-sm font-semibold flex items-center justify-center gap-2 transition-all shadow-md hover:shadow-lg w-full sm:w-auto disabled:opacity-60 disabled:cursor-not-allowed"
-          >
-            {isUploading ? (
-              <><i className="fas fa-spinner fa-spin"></i> Processing…</>
-            ) : (
-              <><i className="fas fa-plus-circle"></i> Upload Logs</>
-            )}
-          </button> */}
+          <SearchBar 
+            value={searchTerm} 
+            onChange={handleSearchChange} 
+            placeholder="Search records..." 
+          />
         </div>
       </div>
 
@@ -379,10 +483,11 @@ const Attendances = () => {
                         )}
                       </td>
                       <td className="px-3 md:px-4 py-2 md:py-3 text-xs md:text-sm">
-                        <span className={`inline-block px-2 py-0.5 rounded-full text-[9px] md:text-xs font-medium ${record.status === "Present"
-                          ? "bg-green-100 dark:bg-green-900/30 text-green-600 dark:text-green-400"
-                          : "bg-red-100 dark:bg-red-900/30 text-red-600 dark:text-red-400"
-                          }`}>
+                        <span className={`inline-block px-2 py-0.5 rounded-full text-[9px] md:text-xs font-medium ${
+                          record.status === "Present"
+                            ? "bg-green-100 dark:bg-green-900/30 text-green-600 dark:text-green-400"
+                            : "bg-red-100 dark:bg-red-900/30 text-red-600 dark:text-red-400"
+                        }`}>
                           {record.status}
                         </span>
                       </td>
@@ -400,13 +505,16 @@ const Attendances = () => {
             </div>
           </div>
 
-          <Pagination
-            currentPage={currentPage}
-            totalPages={totalPages}
-            onPageChange={handlePageChange}
-            totalItems={totalFiltered}
-            itemsPerPage={perPage}
-          />
+          {/* Pagination - Only show if there are items */}
+          {totalFiltered > 0 && (
+            <Pagination
+              currentPage={reduxCurrentPage || 1}
+              totalPages={totalPages}
+              onPageChange={handlePageChange}
+              totalItems={totalFiltered}
+              itemsPerPage={reduxPerPage || 15}
+            />
+          )}
         </>
       )}
 

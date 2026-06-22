@@ -184,7 +184,10 @@ const Dashboard = () => {
   };
 
   const handlePunchOutSubmit = async (data) => {
-    setPunchOutData(data);
+    setPunchOutData({
+    ...data,
+    punch_out_time: data.punch_out_time || null, // Make sure this is preserved
+  });
     setShowPunchOutModal(false);
     setPunchType(pendingPunchOutDate ? "punch-out-then-punchin" : "punch-out");
     setShowLocationModal(true);

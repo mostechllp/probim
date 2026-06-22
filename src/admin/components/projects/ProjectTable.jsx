@@ -11,14 +11,34 @@ const ProjectTable = ({
   onDelete,
   onAddNew,
   onStatusChange,
-  onViewDetails
+  onViewDetails,
 }) => {
-  // Lookup function for employee names
+  // In ProjectTable.jsx
   const getEmployeeName = (id) => {
-    if (!id) return <span className="text-gray-400 dark:text-gray-500 italic text-[11px]">Not Assigned</span>;
-    const emp = employees.find((e) => String(e.id) === String(id));
-    return emp ? emp.name : <span className="text-gray-400 dark:text-gray-500 italic text-[11px]">Not Assigned</span>;
+    if (!id)
+      return (
+        <span className="text-gray-400 dark:text-gray-500 italic text-[11px]">
+          Not Assigned
+        </span>
+      );
+
+    // First try to match by user_id (since projects store user_id)
+    let emp = employees.find((e) => String(e.user_id) === String(id));
+
+    // If not found, try by id
+    if (!emp) {
+      emp = employees.find((e) => String(e.id) === String(id));
+    }
+
+    return emp ? (
+      emp.name
+    ) : (
+      <span className="text-gray-400 dark:text-gray-500 italic text-[11px]">
+        Not Assigned
+      </span>
+    );
   };
+
   const [searchTerm, setSearchTerm] = useState("");
   const [sortField, setSortField] = useState("name");
   const [sortDirection, setSortDirection] = useState("asc");
@@ -38,8 +58,12 @@ const ProjectTable = ({
   // Filter & Search Logic
   const filteredProjects = useMemo(() => {
     return projects.filter((project) => {
-      const nameMatch = project.name.toLowerCase().includes(searchTerm.toLowerCase());
-      const descMatch = (project.description || "").toLowerCase().includes(searchTerm.toLowerCase());
+      const nameMatch = project.name
+        .toLowerCase()
+        .includes(searchTerm.toLowerCase());
+      const descMatch = (project.description || "")
+        .toLowerCase()
+        .includes(searchTerm.toLowerCase());
       return nameMatch || descMatch;
     });
   }, [projects, searchTerm]);
@@ -50,8 +74,6 @@ const ProjectTable = ({
     sorted.sort((a, b) => {
       let valA = a[sortField];
       let valB = b[sortField];
-
-
 
       if (typeof valA === "string") {
         return sortDirection === "asc"
@@ -138,7 +160,9 @@ const ProjectTable = ({
               >
                 Project Name{" "}
                 {sortField === "name" && (
-                  <i className={`fas fa-sort-amount-${sortDirection === "asc" ? "up" : "down"} text-green-500 ml-1.5`}></i>
+                  <i
+                    className={`fas fa-sort-amount-${sortDirection === "asc" ? "up" : "down"} text-green-500 ml-1.5`}
+                  ></i>
                 )}
               </th>
               <th className="px-6 py-4 text-xs font-bold text-gray-500 dark:text-gray-400 uppercase tracking-wider select-none whitespace-nowrap">
@@ -154,7 +178,9 @@ const ProjectTable = ({
               >
                 Created Date{" "}
                 {sortField === "createdDate" && (
-                  <i className={`fas fa-sort-amount-${sortDirection === "asc" ? "up" : "down"} text-green-500 ml-1.5`}></i>
+                  <i
+                    className={`fas fa-sort-amount-${sortDirection === "asc" ? "up" : "down"} text-green-500 ml-1.5`}
+                  ></i>
                 )}
               </th>
               <th className="px-6 py-4 text-xs font-bold text-gray-500 dark:text-gray-400 uppercase tracking-wider select-none text-right whitespace-nowrap">
@@ -191,14 +217,20 @@ const ProjectTable = ({
               <tr>
                 <td colSpan={5} className="px-6 py-10">
                   <EmptyState
-                    message={searchTerm ? "No Match Found" : `No ${PROJECT_MODULE_NAME} Defined`}
+                    message={
+                      searchTerm
+                        ? "No Match Found"
+                        : `No ${PROJECT_MODULE_NAME} Defined`
+                    }
                     description={
                       searchTerm
                         ? "We couldn't find any results matching your search queries. Try modifying your filter term."
                         : `Start by building your first project directory so employees can be assigned.`
                     }
                     onAction={searchTerm ? null : onAddNew}
-                    actionText={searchTerm ? null : `Create ${PROJECT_MODULE_NAME}`}
+                    actionText={
+                      searchTerm ? null : `Create ${PROJECT_MODULE_NAME}`
+                    }
                   />
                 </td>
               </tr>
@@ -216,19 +248,29 @@ const ProjectTable = ({
                   <td className="px-6 py-4 max-w-sm">
                     <p className="text-xs text-gray-500 dark:text-gray-400 line-clamp-2 leading-relaxed">
                       {project.description || (
-                        <span className="italic text-gray-300 dark:text-gray-600">No description provided</span>
+                        <span className="italic text-gray-300 dark:text-gray-600">
+                          No description provided
+                        </span>
                       )}
                     </p>
                   </td>
                   <td className="px-6 py-4 whitespace-nowrap">
                     <div className="flex flex-col gap-1.5">
                       <div className="flex items-center gap-2 text-xs text-gray-600 dark:text-gray-300">
-                        <span className="font-bold text-[9px] uppercase px-1.5 py-0.5 rounded bg-blue-500/10 text-blue-500 dark:text-blue-400 tracking-wider">PM</span>
-                        <span className="font-medium">{getEmployeeName(project.managerId)}</span>
+                        <span className="font-bold text-[9px] uppercase px-1.5 py-0.5 rounded bg-blue-500/10 text-blue-500 dark:text-blue-400 tracking-wider">
+                          PM
+                        </span>
+                        <span className="font-medium">
+                          {getEmployeeName(project.managerId)}
+                        </span>
                       </div>
                       <div className="flex items-center gap-2 text-xs text-gray-600 dark:text-gray-300">
-                        <span className="font-bold text-[9px] uppercase px-1.5 py-0.5 rounded bg-purple-500/10 text-purple-500 dark:text-purple-400 tracking-wider">TL</span>
-                        <span className="font-medium">{getEmployeeName(project.teamLeadId)}</span>
+                        <span className="font-bold text-[9px] uppercase px-1.5 py-0.5 rounded bg-purple-500/10 text-purple-500 dark:text-purple-400 tracking-wider">
+                          TL
+                        </span>
+                        <span className="font-medium">
+                          {getEmployeeName(project.teamLeadId)}
+                        </span>
                       </div>
                     </div>
                   </td>
@@ -280,9 +322,19 @@ const ProjectTable = ({
       {!loading && totalItems > 0 && (
         <div className="px-6 py-4 bg-gray-55 dark:bg-gray-800/40 border-t border-gray-150 dark:border-gray-700/60 flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4">
           <span className="text-xs text-gray-500 dark:text-gray-400 font-semibold text-center sm:text-left">
-            Showing <span className="font-bold text-gray-700 dark:text-gray-200">{Math.min((currentPage - 1) * itemsPerPage + 1, totalItems)}</span> to{" "}
-            <span className="font-bold text-gray-700 dark:text-gray-200">{Math.min(currentPage * itemsPerPage, totalItems)}</span> of{" "}
-            <span className="font-bold text-gray-700 dark:text-gray-200">{totalItems}</span> entries
+            Showing{" "}
+            <span className="font-bold text-gray-700 dark:text-gray-200">
+              {Math.min((currentPage - 1) * itemsPerPage + 1, totalItems)}
+            </span>{" "}
+            to{" "}
+            <span className="font-bold text-gray-700 dark:text-gray-200">
+              {Math.min(currentPage * itemsPerPage, totalItems)}
+            </span>{" "}
+            of{" "}
+            <span className="font-bold text-gray-700 dark:text-gray-200">
+              {totalItems}
+            </span>{" "}
+            entries
           </span>
 
           <div className="flex justify-center gap-1.5">
@@ -302,10 +354,11 @@ const ProjectTable = ({
                 <button
                   key={pageNo}
                   onClick={() => handlePageChange(pageNo)}
-                  className={`w-8 h-8 rounded-lg text-xs font-bold flex items-center justify-center transition-all select-none ${currentPage === pageNo
+                  className={`w-8 h-8 rounded-lg text-xs font-bold flex items-center justify-center transition-all select-none ${
+                    currentPage === pageNo
                       ? "bg-green-500 text-white shadow-soft"
                       : "border border-gray-200 dark:border-gray-600 text-gray-600 dark:text-gray-400 bg-transparent hover:bg-green-500/10 hover:border-green-500 hover:text-green-500"
-                    }`}
+                  }`}
                 >
                   {pageNo}
                 </button>

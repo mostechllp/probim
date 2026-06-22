@@ -13,7 +13,6 @@ const isValidPunch = (value) => value && value !== "-" && value.trim() !== "";
 
 const extractAttendanceRecords = (response) => {
   try {
-    // ✅ Correct path: response.data.data.attendance
     const attendance = response.data?.data?.attendance;
 
     if (attendance?.data && Array.isArray(attendance.data)) {
@@ -24,15 +23,21 @@ const extractAttendanceRecords = (response) => {
         // Derive present/absent from punch_in
         const isPresent = isValidPunch(record.punch_in);
 
+        // ✅ FIX: Get employee name from the correct nested path
+        const employeeName = record.user?.employee
+          ? `${record.user.employee.first_name || ""} ${record.user.employee.last_name || ""}`.trim()
+          : record.user?.username || `Employee ${record.userid}`;
+
+        // ✅ FIX: Get department from the correct path
+        const department = record.user?.department?.name || "-";
+
         return {
           id: record.userid || idx,
           employee_id: record.userid,
-          employeeName: record.user
-            ? `${record.user.first_name || ""} ${record.user.last_name || ""}`.trim()
-            : `Employee ${record.userid}`,
+          employeeName: employeeName || `Employee ${record.userid}`,
           company: record.company?.company_name || "N/A",
           company_id: record.company_id || null,
-          department: record.company?.company_name || "N/A",
+          department: department,
           date: record.log_date || "-",
           punchIn,
           punchOut: hasPunchOut ? record.punch_out : null,
@@ -41,6 +46,8 @@ const extractAttendanceRecords = (response) => {
           status: isPresent ? "Present" : "Absent",
           isLate: false,
           hasPunchOut,
+          // Keep raw data for debugging
+          raw: record,
         };
       });
 
@@ -51,13 +58,16 @@ const extractAttendanceRecords = (response) => {
         per_page: attendance.per_page,
       };
 
+      // ✅ FIX: Use stats from API response
+      const apiStats = response.data?.data?.stats || {};
+      
       const stats = {
-        totalActiveEmployees: meta.total || records.length,
-        presentToday: records.filter((r) => r.status === "Present").length,
-        absentToday: records.filter((r) => r.status === "Absent").length,
-        punchedInOnTime: records.filter((r) => r.status === "Present" && !r.isLate).length,
-        punchedLate: records.filter((r) => r.isLate).length,
-        punchedOutToday: records.filter((r) => r.hasPunchOut).length,
+        totalActiveEmployees: apiStats.total_active_employees || meta.total || records.length,
+        presentToday: apiStats.present_today || records.filter((r) => r.status === "Present").length,
+        absentToday: apiStats.absent_today || records.filter((r) => r.status === "Absent").length,
+        punchedInOnTime: apiStats.punched_in_on_time || 0,
+        punchedLate: apiStats.punched_late || 0,
+        punchedOutToday: apiStats.punched_out_today || 0,
       };
 
       return {
@@ -70,10 +80,10 @@ const extractAttendanceRecords = (response) => {
       };
     }
 
-    return { records: [], total: 0 };
+    return { records: [], total: 0, stats: {} };
   } catch (error) {
     console.error("Error extracting attendance records:", error);
-    return { records: [], total: 0 };
+    return { records: [], total: 0, stats: {} };
   }
 };
 
@@ -89,6 +99,7 @@ export const fetchAttendanceRecords = createAsyncThunk(
   async (params = {}, { rejectWithValue }) => {
     try {
       const response = await apiClient.get(`/admin/attendance`, { params });
+      console.log("Result: ", response)
       return extractAttendanceRecords(response);
     } catch (error) {
       return rejectWithValue(handleApiError(error));

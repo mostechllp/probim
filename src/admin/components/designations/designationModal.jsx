@@ -16,16 +16,15 @@ const DesignationModal = ({ isOpen, onClose, editingDesignation }) => {
 
   useEffect(() => {
     if (editingDesignation) {
-      // eslint-disable-next-line react-hooks/set-state-in-effect
       setFormData({
-  name: editingDesignation.name,
-});
+        name: editingDesignation.name || "",
+      });
     } else {
       setFormData({
         name: "",
       });
     }
-  }, [editingDesignation]);
+  }, [editingDesignation, isOpen]);
 
   const handleChange = (e) => {
     setFormData({ ...formData, [e.target.name]: e.target.value });
@@ -42,7 +41,7 @@ const DesignationModal = ({ isOpen, onClose, editingDesignation }) => {
     setLoading(true);
 
     const payload = {
-      name: formData.name,
+      name: formData.name.trim(),
     };
 
     let result;
@@ -66,7 +65,8 @@ const DesignationModal = ({ isOpen, onClose, editingDesignation }) => {
           name: "",
         });
       } else {
-        showToast("Failed to update designation", "error");
+        const errorMessage = result.payload?.message || result.payload || "Failed to update designation";
+        showToast(errorMessage, "error");
       }
     } else {
       result = await dispatch(addDesignation(payload));
@@ -82,7 +82,8 @@ const DesignationModal = ({ isOpen, onClose, editingDesignation }) => {
           name: "",
         });
       } else {
-        showToast("Failed to add designation", "error");
+        const errorMessage = result.payload?.message || result.payload || "Failed to add designation";
+        showToast(errorMessage, "error");
       }
     }
 
