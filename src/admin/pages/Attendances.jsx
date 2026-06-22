@@ -234,31 +234,110 @@ const Attendances = () => {
   const punchOutCount = stats?.punchedOutToday || 0;
 
   const getSafeArray = (data) => {
-    if (!data) return [];
-    if (Array.isArray(data)) return data;
-    if (data.data && Array.isArray(data.data)) return data.data;
-    return [];
+  if (!data) return [];
+  if (Array.isArray(data)) return data;
+  
+  // Handle case where data might be an object with a data property
+  if (data.data && Array.isArray(data.data)) return data.data;
+  
+  // Handle case where data might be an object with an employees property
+  if (data.employees && Array.isArray(data.employees)) return data.employees;
+  
+  // Handle case where data might be an object with a users property
+  if (data.users && Array.isArray(data.users)) return data.users;
+  
+  // Handle case where data might have a list property
+  if (data.list && Array.isArray(data.list)) return data.list;
+  
+  // If data is an object but not an array, try to find any array property
+  if (typeof data === 'object') {
+    for (const key in data) {
+      if (Array.isArray(data[key]) && data[key].length > 0) {
+        return data[key];
+      }
+    }
+  }
+  
+  return [];
+};
+
+const renderEmployeeList = (employees, title) => {
+  const arr = getSafeArray(employees);
+  if (!arr.length) return null;
+  
+  // Helper to get employee name from various data structures
+  const getEmployeeDisplayName = (emp) => {
+    if (!emp) return "Unknown";
+    
+    // If it's a string, return it
+    if (typeof emp === "string") return emp;
+    
+    // Check for direct first_name/last_name
+    if (emp.first_name || emp.last_name) {
+      return `${emp.first_name || ''} ${emp.last_name || ''}`.trim() || emp.name || "Unknown";
+    }
+    
+    // Check for name fields
+    if (emp.name) return emp.name;
+    if (emp.employeeName) return emp.employeeName;
+    if (emp.employee_name) return emp.employee_name;
+    if (emp.full_name) return emp.full_name;
+    if (emp.display_name) return emp.display_name;
+    
+    // Check for user.employee structure
+    if (emp.user?.employee?.first_name) {
+      return `${emp.user.employee.first_name} ${emp.user.employee.last_name || ''}`.trim();
+    }
+    if (emp.user?.employee?.name) return emp.user.employee.name;
+    if (emp.user?.employee?.full_name) return emp.user.employee.full_name;
+    
+    // Check for user structure
+    if (emp.user?.first_name) {
+      return `${emp.user.first_name} ${emp.user.last_name || ''}`.trim();
+    }
+    if (emp.user?.name) return emp.user.name;
+    if (emp.user?.full_name) return emp.user.full_name;
+    if (emp.user?.username) return emp.user.username;
+    
+    // Check for employee structure
+    if (emp.employee?.first_name) {
+      return `${emp.employee.first_name} ${emp.employee.last_name || ''}`.trim();
+    }
+    if (emp.employee?.name) return emp.employee.name;
+    if (emp.employee?.full_name) return emp.employee.full_name;
+    
+    // Check for raw data
+    if (emp.raw?.employee?.first_name) {
+      return `${emp.raw.employee.first_name} ${emp.raw.employee.last_name || ''}`.trim();
+    }
+    if (emp.raw?.user?.first_name) {
+      return `${emp.raw.user.first_name} ${emp.raw.user.last_name || ''}`.trim();
+    }
+    
+    // Check for employee_id or user_id
+    if (emp.employee_id) return `Employee #${emp.employee_id}`;
+    if (emp.user_id) return `Employee #${emp.user_id}`;
+    if (emp.id) return `Employee #${emp.id}`;
+    
+    return "Unknown";
   };
 
-  const renderEmployeeList = (employees, title) => {
-    const arr = getSafeArray(employees);
-    if (!arr.length) return null;
-    return (
-      <div className="absolute hidden group-hover:block z-20 mt-2 p-3 bg-gray-900 dark:bg-gray-800 text-white text-xs rounded-lg shadow-xl min-w-[200px] top-full left-0">
-        <p className="font-semibold mb-2 text-gray-300 border-b border-gray-700 pb-1">{title}:</p>
-        <div className="flex flex-wrap gap-1.5 max-h-48 overflow-y-auto">
-          {arr.slice(0, 10).map((emp, idx) => (
-            <span key={idx} className="text-xs bg-gray-700 px-2 py-1 rounded-full">
-              {typeof emp === "string" ? emp : emp.name || emp.employeeName || emp.employee_name || "Unknown"}
-            </span>
-          ))}
-          {arr.length > 10 && (
-            <span className="text-xs text-gray-400 mt-1 block">+{arr.length - 10} more</span>
-          )}
-        </div>
+  return (
+    <div className="absolute hidden group-hover:block z-20 mt-2 p-3 bg-gray-900 dark:bg-gray-800 text-white text-xs rounded-lg shadow-xl min-w-[200px] top-full left-0">
+      <p className="font-semibold mb-2 text-gray-300 border-b border-gray-700 pb-1">{title}:</p>
+      <div className="flex flex-wrap gap-1.5 max-h-48 overflow-y-auto">
+        {arr.slice(0, 10).map((emp, idx) => (
+          <span key={idx} className="text-xs bg-gray-700 px-2 py-1 rounded-full">
+            {getEmployeeDisplayName(emp)}
+          </span>
+        ))}
+        {arr.length > 10 && (
+          <span className="text-xs text-gray-400 mt-1 block">+{arr.length - 10} more</span>
+        )}
       </div>
-    );
-  };
+    </div>
+  );
+};
 
   return (
     <div className="w-full overflow-x-hidden">
@@ -289,7 +368,7 @@ const Attendances = () => {
           </div>
           <div className="text-xl md:text-2xl font-bold text-amber-600 dark:text-amber-400">{lateTodayCount}</div>
           <div className="text-[10px] md:text-xs text-gray-500 dark:text-gray-400 font-medium">Late Today</div>
-          {renderEmployeeList(lateComers, "Late Comers")}
+          {/* {renderEmployeeList(lateComers, "Late Comers")} */}
         </div>
 
         <div className="group relative bg-white dark:bg-gray-800 rounded-xl p-3 md:p-4 border border-gray-200 dark:border-gray-700 transition-all hover:-translate-y-0.5 hover:shadow-soft">
@@ -298,7 +377,7 @@ const Attendances = () => {
           </div>
           <div className="text-xl md:text-2xl font-bold text-red-600 dark:text-red-400">{absentTodayCount}</div>
           <div className="text-[10px] md:text-xs text-gray-500 dark:text-gray-400 font-medium">Absent Today</div>
-          {renderEmployeeList(absentees, "Absentees")}
+          {/* {renderEmployeeList(absentees, "Absentees")} */}
         </div>
 
         <div className="col-span-2 sm:col-span-3 lg:col-span-1 bg-white dark:bg-gray-800 rounded-xl p-3 md:p-4 border border-gray-200 dark:border-gray-700 transition-all hover:-translate-y-0.5 hover:shadow-soft">
@@ -333,38 +412,6 @@ const Attendances = () => {
             <i className="fas fa-calendar-check mr-1"></i> Daily Log
           </span>
         </h2>
-      </div>
-
-      {/* ── Filters ─────────────────────────────────────────────────────────── */}
-      <div className="flex flex-col sm:flex-row flex-wrap gap-3 mb-5">
-        <select
-          value={companyFilter}
-          onChange={handleCompanyFilterChange}
-          className="px-3 md:px-4 py-2 bg-white dark:bg-gray-800 border border-gray-200 dark:border-gray-700 rounded-full text-xs md:text-sm text-gray-700 dark:text-gray-300 focus:outline-none focus:border-green-500"
-        >
-          <option value="all">All Companies</option>
-          <option value="THESAY">THESAY</option>
-          <option value="SAYGEN">SAYGEN</option>
-          <option value="warehouse">Warehouse</option>
-          <option value="farmassay">Farmassay</option>
-        </select>
-
-        <input
-          type="text"
-          value={nameFilter}
-          onChange={handleNameFilterChange}
-          placeholder="Employee Name..."
-          className="flex-1 sm:flex-none px-3 md:px-4 py-2 bg-white dark:bg-gray-800 border border-gray-200 dark:border-gray-700 rounded-full text-xs md:text-sm text-gray-700 dark:text-gray-300 focus:outline-none focus:border-green-500 w-full sm:w-48"
-        />
-
-        <button
-          onClick={refreshAllData}
-          disabled={refreshLoading}
-          className="px-3 md:px-4 py-2 bg-white dark:bg-gray-800 border border-gray-200 dark:border-gray-700 rounded-full text-xs md:text-sm text-gray-700 dark:text-gray-300 flex items-center justify-center gap-2 hover:bg-gray-50 dark:hover:bg-gray-700 transition-colors disabled:opacity-50"
-        >
-          <i className={`fas fa-sync-alt text-xs md:text-sm ${refreshLoading ? "fa-spin" : ""}`}></i>
-          <span className="hidden sm:inline">Refresh</span>
-        </button>
       </div>
 
       {/* ── Actions bar ─────────────────────────────────────────────────────── */}
