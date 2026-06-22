@@ -122,7 +122,7 @@ const MODULE_ORDER = {
 };
 
 // Modules that should be hidden for non-admin users (users without all permissions)
-const HIDDEN_MODULES = ["role-management", "organizations", "agreements"];
+const HIDDEN_MODULES = ["role-management", "agreements"];
 
 const Sidebar = ({ isOpen, setIsOpen }) => {
   const [isMobile, setIsMobile] = useState(false);
