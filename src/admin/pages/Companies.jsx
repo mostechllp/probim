@@ -167,7 +167,7 @@ const Companies = () => {
         <div className="flex flex-wrap justify-between items-center mb-4 md:mb-6">
           <div>
             <h2 className="text-lg md:text-2xl font-bold gradient-heading bg-clip-text text-transparent">
-              Company Management
+              Company
             </h2>
             <p className="text-xs md:text-sm text-gray-500 dark:text-gray-400 mt-1">
               Managing companies under{" "}
