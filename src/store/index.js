@@ -19,6 +19,7 @@ import settingsReducer from "../admin/store/slices/settingsSlice";
 import projectReducer from "../admin/store/slices/projectSlice";
 import projectAssignmentReducer from "../admin/store/slices/projectAssignmentSlice";
 import payrollReducer from "../admin/store/slices/payrollSlice"
+import moduleReducer from "../admin/store/slices/moduleSlice"
 
 // Employee reducers
 import leavesReducer from "../employee/store/slices/leavesSlice";
@@ -53,6 +54,7 @@ export const store = configureStore({
     projects: projectReducer,
     projectAssignments: projectAssignmentReducer,
     payroll: payrollReducer,
+    modules: moduleReducer,
 
     // Employee
     EmpLeaves: leavesReducer,
