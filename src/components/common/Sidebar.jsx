@@ -9,7 +9,7 @@ const ADMIN_ROUTE_MAP = {
   employees: "/admin/employees",
   attendance: "/admin/attendances",
   "attendance-requests": "/admin/attendance-requests",
-  "wfh-requests": "/admin/wfh-requests",
+  wfh: "/admin/wfh",
   documents: "/admin/documents",
   leaves: "/admin/leaves",
   "my-leaves": "/admin/my-leaves",
@@ -55,6 +55,7 @@ const ICON_MAP = {
   attendance: "fas fa-fingerprint",
   "attendance-requests": "fas fa-clock",
   "wfh-requests": "fas fa-house-user",
+  "wfh": "fas fa-house-user",
   documents: "fas fa-file-signature",
   leaves: "fas fa-calendar-check",
   "my-leaves": "fas fa-calendar-alt",
@@ -109,14 +110,15 @@ const MODULE_ORDER = {
   "task-reports": 12,
   "my-tasks": 13,
   "wfh-requests": 14,
-  reports: 15,
-  payroll: 16,
-  roles: 17,
-  organizations: 18,
-  agreements: 19,
-  settings: 20,
-  "role-management": 21,
-  "my-profile": 22,
+  "wfh": 15,
+  reports: 16,
+  payroll: 17,
+  roles: 18,
+  organizations: 19,
+  agreements: 20,
+  settings: 21,
+  "role-management": 22,
+  "my-profile": 23,
 };
 
 // Modules that should be hidden for non-admin users (users without all permissions)
@@ -294,9 +296,11 @@ const Sidebar = ({ isOpen, setIsOpen }) => {
   };
 
   const isMenuExpanded = (slug) => {
-    if (isMobile) return expandedMenus[slug] || false;
-    return isOpen;
-  };
+  // For mobile, use the expandedMenus state
+  if (isMobile) return expandedMenus[slug] || false;
+  // For desktop, only expand if the specific menu is toggled
+  return expandedMenus[slug] || false;
+};
 
   const showChevron = !isMobile && isOpen;
 
