@@ -2,8 +2,8 @@ import { Navigate, Outlet } from "react-router-dom";
 import { useSelector } from "react-redux";
 import Loader from "../../admin/components/common/Loader";
 
-const ProtectedRoute = ({ requiredType, children }) => {
-  const { isAuthenticated, userType, loading } = useSelector((state) => state.auth);
+const ProtectedRoute = ({ requiredType, requiredPermission, children }) => {
+  const { isAuthenticated, loading, user } = useSelector((state) => state.auth);
 
   if (loading) {
     return <Loader fullScreen />;
@@ -13,10 +13,25 @@ const ProtectedRoute = ({ requiredType, children }) => {
     return <Navigate to="/login" replace />;
   }
 
-  if (requiredType && userType !== requiredType) {
-    // Redirect to appropriate dashboard if wrong type
-    const redirectPath = userType === "admin" ? "/admin/dashboard" : "/employee/dashboard";
+  // Check user type - use user?.type instead of userType
+  if (requiredType && user?.type !== requiredType) {
+    const redirectPath = user?.type === "admin" ? "/admin/dashboard" : "/employee/dashboard";
     return <Navigate to={redirectPath} replace />;
+  }
+
+  // Check permission if required
+  if (requiredPermission) {
+    const permissions = user?.permissions || {};
+    const hasPermission = 
+      permissions[requiredPermission]?.read === true || 
+      permissions.all === true ||
+      user?.type === 'admin';
+    
+    if (!hasPermission) {
+      // Redirect to dashboard or unauthorized page
+      const redirectPath = user?.type === "admin" ? "/admin/dashboard" : "/employee/dashboard";
+      return <Navigate to={redirectPath} replace />;
+    }
   }
 
   return children || <Outlet />;

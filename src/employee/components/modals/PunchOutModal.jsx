@@ -30,10 +30,10 @@ import { TimeInputWorking } from "../common/TimeInputForWorkingHrs";
 
 // Helper to convert 24-hour time to 12-hour format for display
 const convertTo12Hour = (time24) => {
-  if (!time24) return '';
-  const [hours, minutes] = time24.split(':');
+  if (!time24) return "";
+  const [hours, minutes] = time24.split(":");
   const h = parseInt(hours, 10);
-  const ampm = h >= 12 ? 'PM' : 'AM';
+  const ampm = h >= 12 ? "PM" : "AM";
   const h12 = h % 12 || 12;
   return `${h12}:${minutes} ${ampm}`;
 };
@@ -100,6 +100,7 @@ const PunchOutModal = ({
   }, [punchOutTime, isOpen]);
 
   // Calculate working hours from punch in time and punch out time
+  // Calculate working hours from punch in time and punch out time
   const calculateWorkingHours = () => {
     if (!punchInTime) {
       setMaxWorkingHours(0);
@@ -109,28 +110,66 @@ const PunchOutModal = ({
     let punchInDateObj, punchOutDateObj;
 
     // Parse punch in time
-    if (typeof punchInTime === 'string') {
-      if (punchInTime.includes('T')) {
-        punchInDateObj = new Date(punchInTime);
-      } else {
-        // Format: "09:00:00" or "09:00"
-        const [hours, minutes, seconds] = punchInTime.split(':');
-        const now = new Date();
-        punchInDateObj = new Date(
-          now.getFullYear(),
-          now.getMonth(),
-          now.getDate(),
-          parseInt(hours),
-          parseInt(minutes),
-          seconds ? parseInt(seconds) : 0
-        );
-      }
-    } else {
-      punchInDateObj = new Date(punchInTime);
-    }
+    try {
+      if (typeof punchInTime === "string") {
+        if (punchInTime.includes("T")) {
+          punchInDateObj = new Date(punchInTime);
+        } else if (punchInTime.includes(":")) {
+          // Format: "09:00:00" or "09:00" or "01:04 PM"
+          // Check if it's in 12-hour format with AM/PM
+          if (
+            punchInTime.toLowerCase().includes("am") ||
+            punchInTime.toLowerCase().includes("pm")
+          ) {
+            // Parse 12-hour format: "01:04 PM"
+            const [time, meridian] = punchInTime.split(" ");
+            let [hours, minutes] = time.split(":").map(Number);
+            if (meridian.toLowerCase() === "pm" && hours !== 12) hours += 12;
+            if (meridian.toLowerCase() === "am" && hours === 12) hours = 0;
 
-    // If no punch in time, can't calculate
-    if (isNaN(punchInDateObj.getTime())) {
+            const now = new Date();
+            punchInDateObj = new Date(
+              now.getFullYear(),
+              now.getMonth(),
+              now.getDate(),
+              hours,
+              minutes || 0,
+              0,
+            );
+          } else {
+            // 24-hour format: "09:00:00" or "09:00"
+            const parts = punchInTime.split(":");
+            const hours = parseInt(parts[0]);
+            const minutes = parseInt(parts[1]) || 0;
+            const seconds = parseInt(parts[2]) || 0;
+
+            const now = new Date();
+            punchInDateObj = new Date(
+              now.getFullYear(),
+              now.getMonth(),
+              now.getDate(),
+              hours,
+              minutes,
+              seconds,
+            );
+          }
+        } else {
+          punchInDateObj = new Date(punchInTime);
+        }
+      } else if (punchInTime instanceof Date) {
+        punchInDateObj = punchInTime;
+      } else {
+        punchInDateObj = new Date(punchInTime);
+      }
+
+      // If no valid date, return
+      if (isNaN(punchInDateObj.getTime())) {
+        console.warn("Invalid punch in time:", punchInTime);
+        setMaxWorkingHours(0);
+        return;
+      }
+    } catch (error) {
+      console.error("Error parsing punch in time:", error);
       setMaxWorkingHours(0);
       return;
     }
@@ -146,42 +185,65 @@ const PunchOutModal = ({
       punchOutDateObj = new Date();
     } else {
       // Parse punch out time
-      if (punchOutTimeStr.includes('T')) {
-        punchOutDateObj = new Date(punchOutTimeStr);
-      } else {
-        const [hours, minutes, seconds] = punchOutTimeStr.split(':');
-        punchOutDateObj = new Date(
-          punchInDateObj.getFullYear(),
-          punchInDateObj.getMonth(),
-          punchInDateObj.getDate(),
-          parseInt(hours),
-          parseInt(minutes),
-          seconds ? parseInt(seconds) : 0
-        );
-      }
-    }
+      try {
+        if (punchOutTimeStr.includes("T")) {
+          punchOutDateObj = new Date(punchOutTimeStr);
+        } else if (punchOutTimeStr.includes(":")) {
+          // Format: "18:00" (24-hour)
+          const parts = punchOutTimeStr.split(":");
+          const hours = parseInt(parts[0]);
+          const minutes = parseInt(parts[1]) || 0;
+          const seconds = parseInt(parts[2]) || 0;
 
-    // If punch out is before punch in (next day), add 24 hours
-    if (punchOutDateObj < punchInDateObj) {
-      punchOutDateObj.setDate(punchOutDateObj.getDate() + 1);
+          // Use the same date as punch in for consistency
+          punchOutDateObj = new Date(
+            punchInDateObj.getFullYear(),
+            punchInDateObj.getMonth(),
+            punchInDateObj.getDate(),
+            hours,
+            minutes,
+            seconds,
+          );
+        } else {
+          punchOutDateObj = new Date(punchOutTimeStr);
+        }
+
+        // If punch out is before punch in (next day), add 24 hours
+        if (punchOutDateObj < punchInDateObj) {
+          punchOutDateObj.setDate(punchOutDateObj.getDate() + 1);
+        }
+      } catch (error) {
+        console.error("Error parsing punch out time:", error);
+        // Use current time as fallback
+        punchOutDateObj = new Date();
+      }
     }
 
     // Calculate difference in hours
     const diffMs = punchOutDateObj - punchInDateObj;
     const diffHours = diffMs / (1000 * 60 * 60);
-    
+
     // Round to 2 decimal places
     const roundedHours = Math.round(diffHours * 100) / 100;
-    
+
     // Ensure minimum 0 and maximum reasonable (e.g., 24 hours)
     const maxHours = Math.max(0, Math.min(roundedHours, 24));
     setMaxWorkingHours(maxHours);
+
+    // Debug logging
+    console.log("Punch In Date:", punchInDateObj);
+    console.log("Punch Out Date:", punchOutDateObj);
+    console.log("Difference (ms):", diffMs);
+    console.log("Difference (hours):", diffHours);
+    console.log("Rounded hours:", roundedHours);
+    console.log("Max hours:", maxHours);
   };
 
   // Fetch projects
   const fetchProjects = async () => {
-    const employeeId = dashboardData?.employee?.id || user?.employee?.id || user?.id;
-    
+    const employeeId =
+      dashboardData?.employee?.id || user?.employee?.id || user?.id;
+
     if (!employeeId) {
       console.warn("No employee ID available for projects");
       setProjects([]);
@@ -190,7 +252,9 @@ const PunchOutModal = ({
 
     setLoadingProjects(true);
     try {
-      const res = await apiClient.get(`/admin/project-assignments/${employeeId}`);
+      const res = await apiClient.get(
+        `/admin/project-assignments/${employeeId}`,
+      );
       let projectsData = [];
 
       if (res.data?.data?.projects && Array.isArray(res.data.data.projects)) {
@@ -248,16 +312,19 @@ const PunchOutModal = ({
 
   // Handle saving task report
   const handleSaveTaskReport = async () => {
-    const hasTaskReport = tasksCompleted.trim() || planTomorrow.trim() || remarks.trim();
+    const hasTaskReport =
+      tasksCompleted.trim() || planTomorrow.trim() || remarks.trim();
     if (!hasTaskReport) return true;
 
     setSavingTaskReport(true);
     try {
-      const result = await dispatch(saveTaskReport({
-        tasks_completed: tasksCompleted,
-        plan_tomorrow: planTomorrow,
-        remarks: remarks,
-      })).unwrap();
+      const result = await dispatch(
+        saveTaskReport({
+          tasks_completed: tasksCompleted,
+          plan_tomorrow: planTomorrow,
+          remarks: remarks,
+        }),
+      ).unwrap();
 
       if (result) {
         showToast("Task report saved successfully!", "success");
@@ -277,7 +344,10 @@ const PunchOutModal = ({
 
     // Validate total hours against max working hours
     if (maxWorkingHours > 0 && totalHours > maxWorkingHours) {
-      showToast(`Total hours (${totalHours}) exceeds your working hours (${maxWorkingHours})`, "error");
+      showToast(
+        `Total hours (${totalHours}) exceeds your working hours (${maxWorkingHours})`,
+        "error",
+      );
       return;
     }
 
@@ -367,46 +437,57 @@ const PunchOutModal = ({
   };
 
   // Helper to format punch time
-const formatPunchTime = (time) => {
-  if (!time) return "—";
-  try {
-    let date;
-    if (typeof time === "string" && time.match(/^\d{2}:\d{2}:\d{2}$/)) {
-      const now = new Date();
-      const [hours, minutes, seconds] = time.split(":");
-      date = new Date(
-        now.getFullYear(),
-        now.getMonth(),
-        now.getDate(),
-        parseInt(hours),
-        parseInt(minutes),
-        parseInt(seconds)
-      );
-    } else if (typeof time === "string" && time.includes("T")) {
-      date = new Date(time);
-    } else if (time instanceof Date) {
-      date = time;
-    } else {
-      date = new Date(time);
-    }
+  const formatPunchTime = (time) => {
+    if (!time) return "—";
+    try {
+      let date;
+      if (typeof time === "string" && time.match(/^\d{2}:\d{2}:\d{2}$/)) {
+        const now = new Date();
+        const [hours, minutes, seconds] = time.split(":");
+        date = new Date(
+          now.getFullYear(),
+          now.getMonth(),
+          now.getDate(),
+          parseInt(hours),
+          parseInt(minutes),
+          parseInt(seconds),
+        );
+      } else if (typeof time === "string" && time.includes("T")) {
+        date = new Date(time);
+      } else if (time instanceof Date) {
+        date = time;
+      } else {
+        date = new Date(time);
+      }
 
-    if (isNaN(date.getTime())) return time;
-    return date.toLocaleTimeString("en-US", {
-      hour: "2-digit",
-      minute: "2-digit",
-      hour12: true,
-    });
-  } catch (error) {
-    return time;
-  }
-};
+      if (isNaN(date.getTime())) return time;
+      return date.toLocaleTimeString("en-US", {
+        hour: "2-digit",
+        minute: "2-digit",
+        hour12: true,
+      });
+    } catch (error) {
+      return time;
+    }
+  };
+
+  const formatWorkingHours = (hours) => {
+    if (!hours || hours <= 0) return "0 hrs";
+
+    const hrs = Math.floor(hours);
+    const mins = Math.round((hours - hrs) * 60);
+
+    if (hrs === 0) return `${mins} min`;
+    if (mins === 0) return `${hrs} hr${hrs > 1 ? "s" : ""}`;
+    return `${hrs} hr ${mins} min`;
+  };
 
   // Helper to convert 24-hour time to 12-hour format for display
   const convertTo12Hour = (time24) => {
-    if (!time24) return '';
-    const [hours, minutes] = time24.split(':');
+    if (!time24) return "";
+    const [hours, minutes] = time24.split(":");
     const h = parseInt(hours, 10);
-    const ampm = h >= 12 ? 'PM' : 'AM';
+    const ampm = h >= 12 ? "PM" : "AM";
     const h12 = h % 12 || 12;
     return `${h12}:${minutes} ${ampm}`;
   };
@@ -464,8 +545,8 @@ const formatPunchTime = (time) => {
                 />
               </div>
               <span className="text-xs text-[var(--muted)]">
-                {punchOutTime 
-                  ? `12-hour: ${convertTo12Hour(punchOutTime)}` 
+                {punchOutTime
+                  ? `12-hour: ${convertTo12Hour(punchOutTime)}`
                   : "Select your punch out time"}
               </span>
             </div>
@@ -549,7 +630,7 @@ const formatPunchTime = (time) => {
                     Punch In Time:
                   </span>
                   <span className="ml-2 text-sm text-[var(--text)]">
-                    {punchInTime ? formatPunchTime(punchInTime) : '—'}
+                    {punchInTime ? formatPunchTime(punchInTime) : "—"}
                   </span>
                 </div>
                 <div>
@@ -557,38 +638,52 @@ const formatPunchTime = (time) => {
                     Punch Out Time:
                   </span>
                   <span className="ml-2 text-sm text-[var(--text)]">
-                    {punchOutTime ? convertTo12Hour(punchOutTime) : '—'}
+                    {punchOutTime ? convertTo12Hour(punchOutTime) : "—"}
                   </span>
                 </div>
               </div>
+
+              {/* Display the actual times used for calculation */}
+              <div className="mt-2 text-xs text-[var(--muted)] flex justify-between">
+                <span>Raw Punch In: {punchInTime || "—"}</span>
+                <span>Raw Punch Out: {punchOutTime || "—"}</span>
+              </div>
+
               <div className="flex justify-between items-center mt-3 pt-3 border-t border-blue-500/20">
                 <div>
                   <span className="text-sm font-semibold text-[var(--text)]">
                     Total Working Hours:
                   </span>
                   <span className="ml-2 text-lg font-bold text-blue-500">
-                    {maxWorkingHours > 0 ? `${maxWorkingHours} hours` : '—'}
+                    {maxWorkingHours > 0
+                      ? formatWorkingHours(maxWorkingHours)
+                      : "—"}
                   </span>
                 </div>
                 <div>
                   <span className="text-sm font-semibold text-[var(--text)]">
                     Allocated:
                   </span>
-                  <span className={`ml-2 text-lg font-bold ${totalHours > maxWorkingHours ? 'text-red-500' : 'text-green-500'}`}>
-                    {isNaN(totalHours) ? "0" : totalHours} hours
+                  <span
+                    className={`ml-2 text-lg font-bold ${totalHours > maxWorkingHours ? "text-red-500" : "text-green-500"}`}
+                  >
+                    {isNaN(totalHours) ? "0" : totalHours.toFixed(2)} hours
                   </span>
                 </div>
               </div>
+
               {maxWorkingHours > 0 && (
                 <div className="mt-2">
                   <div className="w-full h-2 bg-gray-200 dark:bg-gray-700 rounded-full overflow-hidden">
-                    <div 
-                      className={`h-full transition-all duration-300 ${totalHours > maxWorkingHours ? 'bg-red-500' : 'bg-green-500'}`}
-                      style={{ width: `${Math.min((totalHours / maxWorkingHours) * 100, 100)}%` }}
+                    <div
+                      className={`h-full transition-all duration-300 ${totalHours > maxWorkingHours ? "bg-red-500" : "bg-green-500"}`}
+                      style={{
+                        width: `${Math.min((totalHours / maxWorkingHours) * 100, 100)}%`,
+                      }}
                     ></div>
                   </div>
                   <div className="text-xs text-[var(--muted)] mt-1">
-                    {totalHours > maxWorkingHours 
+                    {totalHours > maxWorkingHours
                       ? `⚠️ Over by ${(totalHours - maxWorkingHours).toFixed(2)} hours`
                       : `${(maxWorkingHours - totalHours).toFixed(2)} hours remaining`}
                   </div>
@@ -598,7 +693,8 @@ const formatPunchTime = (time) => {
 
             {projects.length > 0 && (
               <p className="text-xs text-[var(--muted)] mb-3">
-                Enter the time you spent working on each project (max {maxWorkingHours} hours total)
+                Enter the time you spent working on each project (max{" "}
+                 {formatWorkingHours(maxWorkingHours)} hours total)
               </p>
             )}
           </div>
@@ -685,7 +781,8 @@ const formatPunchTime = (time) => {
                 </span>
               </div>
               <div className="text-xs text-[var(--muted)] mt-1">
-                You have no projects assigned. Check the confirmation box above to proceed.
+                You have no projects assigned. Check the confirmation box above
+                to proceed.
               </div>
             </div>
           )}
