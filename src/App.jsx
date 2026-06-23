@@ -239,6 +239,7 @@ function App() {
           <Route path="roles" element={<RoleManagement />} />
           <Route path="modules" element={<ModuleManagement />} />
           <Route path="project-working-hours" element={<ProjectWorkingHours />} />
+          <Route path="attendance-requests" element={<AttendanceRequests />} />
         </Route>
 
         {/* Employee Routes - Layout wrapper */}
