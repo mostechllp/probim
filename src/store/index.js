@@ -20,6 +20,7 @@ import projectReducer from "../admin/store/slices/projectSlice";
 import projectAssignmentReducer from "../admin/store/slices/projectAssignmentSlice";
 import payrollReducer from "../admin/store/slices/payrollSlice"
 import moduleReducer from "../admin/store/slices/moduleSlice"
+import adminAttendanceReducer from "../admin/store/slices/attendanceRequestSlice"
 
 // Employee reducers
 import leavesReducer from "../employee/store/slices/leavesSlice";
@@ -55,6 +56,7 @@ export const store = configureStore({
     projectAssignments: projectAssignmentReducer,
     payroll: payrollReducer,
     modules: moduleReducer,
+    adminAttendance: adminAttendanceReducer,
 
     // Employee
     EmpLeaves: leavesReducer,
