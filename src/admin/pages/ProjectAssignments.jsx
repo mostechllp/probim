@@ -7,7 +7,7 @@ import { showToast } from "../../components/common/Toast";
 import {
   fetchAssignments,
   saveAssignment,
-  deleteAssignment,
+  deleteAllEmployeeProjects, // Use this instead
   clearAssignmentError
 } from "../store/slices/projectAssignmentSlice";
 import { fetchEmployees } from "../store/slices/employeeSlice";
@@ -82,7 +82,7 @@ const ProjectAssignments = () => {
   const handleConfirmDelete = async () => {
     if (!selectedAssignment) return;
     try {
-      await dispatch(deleteAssignment(selectedAssignment.employeeId)).unwrap();
+      await dispatch(deleteAllEmployeeProjects(selectedAssignment.employeeId)).unwrap();
       showToast("Employee project mappings removed successfully!", "success");
       setIsDeleteOpen(false);
       setSelectedAssignment(null);

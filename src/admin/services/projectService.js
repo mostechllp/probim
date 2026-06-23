@@ -353,26 +353,51 @@ class ProjectService {
    * GET /admin/project-assignments/{employeeId}/working-time
    */
   async getEmployeeProjectWorkingTime(userId) {
-  try {
-    console.log(
-      `[API REQUEST] GET ${BASE_PATH}/project-assignments/${userId}/working-time`,
-    );
-    const response = await apiClient.get(
-      `${BASE_PATH}/project-assignments/${userId}/working-time`,
-    );
-    console.log(
-      `[API RESPONSE] GET ${BASE_PATH}/project-assignments/${userId}/working-time | Status: ${response.status} | Data:`,
-      response.data,
-    );
-    return response.data;
-  } catch (error) {
-    console.error(
-      `[API ERROR] GET ${BASE_PATH}/project-assignments/${userId}/working-time | Error:`,
-      error,
-    );
-    throw handleError(error, "Failed to fetch employee project working time");
+    try {
+      console.log(
+        `[API REQUEST] GET ${BASE_PATH}/project-assignments/${userId}/working-time`,
+      );
+      const response = await apiClient.get(
+        `${BASE_PATH}/project-assignments/${userId}/working-time`,
+      );
+      console.log(
+        `[API RESPONSE] GET ${BASE_PATH}/project-assignments/${userId}/working-time | Status: ${response.status} | Data:`,
+        response.data,
+      );
+      return response.data;
+    } catch (error) {
+      console.error(
+        `[API ERROR] GET ${BASE_PATH}/project-assignments/${userId}/working-time | Error:`,
+        error,
+      );
+      throw handleError(error, "Failed to fetch employee project working time");
+    }
   }
-}
+  /**
+   * Remove all project assignments for an employee
+   * DELETE /admin/project-assignments/{employeeId}/all
+   */
+  async removeAllEmployeeProjects(employeeId) {
+    try {
+      console.log(
+        `[API REQUEST] DELETE ${BASE_PATH}/project-assignments/${employeeId}/all`,
+      );
+      const response = await apiClient.delete(
+        `${BASE_PATH}/project-assignments/${employeeId}/all`,
+      );
+      console.log(
+        `[API RESPONSE] DELETE ${BASE_PATH}/project-assignments/${employeeId}/all | Status: ${response.status} | Data:`,
+        response.data,
+      );
+      return response.data;
+    } catch (error) {
+      console.error(
+        `[API ERROR] DELETE ${BASE_PATH}/project-assignments/${employeeId}/all | Error:`,
+        error,
+      );
+      throw handleError(error, "Failed to remove all project assignments");
+    }
+  }
 }
 
 export default new ProjectService();
