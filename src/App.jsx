@@ -21,7 +21,9 @@ const EmployeeLayout = lazy(() => import("./shared/layouts/EmployeeLayout"));
 const AdminDashboard = lazy(() => import("./admin/pages/Dashboard"));
 const Projects = lazy(() => import("./admin/pages/Projects"));
 const ProjectDetails = lazy(() => import("./admin/pages/ProjectDetails"));
-const ProjectAssignments = lazy(() => import("./admin/pages/ProjectAssignments"));
+const ProjectAssignments = lazy(
+  () => import("./admin/pages/ProjectAssignments"),
+);
 const Employees = lazy(() => import("./admin/pages/Employees"));
 const AddEmployee = lazy(() => import("./admin/pages/AddEmployee"));
 const EditEmployee = lazy(() => import("./admin/pages/EditEmployee"));
@@ -100,9 +102,7 @@ const LazyWrapper = ({ children }) => {
 function App() {
   const { theme } = useTheme();
   const dispatch = useDispatch();
-  const { loading: authLoading } = useSelector(
-    (state) => state.auth,
-  );
+  const { loading: authLoading, user } = useSelector((state) => state.auth);
   const [initialLoad, setInitialLoad] = useState(true);
 
   useEffect(() => {
@@ -227,7 +227,10 @@ function App() {
           <Route path="leaves" element={<Leaves />} />
           <Route path="leaves/leave-types" element={<LeaveTypeManagement />} />
           <Route path="leaves/allocations" element={<LeaveAllocations />} />
-          <Route path="leaves/allocations/:id" element={<EditLeaveAllocation />} />
+          <Route
+            path="leaves/allocations/:id"
+            element={<EditLeaveAllocation />}
+          />
           <Route path="payroll" element={<Payroll />} />
           <Route path="payroll/add" element={<AddPayroll />} />
           <Route path="wfh" element={<AdminWFH />} />
@@ -267,6 +270,7 @@ function App() {
           <Route path="projects/:id" element={<ProjectDetails />} />
           <Route path="project-assignments" element={<ProjectAssignments />} />
           <Route path="employees/add-employee" element={<AddEmployee />} />
+
           <Route path="employees/onboarding" element={<Onboarding />} />
           <Route path="employees/edit/:id" element={<EditEmployee />} />
           <Route path="employees/:id" element={<EmployeeDetails />} />
@@ -338,7 +342,10 @@ function App() {
           <Route path="leave-management" element={<Leaves />} />
           <Route path="leaves/leave-types" element={<LeaveTypeManagement />} />
           <Route path="leaves/allocations" element={<LeaveAllocations />} />
-          <Route path="leaves/allocations/:id" element={<EditLeaveAllocation />} />
+          <Route
+            path="leaves/allocations/:id"
+            element={<EditLeaveAllocation />}
+          />
           <Route path="payroll" element={<Payroll />} />
           <Route path="payroll/add" element={<AddPayroll />} />
           <Route path="wfh" element={<AdminWFH />} />
@@ -346,6 +353,208 @@ function App() {
           <Route path="roles" element={<RoleManagement />} />
           <Route path="modules" element={<ModuleManagement />} />
         </Route>
+
+        {/* Redirect /admin/employees/add-employee to appropriate route */}
+        <Route
+          path="/admin/employees/add-employee"
+          element={
+            <ProtectedRoute>
+              <LazyWrapper>
+                {user?.type === "employee" ? (
+                  <Navigate to="/employee/employees/add-employee" replace />
+                ) : (
+                  <Navigate to="/admin/employees/add-employee" replace />
+                )}
+              </LazyWrapper>
+            </ProtectedRoute>
+          }
+        />
+
+        {/* Redirect /admin/employees/onboarding to appropriate route */}
+        <Route
+          path="/admin/employees/onboarding"
+          element={
+            <ProtectedRoute>
+              <LazyWrapper>
+                {user?.type === "employee" ? (
+                  <Navigate to="/employee/employees/onboarding" replace />
+                ) : (
+                  <Navigate to="/admin/employees/onboarding" replace />
+                )}
+              </LazyWrapper>
+            </ProtectedRoute>
+          }
+        />
+
+        {/* Redirect /admin/reports/* to appropriate route */}
+        <Route
+          path="/admin/reports/employee-details"
+          element={
+            <ProtectedRoute>
+              <LazyWrapper>
+                {user?.type === "employee" ? (
+                  <Navigate to="/employee/reports/employee-details" replace />
+                ) : (
+                  <Navigate to="/admin/reports/employee-details" replace />
+                )}
+              </LazyWrapper>
+            </ProtectedRoute>
+          }
+        />
+
+        <Route
+          path="/admin/reports/attendance-reports"
+          element={
+            <ProtectedRoute>
+              <LazyWrapper>
+                {user?.type === "employee" ? (
+                  <Navigate to="/employee/reports/attendance-reports" replace />
+                ) : (
+                  <Navigate to="/admin/reports/attendance-reports" replace />
+                )}
+              </LazyWrapper>
+            </ProtectedRoute>
+          }
+        />
+
+        <Route
+          path="/admin/reports/leave-requests-reports"
+          element={
+            <ProtectedRoute>
+              <LazyWrapper>
+                {user?.type === "employee" ? (
+                  <Navigate
+                    to="/employee/reports/leave-requests-reports"
+                    replace
+                  />
+                ) : (
+                  <Navigate
+                    to="/admin/reports/leave-requests-reports"
+                    replace
+                  />
+                )}
+              </LazyWrapper>
+            </ProtectedRoute>
+          }
+        />
+
+        <Route
+          path="/admin/reports/pending-leaves-reports"
+          element={
+            <ProtectedRoute>
+              <LazyWrapper>
+                {user?.type === "employee" ? (
+                  <Navigate
+                    to="/employee/reports/pending-leaves-reports"
+                    replace
+                  />
+                ) : (
+                  <Navigate
+                    to="/admin/reports/pending-leaves-reports"
+                    replace
+                  />
+                )}
+              </LazyWrapper>
+            </ProtectedRoute>
+          }
+        />
+
+        <Route
+          path="/admin/reports/employee-near-expiry"
+          element={
+            <ProtectedRoute>
+              <LazyWrapper>
+                {user?.type === "employee" ? (
+                  <Navigate
+                    to="/employee/reports/employee-near-expiry"
+                    replace
+                  />
+                ) : (
+                  <Navigate to="/admin/reports/employee-near-expiry" replace />
+                )}
+              </LazyWrapper>
+            </ProtectedRoute>
+          }
+        />
+
+        <Route
+          path="/admin/reports/employee-upcoming-renewals"
+          element={
+            <ProtectedRoute>
+              <LazyWrapper>
+                {user?.type === "employee" ? (
+                  <Navigate
+                    to="/employee/reports/employee-upcoming-renewals"
+                    replace
+                  />
+                ) : (
+                  <Navigate
+                    to="/admin/reports/employee-upcoming-renewals"
+                    replace
+                  />
+                )}
+              </LazyWrapper>
+            </ProtectedRoute>
+          }
+        />
+
+        <Route
+          path="/admin/reports/organization-near-expiry"
+          element={
+            <ProtectedRoute>
+              <LazyWrapper>
+                {user?.type === "employee" ? (
+                  <Navigate
+                    to="/employee/reports/organization-near-expiry"
+                    replace
+                  />
+                ) : (
+                  <Navigate
+                    to="/admin/reports/organization-near-expiry"
+                    replace
+                  />
+                )}
+              </LazyWrapper>
+            </ProtectedRoute>
+          }
+        />
+
+        <Route
+          path="/admin/reports/organization-upcoming-renewals"
+          element={
+            <ProtectedRoute>
+              <LazyWrapper>
+                {user?.type === "employee" ? (
+                  <Navigate
+                    to="/employee/reports/organization-upcoming-renewals"
+                    replace
+                  />
+                ) : (
+                  <Navigate
+                    to="/admin/reports/organization-upcoming-renewals"
+                    replace
+                  />
+                )}
+              </LazyWrapper>
+            </ProtectedRoute>
+          }
+        />
+
+        {/* Redirect /admin/modules to appropriate route */}
+        <Route
+          path="/admin/modules"
+          element={
+            <ProtectedRoute>
+              <LazyWrapper>
+                {user?.type === "employee" ? (
+                  <Navigate to="/employee/modules" replace />
+                ) : (
+                  <Navigate to="/admin/modules" replace />
+                )}
+              </LazyWrapper>
+            </ProtectedRoute>
+          }
+        />
 
         {/* Global 404 - No layout, full page */}
         <Route path="*" element={<NotFound />} />

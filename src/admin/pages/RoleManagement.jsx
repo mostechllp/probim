@@ -26,7 +26,15 @@ const FALLBACK_MODULES = [
 
 function RoleManagement() {
     const dispatch = useDispatch();
-    const navigate = useNavigate()
+    const navigate = useNavigate();
+    
+    // Get user role from auth
+    const { user } = useSelector((state) => state.auth);
+    const userRole = user?.type || 'admin';
+    
+    // Determine the base path based on user role
+    const basePath = userRole === 'admin' ? '/admin' : '/employee';
+    
     const { roles, rolePermissions, modules } = useSelector((state) => state.roles);
 
     const [newRoleName, setNewRoleName] = useState("");
@@ -165,11 +173,11 @@ function RoleManagement() {
                         Roles
                     </h2>
                     <button
-                    onClick={() => navigate("/admin/modules")}
-                    className="flex items-center gap-2 px-4 py-2 bg-green-500 hover:bg-green-600 text-white text-sm font-semibold rounded-lg shadow transition-all"
-                >
-                    <i className="fas fa-plus"></i> Add Module
-                </button>
+                        onClick={() => navigate(`${basePath}/modules`)}
+                        className="flex items-center gap-2 px-4 py-2 bg-green-500 hover:bg-green-600 text-white text-sm font-semibold rounded-lg shadow transition-all"
+                    >
+                        <i className="fas fa-plus"></i> Add Module
+                    </button>
                 </div>
 
                 <div className="grid grid-cols-1 xl:grid-cols-2 gap-5 md:gap-6">

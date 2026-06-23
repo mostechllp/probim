@@ -1,6 +1,6 @@
 import { useEffect, useState } from "react";
 import { useDispatch, useSelector } from "react-redux";
-import { Link } from "react-router-dom";
+import { Link, useLocation } from "react-router-dom"; // Add useLocation
 import SearchBar from "../components/common/SearchBar";
 import EntriesSelector from "../components/common/EntriesSelector";
 import { showToast } from "../../components/common/Toast";
@@ -14,9 +14,14 @@ import ConfirmModal from "../components/common/ConfirmModal";
 
 const Employees = () => {
   const dispatch = useDispatch();
+  const location = useLocation(); // Add this
   const { employees = [], loading } = useSelector(
     (state) => state.employees || { employees: [] },
   );
+  
+  // Get user role from auth
+  const { user } = useSelector((state) => state.auth);
+  const userRole = user?.type || 'admin';
 
   // Local state for filtering and pagination
   const [statusFilter, setStatusFilter] = useState("all");
@@ -28,6 +33,9 @@ const Employees = () => {
   const [confirmOpen, setConfirmOpen] = useState(false);
   const [selectedEmployee, setSelectedEmployee] = useState(null);
   const [deleteLoading, setDeleteLoading] = useState(false);
+
+  // Determine the base path based on user role
+  const basePath = userRole === 'admin' ? '/admin' : '/employee';
 
   useEffect(() => {
     dispatch(fetchEmployees());
@@ -111,8 +119,6 @@ const Employees = () => {
   const onboardingCount = employees.filter((e) => e.status === "Onboarding").length;
 
   return (
-    // Remove the outer div with Sidebar and flex layout
-    // Just return the main content directly
     <div className="w-full overflow-x-hidden">
       {/* Stats Cards - Responsive Grid */}
       <div className="stats-grid grid grid-cols-2 md:grid-cols-4 gap-3 md:gap-4 mb-6">
@@ -242,13 +248,13 @@ const Employees = () => {
             placeholder="Search by name, designation or department..."
           />
           <Link
-            to="/admin/employees/onboarding"
+            to={`${basePath}/employees/onboarding`}
             className="bg-green-500 hover:bg-green-600 text-white px-4 py-2 rounded-full text-sm font-semibold flex items-center justify-center gap-2 transition-all shadow-md hover:shadow-lg w-full sm:w-auto"
           >
             <i className="fas fa-user-plus"></i> Onboarding
           </Link>
           <Link
-            to="/admin/employees/add-employee"
+            to={`${basePath}/employees/add-employee`}
             className="bg-green-500 hover:bg-green-600 text-white px-4 py-2 rounded-full text-sm font-semibold flex items-center justify-center gap-2 transition-all shadow-md hover:shadow-lg w-full sm:w-auto"
           >
             <i className="fas fa-plus-circle"></i> Add Employee
@@ -406,14 +412,14 @@ const Employees = () => {
                       <td className="px-3 md:px-4 py-2 md:py-3">
                         <div className="flex gap-1 md:gap-2">
                           <Link
-                            to={`/admin/employees/${emp.id}`}
+                            to={`${basePath}/employees/${emp.id}`}
                             className="p-1.5 rounded-lg hover:bg-gray-100 text-blue-500 transition-colors"
                             title="View Details"
                           >
                             <i className="fas fa-eye text-xs md:text-sm"></i>
                           </Link>
                           <Link
-                            to={`/admin/employees/edit/${emp.id}`}
+                            to={`${basePath}/employees/edit/${emp.id}`}
                             className="p-1.5 rounded-lg hover:bg-gray-100 dark:hover:bg-gray-700 text-amber-500 transition-colors"
                             title="Edit"
                           >
