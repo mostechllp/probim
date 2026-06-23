@@ -1,7 +1,7 @@
 // src/admin/services/projectService.js
-import apiClient from '../../utils/apiClient';
+import apiClient from "../../utils/apiClient";
 
-const BASE_PATH = '/admin';
+const BASE_PATH = "/admin";
 
 /**
  * Standard utility to parse errors and extract message and structure.
@@ -14,16 +14,16 @@ const handleError = (error, defaultMessage) => {
       return {
         message: data.message || defaultMessage,
         errors: data.errors,
-        status: error.response.status
+        status: error.response.status,
       };
     }
     return {
       message: data.message || defaultMessage,
-      status: error.response.status
+      status: error.response.status,
     };
   }
   return {
-    message: error.message || defaultMessage
+    message: error.message || defaultMessage,
   };
 };
 
@@ -34,11 +34,15 @@ const mapProjectPayload = (data) => {
   const payload = { ...data };
 
   if (payload.managerId !== undefined) {
-    payload.project_manager_id = payload.managerId ? Number(payload.managerId) : null;
+    payload.project_manager_id = payload.managerId
+      ? Number(payload.managerId)
+      : null;
     delete payload.managerId;
   }
   if (payload.teamLeadId !== undefined) {
-    payload.team_lead_id = payload.teamLeadId ? Number(payload.teamLeadId) : null;
+    payload.team_lead_id = payload.teamLeadId
+      ? Number(payload.teamLeadId)
+      : null;
     delete payload.teamLeadId;
   }
 
@@ -55,7 +59,7 @@ class ProjectService {
       const response = await apiClient.get(`${BASE_PATH}/projects`);
       return response.data;
     } catch (error) {
-      throw handleError(error, 'Failed to fetch projects');
+      throw handleError(error, "Failed to fetch projects");
     }
   }
 
@@ -66,10 +70,13 @@ class ProjectService {
   async createProject(projectData) {
     try {
       const mappedData = mapProjectPayload(projectData);
-      const response = await apiClient.post(`${BASE_PATH}/projects`, mappedData);
+      const response = await apiClient.post(
+        `${BASE_PATH}/projects`,
+        mappedData,
+      );
       return response.data;
     } catch (error) {
-      throw handleError(error, 'Failed to create project');
+      throw handleError(error, "Failed to create project");
     }
   }
 
@@ -79,10 +86,12 @@ class ProjectService {
    */
   async getProjectById(projectId) {
     try {
-      const response = await apiClient.get(`${BASE_PATH}/projects/${projectId}`);
+      const response = await apiClient.get(
+        `${BASE_PATH}/projects/${projectId}`,
+      );
       return response.data;
     } catch (error) {
-      throw handleError(error, 'Failed to fetch project details');
+      throw handleError(error, "Failed to fetch project details");
     }
   }
 
@@ -93,10 +102,13 @@ class ProjectService {
   async updateProject(projectId, projectData) {
     try {
       const mappedData = mapProjectPayload(projectData);
-      const response = await apiClient.put(`${BASE_PATH}/projects/${projectId}`, mappedData);
+      const response = await apiClient.put(
+        `${BASE_PATH}/projects/${projectId}`,
+        mappedData,
+      );
       return response.data;
     } catch (error) {
-      throw handleError(error, 'Failed to update project');
+      throw handleError(error, "Failed to update project");
     }
   }
 
@@ -107,10 +119,13 @@ class ProjectService {
   async patchProject(projectId, patchData) {
     try {
       const mappedData = mapProjectPayload(patchData);
-      const response = await apiClient.patch(`${BASE_PATH}/projects/${projectId}`, mappedData);
+      const response = await apiClient.patch(
+        `${BASE_PATH}/projects/${projectId}`,
+        mappedData,
+      );
       return response.data;
     } catch (error) {
-      throw handleError(error, 'Failed to update project field');
+      throw handleError(error, "Failed to update project field");
     }
   }
 
@@ -120,10 +135,12 @@ class ProjectService {
    */
   async deleteProject(projectId) {
     try {
-      const response = await apiClient.delete(`${BASE_PATH}/projects/${projectId}`);
+      const response = await apiClient.delete(
+        `${BASE_PATH}/projects/${projectId}`,
+      );
       return response.data;
     } catch (error) {
-      throw handleError(error, 'Failed to delete project');
+      throw handleError(error, "Failed to delete project");
     }
   }
 
@@ -135,11 +152,17 @@ class ProjectService {
     try {
       console.log(`[API REQUEST] GET ${BASE_PATH}/project-assignments`);
       const response = await apiClient.get(`${BASE_PATH}/project-assignments`);
-      console.log(`[API RESPONSE] GET ${BASE_PATH}/project-assignments | Status: ${response.status} | Data length:`, response.data?.data?.length || response.data?.length || 0);
+      console.log(
+        `[API RESPONSE] GET ${BASE_PATH}/project-assignments | Status: ${response.status} | Data length:`,
+        response.data?.data?.length || response.data?.length || 0,
+      );
       return response.data;
     } catch (error) {
-      console.error(`[API ERROR] GET ${BASE_PATH}/project-assignments | Error:`, error);
-      throw handleError(error, 'Failed to fetch project assignments');
+      console.error(
+        `[API ERROR] GET ${BASE_PATH}/project-assignments | Error:`,
+        error,
+      );
+      throw handleError(error, "Failed to fetch project assignments");
     }
   }
 
@@ -151,15 +174,27 @@ class ProjectService {
     try {
       const payload = {
         employee_id: employeeId,
-        project_ids: projectIds
+        project_ids: projectIds,
       };
-      console.log(`[API REQUEST] POST ${BASE_PATH}/employees/projects | Payload:`, payload);
-      const response = await apiClient.post(`${BASE_PATH}/employees/projects`, payload);
-      console.log(`[API RESPONSE] POST ${BASE_PATH}/employees/projects | Status: ${response.status} | Data:`, response.data);
+      console.log(
+        `[API REQUEST] POST ${BASE_PATH}/employees/projects | Payload:`,
+        payload,
+      );
+      const response = await apiClient.post(
+        `${BASE_PATH}/employees/projects`,
+        payload,
+      );
+      console.log(
+        `[API RESPONSE] POST ${BASE_PATH}/employees/projects | Status: ${response.status} | Data:`,
+        response.data,
+      );
       return response.data;
     } catch (error) {
-      console.error(`[API ERROR] POST ${BASE_PATH}/employees/projects | Error:`, error);
-      throw handleError(error, 'Failed to assign projects to employee');
+      console.error(
+        `[API ERROR] POST ${BASE_PATH}/employees/projects | Error:`,
+        error,
+      );
+      throw handleError(error, "Failed to assign projects to employee");
     }
   }
 
@@ -169,15 +204,24 @@ class ProjectService {
    */
   async getEmployeeProjects(employeeId) {
     try {
-      console.log(`[API REQUEST] GET ${BASE_PATH}/employees/projects | Param employee_id:`, employeeId);
+      console.log(
+        `[API REQUEST] GET ${BASE_PATH}/employees/projects | Param employee_id:`,
+        employeeId,
+      );
       const response = await apiClient.get(`${BASE_PATH}/employees/projects`, {
-        params: { employee_id: employeeId }
+        params: { employee_id: employeeId },
       });
-      console.log(`[API RESPONSE] GET ${BASE_PATH}/employees/projects | Status: ${response.status} | Data:`, response.data);
+      console.log(
+        `[API RESPONSE] GET ${BASE_PATH}/employees/projects | Status: ${response.status} | Data:`,
+        response.data,
+      );
       return response.data;
     } catch (error) {
-      console.error(`[API ERROR] GET ${BASE_PATH}/employees/projects | Error:`, error);
-      throw handleError(error, 'Failed to fetch projects assigned to employee');
+      console.error(
+        `[API ERROR] GET ${BASE_PATH}/employees/projects | Error:`,
+        error,
+      );
+      throw handleError(error, "Failed to fetch projects assigned to employee");
     }
   }
 
@@ -190,15 +234,27 @@ class ProjectService {
       const payload = {
         employee_id: employeeId,
         project_id: projectId,
-        ...assignmentData
+        ...assignmentData,
       };
-      console.log(`[API REQUEST] PUT ${BASE_PATH}/employees/projects | Payload:`, payload);
-      const response = await apiClient.put(`${BASE_PATH}/employees/projects`, payload);
-      console.log(`[API RESPONSE] PUT ${BASE_PATH}/employees/projects | Status: ${response.status} | Data:`, response.data);
+      console.log(
+        `[API REQUEST] PUT ${BASE_PATH}/employees/projects | Payload:`,
+        payload,
+      );
+      const response = await apiClient.put(
+        `${BASE_PATH}/employees/projects`,
+        payload,
+      );
+      console.log(
+        `[API RESPONSE] PUT ${BASE_PATH}/employees/projects | Status: ${response.status} | Data:`,
+        response.data,
+      );
       return response.data;
     } catch (error) {
-      console.error(`[API ERROR] PUT ${BASE_PATH}/employees/projects | Error:`, error);
-      throw handleError(error, 'Failed to update employee project assignment');
+      console.error(
+        `[API ERROR] PUT ${BASE_PATH}/employees/projects | Error:`,
+        error,
+      );
+      throw handleError(error, "Failed to update employee project assignment");
     }
   }
 
@@ -210,17 +266,29 @@ class ProjectService {
     try {
       const payload = {
         employee_id: employeeId,
-        project_id: projectId
+        project_id: projectId,
       };
-      console.log(`[API REQUEST] DELETE ${BASE_PATH}/employees/projects | Payload:`, payload);
-      const response = await apiClient.delete(`${BASE_PATH}/employees/projects`, {
-        data: payload
-      });
-      console.log(`[API RESPONSE] DELETE ${BASE_PATH}/employees/projects | Status: ${response.status} | Data:`, response.data);
+      console.log(
+        `[API REQUEST] DELETE ${BASE_PATH}/employees/projects | Payload:`,
+        payload,
+      );
+      const response = await apiClient.delete(
+        `${BASE_PATH}/employees/projects`,
+        {
+          data: payload,
+        },
+      );
+      console.log(
+        `[API RESPONSE] DELETE ${BASE_PATH}/employees/projects | Status: ${response.status} | Data:`,
+        response.data,
+      );
       return response.data;
     } catch (error) {
-      console.error(`[API ERROR] DELETE ${BASE_PATH}/employees/projects | Error:`, error);
-      throw handleError(error, 'Failed to remove employee project assignment');
+      console.error(
+        `[API ERROR] DELETE ${BASE_PATH}/employees/projects | Error:`,
+        error,
+      );
+      throw handleError(error, "Failed to remove employee project assignment");
     }
   }
 
@@ -230,13 +298,23 @@ class ProjectService {
    */
   async getProjectEmployees(projectId) {
     try {
-      console.log(`[API REQUEST] GET ${BASE_PATH}/projects/${projectId}/employees`);
-      const response = await apiClient.get(`${BASE_PATH}/projects/${projectId}/employees`);
-      console.log(`[API RESPONSE] GET ${BASE_PATH}/projects/${projectId}/employees | Status: ${response.status} | Data:`, response.data);
+      console.log(
+        `[API REQUEST] GET ${BASE_PATH}/projects/${projectId}/employees`,
+      );
+      const response = await apiClient.get(
+        `${BASE_PATH}/projects/${projectId}/employees`,
+      );
+      console.log(
+        `[API RESPONSE] GET ${BASE_PATH}/projects/${projectId}/employees | Status: ${response.status} | Data:`,
+        response.data,
+      );
       return response.data;
     } catch (error) {
-      console.error(`[API ERROR] GET ${BASE_PATH}/projects/${projectId}/employees | Error:`, error);
-      throw handleError(error, 'Failed to fetch employees assigned to project');
+      console.error(
+        `[API ERROR] GET ${BASE_PATH}/projects/${projectId}/employees | Error:`,
+        error,
+      );
+      throw handleError(error, "Failed to fetch employees assigned to project");
     }
   }
 
@@ -246,18 +324,80 @@ class ProjectService {
    */
   async assignEmployeesToProject(projectId, employeeIds) {
     try {
-      console.log(`[API REQUEST] POST ${BASE_PATH}/projects/${projectId}/employees | Payload:`, { employee_ids: employeeIds });
-      const response = await apiClient.post(`${BASE_PATH}/projects/${projectId}/employees`, {
-        employee_ids: employeeIds
-      });
-      console.log(`[API RESPONSE] POST ${BASE_PATH}/projects/${projectId}/employees | Status: ${response.status} | Data:`, response.data);
+      console.log(
+        `[API REQUEST] POST ${BASE_PATH}/projects/${projectId}/employees | Payload:`,
+        { employee_ids: employeeIds },
+      );
+      const response = await apiClient.post(
+        `${BASE_PATH}/projects/${projectId}/employees`,
+        {
+          employee_ids: employeeIds,
+        },
+      );
+      console.log(
+        `[API RESPONSE] POST ${BASE_PATH}/projects/${projectId}/employees | Status: ${response.status} | Data:`,
+        response.data,
+      );
       return response.data;
     } catch (error) {
-      console.error(`[API ERROR] POST ${BASE_PATH}/projects/${projectId}/employees | Error:`, error);
-      throw handleError(error, 'Failed to tag employees to project');
+      console.error(
+        `[API ERROR] POST ${BASE_PATH}/projects/${projectId}/employees | Error:`,
+        error,
+      );
+      throw handleError(error, "Failed to tag employees to project");
+    }
+  }
+
+  /**
+   * Get working time for employee's assigned projects
+   * GET /admin/project-assignments/{employeeId}/working-time
+   */
+  async getEmployeeProjectWorkingTime(userId) {
+    try {
+      console.log(
+        `[API REQUEST] GET ${BASE_PATH}/project-assignments/${userId}/working-time`,
+      );
+      const response = await apiClient.get(
+        `${BASE_PATH}/project-assignments/${userId}/working-time`,
+      );
+      console.log(
+        `[API RESPONSE] GET ${BASE_PATH}/project-assignments/${userId}/working-time | Status: ${response.status} | Data:`,
+        response.data,
+      );
+      return response.data;
+    } catch (error) {
+      console.error(
+        `[API ERROR] GET ${BASE_PATH}/project-assignments/${userId}/working-time | Error:`,
+        error,
+      );
+      throw handleError(error, "Failed to fetch employee project working time");
+    }
+  }
+  /**
+   * Remove all project assignments for an employee
+   * DELETE /admin/project-assignments/{employeeId}/all
+   */
+  async removeAllEmployeeProjects(employeeId) {
+    try {
+      console.log(
+        `[API REQUEST] DELETE ${BASE_PATH}/project-assignments/${employeeId}/all`,
+      );
+      const response = await apiClient.delete(
+        `${BASE_PATH}/project-assignments/${employeeId}/all`,
+      );
+      console.log(
+        `[API RESPONSE] DELETE ${BASE_PATH}/project-assignments/${employeeId}/all | Status: ${response.status} | Data:`,
+        response.data,
+      );
+      return response.data;
+    } catch (error) {
+      console.error(
+        `[API ERROR] DELETE ${BASE_PATH}/project-assignments/${employeeId}/all | Error:`,
+        error,
+      );
+      throw handleError(error, "Failed to remove all project assignments");
     }
   }
 }
 
 export default new ProjectService();
-

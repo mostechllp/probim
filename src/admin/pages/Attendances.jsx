@@ -344,7 +344,6 @@ const renderEmployeeList = (employees, title) => {
 
       {/* ── Stats Cards ─────────────────────────────────────────────────────── */}
       <div className="stats-grid grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-5 gap-3 md:gap-4 mb-6">
-        {/* ... stats cards remain the same ... */}
         <div className="bg-white dark:bg-gray-800 rounded-xl p-3 md:p-4 border border-gray-200 dark:border-gray-700 transition-all hover:-translate-y-0.5 hover:shadow-soft">
           <div className="w-8 h-8 md:w-10 md:h-10 bg-green-100 dark:bg-green-900/30 rounded-xl flex items-center justify-center mb-1 md:mb-2">
             <i className="fas fa-users text-green-600 dark:text-green-400 text-sm md:text-lg"></i>
@@ -368,7 +367,6 @@ const renderEmployeeList = (employees, title) => {
           </div>
           <div className="text-xl md:text-2xl font-bold text-amber-600 dark:text-amber-400">{lateTodayCount}</div>
           <div className="text-[10px] md:text-xs text-gray-500 dark:text-gray-400 font-medium">Late Today</div>
-          {/* {renderEmployeeList(lateComers, "Late Comers")} */}
         </div>
 
         <div className="group relative bg-white dark:bg-gray-800 rounded-xl p-3 md:p-4 border border-gray-200 dark:border-gray-700 transition-all hover:-translate-y-0.5 hover:shadow-soft">
@@ -377,7 +375,6 @@ const renderEmployeeList = (employees, title) => {
           </div>
           <div className="text-xl md:text-2xl font-bold text-red-600 dark:text-red-400">{absentTodayCount}</div>
           <div className="text-[10px] md:text-xs text-gray-500 dark:text-gray-400 font-medium">Absent Today</div>
-          {/* {renderEmployeeList(absentees, "Absentees")} */}
         </div>
 
         <div className="col-span-2 sm:col-span-3 lg:col-span-1 bg-white dark:bg-gray-800 rounded-xl p-3 md:p-4 border border-gray-200 dark:border-gray-700 transition-all hover:-translate-y-0.5 hover:shadow-soft">
@@ -438,11 +435,11 @@ const renderEmployeeList = (employees, title) => {
       ) : (
         <>
           <div className="bg-white dark:bg-gray-800 rounded-xl border border-gray-200 dark:border-gray-700 overflow-x-auto shadow-soft">
-            <div className="min-w-[900px] md:min-w-0">
+            <div className="min-w-[1000px] md:min-w-0">
               <table className="w-full border-collapse">
                 <thead>
                   <tr className="bg-gray-50 dark:bg-gray-700/50 border-b border-gray-200 dark:border-gray-700">
-                    {["Sl.No.", "Department", "Employee Name", "Date", "Punch In", "Punch Out", "Status"].map((h) => (
+                    {["Sl.No.", "Department", "Employee Name", "Date", "Punch In", "Punch Out", "Working Hours", "Status"].map((h) => (
                       <th key={h} className="px-3 md:px-4 py-2 md:py-3 text-left text-[10px] md:text-xs font-semibold text-gray-500 dark:text-gray-400">
                         {h}
                       </th>
@@ -482,6 +479,9 @@ const renderEmployeeList = (employees, title) => {
                           </span>
                         )}
                       </td>
+                      <td className="px-3 md:px-4 py-2 md:py-3 text-xs md:text-sm font-medium text-gray-800 dark:text-gray-200">
+                        {record.workingHours || "--"}
+                      </td>
                       <td className="px-3 md:px-4 py-2 md:py-3 text-xs md:text-sm">
                         <span className={`inline-block px-2 py-0.5 rounded-full text-[9px] md:text-xs font-medium ${
                           record.status === "Present"
@@ -495,7 +495,7 @@ const renderEmployeeList = (employees, title) => {
                   ))}
                   {records.length === 0 && (
                     <tr>
-                      <td colSpan="7" className="px-4 py-8 text-center text-gray-500 dark:text-gray-400">
+                      <td colSpan="8" className="px-4 py-8 text-center text-gray-500 dark:text-gray-400">
                         No attendance records found
                       </td>
                     </tr>
