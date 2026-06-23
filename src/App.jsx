@@ -82,6 +82,7 @@ const RoleManagement = lazy(() => import("./admin/pages/RoleManagement"));
 const Payroll = lazy(() => import("./admin/pages/Payroll"));
 const AddPayroll = lazy(() => import("./admin/pages/AddPayroll"));
 const Onboarding = lazy(() => import("./admin/pages/Onboarding"));
+const ProjectWorkingHours = lazy(() => import("./admin/pages/ProjectWorkingHours"));
 
 // Lazy load pages - Employee
 const EmployeeDashboard = lazy(() => import("./employee/pages/Dashboard"));
@@ -237,6 +238,7 @@ function App() {
           <Route path="settings" element={<Settings />} />
           <Route path="roles" element={<RoleManagement />} />
           <Route path="modules" element={<ModuleManagement />} />
+          <Route path="project-working-hours" element={<ProjectWorkingHours />} />
         </Route>
 
         {/* Employee Routes - Layout wrapper */}
@@ -352,6 +354,7 @@ function App() {
           <Route path="settings" element={<Settings />} />
           <Route path="roles" element={<RoleManagement />} />
           <Route path="modules" element={<ModuleManagement />} />
+          <Route path="project-working-hours" element={<ProjectWorkingHours />} />
         </Route>
 
         {/* Redirect /admin/employees/add-employee to appropriate route */}
@@ -550,6 +553,20 @@ function App() {
                   <Navigate to="/employee/modules" replace />
                 ) : (
                   <Navigate to="/admin/modules" replace />
+                )}
+              </LazyWrapper>
+            </ProtectedRoute>
+          }
+        />
+        <Route
+          path="/admin/project-working-hours"
+          element={
+            <ProtectedRoute>
+              <LazyWrapper>
+                {user?.type === "employee" ? (
+                  <Navigate to="/employee/project-working-hours" replace />
+                ) : (
+                  <Navigate to="/admin/project-working-hours" replace />
                 )}
               </LazyWrapper>
             </ProtectedRoute>

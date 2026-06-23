@@ -2,7 +2,13 @@
 import { createSlice, createAsyncThunk } from "@reduxjs/toolkit";
 import projectService from "../../services/projectService";
 
-const mapAssignmentFromApi = (apiAssign, fallbackEmployeeId = null) => {
+// src/admin/store/slices/projectAssignmentSlice.js
+
+const mapAssignmentFromApi = (
+  apiAssign,
+  fallbackEmployeeId = null,
+  includeEmpty = false,
+) => {
   if (!apiAssign) return null;
 
   // Try to find a NUMERIC employee ID from various fields
@@ -50,7 +56,12 @@ const mapAssignmentFromApi = (apiAssign, fallbackEmployeeId = null) => {
   } else if (apiAssign.projectIds) {
     projectIds = apiAssign.projectIds;
   } else if (Array.isArray(apiAssign.projects)) {
-    projectIds = apiAssign.projects.map((p) => p.id || p);
+    projectIds = apiAssign.projects.map((p) => String(p.id || p));
+  }
+
+  // If includeEmpty is false, filter out empty assignments
+  if (!includeEmpty && projectIds.length === 0) {
+    return null;
   }
 
   return {
@@ -67,7 +78,7 @@ const mapAssignmentFromApi = (apiAssign, fallbackEmployeeId = null) => {
   };
 };
 
-// Async Thunks
+// Update fetchAssignments to include empty assignments if needed
 export const fetchAssignments = createAsyncThunk(
   "projectAssignments/fetchAssignments",
   async (_, { rejectWithValue }) => {
@@ -88,11 +99,12 @@ export const fetchAssignments = createAsyncThunk(
       }
 
       const mapped = list
-        .map((item) => mapAssignmentFromApi(item))
-        .filter(
-          (a) => a !== null && !isNaN(a.employeeId) && a.projectIds.length > 0,
-        );
-      return mapped;
+        .map((item) => mapAssignmentFromApi(item, null, true)) // Pass true to include empty assignments
+        .filter((a) => a !== null && !isNaN(a.employeeId));
+
+      // Only keep assignments that have at least one project, or keep all if we want to show empty ones
+      // For now, filter out empty ones for the main list
+      return mapped.filter((a) => a.projectIds.length > 0);
     } catch (error) {
       console.error("[API ERROR] fetchAssignments:", error);
       return rejectWithValue(
@@ -102,31 +114,58 @@ export const fetchAssignments = createAsyncThunk(
   },
 );
 
+// src/admin/store/slices/projectAssignmentSlice.js
+
 export const saveAssignment = createAsyncThunk(
   "projectAssignments/saveAssignment",
-  async ({ employeeId, projectIds }, { rejectWithValue, dispatch }) => {
+  async (
+    { employeeId, projectIds },
+    { rejectWithValue, dispatch, getState },
+  ) => {
     try {
       const ids = projectIds.map(Number);
-      await projectService.assignProjectsToEmployee(employeeId, ids);
-
-      // After successful save, fetch the updated assignments
-      const updatedAssignments = await dispatch(fetchAssignments()).unwrap();
-
-      // Find the specific employee's updated assignment
-      const updatedAssignment = updatedAssignments.find(
-        (a) => Number(a.employeeId) === Number(employeeId),
+      const response = await projectService.assignProjectsToEmployee(
+        employeeId,
+        ids,
       );
 
-      if (updatedAssignment) {
-        return updatedAssignment;
+      console.log("Save assignment response:", response);
+
+      // Get the updated projects from the response
+      let updatedProjectIds = [];
+      let userId = null;
+
+      if (response?.data) {
+        const data = response.data;
+        userId = data.user_id || null;
+
+        if (data.projects && Array.isArray(data.projects)) {
+          updatedProjectIds = data.projects.map((p) => String(p.id));
+        }
       }
 
-      // If the employee has no projects assigned anymore, return empty assignment
-      return {
+      console.log("Updated project IDs:", updatedProjectIds);
+
+      // Create the updated assignment object
+      const updatedAssignment = {
         employeeId: Number(employeeId),
-        projectIds: [],
+        userId: userId,
+        projectIds: updatedProjectIds,
         lastUpdated: new Date().toISOString().split("T")[0],
+        raw: response?.data || response,
       };
+
+      // If there are no projects, we need to remove the assignment from the list
+      if (updatedProjectIds.length === 0) {
+        // Return empty assignment to indicate removal
+        return {
+          ...updatedAssignment,
+          projectIds: [],
+          _remove: true, // Flag to indicate this should be removed
+        };
+      }
+
+      return updatedAssignment;
     } catch (error) {
       console.error("[API ERROR] saveAssignment:", error);
       return rejectWithValue(
@@ -186,6 +225,8 @@ export const removeEmployeeSingleProject = createAsyncThunk(
   },
 );
 
+// src/admin/store/slices/projectAssignmentSlice.js
+
 export const fetchEmployeeProjectWorkingTime = createAsyncThunk(
   "projectAssignments/fetchEmployeeProjectWorkingTime",
   async (userId, { rejectWithValue }) => {
@@ -194,14 +235,18 @@ export const fetchEmployeeProjectWorkingTime = createAsyncThunk(
         await projectService.getEmployeeProjectWorkingTime(userId);
       console.log("Working time API response:", response);
 
-      // Extract project_times from the response
+      // Extract project_times from the response - FIXED
       let projectTimes = [];
+
+      // Check the actual response structure
       if (response?.data?.project_times) {
         projectTimes = response.data.project_times;
-      } else if (Array.isArray(response?.data)) {
+      } else if (response?.data && Array.isArray(response.data)) {
         projectTimes = response.data;
       } else if (Array.isArray(response)) {
         projectTimes = response;
+      } else if (response?.project_times) {
+        projectTimes = response.project_times;
       }
 
       console.log("Extracted project times:", projectTimes);
@@ -273,25 +318,37 @@ const projectAssignmentSlice = createSlice({
         state.actionLoading = true;
         state.error = null;
       })
+      // In the extraReducers, update the saveAssignment.fulfilled case
+
       .addCase(saveAssignment.fulfilled, (state, action) => {
         state.actionLoading = false;
 
         const payload = action.payload;
         if (payload && payload.employeeId) {
+          // Check if this is a removal (empty projectIds with _remove flag)
+          if (
+            payload._remove ||
+            (payload.projectIds && payload.projectIds.length === 0)
+          ) {
+            // Remove the assignment entirely
+            state.assignments = state.assignments.filter(
+              (a) => Number(a.employeeId) !== Number(payload.employeeId),
+            );
+            return;
+          }
+
           const exists = state.assignments.some(
             (a) => Number(a.employeeId) === Number(payload.employeeId),
           );
 
-          if (payload.projectIds && payload.projectIds.length === 0) {
-            state.assignments = state.assignments.filter(
-              (a) => Number(a.employeeId) !== Number(payload.employeeId),
-            );
-          } else if (exists) {
+          if (exists) {
             state.assignments = state.assignments.map((a) =>
-              Number(a.employeeId) === Number(payload.employeeId) ? payload : a,
+              Number(a.employeeId) === Number(payload.employeeId)
+                ? { ...payload, _remove: undefined } // Remove the flag
+                : a,
             );
           } else {
-            state.assignments.unshift(payload);
+            state.assignments.unshift({ ...payload, _remove: undefined });
           }
         }
       })

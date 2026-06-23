@@ -353,26 +353,26 @@ class ProjectService {
    * GET /admin/project-assignments/{employeeId}/working-time
    */
   async getEmployeeProjectWorkingTime(userId) {
-    try {
-      console.log(
-        `[API REQUEST] GET ${BASE_PATH}/project-assignments/${userId}/working-time`,
-      );
-      const response = await apiClient.get(
-        `${BASE_PATH}/project-assignments/${userId}/working-time`,
-      );
-      console.log(
-        `[API RESPONSE] GET ${BASE_PATH}/project-assignments/${userId}/working-time | Status: ${response.status} | Data:`,
-        response.data,
-      );
-      return response.data;
-    } catch (error) {
-      console.error(
-        `[API ERROR] GET ${BASE_PATH}/project-assignments/${userId}/working-time | Error:`,
-        error,
-      );
-      throw handleError(error, "Failed to fetch employee project working time");
-    }
+  try {
+    console.log(
+      `[API REQUEST] GET ${BASE_PATH}/project-assignments/${userId}/working-time`,
+    );
+    const response = await apiClient.get(
+      `${BASE_PATH}/project-assignments/${userId}/working-time`,
+    );
+    console.log(
+      `[API RESPONSE] GET ${BASE_PATH}/project-assignments/${userId}/working-time | Status: ${response.status} | Data:`,
+      response.data,
+    );
+    return response.data;
+  } catch (error) {
+    console.error(
+      `[API ERROR] GET ${BASE_PATH}/project-assignments/${userId}/working-time | Error:`,
+      error,
+    );
+    throw handleError(error, "Failed to fetch employee project working time");
   }
+}
 }
 
 export default new ProjectService();

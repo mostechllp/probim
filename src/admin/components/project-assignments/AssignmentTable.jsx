@@ -5,6 +5,8 @@ import ProjectTags from "./ProjectTags";
 import EmptyState from "../projects/EmptyState";
 import { getPhotoUrl, getFallbackAvatar } from "../../../utils/imageHelper";
 import { fetchEmployeeProjectWorkingTime } from "../../store/slices/projectAssignmentSlice";
+import { Link } from "react-router-dom";
+import { useLocation } from "react-router-dom";
 
 /* ─── EmployeeProjectsModal ─── */
 const EmployeeProjectsModal = ({
@@ -25,9 +27,15 @@ const EmployeeProjectsModal = ({
       state.projectAssignments || { employeeWorkingTime: {}, loading: false },
   );
 
+  const { user } = useSelector((state) => state.auth);
+  const userRole = user?.type || "admin";
+  const basePath = userRole === "admin" ? "/admin" : "/employee";
+
   const [workingTimeData, setWorkingTimeData] = useState(null);
   const [isLoadingTime, setIsLoadingTime] = useState(false);
   const [hasFetched, setHasFetched] = useState(false);
+  const [selectedProject, setSelectedProject] = useState(null);
+  const [isWorkingTimeModalOpen, setIsWorkingTimeModalOpen] = useState(false);
 
   // Fetch working time when modal opens
   useEffect(() => {
@@ -143,22 +151,33 @@ const EmployeeProjectsModal = ({
       return null;
     }
 
+    // Log what we're searching for
+    console.log("Looking for projectId:", projectId);
+    console.log("Available workingTimeData:", workingTimeData);
+
     const projectTime = workingTimeData.find(
       (item) => String(item.project_id) === String(projectId),
     );
 
+    console.log("Found projectTime:", projectTime);
     return projectTime;
   };
 
-  // Format working time
+  // Update the formatWorkingTime function to handle the new structure
   const formatWorkingTime = (workingTimeObj) => {
     if (!workingTimeObj) return null;
 
-    if (workingTimeObj.working_time_formatted) {
-      return workingTimeObj.working_time_formatted;
+    // Use total_working_time_formatted if available
+    if (workingTimeObj.total_working_time_formatted) {
+      return workingTimeObj.total_working_time_formatted;
     }
 
-    const totalMinutes = workingTimeObj.working_time_minutes || 0;
+    // Fallback to calculating from minutes
+    const totalMinutes =
+      workingTimeObj.total_working_time_minutes ||
+      workingTimeObj.working_time_minutes ||
+      0;
+
     if (totalMinutes === 0) return "0 hours 0 mins";
 
     const hours = Math.floor(totalMinutes / 60);
@@ -166,7 +185,12 @@ const EmployeeProjectsModal = ({
 
     if (hours === 0) return `${minutes} mins`;
     if (minutes === 0) return `${hours} hours`;
-    return `${hours} hours ${minutes} mins`;
+    return `${hours} hours ${mins} mins`;
+  };
+
+  const handleViewWorkingTime = (project) => {
+    setSelectedProject(project);
+    setIsWorkingTimeModalOpen(true);
   };
 
   return (
@@ -256,16 +280,16 @@ const EmployeeProjectsModal = ({
                       <h4 className="text-sm font-bold text-gray-850 dark:text-gray-200 leading-snug">
                         {proj.name}
                       </h4>
-                      {/* Show working time badge */}
                       {isLoadingTime ? (
                         <span className="text-[10px] text-gray-400 flex items-center gap-1 whitespace-nowrap">
                           <i className="fas fa-spinner fa-spin"></i>
                           Loading...
                         </span>
-                      ) : timeDisplay ? (
+                      ) : workingTime ? (
                         <span className="inline-flex items-center gap-1.5 px-2.5 py-1 bg-blue-500/10 text-blue-600 dark:text-blue-400 text-[10px] font-bold rounded-full border border-blue-500/20 whitespace-nowrap">
                           <i className="fas fa-clock text-[9px]"></i>
-                          {timeDisplay}
+                          {workingTime.total_working_time_formatted ||
+                            formatWorkingTime(workingTime)}
                         </span>
                       ) : (
                         <span className="text-[10px] text-gray-400 flex items-center gap-1 whitespace-nowrap">
@@ -354,6 +378,25 @@ const EmployeeProjectsModal = ({
                             </span>
                           </div>
                         </div>
+                      </div>
+
+                      {/* View Details Button */}
+                      {/* View Details Button */}
+                      <div className="mt-4 pt-3 border-t border-gray-50 dark:border-gray-700/50 flex justify-end">
+                        <Link
+                          to={`${basePath}/project-working-hours`}
+                          state={{
+                            employeeId: userId,
+                            employeeName: employeeName,
+                            projectId: proj.id,
+                            projectName: proj.name,
+                          }}
+                          className="px-4 py-2 rounded-lg bg-indigo-500/10 hover:bg-indigo-500 text-indigo-600 hover:text-white text-xs font-bold flex items-center gap-2 transition-all duration-200 group"
+                        >
+                          <i className="fas fa-chart-bar text-xs group-hover:scale-110 transition-transform"></i>
+                          View Daily Hours
+                          <i className="fas fa-arrow-right text-[10px] group-hover:translate-x-1 transition-transform"></i>
+                        </Link>
                       </div>
                     </div>
                   </div>
