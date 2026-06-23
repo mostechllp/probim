@@ -40,7 +40,7 @@ const EMPLOYEE_ROUTE_MAP = {
   leaves: "/employee/leave-management",
   "my-leaves": "/employee/leaves",
   "wfh-requests": "/employee/wfh",
-  payroll: "/employee/payroll/add",
+  payroll: "/employee/payroll",
   roles: "/employee/roles",
   "my-tasks": "/employee/my-tasks",
   "my-profile": "/employee/profile",
