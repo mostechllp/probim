@@ -21,6 +21,10 @@ const EmployeeProjectsModal = ({
 
   const getEmployeeDetails = (empId) => {
     if (!empId) return { name: "Not Assigned", avatar: null, designation: "-" };
+    // Safety check: ensure employees is an array
+    if (!employees || !Array.isArray(employees)) {
+      return { name: "Not Assigned", avatar: null, designation: "-" };
+    }
     const emp = employees.find((e) => String(e.id) === String(empId));
     return emp ? {
       name: emp.name,
@@ -33,7 +37,9 @@ const EmployeeProjectsModal = ({
   const getInitials = (name) => (name && name !== "Not Assigned" ? name.charAt(0).toUpperCase() : "N");
 
   // Get full details for assigned projects
-  const assignedProjects = projects.filter((p) => projectIds.includes(String(p.id)));
+  const assignedProjects = projects && Array.isArray(projects) 
+    ? projects.filter((p) => projectIds.includes(String(p.id)))
+    : [];
 
   return (
     <>
@@ -105,7 +111,6 @@ const EmployeeProjectsModal = ({
             ) : (
               assignedProjects.map((proj) => {
                 const pm = getEmployeeDetails(proj.managerId);
-                const tl = getEmployeeDetails(proj.teamLeadId);
 
                 return (
                   <div
@@ -117,16 +122,16 @@ const EmployeeProjectsModal = ({
                         {proj.name}
                       </h4>
                     </div>
-                      <h4 className="text-sm font-bold text-gray-850 dark:text-gray-200">
-                        {proj.project_time}
-                      </h4>
+                    <h4 className="text-sm font-bold text-gray-850 dark:text-gray-200">
+                      {proj.project_time}
+                    </h4>
                     {proj.description && (
                       <p className="text-[11px] text-gray-550 dark:text-gray-450 leading-relaxed font-medium">
                         {proj.description}
                       </p>
                     )}
 
-                    <div className="grid grid-cols-2 gap-4 pt-4 border-t border-gray-50 dark:border-gray-700/50">
+                    <div className="pt-4 border-t border-gray-50 dark:border-gray-700/50">
                       {/* Project Manager info */}
                       <div className="space-y-2">
                         <span className="text-[8.5px] font-bold text-gray-405 dark:text-gray-500 uppercase tracking-widest block font-extrabold">PM</span>
@@ -156,36 +161,6 @@ const EmployeeProjectsModal = ({
                           </div>
                         </div>
                       </div>
-
-                      {/* Team Lead info */}
-                      <div className="space-y-2">
-                        <span className="text-[8.5px] font-bold text-gray-405 dark:text-gray-500 uppercase tracking-widest block font-extrabold">TL</span>
-                        <div className="flex items-center gap-2.5">
-                          <div className="w-7 h-7 rounded-full overflow-hidden bg-purple-500/10 flex items-center justify-center border border-gray-100 dark:border-gray-700 flex-shrink-0">
-                            {tl.avatar ? (
-                              <img
-                                src={tl.avatar}
-                                alt={tl.name}
-                                className="w-full h-full object-cover"
-                                onError={(e) => {
-                                  e.target.onerror = null;
-                                  e.target.src = getFallbackAvatar(tl.name);
-                                }}
-                              />
-                            ) : (
-                              <span className="text-[10px] font-bold text-purple-600 dark:text-purple-400">{getInitials(tl.name)}</span>
-                            )}
-                          </div>
-                          <div className="min-w-0">
-                            <span className="text-[10.5px] font-bold text-gray-700 dark:text-gray-300 truncate block max-w-[120px]" title={tl.name}>
-                              {tl.name}
-                            </span>
-                            <span className="text-[8.5px] text-gray-400 dark:text-gray-500 block truncate max-w-[120px] font-semibold">
-                              {tl.designation}
-                            </span>
-                          </div>
-                        </div>
-                      </div>
                     </div>
                   </div>
                 );
@@ -210,10 +185,10 @@ const EmployeeProjectsModal = ({
 
 /* ─── Main Table Component ─── */
 const AssignmentTable = ({
-  assignments, // Array of { employeeId, projectIds, lastUpdated }
-  employees, // List of all employees to map names/avatars
-  projects, // List of all projects for name labels
-  loading, // Loading state
+  assignments = [], // Default to empty array
+  employees = [], // Default to empty array
+  projects = [], // Default to empty array
+  loading = false, // Default to false
   onEdit, // Edit trigger callback
   onDelete, // Delete trigger callback
   onAddNew // Trigger drawer for new assignments
@@ -230,8 +205,15 @@ const AssignmentTable = ({
 
   // Map assignments to include employee information for quick searches and sorts
   const fullAssignments = useMemo(() => {
+    // Safety check: ensure assignments is an array
+    if (!assignments || !Array.isArray(assignments)) {
+      return [];
+    }
+    
     return assignments.map((assign) => {
-      const emp = employees.find((e) => Number(e.id) === Number(assign.employeeId));
+      const emp = employees && Array.isArray(employees) 
+        ? employees.find((e) => Number(e.id) === Number(assign.employeeId))
+        : undefined;
       let employeeName = emp?.name || "";
       if (!employeeName && (assign.firstName || assign.lastName)) {
         employeeName = [assign.firstName, assign.lastName].filter(Boolean).join(" ");
@@ -255,44 +237,6 @@ const AssignmentTable = ({
     });
   }, [assignments, employees]);
 
-  // Lookup function for Team Leads for assigned projects
-  const getProjectTeamLeads = (projectIds) => {
-    if (!projectIds || projectIds.length === 0) {
-      return <span className="text-gray-400 dark:text-gray-500 italic text-[11px]">No Projects Mapped</span>;
-    }
-
-    // Find unique team lead names
-    const leads = [];
-    projectIds.forEach((projId) => {
-      const proj = projects.find((p) => String(p.id) === String(projId));
-      if (proj && proj.teamLeadId) {
-        const leadEmp = employees.find((e) => String(e.id) === String(proj.teamLeadId));
-        if (leadEmp && leadEmp.name && !leads.includes(leadEmp.name)) {
-          leads.push(leadEmp.name);
-        }
-      }
-    });
-
-    if (leads.length === 0) {
-      return <span className="text-gray-450 italic text-[11px]">Not Assigned</span>;
-    }
-
-    return (
-      <div className="flex flex-wrap gap-1">
-        {leads.map((leadName, index) => (
-          <span
-            key={index}
-            className="inline-flex items-center gap-1 text-[10px] font-bold text-purple-650 bg-purple-500/10 dark:text-purple-300 dark:bg-purple-500/15 px-2 py-0.5 rounded-md max-w-[150px] truncate"
-            title={leadName}
-          >
-            <i className="fas fa-user-tie text-[8px] opacity-75"></i>
-            {leadName}
-          </span>
-        ))}
-      </div>
-    );
-  };
-
   // Handle column sorting toggle
   const handleSort = (field) => {
     if (sortField === field) {
@@ -305,6 +249,11 @@ const AssignmentTable = ({
 
   // Client side search filtering
   const filteredAssignments = useMemo(() => {
+    // Safety check: ensure fullAssignments is an array
+    if (!fullAssignments || !Array.isArray(fullAssignments)) {
+      return [];
+    }
+    
     return fullAssignments.filter((assign) => {
       const matchName = assign.employeeName.toLowerCase().includes(searchTerm.toLowerCase());
       const matchRole = assign.designation.toLowerCase().includes(searchTerm.toLowerCase());
@@ -313,7 +262,9 @@ const AssignmentTable = ({
 
       // Also match assigned projects names
       const matchProjects = assign.projectIds.some((projId) => {
-        const proj = projects.find((p) => String(p.id) === String(projId));
+        const proj = projects && Array.isArray(projects) 
+          ? projects.find((p) => String(p.id) === String(projId))
+          : undefined;
         return proj?.name.toLowerCase().includes(searchTerm.toLowerCase());
       });
 
@@ -323,6 +274,11 @@ const AssignmentTable = ({
 
   // Client side sorting
   const sortedAssignments = useMemo(() => {
+    // Safety check: ensure filteredAssignments is an array
+    if (!filteredAssignments || !Array.isArray(filteredAssignments)) {
+      return [];
+    }
+    
     const sorted = [...filteredAssignments];
     sorted.sort((a, b) => {
       let valA = a[sortField];
@@ -344,6 +300,11 @@ const AssignmentTable = ({
   const totalPages = Math.ceil(totalItems / itemsPerPage) || 1;
 
   const paginatedAssignments = useMemo(() => {
+    // Safety check: ensure sortedAssignments is an array
+    if (!sortedAssignments || !Array.isArray(sortedAssignments)) {
+      return [];
+    }
+    
     const start = (currentPage - 1) * itemsPerPage;
     return sortedAssignments.slice(start, start + itemsPerPage);
   }, [sortedAssignments, currentPage, itemsPerPage]);
@@ -440,9 +401,6 @@ const AssignmentTable = ({
               <th className="px-6 py-4 text-xs font-bold text-gray-500 dark:text-gray-400 uppercase tracking-wider select-none whitespace-nowrap">
                 Assigned {PROJECT_MODULE_NAME}s
               </th>
-              <th className="px-6 py-4 text-xs font-bold text-gray-500 dark:text-gray-400 uppercase tracking-wider select-none whitespace-nowrap">
-                Team Lead
-              </th>
               <th className="px-6 py-4 text-xs font-bold text-gray-500 dark:text-gray-400 uppercase tracking-wider select-none text-right whitespace-nowrap">
                 Actions
               </th>
@@ -472,10 +430,8 @@ const AssignmentTable = ({
                     </div>
                   </td>
                   <td className="px-6 py-4">
-                    <div className="h-6 w-20 bg-gray-200 dark:bg-gray-700 rounded-lg"></div>
-                  </td>
-                  <td className="px-6 py-4">
                     <div className="flex gap-2 justify-end">
+                      <div className="h-8 w-8 bg-gray-200 dark:bg-gray-700 rounded-full"></div>
                       <div className="h-8 w-8 bg-gray-200 dark:bg-gray-700 rounded-full"></div>
                       <div className="h-8 w-8 bg-gray-200 dark:bg-gray-700 rounded-full"></div>
                     </div>
@@ -484,7 +440,7 @@ const AssignmentTable = ({
               ))
             ) : paginatedAssignments.length === 0 ? (
               <tr>
-                <td colSpan={5} className="px-6 py-10">
+                <td colSpan={4} className="px-6 py-10">
                   <EmptyState
                     message={searchTerm ? "No Match Found" : "No Assignments Found"}
                     description={
@@ -554,11 +510,6 @@ const AssignmentTable = ({
                       projectIds={assign.projectIds}
                       projectsList={projects}
                     />
-                  </td>
-
-                  {/* Resolved Team Leads badges column */}
-                  <td className="px-6 py-4">
-                    {getProjectTeamLeads(assign.projectIds)}
                   </td>
 
                   {/* Actions Column */}
