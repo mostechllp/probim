@@ -1,6 +1,6 @@
 import { useEffect } from "react";
 import { useDispatch, useSelector } from "react-redux";
-import { Link } from "react-router-dom";
+import { Link, useLocation } from "react-router-dom";
 import { fetchEmployees } from "../store/slices/employeeSlice";
 import { fetchOrganizations } from "../store/slices/organizationSlice";
 import { fetchAttendanceRecords } from "../store/slices/attendanceSlice";
@@ -8,6 +8,7 @@ import { fetchLeaves } from "../store/slices/LeaveSlice";
 
 const Reports = () => {
   const dispatch = useDispatch();
+  const location = useLocation();
   const { organizations = [] } = useSelector(
     (state) => state.organizations || {},
   );
@@ -18,6 +19,13 @@ const Reports = () => {
   const { leaves: leaveRecords = [] } = useSelector(
     (state) => state.leaves || {},
   );
+  
+  // Get user role from auth
+  const { user } = useSelector((state) => state.auth);
+  const userRole = user?.type || 'admin';
+  
+  // Determine the base path based on user role
+  const basePath = userRole === 'admin' ? '/admin' : '/employee';
 
   useEffect(() => {
     dispatch(fetchOrganizations());
@@ -78,7 +86,7 @@ const Reports = () => {
       icon: "fas fa-users",
       iconBg: "bg-blue-100 dark:bg-blue-900/30",
       iconColor: "text-blue-600 dark:text-blue-400",
-      link: "/admin/reports/employee-details",
+      link: `${basePath}/reports/employee-details`,
       count: totalEmployees,
     },
     {
@@ -88,7 +96,7 @@ const Reports = () => {
       icon: "fas fa-fingerprint",
       iconBg: "bg-green-100 dark:bg-green-900/30",
       iconColor: "text-green-600 dark:text-green-400",
-      link: "/admin/reports/attendance-reports",
+      link: `${basePath}/reports/attendance-reports`,
       count: attendanceRecords.length,
     },
     {
@@ -98,7 +106,7 @@ const Reports = () => {
       icon: "fas fa-calendar-check",
       iconBg: "bg-purple-100 dark:bg-purple-900/30",
       iconColor: "text-purple-600 dark:text-purple-400",
-      link: "/admin/reports/leave-requests-reports",
+      link: `${basePath}/reports/leave-requests-reports`,
       count: leaveRecords.length,
     },
     {
@@ -108,7 +116,7 @@ const Reports = () => {
       icon: "fas fa-clock",
       iconBg: "bg-amber-100 dark:bg-amber-900/30",
       iconColor: "text-amber-600 dark:text-amber-400",
-      link: "/admin/reports/pending-leaves-reports",
+      link: `${basePath}/reports/pending-leaves-reports`,
       count: pendingLeaves,
       highlight: pendingLeaves > 0,
     },
@@ -119,7 +127,7 @@ const Reports = () => {
       icon: "fas fa-exclamation-triangle",
       iconBg: "bg-red-100 dark:bg-red-900/30",
       iconColor: "text-red-600 dark:text-red-400",
-      link: "/admin/reports/employee-near-expiry",
+      link: `${basePath}/reports/employee-near-expiry`,
       count: employeeNearExpiry,
       highlight: employeeNearExpiry > 0,
     },
@@ -130,7 +138,7 @@ const Reports = () => {
       icon: "fas fa-calendar-alt",
       iconBg: "bg-cyan-100 dark:bg-cyan-900/30",
       iconColor: "text-cyan-600 dark:text-cyan-400",
-      link: "/admin/reports/employee-upcoming-renewals",
+      link: `${basePath}/reports/employee-upcoming-renewals`,
       count: employeeUpcomingRenewals,
     },
     {
@@ -140,7 +148,7 @@ const Reports = () => {
       icon: "fas fa-building",
       iconBg: "bg-rose-100 dark:bg-rose-900/30",
       iconColor: "text-rose-600 dark:text-rose-400",
-      link: "/admin/reports/organization-near-expiry",
+      link: `${basePath}/reports/organization-near-expiry`,
       count: orgNearExpiry,
       highlight: orgNearExpiry > 0,
     },
@@ -151,7 +159,7 @@ const Reports = () => {
       icon: "fas fa-chart-line",
       iconBg: "bg-indigo-100 dark:bg-indigo-900/30",
       iconColor: "text-indigo-600 dark:text-indigo-400",
-      link: "/admin/reports/organization-upcoming-renewals",
+      link: `${basePath}/reports/organization-upcoming-renewals`,
       count: orgUpcomingRenewals,
     },
   ];
