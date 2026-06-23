@@ -188,7 +188,7 @@ const Departments = () => {
             <SearchBar
               value={searchTerm}
               onChange={setSearchTerm}
-              placeholder="Search by department name..."
+              placeholder="Search by department..."
             />
             <button
               onClick={() => setIsAddModalOpen(true)}

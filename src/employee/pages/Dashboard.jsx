@@ -733,9 +733,6 @@ const Dashboard = () => {
                     <th className="text-left py-3 px-4 text-[var(--muted)] font-semibold">
                       Punch Out
                     </th>
-                    <th className="text-left py-3 px-4 text-[var(--muted)] font-semibold">
-                      Hours
-                    </th>
                   </tr>
                 </thead>
                 <tbody>
@@ -771,9 +768,6 @@ const Dashboard = () => {
                             {attendance.punch_out
                               ? formatPunchTime(attendance.punch_out)
                               : "-"}
-                          </td>
-                          <td className="py-3 px-4 text-[var(--text)] font-semibold">
-                            {attendance.working_hours}
                           </td>
                         </tr>
                       );
