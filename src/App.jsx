@@ -256,9 +256,95 @@ function App() {
           <Route path="leaves" element={<EmployeeLeaves />} />
           <Route path="request-leave" element={<RequestLeave />} />
           <Route path="wfh" element={<EmployeeWFH />} />
-          <Route path="task-reports" element={<EmployeeTaskReports />} />
+          <Route path="task-reports" element={<TaskReports />} />
+          <Route path="my-tasks" element={<EmployeeTaskReports />} />
           <Route path="profile" element={<EmployeeProfile />} />
           <Route path="attendance-requests" element={<AttendanceRequests />} />
+
+          <Route path="onboarding" element={<Onboarding />} />
+          <Route path="employees" element={<Employees />} />
+          <Route path="projects" element={<Projects />} />
+          <Route path="projects/:id" element={<ProjectDetails />} />
+          <Route path="project-assignments" element={<ProjectAssignments />} />
+          <Route path="employees/add-employee" element={<AddEmployee />} />
+          <Route path="employees/onboarding" element={<Onboarding />} />
+          <Route path="employees/edit/:id" element={<EditEmployee />} />
+          <Route path="employees/:id" element={<EmployeeDetails />} />
+          <Route path="organizations" element={<Organizations />} />
+          <Route
+            path="organizations/add-organization"
+            element={<AddOrganization />}
+          />
+          <Route
+            path="organizations/edit-organization/:id"
+            element={<EditOrganization />}
+          />
+          <Route
+            path="organizations/:organizationId/companies"
+            element={<Companies />}
+          />
+          <Route
+            path="organizations/:organizationId/add-company"
+            element={<AddCompany />}
+          />
+          <Route
+            path="organizations/:organizationId/edit-company/:id"
+            element={<EditCompany />}
+          />
+          <Route path="agreements" element={<Agreements />} />
+          <Route path="agreements/add-agreement" element={<AddAgreement />} />
+          <Route path="agreements/add-document" element={<AddDocument />} />
+          <Route
+            path="agreements/edit-agreement/:id"
+            element={<EditAgreement />}
+          />
+          <Route path="attendance" element={<Attendances />} />
+          <Route path="designations" element={<Designations />} />
+          <Route path="departments" element={<Departments />} />
+          <Route path="task-reports" element={<TaskReports />} />
+          <Route path="reports" element={<Reports />} />
+          <Route
+            path="reports/employee-details"
+            element={<EmployeeDetailsReport />}
+          />
+          <Route
+            path="reports/attendance-reports"
+            element={<AttendanceReport />}
+          />
+          <Route
+            path="reports/leave-requests-reports"
+            element={<LeaveRequestReport />}
+          />
+          <Route
+            path="reports/pending-leaves-reports"
+            element={<PendingLeaveReport />}
+          />
+          <Route
+            path="reports/employee-near-expiry"
+            element={<EmployeeNearestExpiryReport />}
+          />
+          <Route
+            path="reports/employee-upcoming-renewals"
+            element={<EmployeeUpcomingRenewalReport />}
+          />
+          <Route
+            path="reports/organization-near-expiry"
+            element={<OrgNearestExpiryReport />}
+          />
+          <Route
+            path="reports/organization-upcoming-renewals"
+            element={<OrgUpcomingRenewalReport />}
+          />
+          <Route path="leave-management" element={<Leaves />} />
+          <Route path="leaves/leave-types" element={<LeaveTypeManagement />} />
+          <Route path="leaves/allocations" element={<LeaveAllocations />} />
+          <Route path="leaves/allocations/:id" element={<EditLeaveAllocation />} />
+          <Route path="payroll" element={<Payroll />} />
+          <Route path="payroll/add" element={<AddPayroll />} />
+          <Route path="wfh" element={<AdminWFH />} />
+          <Route path="settings" element={<Settings />} />
+          <Route path="roles" element={<RoleManagement />} />
+          <Route path="modules" element={<ModuleManagement />} />
         </Route>
 
         {/* Global 404 - No layout, full page */}
