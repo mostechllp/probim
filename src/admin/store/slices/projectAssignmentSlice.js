@@ -175,24 +175,6 @@ export const saveAssignment = createAsyncThunk(
   },
 );
 
-export const deleteAssignment = createAsyncThunk(
-  "projectAssignments/deleteAssignment",
-  async (employeeId, { rejectWithValue, dispatch }) => {
-    try {
-      await projectService.assignProjectsToEmployee(employeeId, []);
-
-      // After successful delete, fetch the updated assignments
-      await dispatch(fetchAssignments()).unwrap();
-
-      return Number(employeeId);
-    } catch (error) {
-      return rejectWithValue(
-        error.message || "Failed to remove project assignments",
-      );
-    }
-  },
-);
-
 export const fetchEmployeeProjects = createAsyncThunk(
   "projectAssignments/fetchEmployeeProjects",
   async (employeeId, { rejectWithValue }) => {
@@ -255,6 +237,47 @@ export const fetchEmployeeProjectWorkingTime = createAsyncThunk(
       console.error("Error fetching working time:", error);
       return rejectWithValue(
         error.message || "Failed to fetch employee project working time",
+      );
+    }
+  },
+);
+
+export const deleteAllEmployeeProjects = createAsyncThunk(
+  "projectAssignments/deleteAllEmployeeProjects",
+  async (employeeId, { rejectWithValue, dispatch }) => {
+    try {
+      // Call the new API to remove all assignments
+      await projectService.removeAllEmployeeProjects(employeeId);
+
+      // After successful deletion, fetch the updated assignments
+      await dispatch(fetchAssignments()).unwrap();
+
+      return Number(employeeId);
+    } catch (error) {
+      console.error("[API ERROR] deleteAllEmployeeProjects:", error);
+      return rejectWithValue(
+        error.message || "Failed to remove all project assignments",
+      );
+    }
+  },
+);
+
+// Update the deleteAssignment thunk to use the new API
+export const deleteAssignment = createAsyncThunk(
+  "projectAssignments/deleteAssignment",
+  async (employeeId, { rejectWithValue, dispatch }) => {
+    try {
+      // Use the new API to remove all assignments
+      await projectService.removeAllEmployeeProjects(employeeId);
+
+      // After successful delete, fetch the updated assignments
+      const updatedAssignments = await dispatch(fetchAssignments()).unwrap();
+
+      return Number(employeeId);
+    } catch (error) {
+      console.error("[API ERROR] deleteAssignment:", error);
+      return rejectWithValue(
+        error.message || "Failed to remove project assignments",
       );
     }
   },
@@ -418,6 +441,20 @@ const projectAssignmentSlice = createSlice({
       .addCase(fetchEmployeeProjectWorkingTime.rejected, (state, action) => {
         state.loading = false;
         state.error = action.payload;
+      })
+      .addCase(deleteAllEmployeeProjects.pending, (state) => {
+        state.actionLoading = true;
+        state.error = null;
+      })
+      .addCase(deleteAllEmployeeProjects.fulfilled, (state, action) => {
+        state.actionLoading = false;
+        state.assignments = state.assignments.filter(
+          (a) => Number(a.employeeId) !== Number(action.payload),
+        );
+      })
+      .addCase(deleteAllEmployeeProjects.rejected, (state, action) => {
+        state.actionLoading = false;
+        state.error = action.payload || "Failed to delete all assignments";
       });
   },
 });
