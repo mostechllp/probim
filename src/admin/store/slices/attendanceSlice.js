@@ -19,6 +19,7 @@ const extractAttendanceRecords = (response) => {
       const records = attendance.data.map((record, idx) => {
         const hasPunchOut = isValidPunch(record.punch_out);
         const punchIn = isValidPunch(record.punch_in) ? record.punch_in : "-";
+        const punchOut = hasPunchOut ? record.punch_out : null;
 
         // Derive present/absent from punch_in
         const isPresent = isValidPunch(record.punch_in);
@@ -30,6 +31,9 @@ const extractAttendanceRecords = (response) => {
 
         // ✅ FIX: Get department from the correct path
         const department = record.user?.department?.name || "-";
+
+        // Get working hours from the API response
+        const workingHours = record.working_hours || "--";
 
         return {
           id: record.userid || idx,
@@ -43,6 +47,7 @@ const extractAttendanceRecords = (response) => {
           punchOut: hasPunchOut ? record.punch_out : null,
           punch_in_raw: record.punch_in,
           punch_out_raw: record.punch_out,
+          workingHours: workingHours,
           status: isPresent ? "Present" : "Absent",
           isLate: false,
           hasPunchOut,
@@ -109,11 +114,10 @@ export const fetchAttendanceRecords = createAsyncThunk(
 
 export const uploadAttendanceFile = createAsyncThunk(
   "attendance/upload",
-  async ({ file }, { rejectWithValue }) => {  // ← remove company_id
+  async ({ file }, { rejectWithValue }) => {
     try {
       const formData = new FormData();
-      // ❌ Remove this line: formData.append("company_id", company_id);
-      formData.append("file", file);  // ← only file
+      formData.append("file", file);
 
       const response = await apiClient.post(`/admin/attendance/upload`, formData, {
         headers: { "Content-Type": "multipart/form-data" },
@@ -151,19 +155,15 @@ export const fetchUploadStatus = createAsyncThunk(
       const response = await apiClient.get(`/admin/attendance/upload-status/${id}`);
       console.log("Upload status response:", JSON.stringify(response.data, null, 2));
 
-      // API returns: { data: { id, status: "pending"|"completed"|"failed", progress, ... }, message, status: "success" }
-      // NOTE: response.data.status is the HTTP wrapper ("success") — NOT the processing status
-      // The actual processing status is inside response.data.data.status
       const processingStatus = response.data?.data?.status || "pending";
 
-      // Normalize to our internal values
       let normalizedStatus;
       if (["completed", "done", "processed"].includes(processingStatus)) {
         normalizedStatus = "completed";
       } else if (processingStatus === "failed") {
         normalizedStatus = "failed";
       } else {
-        normalizedStatus = "processing"; // "pending" and anything else = still going
+        normalizedStatus = "processing";
       }
 
       return { id, status: normalizedStatus };
@@ -210,7 +210,7 @@ const attendanceSlice = createSlice({
       punchedLate: 0,
       punchedOutToday: 0,
     },
-    uploadStatus: null,       // null | "processing" | "completed" | "failed"
+    uploadStatus: null,
     uploadStatusId: null,
     uploads: [],
     punchInToday: [],
@@ -270,13 +270,12 @@ const attendanceSlice = createSlice({
       })
       .addCase(uploadAttendanceFile.fulfilled, (state, action) => {
         state.uploadLoading = false;
-        state.uploadStatus = action.payload.status; // "processing" or "completed"
+        state.uploadStatus = action.payload.status;
         state.uploadStatusId = action.payload.id;
         state.uploads.push({
           id: action.payload.id,
           status: action.payload.status,
           fileName: action.payload.fileName,
-          company_id: action.payload.company_id,
           uploadedAt: action.payload.uploadedAt,
         });
       })
