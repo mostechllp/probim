@@ -1,6 +1,8 @@
-import React from "react";
+import React, { useState } from "react";
 
 const ProjectTags = ({ projectIds, projectsList }) => {
+  const [showAll, setShowAll] = useState(false);
+
   if (!projectIds || projectIds.length === 0) {
     return <span className="text-gray-400 italic text-xs">No projects assigned</span>;
   }
@@ -14,28 +16,53 @@ const ProjectTags = ({ projectIds, projectsList }) => {
   const displayItems = assignedProjects.slice(0, displayLimit);
   const remainingCount = assignedProjects.length - displayLimit;
 
+  const toggleShowAll = () => {
+    setShowAll(!showAll);
+  };
+
   return (
     <div className="flex flex-wrap items-center gap-1.5 justify-start max-w-md">
-      {displayItems.map((proj) => (
-        <span
-          key={proj.id}
-          className="inline-flex items-center px-2.5 py-1 text-xs font-bold leading-none text-green-700 dark:text-green-300 bg-green-500/10 dark:bg-green-500/5 rounded-full border border-green-500/10 dark:border-green-500/10 max-w-[120px] truncate"
-          title={proj.name}
-        >
-          {proj.name}
-        </span>
-      ))}
+      {showAll ? (
+        // Show all projects
+        assignedProjects.map((proj) => (
+          <span
+            key={proj.id}
+            className="inline-flex items-center px-2.5 py-1 text-xs font-bold leading-none text-green-700 dark:text-green-300 bg-green-500/10 dark:bg-green-500/5 rounded-full border border-green-500/10 dark:border-green-500/10 max-w-[120px] truncate"
+            title={proj.name}
+          >
+            {proj.name}
+          </span>
+        ))
+      ) : (
+        // Show limited projects
+        displayItems.map((proj) => (
+          <span
+            key={proj.id}
+            className="inline-flex items-center px-2.5 py-1 text-xs font-bold leading-none text-green-700 dark:text-green-300 bg-green-500/10 dark:bg-green-500/5 rounded-full border border-green-500/10 dark:border-green-500/10 max-w-[120px] truncate"
+            title={proj.name}
+          >
+            {proj.name}
+          </span>
+        ))
+      )}
 
       {remainingCount > 0 && (
-        <span
-          className="inline-flex items-center px-2 py-1 text-[10px] font-extrabold leading-none text-gray-600 dark:text-gray-400 bg-gray-100 dark:bg-gray-700/60 rounded-full border border-gray-250 dark:border-gray-600 cursor-help"
-          title={assignedProjects
-            .slice(displayLimit)
-            .map((p) => p.name)
-            .join(", ")}
+        <button
+          onClick={toggleShowAll}
+          className="inline-flex items-center px-2 py-1 text-[10px] font-extrabold leading-none text-blue-600 dark:text-blue-400 bg-blue-50 dark:bg-blue-900/20 rounded-full border border-blue-200 dark:border-blue-800/40 hover:bg-blue-100 dark:hover:bg-blue-800/30 transition-colors cursor-pointer"
+          title={showAll ? "Show less" : `Show all ${assignedProjects.length} projects`}
         >
-          +{remainingCount} more
-        </span>
+          {showAll ? (
+            <>
+              <i className="fas fa-chevron-up text-[8px] mr-1"></i>
+              Show less
+            </>
+          ) : (
+            <>
+              +{remainingCount} more
+            </>
+          )}
+        </button>
       )}
     </div>
   );

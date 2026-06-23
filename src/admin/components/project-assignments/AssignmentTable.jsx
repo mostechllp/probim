@@ -1,9 +1,10 @@
-import React, { useState, useMemo } from "react";
+import React, { useState, useMemo, useEffect } from "react";
+import { useDispatch, useSelector } from "react-redux";
 import { PROJECT_MODULE_NAME } from "../../utils/constants";
 import ProjectTags from "./ProjectTags";
 import EmptyState from "../projects/EmptyState";
 import { getPhotoUrl, getFallbackAvatar } from "../../../utils/imageHelper";
-
+import { fetchEmployeeProjectWorkingTime } from "../../store/slices/projectAssignmentSlice";
 
 /* ─── EmployeeProjectsModal ─── */
 const EmployeeProjectsModal = ({
@@ -13,33 +14,160 @@ const EmployeeProjectsModal = ({
   designation = "-",
   department = "-",
   avatar = null,
+  userId = null,
   projectIds = [],
-  projects = [],
-  employees = []
+  projectsWithDetails = [],
+  employees = [],
 }) => {
+  const dispatch = useDispatch();
+  const { employeeWorkingTime, loading: workingTimeLoading } = useSelector(
+    (state) =>
+      state.projectAssignments || { employeeWorkingTime: {}, loading: false },
+  );
+
+  const [workingTimeData, setWorkingTimeData] = useState(null);
+  const [isLoadingTime, setIsLoadingTime] = useState(false);
+  const [hasFetched, setHasFetched] = useState(false);
+
+  // Fetch working time when modal opens
+  useEffect(() => {
+    if (isOpen && userId && !hasFetched) {
+      // Check if we already have the data in Redux
+      if (employeeWorkingTime && employeeWorkingTime[userId]) {
+        console.log("Using cached working time for userId:", userId);
+        setWorkingTimeData(employeeWorkingTime[userId]);
+        setHasFetched(true);
+        return;
+      }
+
+      // Fetch working time
+      const fetchWorkingTime = async () => {
+        setIsLoadingTime(true);
+        try {
+          console.log("Fetching working time for userId:", userId);
+          const result = await dispatch(
+            fetchEmployeeProjectWorkingTime(userId),
+          ).unwrap();
+          console.log("Working time result:", result);
+          setWorkingTimeData(result.data);
+          setHasFetched(true);
+        } catch (error) {
+          console.error("Failed to fetch working time:", error);
+        } finally {
+          setIsLoadingTime(false);
+        }
+      };
+
+      fetchWorkingTime();
+    }
+  }, [isOpen, userId, hasFetched, dispatch, employeeWorkingTime]);
+
+  // Reset fetch state when modal closes
+  useEffect(() => {
+    if (!isOpen) {
+      setHasFetched(false);
+      setWorkingTimeData(null);
+    }
+  }, [isOpen]);
+
+  // Update working time data if Redux state changes
+  useEffect(() => {
+    if (userId && employeeWorkingTime && employeeWorkingTime[userId]) {
+      setWorkingTimeData(employeeWorkingTime[userId]);
+    }
+  }, [userId, employeeWorkingTime]);
+
   if (!isOpen) return null;
 
-  const getEmployeeDetails = (empId) => {
-    if (!empId) return { name: "Not Assigned", avatar: null, designation: "-" };
-    // Safety check: ensure employees is an array
-    if (!employees || !Array.isArray(employees)) {
-      return { name: "Not Assigned", avatar: null, designation: "-" };
+  // Helper to get employee name from employee object
+  const getEmployeeFullName = (emp) => {
+    if (!emp) return "Not Assigned";
+    if (emp.name) return emp.name;
+    if (emp.first_name || emp.last_name) {
+      return (
+        `${emp.first_name || ""} ${emp.last_name || ""}`.trim() ||
+        "Not Assigned"
+      );
     }
-    const emp = employees.find((e) => String(e.id) === String(empId));
-    return emp ? {
-      name: emp.name,
-      avatar: getPhotoUrl(emp.avatar),
-      designation: emp.designation
-    } : { name: "Not Assigned", avatar: null, designation: "-" };
+    if (emp.user?.username) return emp.user.username;
+    return "Not Assigned";
   };
 
+  // Helper to get employee details from various formats
+  const getEmployeeDetails = (empData) => {
+    if (!empData)
+      return { name: "Not Assigned", avatar: null, designation: "-" };
 
-  const getInitials = (name) => (name && name !== "Not Assigned" ? name.charAt(0).toUpperCase() : "N");
+    if (
+      typeof empData === "number" ||
+      (typeof empData === "string" && !isNaN(empData))
+    ) {
+      if (!employees || !Array.isArray(employees)) {
+        return { name: "Not Assigned", avatar: null, designation: "-" };
+      }
+      const emp = employees.find((e) => String(e.id) === String(empData));
+      if (!emp) return { name: "Not Assigned", avatar: null, designation: "-" };
+      return {
+        name: getEmployeeFullName(emp),
+        avatar: getPhotoUrl(emp.avatar),
+        designation: emp.designation || emp.user?.designation?.name || "-",
+      };
+    }
 
-  // Get full details for assigned projects
-  const assignedProjects = projects && Array.isArray(projects) 
-    ? projects.filter((p) => projectIds.includes(String(p.id)))
-    : [];
+    if (typeof empData === "object") {
+      return {
+        name: getEmployeeFullName(empData),
+        avatar: getPhotoUrl(empData.avatar),
+        designation: empData.designation || "-",
+      };
+    }
+
+    return { name: "Not Assigned", avatar: null, designation: "-" };
+  };
+
+  const getInitials = (name) =>
+    name && name !== "Not Assigned" ? name.charAt(0).toUpperCase() : "N";
+
+  // Get full details for assigned projects from projectsWithDetails
+  const assignedProjects =
+    projectsWithDetails && Array.isArray(projectsWithDetails)
+      ? projectsWithDetails.filter((p) => projectIds.includes(String(p.id)))
+      : [];
+
+  console.log("Assigned projects:", assignedProjects);
+  console.log("Working time data:", workingTimeData);
+
+  // Helper to get working time for a project
+  const getProjectWorkingTime = (projectId) => {
+    if (!workingTimeData || !Array.isArray(workingTimeData)) {
+      return null;
+    }
+
+    const projectTime = workingTimeData.find(
+      (item) => String(item.project_id) === String(projectId),
+    );
+
+    return projectTime;
+  };
+
+  // Format working time
+  const formatWorkingTime = (workingTimeObj) => {
+    if (!workingTimeObj) return null;
+
+    if (workingTimeObj.working_time_formatted) {
+      return workingTimeObj.working_time_formatted;
+    }
+
+    const totalMinutes = workingTimeObj.working_time_minutes || 0;
+    if (totalMinutes === 0) return "0 hours 0 mins";
+
+    const hours = Math.floor(totalMinutes / 60);
+    const minutes = totalMinutes % 60;
+
+    if (hours === 0) return `${minutes} mins`;
+    if (minutes === 0) return `${hours} hours`;
+    return `${hours} hours ${minutes} mins`;
+  };
 
   return (
     <>
@@ -53,10 +181,9 @@ const EmployeeProjectsModal = ({
           onClick={(e) => e.stopPropagation()}
           className="bg-white dark:bg-gray-800 border border-gray-100 dark:border-gray-700/60 shadow-2xl rounded-3xl w-full max-w-lg md:max-w-xl max-h-[85vh] flex flex-col overflow-hidden modal-card"
         >
-          {/* Header area with elegant gradient, details and close button */}
+          {/* Header area */}
           <div className="relative p-6 border-b border-gray-100 dark:border-gray-700/60 flex justify-between items-start bg-gradient-to-br from-green-500/5 via-emerald-500/5 to-transparent flex-shrink-0">
             <div className="flex gap-4 items-center">
-              {/* Profile Avatar / Initials in Header */}
               <div className="w-14 h-14 rounded-2xl overflow-hidden bg-gradient-to-br from-green-500/20 to-teal-500/20 dark:from-green-500/10 dark:to-teal-500/10 flex items-center justify-center border border-green-500/20 flex-shrink-0 shadow-sm">
                 {avatar ? (
                   <img
@@ -103,14 +230,22 @@ const EmployeeProjectsModal = ({
                 <div className="w-16 h-16 bg-green-500/10 rounded-3xl flex items-center justify-center mb-4 text-green-500 animate-pulse">
                   <i className="fas fa-folder-open text-2xl"></i>
                 </div>
-                <h4 className="text-sm font-bold text-gray-700 dark:text-gray-300">No Assigned Projects</h4>
+                <h4 className="text-sm font-bold text-gray-700 dark:text-gray-300">
+                  No Assigned Projects
+                </h4>
                 <p className="text-xs text-gray-400 mt-2 max-w-[240px] leading-relaxed">
-                  This employee is not currently mapped to any project directories.
+                  This employee is not currently mapped to any project
+                  directories.
                 </p>
               </div>
             ) : (
               assignedProjects.map((proj) => {
-                const pm = getEmployeeDetails(proj.managerId);
+                const pm = getEmployeeDetails(proj.project_manager);
+                const tl = getEmployeeDetails(proj.team_lead);
+                const workingTime = getProjectWorkingTime(proj.id);
+                const timeDisplay = workingTime
+                  ? formatWorkingTime(workingTime)
+                  : null;
 
                 return (
                   <div
@@ -121,10 +256,31 @@ const EmployeeProjectsModal = ({
                       <h4 className="text-sm font-bold text-gray-850 dark:text-gray-200 leading-snug">
                         {proj.name}
                       </h4>
+                      {/* Show working time badge */}
+                      {isLoadingTime ? (
+                        <span className="text-[10px] text-gray-400 flex items-center gap-1 whitespace-nowrap">
+                          <i className="fas fa-spinner fa-spin"></i>
+                          Loading...
+                        </span>
+                      ) : timeDisplay ? (
+                        <span className="inline-flex items-center gap-1.5 px-2.5 py-1 bg-blue-500/10 text-blue-600 dark:text-blue-400 text-[10px] font-bold rounded-full border border-blue-500/20 whitespace-nowrap">
+                          <i className="fas fa-clock text-[9px]"></i>
+                          {timeDisplay}
+                        </span>
+                      ) : (
+                        <span className="text-[10px] text-gray-400 flex items-center gap-1 whitespace-nowrap">
+                          <i className="fas fa-clock"></i>
+                          No time tracked
+                        </span>
+                      )}
                     </div>
-                    <h4 className="text-sm font-bold text-gray-850 dark:text-gray-200">
-                      {proj.project_time}
-                    </h4>
+
+                    {proj.project_time && (
+                      <h4 className="text-sm font-bold text-gray-850 dark:text-gray-200">
+                        {proj.project_time}
+                      </h4>
+                    )}
+
                     {proj.description && (
                       <p className="text-[11px] text-gray-550 dark:text-gray-450 leading-relaxed font-medium">
                         {proj.description}
@@ -134,7 +290,9 @@ const EmployeeProjectsModal = ({
                     <div className="pt-4 border-t border-gray-50 dark:border-gray-700/50">
                       {/* Project Manager info */}
                       <div className="space-y-2">
-                        <span className="text-[8.5px] font-bold text-gray-405 dark:text-gray-500 uppercase tracking-widest block font-extrabold">PM</span>
+                        <span className="text-[8.5px] font-bold text-gray-405 dark:text-gray-500 uppercase tracking-widest block font-extrabold">
+                          PM
+                        </span>
                         <div className="flex items-center gap-2.5">
                           <div className="w-7 h-7 rounded-full overflow-hidden bg-blue-500/10 flex items-center justify-center border border-gray-100 dark:border-gray-700 flex-shrink-0">
                             {pm.avatar ? (
@@ -148,15 +306,51 @@ const EmployeeProjectsModal = ({
                                 }}
                               />
                             ) : (
-                              <span className="text-[10px] font-bold text-blue-600 dark:text-blue-400">{getInitials(pm.name)}</span>
+                              <span className="text-[10px] font-bold text-blue-600 dark:text-blue-400">
+                                {getInitials(pm.name)}
+                              </span>
                             )}
                           </div>
-                          <div className="min-w-0">
-                            <span className="text-[10.5px] font-bold text-gray-700 dark:text-gray-300 truncate block max-w-[120px]" title={pm.name}>
+                          <div className="min-w-0 flex-1">
+                            <span
+                              className="text-[10.5px] font-bold text-gray-700 dark:text-gray-300 block truncate"
+                              title={pm.name}
+                            >
                               {pm.name}
                             </span>
-                            <span className="text-[8.5px] text-gray-400 dark:text-gray-500 block truncate max-w-[120px] font-semibold">
-                              {pm.designation}
+                          </div>
+                        </div>
+                      </div>
+
+                      {/* Team Lead info */}
+                      <div className="space-y-2 mt-3">
+                        <span className="text-[8.5px] font-bold text-gray-405 dark:text-gray-500 uppercase tracking-widest block font-extrabold">
+                          TL
+                        </span>
+                        <div className="flex items-center gap-2.5">
+                          <div className="w-7 h-7 rounded-full overflow-hidden bg-purple-500/10 flex items-center justify-center border border-gray-100 dark:border-gray-700 flex-shrink-0">
+                            {tl.avatar ? (
+                              <img
+                                src={tl.avatar}
+                                alt={tl.name}
+                                className="w-full h-full object-cover"
+                                onError={(e) => {
+                                  e.target.onerror = null;
+                                  e.target.src = getFallbackAvatar(tl.name);
+                                }}
+                              />
+                            ) : (
+                              <span className="text-[10px] font-bold text-purple-600 dark:text-purple-400">
+                                {getInitials(tl.name)}
+                              </span>
+                            )}
+                          </div>
+                          <div className="min-w-0 flex-1">
+                            <span
+                              className="text-[10.5px] font-bold text-gray-700 dark:text-gray-300 block truncate"
+                              title={tl.name}
+                            >
+                              {tl.name}
                             </span>
                           </div>
                         </div>
@@ -168,7 +362,7 @@ const EmployeeProjectsModal = ({
             )}
           </div>
 
-          {/* Modal Footer with elegant Close button */}
+          {/* Modal Footer */}
           <div className="px-6 py-4 bg-gray-55 dark:bg-gray-800/60 border-t border-gray-100 dark:border-gray-750 flex items-center justify-end flex-shrink-0">
             <button
               onClick={onClose}
@@ -191,7 +385,7 @@ const AssignmentTable = ({
   loading = false, // Default to false
   onEdit, // Edit trigger callback
   onDelete, // Delete trigger callback
-  onAddNew // Trigger drawer for new assignments
+  onAddNew, // Trigger drawer for new assignments
 }) => {
   const [searchTerm, setSearchTerm] = useState("");
   const [sortField, setSortField] = useState("employeeName");
@@ -209,17 +403,22 @@ const AssignmentTable = ({
     if (!assignments || !Array.isArray(assignments)) {
       return [];
     }
-    
+
     return assignments.map((assign) => {
-      const emp = employees && Array.isArray(employees) 
-        ? employees.find((e) => Number(e.id) === Number(assign.employeeId))
-        : undefined;
+      const emp =
+        employees && Array.isArray(employees)
+          ? employees.find((e) => Number(e.id) === Number(assign.employeeId))
+          : undefined;
       let employeeName = emp?.name || "";
       if (!employeeName && (assign.firstName || assign.lastName)) {
-        employeeName = [assign.firstName, assign.lastName].filter(Boolean).join(" ");
+        employeeName = [assign.firstName, assign.lastName]
+          .filter(Boolean)
+          .join(" ");
       }
       if (!employeeName && emp) {
-        employeeName = [emp.first_name, emp.last_name].filter(Boolean).join(" ");
+        employeeName = [emp.first_name, emp.last_name]
+          .filter(Boolean)
+          .join(" ");
       }
       if (!employeeName && emp) {
         employeeName = emp.user?.username || `Employee #${emp.id}`;
@@ -229,13 +428,41 @@ const AssignmentTable = ({
       return {
         ...assign,
         employeeName,
+        userId: assign.userId || emp?.user_id || emp?.user?.id || null, // Store userId
         designation: emp?.designation || emp?.user?.designation?.name || "-",
         department: emp?.department || emp?.user?.department?.name || "-",
         avatar: getPhotoUrl(emp?.avatar) || null,
-        projectCount: assign.projectIds?.length || 0
+        projectCount: assign.projectIds?.length || 0,
       };
     });
   }, [assignments, employees]);
+
+  // Build projects with manager/team lead data from assignments
+  const projectsWithDetails = useMemo(() => {
+    if (!assignments || !Array.isArray(assignments)) return [];
+
+    // Collect all unique projects from all assignments with their manager/team lead data
+    const projectMap = {};
+    assignments.forEach((assign) => {
+      if (
+        assign.raw &&
+        assign.raw.projects &&
+        Array.isArray(assign.raw.projects)
+      ) {
+        assign.raw.projects.forEach((proj) => {
+          if (proj && proj.id) {
+            projectMap[proj.id] = {
+              ...proj,
+              // Ensure manager and team lead data is preserved
+              project_manager: proj.project_manager || null,
+              team_lead: proj.team_lead || null,
+            };
+          }
+        });
+      }
+    });
+    return Object.values(projectMap);
+  }, [assignments]);
 
   // Handle column sorting toggle
   const handleSort = (field) => {
@@ -253,18 +480,25 @@ const AssignmentTable = ({
     if (!fullAssignments || !Array.isArray(fullAssignments)) {
       return [];
     }
-    
+
     return fullAssignments.filter((assign) => {
-      const matchName = assign.employeeName.toLowerCase().includes(searchTerm.toLowerCase());
-      const matchRole = assign.designation.toLowerCase().includes(searchTerm.toLowerCase());
-      const matchDept = assign.department.toLowerCase().includes(searchTerm.toLowerCase());
+      const matchName = assign.employeeName
+        .toLowerCase()
+        .includes(searchTerm.toLowerCase());
+      const matchRole = assign.designation
+        .toLowerCase()
+        .includes(searchTerm.toLowerCase());
+      const matchDept = assign.department
+        .toLowerCase()
+        .includes(searchTerm.toLowerCase());
       const matchEmpId = String(assign.employeeId).includes(searchTerm);
 
       // Also match assigned projects names
       const matchProjects = assign.projectIds.some((projId) => {
-        const proj = projects && Array.isArray(projects) 
-          ? projects.find((p) => String(p.id) === String(projId))
-          : undefined;
+        const proj =
+          projects && Array.isArray(projects)
+            ? projects.find((p) => String(p.id) === String(projId))
+            : undefined;
         return proj?.name.toLowerCase().includes(searchTerm.toLowerCase());
       });
 
@@ -278,7 +512,7 @@ const AssignmentTable = ({
     if (!filteredAssignments || !Array.isArray(filteredAssignments)) {
       return [];
     }
-    
+
     const sorted = [...filteredAssignments];
     sorted.sort((a, b) => {
       let valA = a[sortField];
@@ -304,7 +538,7 @@ const AssignmentTable = ({
     if (!sortedAssignments || !Array.isArray(sortedAssignments)) {
       return [];
     }
-    
+
     const start = (currentPage - 1) * itemsPerPage;
     return sortedAssignments.slice(start, start + itemsPerPage);
   }, [sortedAssignments, currentPage, itemsPerPage]);
@@ -331,7 +565,6 @@ const AssignmentTable = ({
 
   return (
     <div className="bg-white dark:bg-gray-800 rounded-2xl border border-gray-100 dark:border-gray-700/60 shadow-soft overflow-hidden animate-fadeIn">
-
       {/* Utilities Control Bar */}
       <div className="p-5 border-b border-gray-100 dark:border-gray-700 flex flex-col md:flex-row md:items-center justify-between gap-4">
         {/* Page entry selector */}
@@ -386,7 +619,9 @@ const AssignmentTable = ({
               >
                 Employee Name{" "}
                 {sortField === "employeeName" && (
-                  <i className={`fas fa-sort-amount-${sortDirection === "asc" ? "up" : "down"} text-green-500 ml-1.5`}></i>
+                  <i
+                    className={`fas fa-sort-amount-${sortDirection === "asc" ? "up" : "down"} text-green-500 ml-1.5`}
+                  ></i>
                 )}
               </th>
               <th
@@ -395,7 +630,9 @@ const AssignmentTable = ({
               >
                 Employee ID{" "}
                 {sortField === "employeeId" && (
-                  <i className={`fas fa-sort-amount-${sortDirection === "asc" ? "up" : "down"} text-green-500 ml-1.5`}></i>
+                  <i
+                    className={`fas fa-sort-amount-${sortDirection === "asc" ? "up" : "down"} text-green-500 ml-1.5`}
+                  ></i>
                 )}
               </th>
               <th className="px-6 py-4 text-xs font-bold text-gray-500 dark:text-gray-400 uppercase tracking-wider select-none whitespace-nowrap">
@@ -442,7 +679,9 @@ const AssignmentTable = ({
               <tr>
                 <td colSpan={4} className="px-6 py-10">
                   <EmptyState
-                    message={searchTerm ? "No Match Found" : "No Assignments Found"}
+                    message={
+                      searchTerm ? "No Match Found" : "No Assignments Found"
+                    }
                     description={
                       searchTerm
                         ? "We couldn't find any assignments matching your search queries. Try modifying your filter term."
@@ -474,7 +713,9 @@ const AssignmentTable = ({
                             className="w-full h-full object-cover"
                             onError={(e) => {
                               e.target.onerror = null;
-                              e.target.src = getFallbackAvatar(assign.employeeName);
+                              e.target.src = getFallbackAvatar(
+                                assign.employeeName,
+                              );
                             }}
                           />
                         ) : (
@@ -554,9 +795,19 @@ const AssignmentTable = ({
       {!loading && totalItems > 0 && (
         <div className="px-6 py-4 bg-gray-55 dark:bg-gray-800/40 border-t border-gray-150 dark:border-gray-700/60 flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4">
           <span className="text-xs text-gray-500 dark:text-gray-400 font-semibold text-center sm:text-left">
-            Showing <span className="font-bold text-gray-700 dark:text-gray-200">{Math.min((currentPage - 1) * itemsPerPage + 1, totalItems)}</span> to{" "}
-            <span className="font-bold text-gray-700 dark:text-gray-200">{Math.min(currentPage * itemsPerPage, totalItems)}</span> of{" "}
-            <span className="font-bold text-gray-700 dark:text-gray-200">{totalItems}</span> entries
+            Showing{" "}
+            <span className="font-bold text-gray-700 dark:text-gray-200">
+              {Math.min((currentPage - 1) * itemsPerPage + 1, totalItems)}
+            </span>{" "}
+            to{" "}
+            <span className="font-bold text-gray-700 dark:text-gray-200">
+              {Math.min(currentPage * itemsPerPage, totalItems)}
+            </span>{" "}
+            of{" "}
+            <span className="font-bold text-gray-700 dark:text-gray-200">
+              {totalItems}
+            </span>{" "}
+            entries
           </span>
 
           <div className="flex justify-center gap-1.5">
@@ -574,10 +825,11 @@ const AssignmentTable = ({
                 <button
                   key={pageNo}
                   onClick={() => handlePageChange(pageNo)}
-                  className={`w-8 h-8 rounded-lg text-xs font-bold flex items-center justify-center transition-all select-none ${currentPage === pageNo
-                    ? "bg-green-500 text-white shadow-soft"
-                    : "border border-gray-200 dark:border-gray-650 text-gray-600 dark:text-gray-400 bg-transparent hover:bg-green-500/10 hover:border-green-500 hover:text-green-500"
-                    }`}
+                  className={`w-8 h-8 rounded-lg text-xs font-bold flex items-center justify-center transition-all select-none ${
+                    currentPage === pageNo
+                      ? "bg-green-500 text-white shadow-soft"
+                      : "border border-gray-200 dark:border-gray-650 text-gray-600 dark:text-gray-400 bg-transparent hover:bg-green-500/10 hover:border-green-500 hover:text-green-500"
+                  }`}
                 >
                   {pageNo}
                 </button>
@@ -606,8 +858,9 @@ const AssignmentTable = ({
         designation={drawerEmployee?.designation || ""}
         department={drawerEmployee?.department || ""}
         avatar={drawerEmployee?.avatar || null}
+        userId={drawerEmployee?.userId || null}
         projectIds={drawerEmployee?.projectIds || []}
-        projects={projects}
+        projectsWithDetails={projectsWithDetails}
         employees={employees}
       />
     </div>
