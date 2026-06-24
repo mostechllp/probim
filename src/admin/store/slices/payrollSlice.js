@@ -1,7 +1,81 @@
+// src/admin/store/slices/payrollSlice.js
+
 import { createSlice, createAsyncThunk } from "@reduxjs/toolkit";
 import apiClient from "../../../utils/apiClient";
 
-// Fetch draft payroll for an employee
+// ─── Fetch Payroll List ────────────────────────────────────────────────
+export const fetchPayrolls = createAsyncThunk(
+  "payroll/fetchPayrolls",
+  async (params = {}, { rejectWithValue }) => {
+    try {
+      const response = await apiClient.get("/admin/payrolls", { params });
+      console.log("Fetch payrolls response:", response.data);
+      return response.data;
+    } catch (error) {
+      console.error("Fetch payrolls error:", error);
+      return rejectWithValue(
+        error.response?.data?.message || "Failed to fetch payrolls"
+      );
+    }
+  }
+);
+
+// ─── Delete Payroll ────────────────────────────────────────────────────
+export const deletePayroll = createAsyncThunk(
+  "payroll/deletePayroll",
+  async (id, { rejectWithValue }) => {
+    try {
+      const response = await apiClient.delete(`/admin/payrolls/${id}`);
+      console.log("Delete payroll response:", response.data);
+      
+      if (response.data?.success === true) {
+        return id;
+      }
+      return rejectWithValue(response.data?.message || "Failed to delete payroll");
+    } catch (error) {
+      console.error("Delete payroll error:", error);
+      return rejectWithValue(
+        error.response?.data?.message || "Failed to delete payroll"
+      );
+    }
+  }
+);
+
+// ─── Generate Payslip ──────────────────────────────────────────────────
+export const generatePayslip = createAsyncThunk(
+  "payroll/generatePayslip",
+  async (id, { rejectWithValue }) => {
+    try {
+      const response = await apiClient.get(`/admin/payrolls/${id}/payslip`);
+      console.log("Generate payslip response:", response.data);
+      return response.data;
+    } catch (error) {
+      console.error("Generate payslip error:", error);
+      return rejectWithValue(
+        error.response?.data?.message || "Failed to generate payslip"
+      );
+    }
+  }
+);
+
+// ─── Fetch Payroll by ID ──────────────────────────────────────────────
+export const fetchPayrollById = createAsyncThunk(
+  "payroll/fetchPayrollById",
+  async (id, { rejectWithValue }) => {
+    try {
+      const response = await apiClient.get(`/admin/payrolls/${id}`);
+      console.log("Fetch payroll by ID response:", response.data);
+      return response.data?.data || response.data;
+    } catch (error) {
+      console.error("Fetch payroll by ID error:", error);
+      return rejectWithValue(
+        error.response?.data?.message || "Failed to fetch payroll"
+      );
+    }
+  }
+);
+
+// ─── Fetch Draft Payroll ──────────────────────────────────────────────
 export const fetchDraftPayroll = createAsyncThunk(
   "payroll/fetchDraft",
   async (userId, { rejectWithValue }) => {
@@ -22,7 +96,7 @@ export const fetchDraftPayroll = createAsyncThunk(
   }
 );
 
-// Save step data (for each tab/step in the payroll form)
+// ─── Save Payroll Step ────────────────────────────────────────────────
 export const savePayrollStep = createAsyncThunk(
   "payroll/saveStep",
   async ({ userId, step, stepData }, { rejectWithValue }) => {
@@ -52,7 +126,7 @@ export const savePayrollStep = createAsyncThunk(
   }
 );
 
-// Submit and finalize the payroll
+// ─── Submit Payroll ────────────────────────────────────────────────────
 export const submitPayroll = createAsyncThunk(
   "payroll/submit",
   async (userId, { rejectWithValue }) => {
@@ -75,7 +149,7 @@ export const submitPayroll = createAsyncThunk(
   }
 );
 
-// Get history of completed payrolls
+// ─── Fetch Payroll History ────────────────────────────────────────────
 export const fetchPayrollHistory = createAsyncThunk(
   "payroll/fetchHistory",
   async (params = {}, { rejectWithValue }) => {
@@ -96,47 +170,7 @@ export const fetchPayrollHistory = createAsyncThunk(
   }
 );
 
-// Get specific payroll by ID (if you need this)
-export const fetchPayrollById = createAsyncThunk(
-  "payroll/fetchById",
-  async (id, { rejectWithValue }) => {
-    try {
-      const response = await apiClient.get(`/admin/payroll/${id}`);
-      console.log("Fetch payroll by ID response:", response.data);
-      
-      if (response.data?.success === true) {
-        return response.data.data;
-      }
-      return rejectWithValue(response.data?.message || "Failed to fetch payroll");
-    } catch (error) {
-      return rejectWithValue(
-        error.response?.data?.message || "Failed to fetch payroll"
-      );
-    }
-  }
-);
-
-// Delete payroll (if needed)
-export const deletePayroll = createAsyncThunk(
-  "payroll/delete",
-  async (id, { rejectWithValue }) => {
-    try {
-      const response = await apiClient.delete(`/admin/payroll/${id}`);
-      console.log("Delete payroll response:", response.data);
-      
-      if (response.data?.success === true) {
-        return id;
-      }
-      return rejectWithValue(response.data?.message || "Failed to delete payroll");
-    } catch (error) {
-      return rejectWithValue(
-        error.response?.data?.message || "Failed to delete payroll"
-      );
-    }
-  }
-);
-
-// Save entire payroll as draft (if you need a bulk save)
+// ─── Save Draft Payroll ────────────────────────────────────────────────
 export const saveDraftPayroll = createAsyncThunk(
   "payroll/saveDraft",
   async (payrollData, { rejectWithValue }) => {
@@ -149,6 +183,7 @@ export const saveDraftPayroll = createAsyncThunk(
       }
       return rejectWithValue(response.data?.message || "Failed to save draft");
     } catch (error) {
+      console.error("Save draft payroll error:", error);
       return rejectWithValue(
         error.response?.data?.message || "Failed to save draft"
       );
@@ -156,7 +191,79 @@ export const saveDraftPayroll = createAsyncThunk(
   }
 );
 
+// ─── Get Payroll Stats ────────────────────────────────────────────────
+export const fetchPayrollStats = createAsyncThunk(
+  "payroll/fetchStats",
+  async (params = {}, { rejectWithValue }) => {
+    try {
+      const response = await apiClient.get("/admin/payrolls/stats", { params });
+      console.log("Fetch payroll stats response:", response.data);
+      return response.data?.data || response.data;
+    } catch (error) {
+      console.error("Fetch payroll stats error:", error);
+      return rejectWithValue(
+        error.response?.data?.message || "Failed to fetch payroll stats"
+      );
+    }
+  }
+);
+
+// ─── Update Payroll Status ─────────────────────────────────────────────
+export const updatePayrollStatus = createAsyncThunk(
+  "payroll/updateStatus",
+  async ({ id, status }, { rejectWithValue }) => {
+    try {
+      const response = await apiClient.patch(`/admin/payrolls/${id}/status`, {
+        status
+      });
+      console.log("Update payroll status response:", response.data);
+      return response.data;
+    } catch (error) {
+      console.error("Update payroll status error:", error);
+      return rejectWithValue(
+        error.response?.data?.message || "Failed to update payroll status"
+      );
+    }
+  }
+);
+
+// ─── Export Payroll Data ───────────────────────────────────────────────
+export const exportPayrolls = createAsyncThunk(
+  "payroll/export",
+  async (params = {}, { rejectWithValue }) => {
+    try {
+      const response = await apiClient.get("/admin/payrolls/export", {
+        params,
+        responseType: 'blob'
+      });
+      return response.data;
+    } catch (error) {
+      console.error("Export payrolls error:", error);
+      return rejectWithValue(
+        error.response?.data?.message || "Failed to export payrolls"
+      );
+    }
+  }
+);
+
 const initialState = {
+  // List state
+  payrolls: [],
+  totalCount: 0,
+  currentPage: 1,
+  lastPage: 1,
+  perPage: 15,
+  
+  // Stats
+  stats: {
+    totalPayrolls: 0,
+    totalAmount: 0,
+    paidCount: 0,
+    pendingCount: 0,
+    draftCount: 0,
+    failedCount: 0,
+  },
+  
   // Draft payroll data
   draftData: null,
   
@@ -195,6 +302,7 @@ const initialState = {
   
   // Loading & error states
   loading: false,
+  actionLoading: false,
   saving: false,
   error: null,
   
@@ -248,7 +356,7 @@ const payrollSlice = createSlice({
     // Set history filters
     setHistoryFilters: (state, action) => {
       state.historyFilters = { ...state.historyFilters, ...action.payload };
-      state.historyPagination.currentPage = 1; // Reset to first page on filter change
+      state.historyPagination.currentPage = 1;
     },
     
     // Set history pagination
@@ -289,11 +397,85 @@ const payrollSlice = createSlice({
     setCurrentPayroll: (state, action) => {
       state.currentPayroll = action.payload;
     },
+    
+    // Clear payroll list
+    clearPayrollList: (state) => {
+      state.payrolls = [];
+      state.totalCount = 0;
+    },
   },
   
   extraReducers: (builder) => {
     builder
-      // Fetch Draft Payroll
+      // ─── Fetch Payrolls ────────────────────────────────────────────────
+      .addCase(fetchPayrolls.pending, (state) => {
+        state.loading = true;
+        state.error = null;
+      })
+      .addCase(fetchPayrolls.fulfilled, (state, action) => {
+        state.loading = false;
+        const data = action.payload?.data || action.payload || {};
+        state.payrolls = data.payrolls || data.data || [];
+        state.totalCount = data.total || state.payrolls.length;
+        state.currentPage = data.current_page || 1;
+        state.lastPage = data.last_page || 1;
+        state.perPage = data.per_page || 15;
+        if (data.stats) {
+          state.stats = data.stats;
+        }
+      })
+      .addCase(fetchPayrolls.rejected, (state, action) => {
+        state.loading = false;
+        state.error = action.payload;
+      })
+
+      // ─── Delete Payroll ────────────────────────────────────────────────
+      .addCase(deletePayroll.pending, (state) => {
+        state.actionLoading = true;
+        state.error = null;
+      })
+      .addCase(deletePayroll.fulfilled, (state, action) => {
+        state.actionLoading = false;
+        state.payrolls = state.payrolls.filter(p => p.id !== action.payload);
+        state.totalCount = state.payrolls.length;
+        state.successMessage = "Payroll deleted successfully";
+      })
+      .addCase(deletePayroll.rejected, (state, action) => {
+        state.actionLoading = false;
+        state.error = action.payload;
+      })
+
+      // ─── Generate Payslip ──────────────────────────────────────────────
+      .addCase(generatePayslip.pending, (state) => {
+        state.actionLoading = true;
+        state.error = null;
+      })
+      .addCase(generatePayslip.fulfilled, (state) => {
+        state.actionLoading = false;
+        state.successMessage = "Payslip generated successfully";
+      })
+      .addCase(generatePayslip.rejected, (state, action) => {
+        state.actionLoading = false;
+        state.error = action.payload;
+      })
+
+      // ─── Fetch Payroll Stats ───────────────────────────────────────────
+      .addCase(fetchPayrollStats.fulfilled, (state, action) => {
+        state.stats = action.payload || state.stats;
+      })
+
+      // ─── Update Payroll Status ─────────────────────────────────────────
+      .addCase(updatePayrollStatus.fulfilled, (state, action) => {
+        const updated = action.payload?.data || action.payload;
+        if (updated?.id) {
+          const index = state.payrolls.findIndex(p => p.id === updated.id);
+          if (index !== -1) {
+            state.payrolls[index] = { ...state.payrolls[index], ...updated };
+          }
+        }
+      })
+
+      // ─── Fetch Draft Payroll ───────────────────────────────────────────
       .addCase(fetchDraftPayroll.pending, (state) => {
         state.loading = true;
         state.error = null;
@@ -301,7 +483,6 @@ const payrollSlice = createSlice({
       .addCase(fetchDraftPayroll.fulfilled, (state, action) => {
         state.loading = false;
         state.draftData = action.payload;
-        // If draft has step data, populate it
         if (action.payload?.step_data) {
           state.stepData = action.payload.step_data;
         }
@@ -311,7 +492,7 @@ const payrollSlice = createSlice({
         state.error = action.payload;
       })
       
-      // Save Step
+      // ─── Save Step ─────────────────────────────────────────────────────
       .addCase(savePayrollStep.pending, (state) => {
         state.isStepSaving = true;
         state.error = null;
@@ -330,7 +511,7 @@ const payrollSlice = createSlice({
         state.error = action.payload;
       })
       
-      // Submit Payroll
+      // ─── Submit Payroll ────────────────────────────────────────────────
       .addCase(submitPayroll.pending, (state) => {
         state.isSubmitting = true;
         state.error = null;
@@ -339,7 +520,6 @@ const payrollSlice = createSlice({
         state.isSubmitting = false;
         state.submittedPayroll = action.payload;
         state.successMessage = "Payroll submitted successfully! Payslip has been generated and emailed.";
-        // Clear step data after successful submission
         state.stepData = {
           1: {},
           2: {},
@@ -355,19 +535,19 @@ const payrollSlice = createSlice({
         state.error = action.payload;
       })
       
-      // Fetch History
+      // ─── Fetch History ──────────────────────────────────────────────────
       .addCase(fetchPayrollHistory.pending, (state) => {
         state.historyLoading = true;
         state.error = null;
       })
       .addCase(fetchPayrollHistory.fulfilled, (state, action) => {
         state.historyLoading = false;
-        state.history = action.payload;
-        // If pagination data is provided
-        if (action.payload?.pagination) {
-          state.historyPagination.total = action.payload.pagination.total;
-          state.historyPagination.currentPage = action.payload.pagination.current_page;
-          state.historyPagination.perPage = action.payload.pagination.per_page;
+        const data = action.payload?.data || action.payload || [];
+        state.history = data.history || data || [];
+        if (data.pagination) {
+          state.historyPagination.total = data.pagination.total;
+          state.historyPagination.currentPage = data.pagination.current_page;
+          state.historyPagination.perPage = data.pagination.per_page;
         }
       })
       .addCase(fetchPayrollHistory.rejected, (state, action) => {
@@ -375,7 +555,7 @@ const payrollSlice = createSlice({
         state.error = action.payload;
       })
       
-      // Fetch Payroll by ID
+      // ─── Fetch Payroll by ID ───────────────────────────────────────────
       .addCase(fetchPayrollById.pending, (state) => {
         state.loading = true;
         state.error = null;
@@ -389,22 +569,7 @@ const payrollSlice = createSlice({
         state.error = action.payload;
       })
       
-      // Delete Payroll
-      .addCase(deletePayroll.pending, (state) => {
-        state.loading = true;
-        state.error = null;
-      })
-      .addCase(deletePayroll.fulfilled, (state, action) => {
-        state.loading = false;
-        state.history = state.history.filter(p => p.id !== action.payload);
-        state.successMessage = "Payroll deleted successfully";
-      })
-      .addCase(deletePayroll.rejected, (state, action) => {
-        state.loading = false;
-        state.error = action.payload;
-      })
-      
-      // Save Draft Payroll
+      // ─── Save Draft ────────────────────────────────────────────────────
       .addCase(saveDraftPayroll.pending, (state) => {
         state.saving = true;
         state.error = null;
@@ -421,7 +586,7 @@ const payrollSlice = createSlice({
   },
 });
 
-// Export actions
+// ─── Export Actions ──────────────────────────────────────────────────
 export const {
   setCurrentStep,
   updateStepData,
@@ -434,25 +599,42 @@ export const {
   clearPayrollSuccess,
   resetPayrollState,
   setCurrentPayroll,
+  clearPayrollList,
 } = payrollSlice.actions;
 
-// Export selectors
+// ─── Export Selectors ────────────────────────────────────────────────
 export const selectPayrollState = (state) => state.payroll;
+export const selectPayrolls = (state) => state.payroll.payrolls;
+export const selectPayrollStats = (state) => state.payroll.stats;
+export const selectPayrollLoading = (state) => state.payroll.loading;
+export const selectPayrollActionLoading = (state) => state.payroll.actionLoading;
+export const selectPayrollTotalCount = (state) => state.payroll.totalCount;
+export const selectPayrollCurrentPage = (state) => state.payroll.currentPage;
+export const selectPayrollLastPage = (state) => state.payroll.lastPage;
+export const selectPayrollPerPage = (state) => state.payroll.perPage;
+export const selectPayrollError = (state) => state.payroll.error;
+export const selectPayrollSuccess = (state) => state.payroll.successMessage;
+
+// Step selectors
 export const selectCurrentStep = (state) => state.payroll.currentStep;
 export const selectStepData = (state) => state.payroll.stepData;
 export const selectStepDataByStep = (step) => (state) => state.payroll.stepData[step];
-export const selectDraftData = (state) => state.payroll.draftData;
-export const selectPayrollHistory = (state) => state.payroll.history;
-export const selectPayrollHistoryPagination = (state) => state.payroll.historyPagination;
-export const selectPayrollHistoryFilters = (state) => state.payroll.historyFilters;
-export const selectCurrentPayroll = (state) => state.payroll.currentPayroll;
-export const selectSubmittedPayroll = (state) => state.payroll.submittedPayroll;
-export const selectPayrollLoading = (state) => state.payroll.loading;
-export const selectPayrollSaving = (state) => state.payroll.saving;
-export const selectPayrollIsSubmitting = (state) => state.payroll.isSubmitting;
-export const selectPayrollError = (state) => state.payroll.error;
-export const selectPayrollSuccess = (state) => state.payroll.successMessage;
 export const selectCompletedSteps = (state) => state.payroll.completedSteps;
 export const selectIsStepCompleted = (step) => (state) => state.payroll.completedSteps.includes(step);
+
+// Draft selectors
+export const selectDraftData = (state) => state.payroll.draftData;
+export const selectPayrollSaving = (state) => state.payroll.saving;
+export const selectPayrollIsSubmitting = (state) => state.payroll.isSubmitting;
+
+// History selectors
+export const selectPayrollHistory = (state) => state.payroll.history;
+export const selectPayrollHistoryLoading = (state) => state.payroll.historyLoading;
+export const selectPayrollHistoryPagination = (state) => state.payroll.historyPagination;
+export const selectPayrollHistoryFilters = (state) => state.payroll.historyFilters;
+
+// Current payroll selectors
+export const selectCurrentPayroll = (state) => state.payroll.currentPayroll;
+export const selectSubmittedPayroll = (state) => state.payroll.submittedPayroll;
 
 export default payrollSlice.reducer;
