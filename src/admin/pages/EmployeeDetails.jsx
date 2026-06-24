@@ -27,6 +27,7 @@ import {
   FiTrash2,
   FiPlus,
   FiX,
+  FiPackage,
 } from "react-icons/fi";
 import { FaIdCard, FaVenusMars, FaPassport } from "react-icons/fa";
 import { fetchOrganizations } from "../store/slices/organizationSlice";
@@ -41,13 +42,16 @@ const EmployeeDetails = () => {
   const { id } = useParams();
   const [loading, setLoading] = useState(true);
   const [activeTab, setActiveTab] = useState("basic");
-  const [editingSalaryComponent, setEditingSalaryComponent] = useState(null);
+  const [editingComponent, setEditingComponent] = useState(null);
   const [editingBankDetail, setEditingBankDetail] = useState(null);
+  const [editingPackage, setEditingPackage] = useState(null);
   const [showAddComponent, setShowAddComponent] = useState(false);
   const [showAddBank, setShowAddBank] = useState(false);
+  const [showAddPackage, setShowAddPackage] = useState(false);
   const [newComponent, setNewComponent] = useState({
     component_name: "",
     value: "",
+    package_id: null,
   });
   const [newBank, setNewBank] = useState({
     bank_country: "India",
@@ -67,7 +71,7 @@ const EmployeeDetails = () => {
 
   const [confirmModal, setConfirmModal] = useState({
     isOpen: false,
-    type: null, // 'salary' or 'bank'
+    type: null,
     id: null,
     title: "",
     message: "",
@@ -111,18 +115,43 @@ const EmployeeDetails = () => {
     }
   };
 
-  const handleDeleteSalaryComponentClick = (componentId, componentName) => {
+  // ─── Package Helpers ──────────────────────────────────────────────────
+  const getEmployeePackages = () => {
+  // The API returns 'salary_packages' not 'packages'
+  return currentEmployee.salary_packages || currentEmployee.packages || [];
+};
+
+  const getPackageTotal = (pkg) => {
+  if (!pkg || !pkg.salary_components) return 0;
+  return pkg.salary_components.reduce(
+    (sum, comp) => sum + parseFloat(comp.value || 0),
+    0
+  );
+};
+  // ─── Delete Handlers ──────────────────────────────────────────────────
+  const handleDeleteComponentClick = (componentId, componentName, packageId) => {
     setConfirmModal({
       isOpen: true,
-      type: "salary",
+      type: "component",
       id: componentId,
+      packageId: packageId,
       title: "Delete Salary Component",
       message: `Are you sure you want to delete "${componentName}"? This action cannot be undone.`,
       loading: false,
     });
   };
 
-  // Bank Detail Delete - Open confirmation modal
+  const handleDeletePackageClick = (packageId, packageName) => {
+    setConfirmModal({
+      isOpen: true,
+      type: "package",
+      id: packageId,
+      title: "Delete Salary Package",
+      message: `Are you sure you want to delete "${packageName}" package? This action cannot be undone.`,
+      loading: false,
+    });
+  };
+
   const handleDeleteBankDetailClick = (bankId, bankName) => {
     setConfirmModal({
       isOpen: true,
@@ -134,20 +163,20 @@ const EmployeeDetails = () => {
     });
   };
 
-  // Actual delete execution
+  // ─── Execute Delete ──────────────────────────────────────────────────
   const executeDelete = async () => {
-    const { type, id } = confirmModal;
+    const { type, id, packageId } = confirmModal;
 
     setConfirmModal((prev) => ({ ...prev, loading: true }));
 
     try {
-      if (type === "salary") {
+      if (type === "component") {
         const response = await apiClient.delete(
           `/admin/salary-components/${id}`,
         );
         if (response.data.status === "success") {
           showToast("Salary component deleted successfully", "success");
-          fetchEmployeeData(); // Refresh data
+          fetchEmployeeData();
           setConfirmModal({
             isOpen: false,
             type: null,
@@ -163,11 +192,33 @@ const EmployeeDetails = () => {
           );
           setConfirmModal((prev) => ({ ...prev, loading: false }));
         }
+      } else if (type === "package") {
+        const response = await apiClient.delete(
+          `/admin/salary-packages/${id}`,
+        );
+        if (response.data.status === "success") {
+          showToast("Salary package deleted successfully", "success");
+          fetchEmployeeData();
+          setConfirmModal({
+            isOpen: false,
+            type: null,
+            id: null,
+            title: "",
+            message: "",
+            loading: false,
+          });
+        } else {
+          showToast(
+            response.data.message || "Failed to delete salary package",
+            "error",
+          );
+          setConfirmModal((prev) => ({ ...prev, loading: false }));
+        }
       } else if (type === "bank") {
         const response = await apiClient.delete(`/admin/bank-details/${id}`);
         if (response.data.status === "success") {
           showToast("Bank details deleted successfully", "success");
-          fetchEmployeeData(); // Refresh data
+          fetchEmployeeData();
           setConfirmModal({
             isOpen: false,
             type: null,
@@ -191,7 +242,6 @@ const EmployeeDetails = () => {
     }
   };
 
-  // Close modal
   const closeConfirmModal = () => {
     setConfirmModal({
       isOpen: false,
@@ -203,20 +253,21 @@ const EmployeeDetails = () => {
     });
   };
 
-  // Salary Component CRUD Operations
-  const handleUpdateSalaryComponent = async (componentId, updatedData) => {
+  // ─── Salary Component CRUD ──────────────────────────────────────────
+  const handleUpdateComponent = async (componentId, updatedData, packageId) => {
     try {
       const response = await apiClient.put(
         `/admin/salary-components/${componentId}`,
         {
           component_name: updatedData.component_name,
           value: updatedData.value,
+          package_id: packageId,
         },
       );
       if (response.data.status === "success") {
         showToast("Salary component updated successfully", "success");
-        setEditingSalaryComponent(null);
-        fetchEmployeeData(); // Refresh data
+        setEditingComponent(null);
+        fetchEmployeeData();
       } else {
         showToast(
           response.data.message || "Failed to update salary component",
@@ -232,66 +283,29 @@ const EmployeeDetails = () => {
     }
   };
 
-  const handleAddSalaryComponent = async () => {
+  const handleAddComponent = async () => {
     if (!newComponent.component_name || !newComponent.value) {
       showToast("Please fill in all fields", "error");
       return;
     }
 
+    if (!newComponent.package_id) {
+      showToast("Please select a package", "error");
+      return;
+    }
+
     try {
-      // First, get the current salary components
-      const currentComponents = currentEmployee.salary_components || [];
-
-      // Add the new component
-      const updatedComponents = [
-        ...currentComponents,
-        {
-          component_name: newComponent.component_name,
-          value: parseFloat(newComponent.value).toFixed(2),
-        },
-      ];
-
-      // Calculate totals
-      const totalSalary = updatedComponents.reduce(
-        (sum, comp) => sum + parseFloat(comp.value),
-        0,
-      );
-
-      // Find basic salary component (or use first component as basic)
-      const basicComponent = updatedComponents.find((comp) =>
-        comp.component_name.toLowerCase().includes("basic"),
-      );
-
-      const basicSalary = basicComponent
-        ? basicComponent.value
-        : updatedComponents[0]?.value || "0";
-      const otherAllowance = updatedComponents
-        .filter((comp) => !comp.component_name.toLowerCase().includes("basic"))
-        .reduce((sum, comp) => sum + parseFloat(comp.value), 0);
-
-      // Prepare full salary payload for onboarding endpoint
-      const payload = {
-        user_id: currentEmployee.user_id || currentEmployee.user?.id,
-        basic_salary: basicSalary.toString(),
-        other_allowance: otherAllowance.toString(),
-        total_salary: totalSalary.toString(),
-        payment_cycle: currentEmployee.payment_cycle || "Monthly",
-        currency: currentEmployee.currency || "AED",
-        salary_components: updatedComponents,
-      };
-
-      console.log("Submitting salary update:", payload);
-
-      const response = await apiClient.post(
-        "/admin/employees/onboard/salary",
-        payload,
-      );
+      const response = await apiClient.post("/admin/salary-components", {
+        package_id: newComponent.package_id,
+        component_name: newComponent.component_name,
+        value: parseFloat(newComponent.value).toFixed(2),
+      });
 
       if (response.data.status === "success") {
         showToast("Salary component added successfully", "success");
         setShowAddComponent(false);
-        setNewComponent({ component_name: "", value: "" });
-        fetchEmployeeData(); // Refresh data
+        setNewComponent({ component_name: "", value: "", package_id: null });
+        fetchEmployeeData();
       } else {
         showToast(
           response.data.message || "Failed to add salary component",
@@ -307,15 +321,20 @@ const EmployeeDetails = () => {
     }
   };
 
-  // Add new bank
-  // Add new bank - Preserve existing banks
+  // ─── Package CRUD ────────────────────────────────────────────────────
+  const handleAddPackage = async () => {
+    // This would open a modal to add a new package
+    // For now, we'll show a toast
+    showToast("Package management coming soon", "info");
+  };
+
+  // ─── Bank CRUD ──────────────────────────────────────────────────────
   const handleAddBankDetail = async () => {
     if (!newBank.bank_name || !newBank.account_number) {
       showToast("Please fill in all required fields", "error");
       return;
     }
 
-    // Validate based on country
     if (newBank.bank_country === "India" && !newBank.ifsc_code) {
       showToast("IFSC Code is required for Indian bank accounts", "error");
       return;
@@ -326,40 +345,22 @@ const EmployeeDetails = () => {
     }
 
     try {
-      // Get existing bank details
       const existingBanks = currentEmployee.bank_details || [];
-
-      // Format the new bank
       const newBankFormatted = {
         bank_country: newBank.bank_country,
         bank_name: newBank.bank_name,
         account_number: newBank.account_number,
         ifsc_code: newBank.bank_country === "India" ? newBank.ifsc_code : null,
-        branch_name:
-          newBank.bank_country === "India" ? newBank.branch_name : null,
-        iban_number:
-          newBank.bank_country === "UAE" ? newBank.iban_number : null,
+        branch_name: newBank.bank_country === "India" ? newBank.branch_name : null,
+        iban_number: newBank.bank_country === "UAE" ? newBank.iban_number : null,
         swift_code: newBank.bank_country === "UAE" ? newBank.swift_code : null,
       };
 
-      // Combine existing banks with the new bank
       const allBanks = [...existingBanks, newBankFormatted];
-
-      // Prepare payload with ALL bank details (existing + new)
       const payload = {
         user_id: currentEmployee.user_id || currentEmployee.user?.id,
-        bank_details: allBanks.map((bank) => ({
-          bank_country: bank.bank_country,
-          bank_name: bank.bank_name,
-          account_number: bank.account_number,
-          ifsc_code: bank.ifsc_code || null,
-          branch_name: bank.branch_name || null,
-          iban_number: bank.iban_number || null,
-          swift_code: bank.swift_code || null,
-        })),
+        bank_details: allBanks,
       };
-
-      console.log("Adding new bank while preserving existing ones:", payload);
 
       const response = await apiClient.post(
         "/admin/employees/onboard/banks",
@@ -378,7 +379,7 @@ const EmployeeDetails = () => {
           iban_number: "",
           swift_code: "",
         });
-        fetchEmployeeData(); // Refresh data
+        fetchEmployeeData();
       } else {
         showToast(
           response.data.message || "Failed to add bank details",
@@ -394,7 +395,6 @@ const EmployeeDetails = () => {
     }
   };
 
-  // Update existing bank - Use bank-details PUT endpoint
   const handleUpdateBankDetail = async (bankId, updatedData) => {
     try {
       const response = await apiClient.put(
@@ -405,7 +405,7 @@ const EmployeeDetails = () => {
       if (response.data.status === "success") {
         showToast("Bank details updated successfully", "success");
         setEditingBankDetail(null);
-        fetchEmployeeData(); // Refresh data
+        fetchEmployeeData();
       } else {
         showToast(
           response.data.message || "Failed to update bank details",
@@ -421,6 +421,7 @@ const EmployeeDetails = () => {
     }
   };
 
+  // ─── Document Helpers ────────────────────────────────────────────────
   const getDocumentUrl = (documentPath) => {
     if (!documentPath) return null;
     const baseUrl = import.meta.env.VITE_API_URL?.replace("/api", "") || "";
@@ -540,7 +541,6 @@ const EmployeeDetails = () => {
     }
   };
 
-  // Check if employee is skilled
   const isSkilled = () => {
     return (
       currentEmployee?.is_skilled === 1 || currentEmployee?.is_skilled === true
@@ -976,21 +976,214 @@ const EmployeeDetails = () => {
             {/* Salary & Bank Details Tab */}
             {activeTab === "salary" && (
               <div>
-                {/* Salary Information Section */}
+                {/* ─── Salary Packages Section ────────────────────────────────── */}
                 <div className="flex justify-between items-center mb-4">
                   <h3 className="text-lg font-semibold text-gray-800 flex items-center gap-2">
-                    <FiDollarSign className="text-green-500" /> Salary
-                    Information
+                    <FiPackage className="text-green-500" /> Salary Packages
                   </h3>
-                  <button
-                    onClick={() => setShowAddComponent(true)}
-                    className="px-3 py-1.5 bg-green-500 text-white rounded-lg text-sm hover:bg-green-600 transition-colors flex items-center gap-1"
-                  >
-                    <FiPlus size={14} /> Add Component
-                  </button>
+                  <div className="flex gap-2">
+                    <button
+                      onClick={() => setShowAddComponent(true)}
+                      className="px-3 py-1.5 bg-green-500 text-white rounded-lg text-sm hover:bg-green-600 transition-colors flex items-center gap-1"
+                    >
+                      <FiPlus size={14} /> Add Component
+                    </button>
+                    <button
+                      onClick={handleAddPackage}
+                      className="px-3 py-1.5 bg-blue-500 text-white rounded-lg text-sm hover:bg-blue-600 transition-colors flex items-center gap-1"
+                    >
+                      <FiPlus size={14} /> Add Package
+                    </button>
+                  </div>
                 </div>
 
-                {/* Add Salary Component Modal */}
+                {/* Salary Packages */}
+                {getEmployeePackages().length > 0 ? (
+                  <div className="space-y-4 mb-6">
+                    {getEmployeePackages().map((pkg, index) => {
+                      const total = getPackageTotal(pkg);
+                      return (
+                        <div
+                          key={pkg.id || index}
+                          className="border border-gray-200 rounded-xl overflow-hidden"
+                        >
+                          <div className="bg-gray-50 px-6 py-3 border-b border-gray-200 flex justify-between items-center">
+                            <div className="flex items-center gap-3">
+                              <FiPackage className="text-green-500" />
+                              <h4 className="font-semibold text-gray-800">
+                                {pkg.name || `Package ${index + 1}`}
+                              </h4>
+                              <span className="px-2 py-1 bg-blue-100 text-blue-700 rounded-full text-xs">
+                                {pkg.currency || "AED"}
+                              </span>
+                              <span className={`px-2 py-1 rounded-full text-xs ${
+                                pkg.is_active
+                                  ? "bg-green-100 text-green-700"
+                                  : "bg-gray-100 text-gray-500"
+                              }`}>
+                                {pkg.is_active ? "Active" : "Inactive"}
+                              </span>
+                            </div>
+                            <div className="flex items-center gap-2">
+                              <button
+                                onClick={() => setEditingPackage(pkg.id)}
+                                className="text-blue-600 hover:text-blue-800"
+                                title="Edit Package"
+                              >
+                                <FiEdit size={16} />
+                              </button>
+                              <button
+                                onClick={() =>
+                                  handleDeletePackageClick(pkg.id, pkg.name)
+                                }
+                                className="text-red-600 hover:text-red-800"
+                                title="Delete Package"
+                              >
+                                <FiTrash2 size={16} />
+                              </button>
+                            </div>
+                          </div>
+                          <div className="p-4">
+                            <div className="overflow-x-auto">
+                              <table className="min-w-full divide-y divide-gray-200">
+                                <thead className="bg-gray-50">
+                                  <tr>
+                                    <th className="px-4 py-2 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
+                                      Component Name
+                                    </th>
+                                    <th className="px-4 py-2 text-right text-xs font-medium text-gray-500 uppercase tracking-wider">
+                                      Amount ({pkg.currency || "AED"})
+                                    </th>
+                                    <th className="px-4 py-2 text-center text-xs font-medium text-gray-500 uppercase tracking-wider">
+                                      Actions
+                                    </th>
+                                  </tr>
+                                </thead>
+                                <tbody className="bg-white divide-y divide-gray-200">
+                                  {pkg.salary_components && pkg.salary_components.length > 0 ? (
+                                    <>
+                                      {pkg.salary_components.map((comp, compIdx) => (
+                                        <tr key={comp.id || compIdx} className="hover:bg-gray-50">
+                                          <td className="px-4 py-2 whitespace-nowrap text-sm font-medium text-gray-900">
+                                            {editingComponent === comp.id ? (
+                                              <input
+                                                type="text"
+                                                defaultValue={comp.component_name}
+                                                className="px-2 py-1 border border-gray-300 rounded"
+                                                id={`comp-name-${comp.id}`}
+                                              />
+                                            ) : (
+                                              comp.component_name
+                                            )}
+                                          </td>
+                                          <td className="px-4 py-2 whitespace-nowrap text-sm text-gray-900 text-right">
+                                            {editingComponent === comp.id ? (
+                                              <input
+                                                type="number"
+                                                step="0.01"
+                                                defaultValue={comp.value}
+                                                className="px-2 py-1 border border-gray-300 rounded text-right"
+                                                id={`comp-value-${comp.id}`}
+                                              />
+                                            ) : (
+                                              parseFloat(comp.value).toLocaleString(undefined, {
+                                                minimumFractionDigits: 2,
+                                                maximumFractionDigits: 2,
+                                              })
+                                            )}
+                                          </td>
+                                          <td className="px-4 py-2 whitespace-nowrap text-center">
+                                            {editingComponent === comp.id ? (
+                                              <div className="flex items-center justify-center gap-2">
+                                                <button
+                                                  onClick={() => {
+                                                    const newName = document.getElementById(`comp-name-${comp.id}`).value;
+                                                    const newValue = document.getElementById(`comp-value-${comp.id}`).value;
+                                                    handleUpdateComponent(
+                                                      comp.id,
+                                                      {
+                                                        component_name: newName,
+                                                        value: newValue,
+                                                      },
+                                                      pkg.id
+                                                    );
+                                                  }}
+                                                  className="text-green-600 hover:text-green-800"
+                                                  title="Save"
+                                                >
+                                                  <FiSave size={16} />
+                                                </button>
+                                                <button
+                                                  onClick={() => setEditingComponent(null)}
+                                                  className="text-gray-500 hover:text-gray-700"
+                                                  title="Cancel"
+                                                >
+                                                  <FiX size={16} />
+                                                </button>
+                                              </div>
+                                            ) : (
+                                              <div className="flex items-center justify-center gap-2">
+                                                <button
+                                                  onClick={() => setEditingComponent(comp.id)}
+                                                  className="text-blue-600 hover:text-blue-800"
+                                                  title="Edit"
+                                                >
+                                                  <FiEdit size={16} />
+                                                </button>
+                                                <button
+                                                  onClick={() =>
+                                                    handleDeleteComponentClick(
+                                                      comp.id,
+                                                      comp.component_name,
+                                                      pkg.id
+                                                    )
+                                                  }
+                                                  className="text-red-600 hover:text-red-800"
+                                                  title="Delete"
+                                                >
+                                                  <FiTrash2 size={16} />
+                                                </button>
+                                              </div>
+                                            )}
+                                          </td>
+                                        </tr>
+                                      ))}
+                                      <tr className="bg-gray-50 font-bold">
+                                        <td className="px-4 py-2 whitespace-nowrap text-sm font-bold text-gray-900">
+                                          Package Total
+                                        </td>
+                                        <td className="px-4 py-2 whitespace-nowrap text-sm font-bold text-green-600 text-right">
+                                          {pkg.currency || "AED"} {total.toLocaleString(undefined, {
+                                            minimumFractionDigits: 2,
+                                            maximumFractionDigits: 2,
+                                          })}
+                                        </td>
+                                        <td></td>
+                                      </tr>
+                                    </>
+                                  ) : (
+                                    <tr>
+                                      <td colSpan="3" className="px-4 py-4 text-center text-gray-500">
+                                        No salary components in this package
+                                      </td>
+                                    </tr>
+                                  )}
+                                </tbody>
+                              </table>
+                            </div>
+                          </div>
+                        </div>
+                      );
+                    })}
+                  </div>
+                ) : (
+                  <div className="text-center py-8 bg-gray-50 rounded-xl border border-gray-200 mb-6">
+                    <FiPackage className="text-4xl text-gray-400 mx-auto mb-2" />
+                    <p className="text-gray-500">No salary packages configured</p>
+                  </div>
+                )}
+
+                {/* ─── Add Component Modal ────────────────────────────────────── */}
                 {showAddComponent && (
                   <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50 p-4">
                     <div className="bg-white rounded-xl max-w-md w-full p-6">
@@ -1006,32 +1199,65 @@ const EmployeeDetails = () => {
                         </button>
                       </div>
                       <div className="space-y-4">
-                        <input
-                          type="text"
-                          placeholder="Component Name (e.g., Basic Salary)"
-                          value={newComponent.component_name}
-                          onChange={(e) =>
-                            setNewComponent({
-                              ...newComponent,
-                              component_name: e.target.value,
-                            })
-                          }
-                          className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-green-500 focus:border-green-500"
-                        />
-                        <input
-                          type="number"
-                          placeholder="Amount"
-                          value={newComponent.value}
-                          onChange={(e) =>
-                            setNewComponent({
-                              ...newComponent,
-                              value: e.target.value,
-                            })
-                          }
-                          className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-green-500 focus:border-green-500"
-                        />
+                        <div>
+                          <label className="block text-sm font-medium text-gray-700 mb-1">
+                            Package
+                          </label>
+                          <select
+                            value={newComponent.package_id || ""}
+                            onChange={(e) =>
+                              setNewComponent({
+                                ...newComponent,
+                                package_id: e.target.value,
+                              })
+                            }
+                            className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-green-500 focus:border-green-500"
+                          >
+                            <option value="">Select a package</option>
+                            {getEmployeePackages().map((pkg) => (
+                              <option key={pkg.id} value={pkg.id}>
+                                {pkg.name} ({pkg.currency || "AED"})
+                              </option>
+                            ))}
+                          </select>
+                        </div>
+                        <div>
+                          <label className="block text-sm font-medium text-gray-700 mb-1">
+                            Component Name
+                          </label>
+                          <input
+                            type="text"
+                            placeholder="e.g., Basic Salary"
+                            value={newComponent.component_name}
+                            onChange={(e) =>
+                              setNewComponent({
+                                ...newComponent,
+                                component_name: e.target.value,
+                              })
+                            }
+                            className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-green-500 focus:border-green-500"
+                          />
+                        </div>
+                        <div>
+                          <label className="block text-sm font-medium text-gray-700 mb-1">
+                            Amount
+                          </label>
+                          <input
+                            type="number"
+                            step="0.01"
+                            placeholder="Enter amount"
+                            value={newComponent.value}
+                            onChange={(e) =>
+                              setNewComponent({
+                                ...newComponent,
+                                value: e.target.value,
+                              })
+                            }
+                            className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-green-500 focus:border-green-500"
+                          />
+                        </div>
                         <button
-                          onClick={handleAddSalaryComponent}
+                          onClick={handleAddComponent}
                           className="w-full bg-green-500 text-white py-2 rounded-lg hover:bg-green-600 transition-colors"
                         >
                           Add Component
@@ -1041,202 +1267,8 @@ const EmployeeDetails = () => {
                   </div>
                 )}
 
-                {/* Salary Summary Cards */}
-                <div className="grid grid-cols-1 sm:grid-cols-3 gap-4 mb-6">
-                  <div className="bg-gradient-to-br from-green-50 to-emerald-50 rounded-xl p-4 border border-green-100">
-                    <p className="text-xs text-gray-500 uppercase tracking-wide">
-                      Currency
-                    </p>
-                    <p className="text-2xl font-bold text-green-600 mt-1">
-                      {currentEmployee.currency || "AED"}
-                    </p>
-                  </div>
-                  <div className="bg-gradient-to-br from-blue-50 to-indigo-50 rounded-xl p-4 border border-blue-100">
-                    <p className="text-xs text-gray-500 uppercase tracking-wide">
-                      Payment Cycle
-                    </p>
-                    <p className="text-2xl font-bold text-blue-600 mt-1">
-                      {currentEmployee.payment_cycle || "Monthly"}
-                    </p>
-                  </div>
-                  <div className="bg-gradient-to-br from-purple-50 to-pink-50 rounded-xl p-4 border border-purple-100">
-                    <p className="text-xs text-gray-500 uppercase tracking-wide">
-                      Total Salary
-                    </p>
-                    <p className="text-2xl font-bold text-purple-600 mt-1">
-                      {currentEmployee.currency || "AED"}{" "}
-                      {currentEmployee.salary_components
-                        ?.reduce((sum, comp) => sum + parseFloat(comp.value), 0)
-                        .toLocaleString() || "0"}
-                    </p>
-                  </div>
-                </div>
-
-                {/* Salary Components Table */}
-                <div className="mb-8">
-                  <h4 className="text-md font-semibold text-gray-700 mb-3 flex items-center gap-2">
-                    <FiDollarSign className="text-green-500" /> Salary
-                    Components
-                  </h4>
-                  <div className="overflow-x-auto">
-                    <table className="min-w-full divide-y divide-gray-200">
-                      <thead className="bg-gray-50">
-                        <tr>
-                          <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
-                            Component Name
-                          </th>
-                          <th className="px-6 py-3 text-right text-xs font-medium text-gray-500 uppercase tracking-wider">
-                            Amount ({currentEmployee.currency || "AED"})
-                          </th>
-                          <th className="px-6 py-3 text-center text-xs font-medium text-gray-500 uppercase tracking-wider">
-                            Actions
-                          </th>
-                        </tr>
-                      </thead>
-                      <tbody className="bg-white divide-y divide-gray-200">
-                        {currentEmployee.salary_components &&
-                        currentEmployee.salary_components.length > 0 ? (
-                          <>
-                            {currentEmployee.salary_components.map(
-                              (component, index) => (
-                                <tr
-                                  key={component.id || index}
-                                  className="hover:bg-gray-50"
-                                >
-                                  <td className="px-6 py-4 whitespace-nowrap text-sm font-medium text-gray-900">
-                                    {editingSalaryComponent === component.id ? (
-                                      <input
-                                        type="text"
-                                        defaultValue={component.component_name}
-                                        className="px-2 py-1 border border-gray-300 rounded"
-                                        id={`comp-name-${component.id}`}
-                                      />
-                                    ) : (
-                                      component.component_name
-                                    )}
-                                  </td>
-                                  <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-900 text-right">
-                                    {editingSalaryComponent === component.id ? (
-                                      <input
-                                        type="number"
-                                        step="0.01"
-                                        defaultValue={component.value}
-                                        className="px-2 py-1 border border-gray-300 rounded text-right"
-                                        id={`comp-value-${component.id}`}
-                                      />
-                                    ) : (
-                                      parseFloat(
-                                        component.value,
-                                      ).toLocaleString(undefined, {
-                                        minimumFractionDigits: 2,
-                                        maximumFractionDigits: 2,
-                                      })
-                                    )}
-                                  </td>
-                                  <td className="px-6 py-4 whitespace-nowrap text-center">
-                                    {editingSalaryComponent === component.id ? (
-                                      <div className="flex items-center justify-center gap-2">
-                                        <button
-                                          onClick={() => {
-                                            const newName =
-                                              document.getElementById(
-                                                `comp-name-${component.id}`,
-                                              ).value;
-                                            const newValue =
-                                              document.getElementById(
-                                                `comp-value-${component.id}`,
-                                              ).value;
-                                            handleUpdateSalaryComponent(
-                                              component.id,
-                                              {
-                                                component_name: newName,
-                                                value: newValue,
-                                              },
-                                            );
-                                          }}
-                                          className="text-green-600 hover:text-green-800"
-                                          title="Save"
-                                        >
-                                          <FiSave size={16} />
-                                        </button>
-                                        <button
-                                          onClick={() =>
-                                            setEditingSalaryComponent(null)
-                                          }
-                                          className="text-gray-500 hover:text-gray-700"
-                                          title="Cancel"
-                                        >
-                                          <FiX size={16} />
-                                        </button>
-                                      </div>
-                                    ) : (
-                                      <div className="flex items-center justify-center gap-2">
-                                        <button
-                                          onClick={() =>
-                                            setEditingSalaryComponent(
-                                              component.id,
-                                            )
-                                          }
-                                          className="text-blue-600 hover:text-blue-800"
-                                          title="Edit"
-                                        >
-                                          <FiEdit size={16} />
-                                        </button>
-                                        <button
-                                          onClick={() =>
-                                            handleDeleteSalaryComponentClick(
-                                              component.id,
-                                              component.component_name,
-                                            )
-                                          }
-                                          className="text-red-600 hover:text-red-800"
-                                          title="Delete"
-                                        >
-                                          <FiTrash2 size={16} />
-                                        </button>
-                                      </div>
-                                    )}
-                                  </td>
-                                </tr>
-                              ),
-                            )}
-                            {/* Total Row */}
-                            <tr className="bg-gray-50 font-bold">
-                              <td className="px-6 py-4 whitespace-nowrap text-sm font-bold text-gray-900">
-                                Total Monthly Salary
-                              </td>
-                              <td className="px-6 py-4 whitespace-nowrap text-sm font-bold text-green-600 text-right">
-                                {currentEmployee.currency || "AED"}{" "}
-                                {currentEmployee.salary_components
-                                  .reduce(
-                                    (sum, comp) => sum + parseFloat(comp.value),
-                                    0,
-                                  )
-                                  .toLocaleString(undefined, {
-                                    minimumFractionDigits: 2,
-                                    maximumFractionDigits: 2,
-                                  })}
-                              </td>
-                              <td></td>
-                            </tr>
-                          </>
-                        ) : (
-                          <tr>
-                            <td
-                              colSpan="3"
-                              className="px-6 py-8 text-center text-gray-500"
-                            >
-                              No salary components found
-                            </td>
-                          </tr>
-                        )}
-                      </tbody>
-                    </table>
-                  </div>
-                </div>
-
-                {/* Bank Details Section */}
-                <div className="flex justify-between items-center mb-4">
+                {/* ─── Bank Details Section ───────────────────────────────────── */}
+                <div className="flex justify-between items-center mb-4 mt-8 pt-4 border-t border-gray-200">
                   <h3 className="text-lg font-semibold text-gray-800 flex items-center gap-2">
                     <FiCreditCardIcon className="text-green-500" /> Bank Details
                   </h3>
@@ -1396,8 +1428,8 @@ const EmployeeDetails = () => {
                   </div>
                 )}
 
-                {currentEmployee.bank_details &&
-                currentEmployee.bank_details.length > 0 ? (
+                {/* Bank Details List */}
+                {currentEmployee.bank_details && currentEmployee.bank_details.length > 0 ? (
                   <div className="space-y-4">
                     {currentEmployee.bank_details.map((bank, index) => (
                       <div
@@ -1534,23 +1566,19 @@ const EmployeeDetails = () => {
                                       ).value,
                                     };
                                     if (bank.bank_country === "India") {
-                                      updatedData.ifsc_code =
-                                        document.getElementById(
-                                          `bank-ifsc-${bank.id}`,
-                                        ).value;
-                                      updatedData.branch_name =
-                                        document.getElementById(
-                                          `bank-branch-${bank.id}`,
-                                        ).value;
+                                      updatedData.ifsc_code = document.getElementById(
+                                        `bank-ifsc-${bank.id}`
+                                      ).value;
+                                      updatedData.branch_name = document.getElementById(
+                                        `bank-branch-${bank.id}`
+                                      ).value;
                                     } else {
-                                      updatedData.iban_number =
-                                        document.getElementById(
-                                          `bank-iban-${bank.id}`,
-                                        ).value;
-                                      updatedData.swift_code =
-                                        document.getElementById(
-                                          `bank-swift-${bank.id}`,
-                                        ).value;
+                                      updatedData.iban_number = document.getElementById(
+                                        `bank-iban-${bank.id}`
+                                      ).value;
+                                      updatedData.swift_code = document.getElementById(
+                                        `bank-swift-${bank.id}`
+                                      ).value;
                                     }
                                     handleUpdateBankDetail(
                                       bank.id,
