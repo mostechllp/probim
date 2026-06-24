@@ -1,6 +1,8 @@
+// src/admin/components/onboarding/SalaryBankDetailsForm.jsx
+
 import { useEffect, useState } from "react";
 import { useDispatch, useSelector } from "react-redux";
-import { FiChevronRight, FiChevronLeft, FiDollarSign, FiCreditCard, FiActivity, FiSave, FiPlus, FiTrash2, FiEdit, FiGlobe } from "react-icons/fi";
+import { FiChevronRight, FiChevronLeft, FiDollarSign, FiCreditCard, FiActivity, FiSave, FiPlus, FiTrash2, FiEdit, FiGlobe, FiHome, FiMapPin } from "react-icons/fi";
 import { setStep, updateEmployeeDetails } from "../../store/slices/onboardingSlice";
 import { showToast } from "../../components/common/Toast";
 
@@ -9,19 +11,34 @@ const SalaryBankDetailsForm = () => {
   const onboardingState = useSelector((state) => state.onboarding) || {};
   const { employeeDetails = {} } = onboardingState;
 
-  // --- Dynamic State Management (useState standard hooks as requested) ---
+  // --- Dynamic State Management ---
   const [isSavingDraft, setIsSavingDraft] = useState(false);
 
-  // 1. Salary Structure States
-  const [currency, setCurrency] = useState("AED");
-  const [salaryComponents, setSalaryComponents] = useState([]);
-  const [newComponentName, setNewComponentName] = useState("");
-  const [newComponentPrice, setNewComponentPrice] = useState("");
-  const [isSalarySaved, setIsSalarySaved] = useState(false);
+  // 1. Salary Packages State
+  const [packages, setPackages] = useState({
+    package1: {
+      id: "package1",
+      name: "Home Country / WFH",
+      icon: <FiHome className="text-blue-500" />,
+      currency: "AED",
+      salaryComponents: [],
+      isSaved: false,
+      totalSalary: 0,
+    },
+    package2: {
+      id: "package2",
+      name: "Dubai Onsite",
+      icon: <FiMapPin className="text-green-500" />,
+      currency: "AED",
+      salaryComponents: [],
+      isSaved: false,
+      totalSalary: 0,
+    }
+  });
 
   // 2. Bank Details States
   const [bankAccounts, setBankAccounts] = useState([]);
-  const [bankCountry, setBankCountry] = useState("UAE"); // Default UAE
+  const [bankCountry, setBankCountry] = useState("UAE");
   const [bankName, setBankName] = useState("");
   const [bankAccountNumber, setBankAccountNumber] = useState("");
   const [bankIfsc, setBankIfsc] = useState("");
@@ -34,14 +51,19 @@ const SalaryBankDetailsForm = () => {
 
   // 4. Form Errors Validation State
   const [formErrors, setFormErrors] = useState({});
+  const [activePackage, setActivePackage] = useState("package1");
+  const [newComponentName, setNewComponentName] = useState("");
+  const [newComponentPrice, setNewComponentPrice] = useState("");
 
-  // Available currencies for dropdown selection
+  // Available currencies
   const currenciesList = [
     { code: "AED", name: "United Arab Emirates Dirham (AED)" },
     { code: "INR", name: "Indian Rupee (INR)" },
     { code: "USD", name: "United States Dollar (USD)" },
     { code: "EUR", name: "Euro (EUR)" },
-    { code: "GBP", name: "British Pound (GBP)" }
+    { code: "GBP", name: "British Pound (GBP)" },
+    { code: "PHP", name: "Philippine Peso (PHP)" },
+    { code: "LKR", name: "Sri Lankan Rupee (LKR)" },
   ];
 
   // --- Load Draft / Restore Redux State ---
@@ -61,16 +83,29 @@ const SalaryBankDetailsForm = () => {
     }
 
     if (details && Object.keys(details).length > 0) {
-      if (details.currency) setCurrency(details.currency);
-      if (Array.isArray(details.salaryComponents)) {
-        const localComponents = details.salaryComponents.map(comp => ({
-        id: comp.id || Date.now(),
-        name: comp.component_name || comp.name,
-        price: comp.value || comp.price
-      }));
-      setSalaryComponents(localComponents);
-      setIsSalarySaved(details.isSalarySaved ?? false);
-    }
+      // Load packages
+      if (details.packages) {
+        const updatedPackages = { ...packages };
+        if (details.packages.package1) {
+          updatedPackages.package1 = {
+            ...updatedPackages.package1,
+            ...details.packages.package1,
+            salaryComponents: details.packages.package1.salaryComponents || [],
+            isSaved: details.packages.package1.isSaved || false,
+          };
+        }
+        if (details.packages.package2) {
+          updatedPackages.package2 = {
+            ...updatedPackages.package2,
+            ...details.packages.package2,
+            salaryComponents: details.packages.package2.salaryComponents || [],
+            isSaved: details.packages.package2.isSaved || false,
+          };
+        }
+        setPackages(updatedPackages);
+      }
+
+      // Load bank accounts
       if (Array.isArray(details.bankAccounts) && details.bankAccounts.length > 0) {
         setBankAccounts(details.bankAccounts);
       } else if (details.bankName) {
@@ -85,51 +120,31 @@ const SalaryBankDetailsForm = () => {
           bankSwift: details.bankSwift || ""
         }]);
       }
+
       if (details.paymentCycle) setPaymentCycle(details.paymentCycle);
     }
   }, [employeeDetails]);
 
-  // --- Helper: Compute aggregate Basic, Allowance, and Total ---
-  const computeAggregateSalary = () => {
-  let basicSalary = 0;
-  let otherAllowance = 0;
-
-  // Get components from either format (local state has 'name', Redux may have 'component_name')
-  const components = salaryComponents.map(comp => ({
-    name: comp.component_name || comp.name,
-    price: comp.value || comp.price
-  }));
-
-  // Look for a component name containing "basic" (case-insensitive) to map to basic_salary
-  const basicComponent = components.find(comp => 
-    comp.name.toLowerCase().includes("basic")
-  );
-
-  if (basicComponent) {
-    basicSalary = basicComponent.price;
-    // Other allowance is the sum of all components excluding the basic one
-    otherAllowance = components
-      .filter(comp => comp.name !== basicComponent.name)
-      .reduce((sum, comp) => sum + comp.price, 0);
-  } else if (components.length > 0) {
-    // Fallback: first component is basic, others are other allowance
-    basicSalary = components[0].price;
-    otherAllowance = components.slice(1).reduce((sum, comp) => sum + comp.price, 0);
-  }
-
-  const totalMonthlySalary = components.reduce((sum, comp) => sum + comp.price, 0);
-
-  return {
-    basicSalary: String(basicSalary),
-    otherAllowance: String(otherAllowance),
-    totalMonthlySalary
+  // Compute total salary for a package
+  const computePackageTotal = (components) => {
+    return components.reduce((sum, comp) => sum + (comp.price || comp.value || 0), 0);
   };
-};
 
-  const watchTotalSalary = salaryComponents.reduce((sum, comp) => sum + comp.price, 0);
+  // Get current active package
+  const currentPackage = packages[activePackage];
 
-  // --- Actions: Salary Structure ---
-  const handleAddSalaryComponent = () => {
+  // --- Actions: Salary Package Management ---
+  const handlePackageCurrencyChange = (pkgId, currency) => {
+    setPackages(prev => ({
+      ...prev,
+      [pkgId]: {
+        ...prev[pkgId],
+        currency,
+      }
+    }));
+  };
+
+  const handleAddSalaryComponent = (pkgId) => {
     if (!newComponentName.trim()) {
       showToast("Component name cannot be empty", "error");
       return;
@@ -140,9 +155,9 @@ const SalaryBankDetailsForm = () => {
       return;
     }
 
-    // Prevent duplicates
-    if (salaryComponents.some(c => c.name.toLowerCase() === newComponentName.trim().toLowerCase())) {
-      showToast(`Component "${newComponentName.trim()}" already exists!`, "error");
+    const pkg = packages[pkgId];
+    if (pkg.salaryComponents.some(c => c.name.toLowerCase() === newComponentName.trim().toLowerCase())) {
+      showToast(`Component "${newComponentName.trim()}" already exists in this package!`, "error");
       return;
     }
 
@@ -152,49 +167,63 @@ const SalaryBankDetailsForm = () => {
       price: priceNum
     };
 
-    setSalaryComponents(prev => [...prev, newComponent]);
+    setPackages(prev => ({
+      ...prev,
+      [pkgId]: {
+        ...prev[pkgId],
+        salaryComponents: [...prev[pkgId].salaryComponents, newComponent]
+      }
+    }));
+
     setNewComponentName("");
     setNewComponentPrice("");
     showToast("Component added successfully!", "success");
   };
 
-  const handleDeleteSalaryComponent = (id) => {
-    setSalaryComponents(prev => prev.filter(c => c.id !== id));
+  const handleDeleteSalaryComponent = (pkgId, componentId) => {
+    setPackages(prev => ({
+      ...prev,
+      [pkgId]: {
+        ...prev[pkgId],
+        salaryComponents: prev[pkgId].salaryComponents.filter(c => c.id !== componentId)
+      }
+    }));
   };
 
-  // In SalaryBankDetailsForm.jsx, update the handleSaveSalaryStructure function:
+  const handleSaveSalaryPackage = (pkgId) => {
+    const pkg = packages[pkgId];
+    if (pkg.salaryComponents.length === 0) {
+      showToast(`Please add at least one salary component to ${pkg.name} before saving`, "error");
+      return;
+    }
 
-const handleSaveSalaryStructure = () => {
-  if (salaryComponents.length === 0) {
-    showToast("Please add at least one salary component before saving", "error");
-    return;
-  }
-  
-  // Transform salary components to match backend expected format
-  const transformedComponents = salaryComponents.map(comp => ({
-    component_name: comp.name, 
-    value: comp.price            
-  }));
-  
-  // Update the employeeDetails in Redux with the properly formatted components
-  const computedValues = computeAggregateSalary();
-  dispatch(updateEmployeeDetails({
-    ...computedValues,
-    paymentCycle,
-    currency,
-    salaryComponents: transformedComponents,  // Store transformed components
-    isSalarySaved: true
-  }));
-  
-  setIsSalarySaved(true);
-  showToast("Salary structure saved!", "success");
-};
+    const total = computePackageTotal(pkg.salaryComponents);
+    setPackages(prev => ({
+      ...prev,
+      [pkgId]: {
+        ...prev[pkgId],
+        isSaved: true,
+        totalSalary: total
+      }
+    }));
 
-  // --- Actions: Bank Details Validation & Changes ---
+    showToast(`${pkg.name} salary structure saved!`, "success");
+  };
+
+  const handleEditPackage = (pkgId) => {
+    setPackages(prev => ({
+      ...prev,
+      [pkgId]: {
+        ...prev[pkgId],
+        isSaved: false
+      }
+    }));
+  };
+
+  // --- Bank Details Functions (unchanged) ---
   const handleBankCountryChange = (e) => {
     const selectedCountry = e.target.value;
     setBankCountry(selectedCountry);
-    // Clear country-specific values and errors to ensure clean state
     setBankIfsc("");
     setBankBranch("");
     setBankIban("");
@@ -215,7 +244,7 @@ const handleSaveSalaryStructure = () => {
   };
 
   const handleAccountNumberChange = (e) => {
-    const val = e.target.value.replace(/[^a-zA-Z0-9-\s]/g, ""); // Allow alphanumeric, dashes, spaces
+    const val = e.target.value.replace(/[^a-zA-Z0-9-\s]/g, "");
     setBankAccountNumber(val);
     
     const cleanVal = val.replace(/[\s-]/g, "");
@@ -230,7 +259,6 @@ const handleSaveSalaryStructure = () => {
     }
   };
 
-  // Indian IFSC Code: 11 characters. 4 letters, '0', then 6 alphanumeric
   const handleIfscChange = (e) => {
     const val = e.target.value.toUpperCase().replace(/[^A-Z0-9]/g, "").substring(0, 11);
     setBankIfsc(val);
@@ -257,11 +285,9 @@ const handleSaveSalaryStructure = () => {
     }
   };
 
-  // UAE IBAN: starts with "AE" followed by 21 alphanumeric digits. Total 23 characters.
   const handleIbanChange = (e) => {
     let val = e.target.value.toUpperCase().replace(/[^A-Z0-9]/g, "").substring(0, 23);
     
-    // Auto-format spaces every 4 characters
     let formatted = "";
     for (let i = 0; i < val.length; i++) {
       if (i > 0 && i % 4 === 0) formatted += " ";
@@ -280,7 +306,6 @@ const handleSaveSalaryStructure = () => {
     }
   };
 
-  // SWIFT/BIC Code: 8 or 11 alphanumeric characters
   const handleSwiftChange = (e) => {
     const val = e.target.value.toUpperCase().replace(/[^A-Z0-9]/g, "").substring(0, 11);
     setBankSwift(val);
@@ -309,14 +334,13 @@ const handleSaveSalaryStructure = () => {
         errors.ifsc = "Invalid IFSC Code format";
       }
       if (!bankBranch.trim()) errors.branch = "Branch name is required";
-    } else { // UAE
+    } else {
       const rawIban = bankIban.replace(/\s/g, "");
       if (!bankIban.trim()) {
         errors.iban = "IBAN is required";
       } else if (!/^AE[A-Z0-9]{21}$/.test(rawIban)) {
         errors.iban = "Invalid UAE IBAN format (AE followed by 21 characters)";
       }
-
       if (!bankSwift.trim()) {
         errors.swift = "SWIFT/BIC Code is required";
       } else if (!/^[A-Z]{6}[A-Z0-9]{2}([A-Z0-9]{3})?$/.test(bankSwift)) {
@@ -343,7 +367,6 @@ const handleSaveSalaryStructure = () => {
 
     setBankAccounts(prev => [...prev, newBank]);
     
-    // Reset form
     setBankName("");
     setBankAccountNumber("");
     setBankIfsc("");
@@ -359,24 +382,18 @@ const handleSaveSalaryStructure = () => {
     setBankAccounts(prev => prev.filter(b => b.id !== id));
   };
 
-  // --- Draft Saving Flow ---
+  // --- Draft Saving ---
   const handleSaveDraft = () => {
     setIsSavingDraft(true);
-    const computedValues = computeAggregateSalary();
-    const cleanIban = bankIban.replace(/\s/g, "");
-
-    const formValues = {
-      ...computedValues, // basicSalary, otherAllowance, totalMonthlySalary
-      paymentCycle,
-      currency,
-      salaryComponents,
-      isSalarySaved,
-      bankAccounts
-    };
 
     const draftState = {
       ...onboardingState,
-      employeeDetails: { ...onboardingState.employeeDetails, ...formValues }
+      employeeDetails: {
+        ...onboardingState.employeeDetails,
+        packages: packages,
+        paymentCycle,
+        bankAccounts
+      }
     };
 
     try {
@@ -390,64 +407,262 @@ const handleSaveSalaryStructure = () => {
     }
   };
 
-  // --- Final Form Submit ---
- // --- Final Form Submit ---
-const handleSubmit = (e) => {
-  e.preventDefault();
+  // --- Final Submit ---
+  const handleSubmit = (e) => {
+    e.preventDefault();
 
-  if (!isSalarySaved) {
-    showToast("Please save your Salary Structure before continuing", "warning");
-    return;
-  }
+    // Check if at least one package is saved
+    const hasSavedPackage = packages.package1.isSaved || packages.package2.isSaved;
+    if (!hasSavedPackage) {
+      showToast("Please save at least one Salary Package before continuing", "warning");
+      return;
+    }
 
-  if (bankAccounts.length === 0) {
-    showToast("Please add at least one Bank Account before continuing", "warning");
-    return;
-  }
+    if (bankAccounts.length === 0) {
+      showToast("Please add at least one Bank Account before continuing", "warning");
+      return;
+    }
 
-  const computedValues = computeAggregateSalary();
-  
-  // Transform salary components to backend format
-  const transformedComponents = salaryComponents.map(comp => ({
-    component_name: comp.name,
-    value: comp.price
-  }));
+    const finalPayload = {
+      packages,
+      paymentCycle,
+      bankAccounts
+    };
 
-  const finalPayload = {
-    ...computedValues,
-    paymentCycle,
-    currency,
-    salaryComponents: transformedComponents,
-    isSalarySaved,
-    bankAccounts: bankAccounts // This already has the correct structure
+    console.log("[SalaryBankDetailsForm] Saving to Redux:", finalPayload);
+    
+    dispatch(updateEmployeeDetails(finalPayload));
+    dispatch(setStep(4));
+    showToast("Financial details verified and saved!", "success");
   };
 
-  console.log("[SalaryBankDetailsForm] Saving to Redux:", finalPayload);
-  
-  dispatch(updateEmployeeDetails(finalPayload));
-  dispatch(setStep(4));
-  showToast("Financial details verified and saved!", "success");
-};
   const handleBack = () => {
-    dispatch(setStep(2)); // Back to Step 2 (Employee Details Form)
+    dispatch(setStep(2));
+  };
+
+  // --- Render Package Component ---
+  const renderPackage = (pkgId, pkg) => {
+    const isActive = activePackage === pkgId;
+    const total = computePackageTotal(pkg.salaryComponents);
+
+    return (
+      <div 
+        className={`border rounded-2xl overflow-hidden transition-all ${
+          isActive ? 'border-green-500 ring-2 ring-green-500/20' : 'border-gray-200 dark:border-gray-700'
+        }`}
+      >
+        {/* Package Header */}
+        <div 
+          className="px-5 py-4 bg-gray-50/70 dark:bg-gray-800/50 border-b border-gray-100 dark:border-gray-700 flex items-center justify-between cursor-pointer hover:bg-gray-100/50 dark:hover:bg-gray-700/30 transition-all"
+          onClick={() => setActivePackage(pkgId)}
+        >
+          <div className="flex items-center gap-3">
+            <div className="w-10 h-10 rounded-xl bg-green-100 dark:bg-green-900/30 flex items-center justify-center text-green-600 dark:text-green-400">
+              {pkg.icon}
+            </div>
+            <div>
+              <h4 className="text-sm font-bold text-gray-900 dark:text-white">{pkg.name}</h4>
+              <p className="text-xs text-gray-500 dark:text-gray-400">
+                {pkg.isSaved ? `Saved • ${pkg.currency} ${total.toLocaleString()}` : '⚠️ Not configured'}
+              </p>
+            </div>
+          </div>
+          <div className="flex items-center gap-2">
+            {pkg.isSaved && (
+              <span className="text-xs font-bold text-green-600 dark:text-green-400 bg-green-50 dark:bg-green-950/30 px-2.5 py-1 rounded-full">
+                Active
+              </span>
+            )}
+            <span className="text-gray-400">
+              <FiChevronRight className={`transform transition-transform ${isActive ? 'rotate-90' : ''}`} />
+            </span>
+          </div>
+        </div>
+
+        {/* Package Content */}
+        {isActive && (
+          <div className="p-5 space-y-5 bg-white dark:bg-gray-800/30">
+            {!pkg.isSaved ? (
+              // Edit Mode
+              <div className="space-y-5">
+                {/* Currency Selector */}
+                <div className="space-y-2">
+                  <label className="block text-sm font-bold text-gray-700 dark:text-gray-300">
+                    Currency <span className="text-red-500">*</span>
+                  </label>
+                  <select
+                    value={pkg.currency}
+                    onChange={(e) => handlePackageCurrencyChange(pkgId, e.target.value)}
+                    className="w-full px-4 py-3 bg-white dark:bg-gray-900 border border-gray-200 dark:border-gray-700 rounded-xl text-gray-900 dark:text-white transition-all outline-none focus:border-green-500 focus:ring-4 focus:ring-green-500/10 cursor-pointer"
+                  >
+                    {currenciesList.map(curr => (
+                      <option key={curr.code} value={curr.code}>{curr.name}</option>
+                    ))}
+                  </select>
+                </div>
+
+                {/* Add Component */}
+                <div className="p-4 bg-gray-50/50 dark:bg-gray-900/30 rounded-xl border border-gray-100 dark:border-gray-700/50 space-y-4">
+                  <h5 className="text-xs font-bold text-gray-600 dark:text-gray-400 uppercase tracking-wider">
+                    Add Component
+                  </h5>
+                  <div className="grid grid-cols-1 sm:grid-cols-5 gap-3">
+                    <div className="sm:col-span-2">
+                      <input
+                        type="text"
+                        placeholder="Component name"
+                        value={newComponentName}
+                        onChange={(e) => setNewComponentName(e.target.value)}
+                        className="w-full px-4 py-2.5 bg-white dark:bg-gray-900 border border-gray-200 dark:border-gray-700 rounded-xl text-sm text-gray-900 dark:text-white outline-none focus:border-green-500"
+                      />
+                    </div>
+                    <div className="sm:col-span-2">
+                      <input
+                        type="number"
+                        step="any"
+                        placeholder={`Amount (${pkg.currency})`}
+                        value={newComponentPrice}
+                        onChange={(e) => setNewComponentPrice(e.target.value)}
+                        className="w-full px-4 py-2.5 bg-white dark:bg-gray-900 border border-gray-200 dark:border-gray-700 rounded-xl text-sm text-gray-900 dark:text-white outline-none focus:border-green-500"
+                      />
+                    </div>
+                    <button
+                      type="button"
+                      onClick={() => handleAddSalaryComponent(pkgId)}
+                      className="py-2.5 px-4 bg-green-500 hover:bg-green-600 text-white rounded-xl text-sm font-bold transition-all shadow-md hover:shadow-lg flex items-center justify-center gap-1"
+                    >
+                      <FiPlus size={16} />
+                      Add
+                    </button>
+                  </div>
+                </div>
+
+                {/* Components List */}
+                {pkg.salaryComponents.length > 0 ? (
+                  <div className="overflow-hidden border border-gray-100 dark:border-gray-700/80 rounded-xl">
+                    <table className="min-w-full divide-y divide-gray-100 dark:divide-gray-700/60 text-left">
+                      <thead className="bg-gray-50 dark:bg-gray-800 text-xs font-bold text-gray-500 dark:text-gray-400 uppercase">
+                        <tr>
+                          <th className="px-4 py-3">Component</th>
+                          <th className="px-4 py-3 text-right">Value</th>
+                          <th className="px-4 py-3 text-center">Action</th>
+                        </tr>
+                      </thead>
+                      <tbody className="divide-y divide-gray-100 dark:divide-gray-700/60 text-sm">
+                        {pkg.salaryComponents.map((comp) => (
+                          <tr key={comp.id} className="hover:bg-gray-50/50 dark:hover:bg-gray-900/10">
+                            <td className="px-4 py-3 font-semibold text-gray-800 dark:text-gray-200">
+                              {comp.name}
+                            </td>
+                            <td className="px-4 py-3 text-right font-bold text-gray-900 dark:text-white">
+                              {pkg.currency} {comp.price.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
+                            </td>
+                            <td className="px-4 py-3 text-center">
+                              <button
+                                type="button"
+                                onClick={() => handleDeleteSalaryComponent(pkgId, comp.id)}
+                                className="p-1 text-red-500 hover:text-red-650 hover:bg-red-50 dark:hover:bg-red-950/20 rounded-lg transition-all"
+                              >
+                                <FiTrash2 size={16} />
+                              </button>
+                            </td>
+                          </tr>
+                        ))}
+                        <tr className="bg-green-50/30 dark:bg-green-950/10 font-bold border-t-2 border-green-200/50">
+                          <td className="px-4 py-3 text-green-700 dark:text-green-400 uppercase tracking-wider">
+                            Total
+                          </td>
+                          <td className="px-4 py-3 text-right text-green-700 dark:text-green-400">
+                            {pkg.currency} {total.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
+                          </td>
+                          <td></td>
+                        </tr>
+                      </tbody>
+                    </table>
+                  </div>
+                ) : (
+                  <p className="text-center py-4 text-xs text-gray-400 italic">
+                    No components added yet. Add Basic Salary and other allowances.
+                  </p>
+                )}
+
+                {/* Save Button */}
+                {pkg.salaryComponents.length > 0 && (
+                  <div className="flex justify-end">
+                    <button
+                      type="button"
+                      onClick={() => handleSaveSalaryPackage(pkgId)}
+                      className="px-6 py-2.5 bg-green-600 hover:bg-green-700 text-white rounded-full text-xs font-bold transition-all shadow-md flex items-center gap-2 hover:scale-[1.02]"
+                    >
+                      <FiSave size={14} />
+                      Save {pkg.name}
+                    </button>
+                  </div>
+                )}
+              </div>
+            ) : (
+              // Saved View
+              <div className="space-y-3">
+                <div className="flex items-center justify-between">
+                  <div className="space-y-1">
+                    <p className="text-xs text-gray-500 dark:text-gray-400">Currency</p>
+                    <span className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-xl text-sm font-extrabold text-green-700 dark:text-green-400 bg-green-50 dark:bg-green-950/30 border border-green-100 dark:border-green-900/30">
+                      <FiGlobe className="text-green-600" size={14} />
+                      {pkg.currency}
+                    </span>
+                  </div>
+                  <div className="text-right">
+                    <p className="text-xs text-gray-500 dark:text-gray-400">Total Monthly Salary</p>
+                    <p className="text-lg font-extrabold text-green-600 dark:text-green-400">
+                      {pkg.currency} {total.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
+                    </p>
+                  </div>
+                </div>
+
+                <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
+                  {pkg.salaryComponents.map((comp) => (
+                    <div key={comp.id} className="flex justify-between items-center p-3 bg-gray-50/50 dark:bg-gray-900/20 rounded-lg border border-gray-100 dark:border-gray-700/50">
+                      <span className="text-sm font-medium text-gray-700 dark:text-gray-300">{comp.name}</span>
+                      <span className="text-sm font-bold text-gray-900 dark:text-white">
+                        {pkg.currency} {comp.price.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
+                      </span>
+                    </div>
+                  ))}
+                </div>
+
+                <div className="flex justify-end">
+                  <button
+                    type="button"
+                    onClick={() => handleEditPackage(pkgId)}
+                    className="inline-flex items-center gap-1.5 px-4 py-2 text-xs font-bold text-green-600 dark:text-green-400 bg-green-50 hover:bg-green-100 dark:bg-green-950/20 dark:hover:bg-green-950/40 rounded-xl transition-all border border-green-150/40 dark:border-green-900/30 hover:scale-[1.03]"
+                  >
+                    <FiEdit size={14} />
+                    Modify Structure
+                  </button>
+                </div>
+              </div>
+            )}
+          </div>
+        )}
+      </div>
+    );
   };
 
   return (
-    <div className="max-w-4xl mx-auto animate-fadeIn space-y-8 pb-10">
+    <div className="max-w-5xl mx-auto animate-fadeIn space-y-8 pb-10">
       {/* Page Header */}
       <div className="space-y-2">
         <h2 className="text-2xl md:text-3xl font-extrabold text-gray-900 dark:text-white tracking-tight">
           Salary & Bank Details
         </h2>
         <p className="text-sm md:text-base text-gray-500 dark:text-gray-400">
-          Configure employee salary structure and payment information.
+          Configure employee salary packages and payment information.
         </p>
       </div>
 
       <form onSubmit={handleSubmit} className="space-y-8">
-        
-        {/* SECTION 1: DYNAMIC SALARY STRUCTURE */}
-        <div className="bg-white dark:bg-gray-800 rounded-2xl shadow-soft border border-gray-100 dark:border-gray-700/80 overflow-hidden transition-all">
+        {/* Salary Packages Section */}
+        <div className="bg-white dark:bg-gray-800 rounded-2xl shadow-soft border border-gray-100 dark:border-gray-700/80 overflow-hidden">
           <div className="px-6 md:px-8 py-5 border-b border-gray-100 dark:border-gray-700/80 bg-gray-50/50 dark:bg-gray-800/50 flex flex-col sm:flex-row sm:items-center justify-between gap-4">
             <div className="flex items-center gap-3">
               <div className="w-10 h-10 bg-green-100 dark:bg-green-900/30 text-green-600 dark:text-green-400 rounded-xl flex items-center justify-center">
@@ -455,10 +670,10 @@ const handleSubmit = (e) => {
               </div>
               <div>
                 <h3 className="text-base font-bold text-gray-900 dark:text-white">
-                  Salary Structure
+                  Salary Packages
                 </h3>
                 <p className="text-xs text-gray-500 dark:text-gray-400 font-medium">
-                  Select currency and build a dynamic component breakdown.
+                  Configure Home Country/WFH and Dubai Onsite packages
                 </p>
               </div>
             </div>
@@ -475,228 +690,16 @@ const handleSubmit = (e) => {
           </div>
 
           <div className="p-6 md:p-8 space-y-6">
-            {!isSalarySaved ? (
-              // SALARY EDIT MODE
-              <div className="space-y-6 animate-fadeIn">
-                <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
-                  {/* Currency Dropdown */}
-                  <div className="space-y-2">
-                    <label className="block text-sm font-bold text-gray-700 dark:text-gray-300">
-                      Currency Selection <span className="text-red-500">*</span>
-                    </label>
-                    <select
-                      value={currency}
-                      onChange={(e) => setCurrency(e.target.value)}
-                      className="w-full px-4 py-3 bg-white dark:bg-gray-900 border border-gray-200 dark:border-gray-700 rounded-xl text-gray-900 dark:text-white transition-all duration-200 outline-none focus:border-green-500 focus:ring-4 focus:ring-green-500/10 cursor-pointer"
-                    >
-                      {currenciesList.map(curr => (
-                        <option key={curr.code} value={curr.code}>{curr.name}</option>
-                      ))}
-                    </select>
-                  </div>
+            {/* Package 1 */}
+            {renderPackage("package1", packages.package1)}
 
-                  {/* Payment Cycle */}
-                  <div className="space-y-2">
-                    <label className="block text-sm font-bold text-gray-700 dark:text-gray-300">
-                      Payment Cycle <span className="text-red-500">*</span>
-                    </label>
-                    <select
-                      value={paymentCycle}
-                      onChange={(e) => setPaymentCycle(e.target.value)}
-                      className="w-full px-4 py-3 bg-white dark:bg-gray-900 border border-gray-200 dark:border-gray-700 rounded-xl text-gray-900 dark:text-white transition-all duration-200 outline-none focus:border-green-500 focus:ring-4 focus:ring-green-500/10 cursor-pointer"
-                    >
-                      <option value="Monthly">Monthly</option>
-                      <option value="Weekly">Weekly</option>
-                      <option value="Bi-Weekly">Bi-Weekly</option>
-                      <option value="Quarterly">Quarterly</option>
-                    </select>
-                  </div>
-                </div>
-
-                {/* Salary Component Input Panel */}
-                <div className="p-5 bg-gray-50/50 dark:bg-gray-900/30 rounded-2xl border border-gray-100 dark:border-gray-700/50 space-y-4">
-                  <h4 className="text-sm font-bold text-gray-800 dark:text-gray-300 uppercase tracking-wider">
-                    Add Salary Component
-                  </h4>
-                  
-                  <div className="grid grid-cols-1 sm:grid-cols-5 gap-4 items-end">
-                    <div className="sm:col-span-2 space-y-1.5">
-                      <label className="text-xs font-semibold text-gray-500 dark:text-gray-400">
-                        Component Name
-                      </label>
-                      <input
-                        type="text"
-                        placeholder="e.g. Basic Salary, Housing, Transit"
-                        value={newComponentName}
-                        onChange={(e) => setNewComponentName(e.target.value)}
-                        className="w-full px-4 py-2.5 bg-white dark:bg-gray-900 border border-gray-200 dark:border-gray-700 rounded-xl text-sm text-gray-900 dark:text-white outline-none focus:border-green-500"
-                      />
-                    </div>
-                    
-                    <div className="sm:col-span-2 space-y-1.5">
-                      <label className="text-xs font-semibold text-gray-500 dark:text-gray-400 flex items-center justify-between">
-                        <span>Price / Value</span>
-                        {currency && <span className="font-extrabold text-[10px] text-green-600 dark:text-green-500">{currency}</span>}
-                      </label>
-                      <input
-                        type="number"
-                        step="any"
-                        placeholder="Enter amount"
-                        value={newComponentPrice}
-                        onChange={(e) => setNewComponentPrice(e.target.value)}
-                        className="w-full px-4 py-2.5 bg-white dark:bg-gray-900 border border-gray-200 dark:border-gray-700 rounded-xl text-sm text-gray-900 dark:text-white outline-none focus:border-green-500"
-                      />
-                    </div>
-
-                    <button
-                      type="button"
-                      onClick={handleAddSalaryComponent}
-                      className="sm:col-span-1 py-3 px-4 bg-green-500 hover:bg-green-600 text-white rounded-xl text-sm font-bold transition-all shadow-md hover:shadow-lg flex items-center justify-center gap-1 hover:scale-[1.02]"
-                    >
-                      <FiPlus size={16} />
-                      Add
-                    </button>
-                  </div>
-                </div>
-
-                {/* Salary Components Local List Preview */}
-                {salaryComponents.length > 0 ? (
-                  <div className="space-y-4">
-                    <div className="overflow-hidden border border-gray-100 dark:border-gray-700/80 rounded-xl">
-                      <table className="min-w-full divide-y divide-gray-100 dark:divide-gray-700/60 text-left">
-                        <thead className="bg-gray-50 dark:bg-gray-800 text-xs font-bold text-gray-500 dark:text-gray-400 uppercase">
-                          <tr>
-                            <th className="px-4 py-3">Component Name</th>
-                            <th className="px-4 py-3 text-right">Value ({currency})</th>
-                            <th className="px-4 py-3 text-center">Action</th>
-                          </tr>
-                        </thead>
-                        <tbody className="divide-y divide-gray-100 dark:divide-gray-700/60 text-sm">
-                          {salaryComponents.map((comp) => (
-                            <tr key={comp.id} className="hover:bg-gray-50/50 dark:hover:bg-gray-900/10">
-                              <td className="px-4 py-3 font-semibold text-gray-800 dark:text-gray-200">
-                                {comp.name}
-                              </td>
-                              <td className="px-4 py-3 text-right font-bold text-gray-900 dark:text-white">
-                                {comp.price.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
-                              </td>
-                              <td className="px-4 py-3 text-center">
-                                <button
-                                  type="button"
-                                  onClick={() => handleDeleteSalaryComponent(comp.id)}
-                                  className="p-1 text-red-500 hover:text-red-650 hover:bg-red-50 dark:hover:bg-red-950/20 rounded-lg transition-all"
-                                >
-                                  <FiTrash2 size={16} />
-                                </button>
-                              </td>
-                            </tr>
-                          ))}
-                          <tr className="bg-green-50/30 dark:bg-green-950/10 font-bold border-t-2 border-green-200/50">
-                            <td className="px-4 py-3 text-green-700 dark:text-green-400 uppercase tracking-wider">
-                              Total Monthly Salary
-                            </td>
-                            <td className="px-4 py-3 text-right text-green-700 dark:text-green-400 text-base">
-                              {currency} {watchTotalSalary.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
-                            </td>
-                            <td></td>
-                          </tr>
-                        </tbody>
-                      </table>
-                    </div>
-
-                    <div className="flex justify-end">
-                      <button
-                        type="button"
-                        onClick={handleSaveSalaryStructure}
-                        className="px-6 py-2.5 bg-green-600 hover:bg-green-700 text-white rounded-full text-xs font-bold transition-all shadow-md flex items-center gap-2 hover:scale-[1.02]"
-                      >
-                        <FiSave size={14} />
-                        Save Salary Structure
-                      </button>
-                    </div>
-                  </div>
-                ) : (
-                  <p className="text-center py-6 text-xs text-gray-400 italic">
-                    No salary components added yet. Add "Basic Salary" and other allowances to build the structure.
-                  </p>
-                )}
-              </div>
-            ) : (
-              // SALARY STRUCTURE SAVED SINGLE TABLE ROW RENDERING
-              <div className="overflow-x-auto border border-gray-150 dark:border-gray-700/80 rounded-2xl shadow-inner animate-fadeIn">
-                <table className="min-w-full divide-y divide-gray-100 dark:divide-gray-700/80 text-left">
-                  <thead className="bg-gray-50/70 dark:bg-gray-800/40 text-xs font-bold uppercase tracking-wider text-gray-500 dark:text-gray-400">
-                    <tr>
-                      <th className="px-6 py-4">Currency</th>
-                      <th className="px-6 py-4">Component Name</th>
-                      <th className="px-6 py-4">Component Price</th>
-                      <th className="px-6 py-4 text-right">Total Salary</th>
-                      <th className="px-6 py-4 text-center">Actions</th>
-                    </tr>
-                  </thead>
-                  <tbody className="divide-y divide-gray-100 dark:divide-gray-750 bg-white dark:bg-gray-800/20">
-                    <tr className="hover:bg-gray-50/30 dark:hover:bg-gray-800/10 transition-colors">
-                      {/* Selected Currency Dropdown Column */}
-                      <td className="px-6 py-5 whitespace-nowrap">
-                        <span className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-xl text-sm font-extrabold text-green-700 dark:text-green-400 bg-green-50 dark:bg-green-950/30 border border-green-100 dark:border-green-900/30 shadow-sm">
-                          <FiGlobe className="text-green-600" size={14} />
-                          {currency}
-                        </span>
-                      </td>
-
-                      {/* Component Name stacked */}
-                      <td className="px-6 py-5">
-                        <div className="space-y-2">
-                          {salaryComponents.map((comp) => (
-                            <div key={comp.id} className="flex items-center gap-2">
-                              <span className="w-1.5 h-1.5 rounded-full bg-green-500"></span>
-                              <span className="text-sm font-semibold text-gray-800 dark:text-gray-200">
-                                {comp.name}
-                              </span>
-                            </div>
-                          ))}
-                        </div>
-                      </td>
-
-                      {/* Price stacked */}
-                      <td className="px-6 py-5">
-                        <div className="space-y-2">
-                          {salaryComponents.map((comp) => (
-                            <div key={comp.id} className="text-sm font-bold text-gray-900 dark:text-white">
-                              {currency} {comp.price.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
-                            </div>
-                          ))}
-                        </div>
-                      </td>
-
-                      {/* Aggregate Sum total monthly salary */}
-                      <td className="px-6 py-5 text-right whitespace-nowrap">
-                        <span className="text-base font-extrabold text-green-600 dark:text-green-400 bg-green-50/50 dark:bg-green-950/20 px-3.5 py-2 rounded-2xl border border-green-150/30 dark:border-green-900/20 shadow-inner">
-                          {currency} {watchTotalSalary.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
-                        </span>
-                      </td>
-
-                      {/* Action Column to reopen edit structure */}
-                      <td className="px-6 py-5 text-center whitespace-nowrap">
-                        <button
-                          type="button"
-                          onClick={() => setIsSalarySaved(false)}
-                          className="inline-flex items-center justify-center gap-1.5 px-4 py-2 text-xs font-bold text-green-600 dark:text-green-400 bg-green-50 hover:bg-green-100 dark:bg-green-950/20 dark:hover:bg-green-950/40 rounded-xl transition-all border border-green-150/40 dark:border-green-900/30 hover:scale-[1.03]"
-                        >
-                          <FiEdit size={14} />
-                          Modify Structure
-                        </button>
-                      </td>
-                    </tr>
-                  </tbody>
-                </table>
-              </div>
-            )}
+            {/* Package 2 */}
+            {renderPackage("package2", packages.package2)}
           </div>
         </div>
 
-        {/* SECTION 2: DYNAMIC BANK DETAILS (Indian/UAE specific validation) */}
-        <div className="bg-white dark:bg-gray-800 rounded-2xl shadow-soft border border-gray-100 dark:border-gray-700/80 overflow-hidden transition-all">
+        {/* Bank Details Section */}
+        <div className="bg-white dark:bg-gray-800 rounded-2xl shadow-soft border border-gray-100 dark:border-gray-700/80 overflow-hidden">
           <div className="px-6 md:px-8 py-5 border-b border-gray-100 dark:border-gray-700/80 bg-gray-50/50 dark:bg-gray-800/50 flex items-center gap-3">
             <div className="w-10 h-10 bg-green-100 dark:bg-green-900/30 text-green-600 dark:text-green-400 rounded-xl flex items-center justify-center">
               <FiCreditCard size={20} />
@@ -706,210 +709,211 @@ const handleSubmit = (e) => {
                 Bank Details
               </h3>
               <p className="text-xs text-gray-500 dark:text-gray-400 font-medium">
-                Select country, enter required fields with local validations, and define additional fields.
+                Add employee bank account information
               </p>
             </div>
           </div>
 
           <div className="p-6 md:p-8 space-y-6">
-            {/* BANK DETAILS EDIT MODE */}
-            <div className="space-y-6 animate-fadeIn">
-                <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
-                  {/* Country Selector */}
-                  <div className="space-y-2">
-                    <label className="block text-sm font-bold text-gray-700 dark:text-gray-300">
-                      Bank Country <span className="text-red-500">*</span>
-                    </label>
-                    <select
-                      value={bankCountry}
-                      onChange={handleBankCountryChange}
-                      className="w-full px-4 py-3 bg-white dark:bg-gray-900 border border-gray-200 dark:border-gray-700 rounded-xl text-gray-900 dark:text-white transition-all duration-200 outline-none focus:border-green-500 focus:ring-4 focus:ring-green-500/10 cursor-pointer"
-                    >
-                      <option value="UAE">United Arab Emirates (UAE)</option>
-                      <option value="India">India</option>
-                    </select>
-                    <p className="text-[10px] text-gray-400 font-medium">
-                      Switches bank identifier validation (IBAN & SWIFT for UAE vs IFSC & Branch for India).
-                    </p>
-                  </div>
+            {/* Bank Details Form */}
+            <div className="space-y-6">
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+                <div className="space-y-2">
+                  <label className="block text-sm font-bold text-gray-700 dark:text-gray-300">
+                    Bank Country <span className="text-red-500">*</span>
+                  </label>
+                  <select
+                    value={bankCountry}
+                    onChange={handleBankCountryChange}
+                    className="w-full px-4 py-3 bg-white dark:bg-gray-900 border border-gray-200 dark:border-gray-700 rounded-xl text-gray-900 dark:text-white transition-all outline-none focus:border-green-500 focus:ring-4 focus:ring-green-500/10 cursor-pointer"
+                  >
+                    <option value="UAE">United Arab Emirates (UAE)</option>
+                    <option value="India">India</option>
+                  </select>
+                </div>
 
-                  {/* Bank Name */}
-                  <div className="space-y-2">
-                    <label className="block text-sm font-bold text-gray-700 dark:text-gray-300">
-                      Bank Name <span className="text-red-500">*</span>
-                    </label>
-                    <input
-                      type="text"
-                      placeholder="e.g. Emirates NBD, HDFC Bank"
-                      value={bankName}
-                      onChange={handleBankNameChange}
-                      className={`w-full px-4 py-3 bg-white dark:bg-gray-900 border rounded-xl text-gray-900 dark:text-white transition-all outline-none ${
-                        formErrors.bankName
-                          ? "border-red-500 focus:ring-4 focus:ring-red-500/10 focus:border-red-500"
-                          : "border-gray-200 dark:border-gray-700 focus:border-green-500 focus:ring-4 focus:ring-green-500/10"
-                      }`}
-                    />
-                    {formErrors.bankName && (
-                      <p className="text-xs font-semibold text-red-500">{formErrors.bankName}</p>
-                    )}
-                  </div>
-
-                  {/* Account Number */}
-                  <div className="space-y-2">
-                    <label className="block text-sm font-bold text-gray-700 dark:text-gray-300">
-                      Account Number <span className="text-red-500">*</span>
-                    </label>
-                    <input
-                      type="text"
-                      placeholder="e.g. 101004561239"
-                      value={bankAccountNumber}
-                      onChange={handleAccountNumberChange}
-                      className={`w-full px-4 py-3 bg-white dark:bg-gray-900 border rounded-xl text-gray-900 dark:text-white transition-all outline-none ${
-                        formErrors.accountNumber
-                          ? "border-red-500 focus:ring-4 focus:ring-red-500/10 focus:border-red-500"
-                          : "border-gray-200 dark:border-gray-700 focus:border-green-500 focus:ring-4 focus:ring-green-500/10"
-                      }`}
-                    />
-                    {formErrors.accountNumber && (
-                      <p className="text-xs font-semibold text-red-500">{formErrors.accountNumber}</p>
-                    )}
-                  </div>
-
-                  {/* REGION-SPECIFIC bank details fields (India: IFSC, Branch; UAE: IBAN, SWIFT) */}
-                  {bankCountry === "India" ? (
-                    <>
-                      {/* IFSC Code */}
-                      <div className="space-y-2">
-                        <label className="block text-sm font-bold text-gray-700 dark:text-gray-300">
-                          IFSC Code <span className="text-red-500">*</span>
-                        </label>
-                        <input
-                          type="text"
-                          placeholder="e.g. HDFC0000240"
-                          value={bankIfsc}
-                          onChange={handleIfscChange}
-                          className={`w-full px-4 py-3 bg-white dark:bg-gray-900 border rounded-xl text-gray-900 dark:text-white transition-all outline-none font-mono tracking-wider ${
-                            formErrors.ifsc
-                              ? "border-red-500 focus:ring-4 focus:ring-red-500/10 focus:border-red-500"
-                              : "border-gray-200 dark:border-gray-700 focus:border-green-500 focus:ring-4 focus:ring-green-500/10"
-                          }`}
-                        />
-                        {formErrors.ifsc && (
-                          <p className="text-xs font-semibold text-red-500">{formErrors.ifsc}</p>
-                        )}
-                      </div>
-
-                      {/* Branch Name */}
-                      <div className="space-y-2">
-                        <label className="block text-sm font-bold text-gray-700 dark:text-gray-300">
-                          Branch Name <span className="text-red-500">*</span>
-                        </label>
-                        <input
-                          type="text"
-                          placeholder="e.g. Bandra East, Mumbai"
-                          value={bankBranch}
-                          onChange={handleBranchChange}
-                          className={`w-full px-4 py-3 bg-white dark:bg-gray-900 border rounded-xl text-gray-900 dark:text-white transition-all outline-none ${
-                            formErrors.branch
-                              ? "border-red-500 focus:ring-4 focus:ring-red-500/10 focus:border-red-500"
-                              : "border-gray-200 dark:border-gray-700 focus:border-green-500 focus:ring-4 focus:ring-green-500/10"
-                          }`}
-                        />
-                        {formErrors.branch && (
-                          <p className="text-xs font-semibold text-red-500">{formErrors.branch}</p>
-                        )}
-                      </div>
-                    </>
-                  ) : (
-                    <>
-                      {/* IBAN number */}
-                      <div className="space-y-2">
-                        <label className="block text-sm font-bold text-gray-700 dark:text-gray-300">
-                          IBAN Number <span className="text-red-500">*</span>
-                        </label>
-                        <input
-                          type="text"
-                          placeholder="e.g. AE55 0230 0000 1234 5678 901"
-                          value={bankIban}
-                          onChange={handleIbanChange}
-                          className={`w-full px-4 py-3 bg-white dark:bg-gray-900 border rounded-xl text-gray-900 dark:text-white transition-all outline-none font-mono tracking-wide ${
-                            formErrors.iban
-                              ? "border-red-500 focus:ring-4 focus:ring-red-500/10 focus:border-red-500"
-                              : "border-gray-200 dark:border-gray-700 focus:border-green-500 focus:ring-4 focus:ring-green-500/10"
-                          }`}
-                        />
-                        {formErrors.iban && (
-                          <p className="text-xs font-semibold text-red-500">{formErrors.iban}</p>
-                        )}
-                      </div>
-
-                      {/* SWIFT/BIC Code */}
-                      <div className="space-y-2">
-                        <label className="block text-sm font-bold text-gray-700 dark:text-gray-300">
-                          SWIFT/BIC Code <span className="text-red-500">*</span>
-                        </label>
-                        <input
-                          type="text"
-                          placeholder="e.g. EBILAEADXXX"
-                          value={bankSwift}
-                          onChange={handleSwiftChange}
-                          className={`w-full px-4 py-3 bg-white dark:bg-gray-900 border rounded-xl text-gray-900 dark:text-white transition-all outline-none font-mono tracking-wider ${
-                            formErrors.swift
-                              ? "border-red-500 focus:ring-4 focus:ring-red-500/10 focus:border-red-500"
-                              : "border-gray-200 dark:border-gray-700 focus:border-green-500 focus:ring-4 focus:ring-green-500/10"
-                          }`}
-                        />
-                        {formErrors.swift && (
-                          <p className="text-xs font-semibold text-red-500">{formErrors.swift}</p>
-                        )}
-                      </div>
-                    </>
+                <div className="space-y-2">
+                  <label className="block text-sm font-bold text-gray-700 dark:text-gray-300">
+                    Bank Name <span className="text-red-500">*</span>
+                  </label>
+                  <input
+                    type="text"
+                    placeholder="e.g. Emirates NBD, HDFC Bank"
+                    value={bankName}
+                    onChange={handleBankNameChange}
+                    className={`w-full px-4 py-3 bg-white dark:bg-gray-900 border rounded-xl text-gray-900 dark:text-white transition-all outline-none ${
+                      formErrors.bankName
+                        ? "border-red-500 focus:ring-4 focus:ring-red-500/10 focus:border-red-500"
+                        : "border-gray-200 dark:border-gray-700 focus:border-green-500 focus:ring-4 focus:ring-green-500/10"
+                    }`}
+                  />
+                  {formErrors.bankName && (
+                    <p className="text-xs font-semibold text-red-500">{formErrors.bankName}</p>
                   )}
                 </div>
 
-                {/* Save Bank Details Button */}
-                <div className="flex justify-end">
-                  <button
-                    type="button"
-                    onClick={handleAddBankDetails}
-                    className="px-6 py-2.5 bg-green-600 hover:bg-green-700 text-white rounded-full text-xs font-bold transition-all shadow-md flex items-center gap-2 hover:scale-[1.02]"
-                  >
-                    <FiPlus size={14} />
-                    Add Bank Account
-                  </button>
+                <div className="space-y-2">
+                  <label className="block text-sm font-bold text-gray-700 dark:text-gray-300">
+                    Account Number <span className="text-red-500">*</span>
+                  </label>
+                  <input
+                    type="text"
+                    placeholder="e.g. 101004561239"
+                    value={bankAccountNumber}
+                    onChange={handleAccountNumberChange}
+                    className={`w-full px-4 py-3 bg-white dark:bg-gray-900 border rounded-xl text-gray-900 dark:text-white transition-all outline-none ${
+                      formErrors.accountNumber
+                        ? "border-red-500 focus:ring-4 focus:ring-red-500/10 focus:border-red-500"
+                        : "border-gray-200 dark:border-gray-700 focus:border-green-500 focus:ring-4 focus:ring-green-500/10"
+                    }`}
+                  />
+                  {formErrors.accountNumber && (
+                    <p className="text-xs font-semibold text-red-500">{formErrors.accountNumber}</p>
+                  )}
                 </div>
+
+                {/* Payment Cycle */}
+                <div className="space-y-2">
+                  <label className="block text-sm font-bold text-gray-700 dark:text-gray-300">
+                    Payment Cycle <span className="text-red-500">*</span>
+                  </label>
+                  <select
+                    value={paymentCycle}
+                    onChange={(e) => setPaymentCycle(e.target.value)}
+                    className="w-full px-4 py-3 bg-white dark:bg-gray-900 border border-gray-200 dark:border-gray-700 rounded-xl text-gray-900 dark:text-white transition-all outline-none focus:border-green-500 focus:ring-4 focus:ring-green-500/10 cursor-pointer"
+                  >
+                    <option value="Monthly">Monthly</option>
+                    <option value="Weekly">Weekly</option>
+                    <option value="Bi-Weekly">Bi-Weekly</option>
+                    <option value="Quarterly">Quarterly</option>
+                  </select>
+                </div>
+
+                {bankCountry === "India" ? (
+                  <>
+                    <div className="space-y-2">
+                      <label className="block text-sm font-bold text-gray-700 dark:text-gray-300">
+                        IFSC Code <span className="text-red-500">*</span>
+                      </label>
+                      <input
+                        type="text"
+                        placeholder="e.g. HDFC0000240"
+                        value={bankIfsc}
+                        onChange={handleIfscChange}
+                        className={`w-full px-4 py-3 bg-white dark:bg-gray-900 border rounded-xl text-gray-900 dark:text-white transition-all outline-none font-mono tracking-wider ${
+                          formErrors.ifsc
+                            ? "border-red-500 focus:ring-4 focus:ring-red-500/10 focus:border-red-500"
+                            : "border-gray-200 dark:border-gray-700 focus:border-green-500 focus:ring-4 focus:ring-green-500/10"
+                        }`}
+                      />
+                      {formErrors.ifsc && (
+                        <p className="text-xs font-semibold text-red-500">{formErrors.ifsc}</p>
+                      )}
+                    </div>
+
+                    <div className="space-y-2">
+                      <label className="block text-sm font-bold text-gray-700 dark:text-gray-300">
+                        Branch Name <span className="text-red-500">*</span>
+                      </label>
+                      <input
+                        type="text"
+                        placeholder="e.g. Bandra East, Mumbai"
+                        value={bankBranch}
+                        onChange={handleBranchChange}
+                        className={`w-full px-4 py-3 bg-white dark:bg-gray-900 border rounded-xl text-gray-900 dark:text-white transition-all outline-none ${
+                          formErrors.branch
+                            ? "border-red-500 focus:ring-4 focus:ring-red-500/10 focus:border-red-500"
+                            : "border-gray-200 dark:border-gray-700 focus:border-green-500 focus:ring-4 focus:ring-green-500/10"
+                        }`}
+                      />
+                      {formErrors.branch && (
+                        <p className="text-xs font-semibold text-red-500">{formErrors.branch}</p>
+                      )}
+                    </div>
+                  </>
+                ) : (
+                  <>
+                    <div className="space-y-2">
+                      <label className="block text-sm font-bold text-gray-700 dark:text-gray-300">
+                        IBAN Number <span className="text-red-500">*</span>
+                      </label>
+                      <input
+                        type="text"
+                        placeholder="e.g. AE55 0230 0000 1234 5678 901"
+                        value={bankIban}
+                        onChange={handleIbanChange}
+                        className={`w-full px-4 py-3 bg-white dark:bg-gray-900 border rounded-xl text-gray-900 dark:text-white transition-all outline-none font-mono tracking-wide ${
+                          formErrors.iban
+                            ? "border-red-500 focus:ring-4 focus:ring-red-500/10 focus:border-red-500"
+                            : "border-gray-200 dark:border-gray-700 focus:border-green-500 focus:ring-4 focus:ring-green-500/10"
+                        }`}
+                      />
+                      {formErrors.iban && (
+                        <p className="text-xs font-semibold text-red-500">{formErrors.iban}</p>
+                      )}
+                    </div>
+
+                    <div className="space-y-2">
+                      <label className="block text-sm font-bold text-gray-700 dark:text-gray-300">
+                        SWIFT/BIC Code <span className="text-red-500">*</span>
+                      </label>
+                      <input
+                        type="text"
+                        placeholder="e.g. EBILAEADXXX"
+                        value={bankSwift}
+                        onChange={handleSwiftChange}
+                        className={`w-full px-4 py-3 bg-white dark:bg-gray-900 border rounded-xl text-gray-900 dark:text-white transition-all outline-none font-mono tracking-wider ${
+                          formErrors.swift
+                            ? "border-red-500 focus:ring-4 focus:ring-red-500/10 focus:border-red-500"
+                            : "border-gray-200 dark:border-gray-700 focus:border-green-500 focus:ring-4 focus:ring-green-500/10"
+                        }`}
+                      />
+                      {formErrors.swift && (
+                        <p className="text-xs font-semibold text-red-500">{formErrors.swift}</p>
+                      )}
+                    </div>
+                  </>
+                )}
               </div>
 
-            {/* BANK DETAILS SAVED MULTIPLE ROWS RENDERING */}
+              <div className="flex justify-end">
+                <button
+                  type="button"
+                  onClick={handleAddBankDetails}
+                  className="px-6 py-2.5 bg-green-600 hover:bg-green-700 text-white rounded-full text-xs font-bold transition-all shadow-md flex items-center gap-2 hover:scale-[1.02]"
+                >
+                  <FiPlus size={14} />
+                  Add Bank Account
+                </button>
+              </div>
+            </div>
+
+            {/* Bank Accounts List */}
             {bankAccounts.length > 0 && (
-              <div className="overflow-x-auto border border-gray-150 dark:border-gray-700/80 rounded-2xl shadow-inner animate-fadeIn mt-6">
+              <div className="overflow-x-auto border border-gray-150 dark:border-gray-700/80 rounded-2xl shadow-inner mt-6">
                 <table className="min-w-full divide-y divide-gray-100 dark:divide-gray-700/80 text-left">
                   <thead className="bg-gray-50/70 dark:bg-gray-800/40 text-xs font-bold uppercase tracking-wider text-gray-500 dark:text-gray-400">
                     <tr>
                       <th className="px-6 py-4">Country</th>
-                      <th className="px-6 py-4">Bank Name & Account Details</th>
-                      <th className="px-6 py-4">Routing / Key Identifier</th>
-                      <th className="px-6 py-4 text-center">Actions</th>
+                      <th className="px-6 py-4">Bank Details</th>
+                      <th className="px-6 py-4">Identifier</th>
+                      <th className="px-6 py-4 text-center">Action</th>
                     </tr>
                   </thead>
                   <tbody className="divide-y divide-gray-100 dark:divide-gray-750 bg-white dark:bg-gray-800/20">
                     {bankAccounts.map((bank) => (
                       <tr key={bank.id} className="hover:bg-gray-50/30 dark:hover:bg-gray-800/10 transition-colors">
-                        
-                        {/* Bank Country Column */}
                         <td className="px-6 py-5 whitespace-nowrap">
-                          <span className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-xl text-sm font-extrabold text-blue-700 dark:text-blue-400 bg-blue-50 dark:bg-blue-950/30 border border-blue-100 dark:border-blue-900/30 shadow-sm">
+                          <span className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-xl text-sm font-extrabold text-blue-700 dark:text-blue-400 bg-blue-50 dark:bg-blue-950/30 border border-blue-100 dark:border-blue-900/30">
                             <FiGlobe className="text-blue-600" size={14} />
                             {bank.bankCountry}
                           </span>
                         </td>
-
-                        {/* Bank Name, Account details and custom fields stacked */}
                         <td className="px-6 py-5">
                           <div className="space-y-1">
                             <p className="text-sm font-bold text-gray-900 dark:text-white">{bank.bankName}</p>
                             <p className="text-xs text-gray-500 dark:text-gray-400 font-medium">
-                              Account Number: <span className="font-semibold text-gray-700 dark:text-gray-300">{bank.accountNumber}</span>
+                              Account: <span className="font-semibold text-gray-700 dark:text-gray-300">{bank.accountNumber}</span>
                             </p>
                             {bank.bankCountry === "India" && bank.bankBranch && (
                               <p className="text-xs text-gray-500 dark:text-gray-400 font-medium">
@@ -918,35 +922,29 @@ const handleSubmit = (e) => {
                             )}
                           </div>
                         </td>
-
-                        {/* Key Identifier column (India: IFSC Code, UAE: IBAN & SWIFT) */}
                         <td className="px-6 py-5">
                           {bank.bankCountry === "India" ? (
                             <div className="space-y-1">
-                              <span className="text-[10px] font-bold text-gray-400 dark:text-gray-500 uppercase tracking-widest block">IFSC Code</span>
+                              <span className="text-[10px] font-bold text-gray-400 dark:text-gray-500 uppercase tracking-widest block">IFSC</span>
                               <span className="font-mono text-sm font-bold text-gray-900 dark:text-white bg-gray-100 dark:bg-gray-900 px-2.5 py-1 rounded border border-gray-200 dark:border-gray-800">
                                 {bank.bankIfsc}
                               </span>
                             </div>
                           ) : (
                             <div className="space-y-1.5">
-                              <span className="text-[10px] font-bold text-gray-400 dark:text-gray-500 uppercase tracking-widest block">IBAN & SWIFT</span>
-                              <div className="space-y-1">
-                                <span className="font-mono text-xs font-bold text-gray-900 dark:text-white bg-gray-100 dark:bg-gray-900 px-2 py-1 rounded border border-gray-200 dark:border-gray-800 block w-fit">
-                                  {bank.bankIban}
+                              <span className="text-[10px] font-bold text-gray-400 dark:text-gray-500 uppercase tracking-widest block">IBAN</span>
+                              <span className="font-mono text-xs font-bold text-gray-900 dark:text-white bg-gray-100 dark:bg-gray-900 px-2 py-1 rounded border border-gray-200 dark:border-gray-800 block w-fit">
+                                {bank.bankIban}
+                              </span>
+                              {bank.bankSwift && (
+                                <span className="text-[10px] text-gray-400 dark:text-gray-500 font-semibold block">
+                                  SWIFT: <span className="font-mono text-xs font-bold text-gray-700 dark:text-gray-300 bg-gray-100/50 dark:bg-gray-900/50 px-1.5 py-0.5 rounded">{bank.bankSwift}</span>
                                 </span>
-                                {bank.bankSwift && (
-                                  <span className="text-[10px] text-gray-400 dark:text-gray-500 font-semibold block">
-                                    SWIFT: <span className="font-mono text-xs font-bold text-gray-700 dark:text-gray-300 bg-gray-100/50 dark:bg-gray-900/50 px-1.5 py-0.5 rounded">{bank.bankSwift}</span>
-                                  </span>
-                                )}
-                              </div>
+                              )}
                             </div>
                           )}
                         </td>
-
-                        {/* Action column to unlock edit state */}
-                        <td className="px-6 py-5 text-center whitespace-nowrap">
+                        <td className="px-6 py-5 text-center">
                           <button
                             type="button"
                             onClick={() => handleDeleteBank(bank.id)}
@@ -964,7 +962,7 @@ const handleSubmit = (e) => {
           </div>
         </div>
 
-        {/* FOOTER ACTIONS - Navigation controls */}
+        {/* Footer Actions */}
         <div className="flex flex-col sm:flex-row items-center justify-between gap-4 p-6 bg-white dark:bg-gray-800 rounded-2xl border border-gray-100 dark:border-gray-700 shadow-soft">
           <button
             type="button"
@@ -978,7 +976,7 @@ const handleSubmit = (e) => {
           <button
             type="submit"
             className={`w-full sm:w-auto px-8 py-3 rounded-full text-sm font-bold flex items-center justify-center gap-2 transition-all shadow-md hover:shadow-lg whitespace-nowrap text-white ${
-              isSalarySaved && bankAccounts.length > 0
+              (packages.package1.isSaved || packages.package2.isSaved) && bankAccounts.length > 0
                 ? "bg-green-500 hover:bg-green-600 hover:scale-[1.02]"
                 : "bg-gray-300 dark:bg-gray-700 cursor-not-allowed text-gray-500 dark:text-gray-400 opacity-60"
             }`}
