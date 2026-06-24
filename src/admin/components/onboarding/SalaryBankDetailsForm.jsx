@@ -14,6 +14,7 @@ import {
   FiHome,
   FiMapPin,
   FiLoader,
+  FiAlertCircle,
 } from "react-icons/fi";
 import {
   setStep,
@@ -30,16 +31,17 @@ const ICON_MAP = {
 const SalaryBankDetailsForm = () => {
   const dispatch = useDispatch();
   const onboardingState = useSelector((state) => state.onboarding) || {};
-  const { employeeDetails = {} } = onboardingState;
+  const { employeeDetails = {}, savedEmployeeId } = onboardingState;
   
   // Get salary packages from Redux
-  const { packages: availablePackages, loading: packagesLoading } = useSelector(
-  (state) => state.onboarding || { availablePackages: [], packagesLoading: false }
-);
+  const { availablePackages, packagesLoading } = useSelector(
+    (state) => state.onboarding || { availablePackages: [], packagesLoading: false }
+  );
 
   // --- Dynamic State Management ---
   const [isSavingDraft, setIsSavingDraft] = useState(false);
   const [isLoadingPackages, setIsLoadingPackages] = useState(true);
+  const [validationErrors, setValidationErrors] = useState({});
 
   // 1. Salary Packages State
   const [packages, setPackages] = useState({
@@ -52,7 +54,7 @@ const SalaryBankDetailsForm = () => {
       salaryComponents: [],
       isSaved: false,
       totalSalary: 0,
-      packageId: null, // Store the API package ID
+      packageId: null,
     },
     package2: {
       id: "package2",
@@ -105,7 +107,6 @@ const SalaryBankDetailsForm = () => {
         const result = await dispatch(fetchSalaryPackages()).unwrap();
         console.log("Fetched salary packages:", result);
         
-        // Map API packages to local state
         if (result && Array.isArray(result)) {
           const updatedPackages = { ...packages };
           
@@ -208,8 +209,24 @@ const SalaryBankDetailsForm = () => {
     );
   };
 
-  // Get current active package
-  const currentPackage = packages[activePackage];
+  // ─── Validation Functions ──────────────────────────────────────────────
+  const validatePackage = (pkg) => {
+    return pkg.salaryComponents.length > 0 && pkg.isSaved === true;
+  };
+
+  const validateAllPackages = () => {
+    const errors = {};
+    
+    if (!validatePackage(packages.package1)) {
+      errors.package1 = "Package 1 must be configured and saved";
+    }
+    
+    if (!validatePackage(packages.package2)) {
+      errors.package2 = "Package 2 must be configured and saved";
+    }
+    
+    return errors;
+  };
 
   // ─── Actions: Salary Package Management ──────────────────────────────────
   const handlePackageCurrencyChange = (pkgId, currency) => {
@@ -262,6 +279,8 @@ const SalaryBankDetailsForm = () => {
 
     setNewComponentName("");
     setNewComponentPrice("");
+    // Clear validation error for this package
+    setValidationErrors((prev) => ({ ...prev, [pkgId]: "" }));
     showToast("Component added successfully!", "success");
   };
 
@@ -287,7 +306,6 @@ const SalaryBankDetailsForm = () => {
       return;
     }
 
-    // Check if package has an API ID
     if (!pkg.packageId) {
       showToast("Package not found. Please refresh and try again.", "error");
       return;
@@ -303,6 +321,8 @@ const SalaryBankDetailsForm = () => {
       },
     }));
 
+    // Clear validation error for this package
+    setValidationErrors((prev) => ({ ...prev, [pkgId]: "" }));
     showToast(`${pkg.name} salary structure saved!`, "success");
   };
 
@@ -588,76 +608,98 @@ const SalaryBankDetailsForm = () => {
   };
 
   // ─── Final Submit ──────────────────────────────────────────────────────────
-  const handleSubmit = (e) => {
-    e.preventDefault();
+const handleSubmit = (e) => {
+  e.preventDefault();
 
-    // Validate at least one package is saved
-    const hasSavedPackage =
-      packages.package1.isSaved || packages.package2.isSaved;
-    if (!hasSavedPackage) {
-      showToast(
-        "Please save at least one Salary Package before continuing",
-        "warning",
-      );
-      return;
-    }
+  // ─── Validate both packages are saved ──────────────────────────────────
+  const packageErrors = validateAllPackages();
+  setValidationErrors(packageErrors);
 
-    // Validate saved packages have packageId
-    if (packages.package1.isSaved && !packages.package1.packageId) {
-      showToast("Package 1 is not properly configured. Please refresh.", "error");
-      return;
-    }
-    if (packages.package2.isSaved && !packages.package2.packageId) {
-      showToast("Package 2 is not properly configured. Please refresh.", "error");
-      return;
-    }
+  if (Object.keys(packageErrors).length > 0) {
+    const errorMessages = Object.values(packageErrors);
+    showToast(
+      `Please configure both salary packages: ${errorMessages.join(", ")}`,
+      "error"
+    );
+    return;
+  }
 
-    if (bankAccounts.length === 0) {
-      showToast(
-        "Please add at least one Bank Account before continuing",
-        "warning",
-      );
-      return;
-    }
+  // Validate saved packages have packageId
+  if (!packages.package1.packageId) {
+    showToast("Package 1 is not properly configured. Please refresh.", "error");
+    return;
+  }
+  if (!packages.package2.packageId) {
+    showToast("Package 2 is not properly configured. Please refresh.", "error");
+    return;
+  }
 
-    // Prepare payload with package IDs
-    const finalPayload = {
-      packages: {
-        package1: {
-          package_id: packages.package1.packageId,
-          currency: packages.package1.currency,
-          salaryComponents: packages.package1.salaryComponents.map((comp) => ({
-            component_name: comp.name,
-            value: typeof comp.price === "number"
-              ? comp.price
-              : parseFloat(comp.price) || 0,
-          })),
-        },
-        package2: {
-          package_id: packages.package2.packageId,
-          currency: packages.package2.currency,
-          salaryComponents: packages.package2.salaryComponents.map((comp) => ({
-            component_name: comp.name,
-            value: typeof comp.price === "number"
-              ? comp.price
-              : parseFloat(comp.price) || 0,
-          })),
-        },
-      },
-      paymentCycle,
-      bankAccounts: bankAccounts.map((bank) => ({
-        ...bank,
-        accountNumber: bank.accountNumber || "",
-        bankName: bank.bankName || "",
+  if (bankAccounts.length === 0) {
+    showToast(
+      "Please add at least one Bank Account before continuing",
+      "warning",
+    );
+    return;
+  }
+
+  // ─── CORRECTED PAYLOAD STRUCTURE ──────────────────────────────────────
+  const packagesArray = [];
+  
+  if (packages.package1.isSaved && packages.package1.packageId) {
+    packagesArray.push({
+      id: packages.package1.packageId,
+      name: packages.package1.name || "Home Country / WFH",
+      is_active: true,
+      currency: packages.package1.currency || "AED",
+      salary_components: (packages.package1.salaryComponents || []).map((comp) => ({
+        component_name: comp.name,
+        value: typeof comp.price === "number"
+          ? comp.price
+          : parseFloat(comp.price) || 0,
       })),
-    };
+    });
+  }
+  
+  if (packages.package2.isSaved && packages.package2.packageId) {
+    packagesArray.push({
+      id: packages.package2.packageId,
+      name: packages.package2.name || "Dubai Onsite",
+      is_active: true,
+      currency: packages.package2.currency || "AED",
+      salary_components: (packages.package2.salaryComponents || []).map((comp) => ({
+        component_name: comp.name,
+        value: typeof comp.price === "number"
+          ? comp.price
+          : parseFloat(comp.price) || 0,
+      })),
+    });
+  }
 
-    console.log("[SalaryBankDetailsForm] Saving to Redux:", finalPayload);
-
-    dispatch(updateEmployeeDetails(finalPayload));
-    dispatch(setStep(4));
-    showToast("Financial details verified and saved!", "success");
+  const finalPayload = {
+    user_id: savedEmployeeId || onboardingState.savedEmployeeId,
+    payment_cycle: paymentCycle || "Monthly",
+    packages: packagesArray,
   };
+
+  console.log("[SalaryBankDetailsForm] Saving to API:", JSON.stringify(finalPayload, null, 2));
+
+  // Update Redux state
+  dispatch(updateEmployeeDetails({
+    packages: {
+      package1: packages.package1,
+      package2: packages.package2,
+    },
+    paymentCycle,
+    bankAccounts: bankAccounts.map((bank) => ({
+      ...bank,
+      accountNumber: bank.accountNumber || "",
+      bankName: bank.bankName || "",
+    })),
+  }));
+  
+  dispatch(setStep(4));
+  showToast("Financial details verified and saved!", "success");
+};
 
   const handleBack = () => {
     dispatch(setStep(2));
@@ -672,32 +714,49 @@ const SalaryBankDetailsForm = () => {
     const isActive = activePackage === pkgId;
     const total = computePackageTotal(pkg.salaryComponents);
     const IconComponent = getIconComponent(pkg.iconName);
+    const hasError = validationErrors[pkgId];
 
     return (
       <div
         className={`border rounded-2xl overflow-hidden transition-all ${
           isActive
             ? "border-green-500 ring-2 ring-green-500/20"
+            : hasError && !pkg.isSaved
+            ? "border-red-400 ring-2 ring-red-500/20"
             : "border-gray-200 dark:border-gray-700"
         }`}
       >
         {/* Package Header */}
         <div
-          className="px-5 py-4 bg-gray-50/70 dark:bg-gray-800/50 border-b border-gray-100 dark:border-gray-700 flex items-center justify-between cursor-pointer hover:bg-gray-100/50 dark:hover:bg-gray-700/30 transition-all"
+          className={`px-5 py-4 border-b flex items-center justify-between cursor-pointer hover:bg-gray-100/50 dark:hover:bg-gray-700/30 transition-all ${
+            hasError && !pkg.isSaved
+              ? "bg-red-50/70 dark:bg-red-900/10 border-red-200 dark:border-red-800"
+              : "bg-gray-50/70 dark:bg-gray-800/50 border-gray-100 dark:border-gray-700"
+          }`}
           onClick={() => setActivePackage(pkgId)}
         >
           <div className="flex items-center gap-3">
-            <div className="w-10 h-10 rounded-xl bg-green-100 dark:bg-green-900/30 flex items-center justify-center text-green-600 dark:text-green-400">
+            <div className={`w-10 h-10 rounded-xl flex items-center justify-center ${
+              hasError && !pkg.isSaved
+                ? "bg-red-100 dark:bg-red-900/30 text-red-600 dark:text-red-400"
+                : "bg-green-100 dark:bg-green-900/30 text-green-600 dark:text-green-400"
+            }`}>
               <IconComponent className={`w-5 h-5 ${pkg.iconClass}`} />
             </div>
             <div>
               <h4 className="text-sm font-bold text-gray-900 dark:text-white">
                 {pkg.name}
+                {hasError && !pkg.isSaved && (
+                  <span className="ml-2 text-xs text-red-500 font-normal">
+                    <FiAlertCircle className="inline mr-1" />
+                    Required
+                  </span>
+                )}
               </h4>
               <p className="text-xs text-gray-500 dark:text-gray-400">
                 {pkg.isSaved
-                  ? `Saved • ${typeof pkg.currency === "string" ? pkg.currency : "AED"} ${total.toLocaleString()}`
-                  : "Not configured"}
+                  ? `✅ Saved • ${typeof pkg.currency === "string" ? pkg.currency : "AED"} ${total.toLocaleString()}`
+                  : "⚠️ Not configured - Required"}
               </p>
             </div>
           </div>
@@ -705,6 +764,11 @@ const SalaryBankDetailsForm = () => {
             {pkg.isSaved && (
               <span className="text-xs font-bold text-green-600 dark:text-green-400 bg-green-50 dark:bg-green-950/30 px-2.5 py-1 rounded-full">
                 Active
+              </span>
+            )}
+            {!pkg.isSaved && (
+              <span className="text-xs font-bold text-red-500 bg-red-50 dark:bg-red-950/30 px-2.5 py-1 rounded-full">
+                Required
               </span>
             )}
             <span className="text-gray-400">
@@ -729,7 +793,6 @@ const SalaryBankDetailsForm = () => {
                 <p className="text-xs text-gray-400 mt-1">Please refresh and try again</p>
               </div>
             ) : !pkg.isSaved ? (
-              // Edit Mode
               <div className="space-y-5">
                 {/* Currency Selector */}
                 <div className="space-y-2">
@@ -935,20 +998,33 @@ const SalaryBankDetailsForm = () => {
                   Salary Packages
                 </h3>
                 <p className="text-xs text-gray-500 dark:text-gray-400 font-medium">
-                  Configure Home Country/WFH and Dubai Onsite packages
+                  Both packages must be configured and saved
                 </p>
               </div>
             </div>
 
-            <button
-              type="button"
-              onClick={handleSaveDraft}
-              disabled={isSavingDraft}
-              className="flex items-center justify-center gap-2 px-4 py-2 text-sm font-semibold text-green-600 dark:text-green-400 bg-green-50 dark:bg-green-950/20 rounded-xl hover:bg-green-100 dark:hover:bg-green-950/40 transition-all border border-green-100 dark:border-green-900/30 shadow-sm"
-            >
-              <FiSave size={16} />
-              {isSavingDraft ? "Saving..." : "Save Draft"}
-            </button>
+            <div className="flex items-center gap-3">
+              <span className={`text-xs font-semibold px-3 py-1 rounded-full ${
+                packages.package1.isSaved && packages.package2.isSaved
+                  ? "bg-green-100 text-green-700 dark:bg-green-900/30 dark:text-green-400"
+                  : "bg-yellow-100 text-yellow-700 dark:bg-yellow-900/30 dark:text-yellow-400"
+              }`}>
+                {packages.package1.isSaved && packages.package2.isSaved ? (
+                  "✓ Both Ready"
+                ) : (
+                  "⚠️ Both Required"
+                )}
+              </span>
+              <button
+                type="button"
+                onClick={handleSaveDraft}
+                disabled={isSavingDraft}
+                className="flex items-center justify-center gap-2 px-4 py-2 text-sm font-semibold text-green-600 dark:text-green-400 bg-green-50 dark:bg-green-950/20 rounded-xl hover:bg-green-100 dark:hover:bg-green-950/40 transition-all border border-green-100 dark:border-green-900/30 shadow-sm"
+              >
+                <FiSave size={16} />
+                {isSavingDraft ? "Saving..." : "Save Draft"}
+              </button>
+            </div>
           </div>
 
           <div className="p-6 md:p-8 space-y-6">
@@ -1267,10 +1343,9 @@ const SalaryBankDetailsForm = () => {
 
           <button
             type="submit"
-            className={`w-full sm:w-auto px-8 py-3 rounded-full text-sm font-bold flex items-center justify-center gap-2 transition-all shadow-md hover:shadow-lg whitespace-nowrap text-white ${
-              (packages.package1.isSaved || packages.package2.isSaved) &&
-              bankAccounts.length > 0
-                ? "bg-green-500 hover:bg-green-600 hover:scale-[1.02]"
+            className={`w-full sm:w-auto px-8 py-3 rounded-full text-sm font-bold flex items-center justify-center gap-2 transition-all shadow-md hover:shadow-lg whitespace-nowrap ${
+              packages.package1.isSaved && packages.package2.isSaved && bankAccounts.length > 0
+                ? "bg-green-500 hover:bg-green-600 text-white hover:scale-[1.02]"
                 : "bg-gray-300 dark:bg-gray-700 cursor-not-allowed text-gray-500 dark:text-gray-400 opacity-60"
             }`}
           >

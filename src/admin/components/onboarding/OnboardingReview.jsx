@@ -13,6 +13,7 @@ import {
   FiX,
   FiDollarSign,
   FiCalendar,
+  FiPackage,
 } from "react-icons/fi";
 import {
   setStep,
@@ -122,7 +123,7 @@ const OnboardingReview = () => {
     return `EMP-${dobDay}${dobMonth}${dobYear}-${joiningDay}${joiningMonth}${joiningYear}`;
   };
 
-  // Step 1: Save employee details
+  // ─── Step 1: Save employee details ──────────────────────────────────────
   const saveEmployeeDetails = async (data) => {
     console.log("[Onboarding] Step 1: Saving employee details...");
     const response = await apiClient.post(
@@ -133,31 +134,72 @@ const OnboardingReview = () => {
     return response.data;
   };
 
-  // Step 2: Save salary details - FIXED PAYLOAD STRUCTURE
-  const saveSalaryDetails = async (employeeId, salaryData) => {
-    console.log(
-      "[Onboarding] Step 2: Saving salary details for employee:",
-      employeeId,
-    );
+  // ─── Step 2: Save salary details with packages ──────────────────────────
+  // ─── Step 2: Save salary details with packages ──────────────────────────
+  const saveSalaryDetails = async (userId, salaryData) => {
+    console.log("[Onboarding] Step 2: Saving salary details for user:", userId);
 
-    // Format salary components as an object with component_name and value
-    const salaryComponentsArray = salaryData.salaryComponents || [];
+    // Get packages from employeeDetails
+    const packages = salaryData.packages || {};
+
+    // Build packages array for API
+    const packagesArray = [];
+
+    // Package 1
+    if (
+      packages.package1 &&
+      packages.package1.isSaved &&
+      packages.package1.packageId
+    ) {
+      const pkg1 = packages.package1;
+      packagesArray.push({
+        id: pkg1.packageId,
+        name: pkg1.name || "Home Country / WFH",
+        is_active: true,
+        currency: pkg1.currency || "AED",
+        salary_components: (pkg1.salaryComponents || []).map((comp) => ({
+          component_name: comp.name,
+          value:
+            typeof comp.price === "number"
+              ? comp.price
+              : parseFloat(comp.price) || 0,
+        })),
+      });
+    }
+
+    // Package 2
+    if (
+      packages.package2 &&
+      packages.package2.isSaved &&
+      packages.package2.packageId
+    ) {
+      const pkg2 = packages.package2;
+      packagesArray.push({
+        id: pkg2.packageId,
+        name: pkg2.name || "Dubai Onsite",
+        is_active: true,
+        currency: pkg2.currency || "AED",
+        salary_components: (pkg2.salaryComponents || []).map((comp) => ({
+          component_name: comp.name,
+          value:
+            typeof comp.price === "number"
+              ? comp.price
+              : parseFloat(comp.price) || 0,
+        })),
+      });
+    }
 
     // Prepare payload matching backend expectations
     const payload = {
-      user_id: employeeId,
-      basic_salary: salaryData.basicSalary || "0",
-      other_allowance: salaryData.otherAllowance || "0",
-      total_salary: salaryData.totalMonthlySalary || "0",
+      user_id: userId,
       payment_cycle: salaryData.paymentCycle || "Monthly",
-      currency: salaryData.currency || "AED",
-      salary_components: salaryComponentsArray.map((comp) => ({
-        component_name: comp.component_name,
-        value: comp.value,
-      })),
+      packages: packagesArray,
     };
 
-    console.log("[Onboarding] Salary payload:", payload);
+    console.log(
+      "[Onboarding] Salary payload:",
+      JSON.stringify(payload, null, 2),
+    );
     const response = await apiClient.post(
       "/admin/employees/onboard/salary",
       payload,
@@ -166,8 +208,7 @@ const OnboardingReview = () => {
     return response.data;
   };
 
-  // Step 3: Save bank details
-  // Step 3: Save bank details - CORRECTED to match backend expectations
+  // ─── Step 3: Save bank details ──────────────────────────────────────────
   const saveBankDetails = async (userId, bankData) => {
     console.log("[Onboarding] Step 3: Saving bank details for user:", userId);
 
@@ -178,7 +219,6 @@ const OnboardingReview = () => {
       return { success: true, message: "No bank accounts provided" };
     }
 
-    // Transform to match backend expected format
     const payload = {
       user_id: userId,
       bank_details: bankAccounts.map((account) => ({
@@ -187,7 +227,7 @@ const OnboardingReview = () => {
         account_number: account.accountNumber,
         ifsc_code: account.bankIfsc || null,
         branch_name: account.bankBranch || null,
-        iban_number: account.bankIban || null, // Changed from 'iban' to 'iban_number'
+        iban_number: account.bankIban || null,
         swift_code: account.bankSwift || null,
       })),
     };
@@ -208,7 +248,7 @@ const OnboardingReview = () => {
     }
   };
 
-  // Step 4: Complete onboarding
+  // ─── Step 4: Complete onboarding ────────────────────────────────────────
   const completeOnboardingProcess = async (employeeId) => {
     console.log(
       "[Onboarding] Step 4: Completing onboarding for employee:",
@@ -221,6 +261,7 @@ const OnboardingReview = () => {
     return response.data;
   };
 
+  // ─── Handle Submit ──────────────────────────────────────────────────────
   const handleSubmit = async () => {
     if (isSubmitting) return;
     setIsSubmitting(true);
@@ -438,7 +479,7 @@ const OnboardingReview = () => {
         const createRes = await saveEmployeeDetails(employeeFormData);
         createdEmployee = createRes.data || createRes;
         const employeeId = createdEmployee.id || createdEmployee.employee_id;
-        const userId = createdEmployee.user_id; // IMPORTANT: Get the user_id
+        const userId = createdEmployee.user_id;
 
         setEmployeeId(employeeId);
         console.log(
@@ -448,30 +489,16 @@ const OnboardingReview = () => {
           userId,
         );
 
-        // Validate we have user_id before proceeding
         if (!userId) {
           throw new Error("No user_id returned from employee creation");
         }
 
-        // Save salary details with user_id
+        // ─── Save salary details with packages ──────────────────────────────
         console.log("[Onboarding] Saving salary details...");
         try {
-          // Transform salary components to backend format if needed
-          const salaryComponentsForApi = (
-            employeeDetails.salaryComponents || []
-          ).map((comp) => ({
-            component_name: comp.component_name || comp.name,
-            value: comp.value || comp.price,
-          }));
-
           await saveSalaryDetails(userId, {
-            // ✅ Use userId
-            basicSalary: employeeDetails.basicSalary,
-            otherAllowance: employeeDetails.otherAllowance,
-            totalMonthlySalary: employeeDetails.totalMonthlySalary,
-            paymentCycle: employeeDetails.paymentCycle,
-            currency: employeeDetails.currency,
-            salaryComponents: salaryComponentsForApi,
+            packages: employeeDetails.packages || {},
+            paymentCycle: employeeDetails.paymentCycle || "Monthly",
           });
           console.log("[Onboarding] Salary details saved successfully");
         } catch (error) {
@@ -498,11 +525,10 @@ const OnboardingReview = () => {
           }
         }
 
-        // Save bank details with user_id
+        // ─── Save bank details ──────────────────────────────────────────────
         console.log("[Onboarding] Saving bank details...");
         try {
           await saveBankDetails(userId, {
-            // ✅ Use userId
             bankAccounts: employeeDetails.bankAccounts || [],
           });
           console.log("[Onboarding] Bank details saved successfully");
@@ -530,10 +556,10 @@ const OnboardingReview = () => {
           }
         }
 
-        // Complete onboarding with user_id
+        // ─── Complete onboarding ─────────────────────────────────────────────
         console.log("[Onboarding] Completing onboarding process...");
         try {
-          await completeOnboardingProcess(userId); // ✅ Use userId
+          await completeOnboardingProcess(userId);
           console.log("[Onboarding] Onboarding completed successfully!");
 
           dispatch(fetchEmployees());
@@ -634,6 +660,18 @@ const OnboardingReview = () => {
       <div className="p-6">{children}</div>
     </div>
   );
+
+  // ─── Get packages from employeeDetails ──────────────────────────────────
+  const packages = employeeDetails.packages || {};
+  const package1 = packages.package1 || {};
+  const package2 = packages.package2 || {};
+
+  const totalSalary = (pkg) => {
+    return (pkg.salaryComponents || []).reduce(
+      (sum, comp) => sum + (comp.price || 0),
+      0,
+    );
+  };
 
   return (
     <>
@@ -815,48 +853,100 @@ const OnboardingReview = () => {
           <div className="md:col-span-2">
             <SummaryCard title="Salary & Bank Details" icon={FiDollarSign}>
               <div className="space-y-6">
-                {/* Salary Summary */}
-                <div className="grid grid-cols-1 sm:grid-cols-4 gap-6">
-                  <div>
-                    <p className="text-xs font-semibold text-gray-400 uppercase">
-                      Currency
-                    </p>
-                    <p className="text-sm font-bold text-gray-900 dark:text-white">
-                      {employeeDetails.currency || "AED"}
-                    </p>
-                  </div>
-                  <div>
-                    <p className="text-xs font-semibold text-gray-400 uppercase">
-                      Basic Salary
-                    </p>
-                    <p className="text-sm font-bold text-gray-900 dark:text-white">
-                      {employeeDetails.currency || "AED"}{" "}
-                      {parseFloat(
-                        employeeDetails.basicSalary || 0,
-                      ).toLocaleString()}
-                    </p>
-                  </div>
-                  <div>
-                    <p className="text-xs font-semibold text-gray-400 uppercase">
-                      Other Allowance
-                    </p>
-                    <p className="text-sm font-bold text-gray-900 dark:text-white">
-                      {employeeDetails.currency || "AED"}{" "}
-                      {parseFloat(
-                        employeeDetails.otherAllowance || 0,
-                      ).toLocaleString()}
-                    </p>
-                  </div>
-                  <div>
-                    <p className="text-xs font-semibold text-gray-400 uppercase">
-                      Total Monthly
-                    </p>
-                    <p className="text-sm font-extrabold text-green-600">
-                      {employeeDetails.currency || "AED"}{" "}
-                      {parseFloat(
-                        employeeDetails.totalMonthlySalary || 0,
-                      ).toLocaleString()}
-                    </p>
+                {/* Salary Packages Summary */}
+                <div className="space-y-4">
+                  <p className="text-xs font-semibold text-gray-400 uppercase tracking-wider flex items-center gap-2">
+                    <FiPackage size={14} />
+                    Salary Packages
+                  </p>
+
+                  {/* Package 1 */}
+                  {package1.isSaved && package1.packageId && (
+                    <div className="border border-gray-200 dark:border-gray-700 rounded-xl overflow-hidden">
+                      <div className="bg-gray-50 dark:bg-gray-800/50 px-4 py-3 border-b border-gray-200 dark:border-gray-700 flex justify-between items-center">
+                        <div className="flex items-center gap-2">
+                          <span className="text-xs font-bold text-green-600 dark:text-green-400">
+                            {package1.name || "Package 1"}
+                          </span>
+                          <span className="text-xs px-2 py-0.5 bg-blue-100 dark:bg-blue-900/30 text-blue-700 dark:text-blue-400 rounded-full">
+                            {package1.currency || "AED"}
+                          </span>
+                        </div>
+                        <span className="text-sm font-bold text-green-600 dark:text-green-400">
+                          {package1.currency || "AED"}{" "}
+                          {totalSalary(package1).toLocaleString()}
+                        </span>
+                      </div>
+                      <div className="p-4 space-y-2">
+                        {(package1.salaryComponents || []).map((comp, idx) => (
+                          <div
+                            key={idx}
+                            className="flex justify-between text-sm"
+                          >
+                            <span className="text-gray-600 dark:text-gray-400">
+                              {comp.name}
+                            </span>
+                            <span className="font-medium text-gray-900 dark:text-white">
+                              {package1.currency || "AED"}{" "}
+                              {comp.price.toLocaleString()}
+                            </span>
+                          </div>
+                        ))}
+                      </div>
+                    </div>
+                  )}
+
+                  {/* Package 2 */}
+                  {package2.isSaved && package2.packageId && (
+                    <div className="border border-gray-200 dark:border-gray-700 rounded-xl overflow-hidden">
+                      <div className="bg-gray-50 dark:bg-gray-800/50 px-4 py-3 border-b border-gray-200 dark:border-gray-700 flex justify-between items-center">
+                        <div className="flex items-center gap-2">
+                          <span className="text-xs font-bold text-green-600 dark:text-green-400">
+                            {package2.name || "Package 2"}
+                          </span>
+                          <span className="text-xs px-2 py-0.5 bg-blue-100 dark:bg-blue-900/30 text-blue-700 dark:text-blue-400 rounded-full">
+                            {package2.currency || "AED"}
+                          </span>
+                        </div>
+                        <span className="text-sm font-bold text-green-600 dark:text-green-400">
+                          {package2.currency || "AED"}{" "}
+                          {totalSalary(package2).toLocaleString()}
+                        </span>
+                      </div>
+                      <div className="p-4 space-y-2">
+                        {(package2.salaryComponents || []).map((comp, idx) => (
+                          <div
+                            key={idx}
+                            className="flex justify-between text-sm"
+                          >
+                            <span className="text-gray-600 dark:text-gray-400">
+                              {comp.name}
+                            </span>
+                            <span className="font-medium text-gray-900 dark:text-white">
+                              {package2.currency || "AED"}{" "}
+                              {comp.price.toLocaleString()}
+                            </span>
+                          </div>
+                        ))}
+                      </div>
+                    </div>
+                  )}
+
+                  {!package1.isSaved && !package2.isSaved && (
+                    <div className="text-center py-4 text-gray-500 text-sm">
+                      No salary packages configured
+                    </div>
+                  )}
+
+                  {/* Payment Cycle */}
+                  <div className="flex items-center gap-2 text-sm pt-2 border-t border-gray-100 dark:border-gray-700">
+                    <FiCalendar className="text-gray-400" />
+                    <span className="text-gray-500 font-medium">
+                      Payment Cycle:
+                    </span>
+                    <span className="text-gray-900 dark:text-gray-300 font-semibold">
+                      {employeeDetails.paymentCycle || "Monthly"}
+                    </span>
                   </div>
                 </div>
 
@@ -873,7 +963,6 @@ const OnboardingReview = () => {
                             key={idx}
                             className="border border-gray-200 dark:border-gray-700 rounded-lg overflow-hidden"
                           >
-                            {/* Bank Header */}
                             <div className="bg-gray-50 dark:bg-gray-800/50 px-4 py-2 border-b border-gray-200 dark:border-gray-700 flex justify-between items-center">
                               <div className="flex items-center gap-2">
                                 <span className="text-xs font-bold text-gray-500 uppercase">
@@ -884,11 +973,8 @@ const OnboardingReview = () => {
                                 </span>
                               </div>
                             </div>
-
-                            {/* Bank Details Body */}
                             <div className="p-4">
                               <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                                {/* Left Column */}
                                 <div className="space-y-2">
                                   <div>
                                     <p className="text-xs text-gray-500 uppercase tracking-wide">
@@ -918,8 +1004,6 @@ const OnboardingReview = () => {
                                       </div>
                                     )}
                                 </div>
-
-                                {/* Right Column */}
                                 <div className="space-y-2">
                                   {bank.bankCountry === "India" &&
                                     bank.bankIfsc && (
@@ -963,7 +1047,6 @@ const OnboardingReview = () => {
                     </div>
                   )}
 
-                {/* Debug: Show if no bank accounts */}
                 {(!employeeDetails.bankAccounts ||
                   employeeDetails.bankAccounts.length === 0) && (
                   <div className="border-t border-gray-100 pt-4">
