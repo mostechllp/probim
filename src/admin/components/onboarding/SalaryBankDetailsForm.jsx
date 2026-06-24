@@ -2,9 +2,28 @@
 
 import { useEffect, useState } from "react";
 import { useDispatch, useSelector } from "react-redux";
-import { FiChevronRight, FiChevronLeft, FiDollarSign, FiCreditCard, FiActivity, FiSave, FiPlus, FiTrash2, FiEdit, FiGlobe, FiHome, FiMapPin } from "react-icons/fi";
-import { setStep, updateEmployeeDetails } from "../../store/slices/onboardingSlice";
+import {
+  FiChevronRight,
+  FiChevronLeft,
+  FiDollarSign,
+  FiCreditCard,
+  FiSave,
+  FiPlus,
+  FiTrash2,
+  FiEdit,
+  FiHome,
+  FiMapPin,
+} from "react-icons/fi";
+import {
+  setStep,
+  updateEmployeeDetails,
+} from "../../store/slices/onboardingSlice";
 import { showToast } from "../../components/common/Toast";
+
+const ICON_MAP = {
+  FiHome: FiHome,
+  FiMapPin: FiMapPin,
+};
 
 const SalaryBankDetailsForm = () => {
   const dispatch = useDispatch();
@@ -19,7 +38,8 @@ const SalaryBankDetailsForm = () => {
     package1: {
       id: "package1",
       name: "Home Country / WFH",
-      icon: <FiHome className="text-blue-500" />,
+      iconName: "FiHome",
+      iconClass: "text-blue-500",
       currency: "AED",
       salaryComponents: [],
       isSaved: false,
@@ -28,12 +48,13 @@ const SalaryBankDetailsForm = () => {
     package2: {
       id: "package2",
       name: "Dubai Onsite",
-      icon: <FiMapPin className="text-green-500" />,
+      iconName: "FiMapPin",
+      iconClass: "text-green-500",
       currency: "AED",
       salaryComponents: [],
       isSaved: false,
       totalSalary: 0,
-    }
+    },
   });
 
   // 2. Bank Details States
@@ -106,19 +127,26 @@ const SalaryBankDetailsForm = () => {
       }
 
       // Load bank accounts
-      if (Array.isArray(details.bankAccounts) && details.bankAccounts.length > 0) {
+      if (
+        Array.isArray(details.bankAccounts) &&
+        details.bankAccounts.length > 0
+      ) {
         setBankAccounts(details.bankAccounts);
       } else if (details.bankName) {
-        setBankAccounts([{
-          id: Date.now(),
-          bankCountry: details.bankCountry || "UAE",
-          bankName: details.bankName,
-          accountNumber: details.accountNumber,
-          bankIfsc: details.bankIfsc || "",
-          bankBranch: details.bankBranch || "",
-          bankIban: details.bankIban ? details.bankIban.replace(/\s/g, "") : "",
-          bankSwift: details.bankSwift || ""
-        }]);
+        setBankAccounts([
+          {
+            id: Date.now(),
+            bankCountry: details.bankCountry || "UAE",
+            bankName: details.bankName,
+            accountNumber: details.accountNumber,
+            bankIfsc: details.bankIfsc || "",
+            bankBranch: details.bankBranch || "",
+            bankIban: details.bankIban
+              ? details.bankIban.replace(/\s/g, "")
+              : "",
+            bankSwift: details.bankSwift || "",
+          },
+        ]);
       }
 
       if (details.paymentCycle) setPaymentCycle(details.paymentCycle);
@@ -127,7 +155,10 @@ const SalaryBankDetailsForm = () => {
 
   // Compute total salary for a package
   const computePackageTotal = (components) => {
-    return components.reduce((sum, comp) => sum + (comp.price || comp.value || 0), 0);
+    return components.reduce(
+      (sum, comp) => sum + (comp.price || comp.value || 0),
+      0,
+    );
   };
 
   // Get current active package
@@ -135,12 +166,12 @@ const SalaryBankDetailsForm = () => {
 
   // --- Actions: Salary Package Management ---
   const handlePackageCurrencyChange = (pkgId, currency) => {
-    setPackages(prev => ({
+    setPackages((prev) => ({
       ...prev,
       [pkgId]: {
         ...prev[pkgId],
         currency,
-      }
+      },
     }));
   };
 
@@ -156,23 +187,30 @@ const SalaryBankDetailsForm = () => {
     }
 
     const pkg = packages[pkgId];
-    if (pkg.salaryComponents.some(c => c.name.toLowerCase() === newComponentName.trim().toLowerCase())) {
-      showToast(`Component "${newComponentName.trim()}" already exists in this package!`, "error");
+    if (
+      pkg.salaryComponents.some(
+        (c) => c.name.toLowerCase() === newComponentName.trim().toLowerCase(),
+      )
+    ) {
+      showToast(
+        `Component "${newComponentName.trim()}" already exists in this package!`,
+        "error",
+      );
       return;
     }
 
     const newComponent = {
       id: Date.now(),
       name: newComponentName.trim(),
-      price: priceNum
+      price: priceNum,
     };
 
-    setPackages(prev => ({
+    setPackages((prev) => ({
       ...prev,
       [pkgId]: {
         ...prev[pkgId],
-        salaryComponents: [...prev[pkgId].salaryComponents, newComponent]
-      }
+        salaryComponents: [...prev[pkgId].salaryComponents, newComponent],
+      },
     }));
 
     setNewComponentName("");
@@ -181,46 +219,51 @@ const SalaryBankDetailsForm = () => {
   };
 
   const handleDeleteSalaryComponent = (pkgId, componentId) => {
-    setPackages(prev => ({
+    setPackages((prev) => ({
       ...prev,
       [pkgId]: {
         ...prev[pkgId],
-        salaryComponents: prev[pkgId].salaryComponents.filter(c => c.id !== componentId)
-      }
+        salaryComponents: prev[pkgId].salaryComponents.filter(
+          (c) => c.id !== componentId,
+        ),
+      },
     }));
   };
 
   const handleSaveSalaryPackage = (pkgId) => {
     const pkg = packages[pkgId];
     if (pkg.salaryComponents.length === 0) {
-      showToast(`Please add at least one salary component to ${pkg.name} before saving`, "error");
+      showToast(
+        `Please add at least one salary component to ${pkg.name} before saving`,
+        "error",
+      );
       return;
     }
 
     const total = computePackageTotal(pkg.salaryComponents);
-    setPackages(prev => ({
+    setPackages((prev) => ({
       ...prev,
       [pkgId]: {
         ...prev[pkgId],
         isSaved: true,
-        totalSalary: total
-      }
+        totalSalary: total,
+      },
     }));
 
     showToast(`${pkg.name} salary structure saved!`, "success");
   };
 
   const handleEditPackage = (pkgId) => {
-    setPackages(prev => ({
+    setPackages((prev) => ({
       ...prev,
       [pkgId]: {
         ...prev[pkgId],
-        isSaved: false
-      }
+        isSaved: false,
+      },
     }));
   };
 
-  // --- Bank Details Functions (unchanged) ---
+  // --- Bank Details Functions ---
   const handleBankCountryChange = (e) => {
     const selectedCountry = e.target.value;
     setBankCountry(selectedCountry);
@@ -235,43 +278,70 @@ const SalaryBankDetailsForm = () => {
     const val = e.target.value;
     setBankName(val);
     if (!val.trim()) {
-      setFormErrors(prev => ({ ...prev, bankName: "Bank name is required" }));
+      setFormErrors((prev) => ({ ...prev, bankName: "Bank name is required" }));
     } else if (val.trim().length < 2) {
-      setFormErrors(prev => ({ ...prev, bankName: "Bank name must be at least 2 characters" }));
+      setFormErrors((prev) => ({
+        ...prev,
+        bankName: "Bank name must be at least 2 characters",
+      }));
     } else {
-      setFormErrors(prev => ({ ...prev, bankName: "" }));
+      setFormErrors((prev) => ({ ...prev, bankName: "" }));
     }
   };
 
   const handleAccountNumberChange = (e) => {
     const val = e.target.value.replace(/[^a-zA-Z0-9-\s]/g, "");
     setBankAccountNumber(val);
-    
+
     const cleanVal = val.replace(/[\s-]/g, "");
     if (!val.trim()) {
-      setFormErrors(prev => ({ ...prev, accountNumber: "Account number is required" }));
-    } else if (bankCountry === "India" && (cleanVal.length < 9 || cleanVal.length > 18)) {
-      setFormErrors(prev => ({ ...prev, accountNumber: "Indian bank account numbers must be 9 to 18 digits" }));
-    } else if (bankCountry === "UAE" && (cleanVal.length < 8 || cleanVal.length > 16)) {
-      setFormErrors(prev => ({ ...prev, accountNumber: "UAE bank account numbers must be 8 to 16 digits" }));
+      setFormErrors((prev) => ({
+        ...prev,
+        accountNumber: "Account number is required",
+      }));
+    } else if (
+      bankCountry === "India" &&
+      (cleanVal.length < 9 || cleanVal.length > 18)
+    ) {
+      setFormErrors((prev) => ({
+        ...prev,
+        accountNumber: "Indian bank account numbers must be 9 to 18 digits",
+      }));
+    } else if (
+      bankCountry === "UAE" &&
+      (cleanVal.length < 8 || cleanVal.length > 16)
+    ) {
+      setFormErrors((prev) => ({
+        ...prev,
+        accountNumber: "UAE bank account numbers must be 8 to 16 digits",
+      }));
     } else {
-      setFormErrors(prev => ({ ...prev, accountNumber: "" }));
+      setFormErrors((prev) => ({ ...prev, accountNumber: "" }));
     }
   };
 
   const handleIfscChange = (e) => {
-    const val = e.target.value.toUpperCase().replace(/[^A-Z0-9]/g, "").substring(0, 11);
+    const val = e.target.value
+      .toUpperCase()
+      .replace(/[^A-Z0-9]/g, "")
+      .substring(0, 11);
     setBankIfsc(val);
-    
+
     const ifscRegex = /^[A-Z]{4}0[A-Z0-9]{6}$/;
     if (!val) {
-      setFormErrors(prev => ({ ...prev, ifsc: "IFSC Code is required" }));
+      setFormErrors((prev) => ({ ...prev, ifsc: "IFSC Code is required" }));
     } else if (val.length < 11) {
-      setFormErrors(prev => ({ ...prev, ifsc: "IFSC Code must be exactly 11 characters" }));
+      setFormErrors((prev) => ({
+        ...prev,
+        ifsc: "IFSC Code must be exactly 11 characters",
+      }));
     } else if (!ifscRegex.test(val)) {
-      setFormErrors(prev => ({ ...prev, ifsc: "Format must be: 4 letters, 0, then 6 alphanumeric (e.g. HDFC0000123)" }));
+      setFormErrors((prev) => ({
+        ...prev,
+        ifsc: "Format must be: 4 letters, 0, then 6 alphanumeric (e.g. HDFC0000123)",
+      }));
     } else {
-      setFormErrors(prev => ({ ...prev, ifsc: "" }));
+      setFormErrors((prev) => ({ ...prev, ifsc: "" }));
     }
   };
 
@@ -279,53 +349,72 @@ const SalaryBankDetailsForm = () => {
     const val = e.target.value;
     setBankBranch(val);
     if (!val.trim()) {
-      setFormErrors(prev => ({ ...prev, branch: "Branch name is required" }));
+      setFormErrors((prev) => ({ ...prev, branch: "Branch name is required" }));
     } else {
-      setFormErrors(prev => ({ ...prev, branch: "" }));
+      setFormErrors((prev) => ({ ...prev, branch: "" }));
     }
   };
 
   const handleIbanChange = (e) => {
-    let val = e.target.value.toUpperCase().replace(/[^A-Z0-9]/g, "").substring(0, 23);
-    
+    let val = e.target.value
+      .toUpperCase()
+      .replace(/[^A-Z0-9]/g, "")
+      .substring(0, 23);
+
     let formatted = "";
     for (let i = 0; i < val.length; i++) {
       if (i > 0 && i % 4 === 0) formatted += " ";
       formatted += val[i];
     }
     setBankIban(formatted);
-    
+
     if (!val) {
-      setFormErrors(prev => ({ ...prev, iban: "IBAN is required" }));
+      setFormErrors((prev) => ({ ...prev, iban: "IBAN is required" }));
     } else if (!val.startsWith("AE")) {
-      setFormErrors(prev => ({ ...prev, iban: "UAE IBAN must start with 'AE'" }));
+      setFormErrors((prev) => ({
+        ...prev,
+        iban: "UAE IBAN must start with 'AE'",
+      }));
     } else if (val.length < 23) {
-      setFormErrors(prev => ({ ...prev, iban: `IBAN must be exactly 23 characters (current: ${val.length})` }));
+      setFormErrors((prev) => ({
+        ...prev,
+        iban: `IBAN must be exactly 23 characters (current: ${val.length})`,
+      }));
     } else {
-      setFormErrors(prev => ({ ...prev, iban: "" }));
+      setFormErrors((prev) => ({ ...prev, iban: "" }));
     }
   };
 
   const handleSwiftChange = (e) => {
-    const val = e.target.value.toUpperCase().replace(/[^A-Z0-9]/g, "").substring(0, 11);
+    const val = e.target.value
+      .toUpperCase()
+      .replace(/[^A-Z0-9]/g, "")
+      .substring(0, 11);
     setBankSwift(val);
-    
+
     const swiftRegex = /^[A-Z]{6}[A-Z0-9]{2}([A-Z0-9]{3})?$/;
     if (!val) {
-      setFormErrors(prev => ({ ...prev, swift: "SWIFT/BIC Code is required" }));
+      setFormErrors((prev) => ({
+        ...prev,
+        swift: "SWIFT/BIC Code is required",
+      }));
     } else if (val.length !== 8 && val.length !== 11) {
-      setFormErrors(prev => ({ ...prev, swift: "SWIFT/BIC Code must be 8 or 11 characters" }));
+      setFormErrors((prev) => ({
+        ...prev,
+        swift: "SWIFT/BIC Code must be 8 or 11 characters",
+      }));
     } else if (!swiftRegex.test(val)) {
-      setFormErrors(prev => ({ ...prev, swift: "Invalid SWIFT/BIC format" }));
+      setFormErrors((prev) => ({ ...prev, swift: "Invalid SWIFT/BIC format" }));
     } else {
-      setFormErrors(prev => ({ ...prev, swift: "" }));
+      setFormErrors((prev) => ({ ...prev, swift: "" }));
     }
   };
 
   const handleAddBankDetails = () => {
     let errors = {};
     if (!bankName.trim()) errors.bankName = "Bank name is required";
-    if (!bankAccountNumber.trim()) errors.accountNumber = "Account number is required";
+    if (!bankAccountNumber.trim())
+      errors.accountNumber = "Account number is required";
 
     if (bankCountry === "India") {
       if (!bankIfsc.trim()) {
@@ -362,11 +451,11 @@ const SalaryBankDetailsForm = () => {
       bankIfsc,
       bankBranch,
       bankIban: bankIban.replace(/\s/g, ""),
-      bankSwift
+      bankSwift,
     };
 
-    setBankAccounts(prev => [...prev, newBank]);
-    
+    setBankAccounts((prev) => [...prev, newBank]);
+
     setBankName("");
     setBankAccountNumber("");
     setBankIfsc("");
@@ -374,63 +463,142 @@ const SalaryBankDetailsForm = () => {
     setBankIban("");
     setBankSwift("");
     setFormErrors({});
-    
+
     showToast("Bank details added successfully!", "success");
   };
 
   const handleDeleteBank = (id) => {
-    setBankAccounts(prev => prev.filter(b => b.id !== id));
+    setBankAccounts((prev) => prev.filter((b) => b.id !== id));
   };
 
   // --- Draft Saving ---
   const handleSaveDraft = () => {
-    setIsSavingDraft(true);
+  setIsSavingDraft(true);
 
-    const draftState = {
-      ...onboardingState,
-      employeeDetails: {
-        ...onboardingState.employeeDetails,
-        packages: packages,
-        paymentCycle,
-        bankAccounts
-      }
-    };
-
-    try {
-      localStorage.setItem("onboarding-draft", JSON.stringify(draftState));
-      showToast("Draft saved successfully!", "success");
-    } catch (err) {
-      console.error(err);
-      showToast("Failed to save draft", "error");
-    } finally {
-      setIsSavingDraft(false);
-    }
+  // Sanitize packages before saving - ensure currency is a string and icon is stored as name
+  const sanitizedPackages = {
+    package1: {
+      ...packages.package1,
+      icon: undefined, // Remove any icon object
+      iconName: packages.package1.iconName || "FiHome",
+      currency: typeof packages.package1.currency === "string"
+        ? packages.package1.currency
+        : "AED",
+      salaryComponents: packages.package1.salaryComponents.map((comp) => ({
+        ...comp,
+        price: typeof comp.price === "number"
+          ? comp.price
+          : parseFloat(comp.price) || 0,
+      })),
+    },
+    package2: {
+      ...packages.package2,
+      icon: undefined,
+      iconName: packages.package2.iconName || "FiMapPin",
+      currency: typeof packages.package2.currency === "string"
+        ? packages.package2.currency
+        : "AED",
+      salaryComponents: packages.package2.salaryComponents.map((comp) => ({
+        ...comp,
+        price: typeof comp.price === "number"
+          ? comp.price
+          : parseFloat(comp.price) || 0,
+      })),
+    },
   };
+
+  const draftState = {
+    ...onboardingState,
+    employeeDetails: {
+      ...onboardingState.employeeDetails,
+      packages: sanitizedPackages,
+      paymentCycle,
+      bankAccounts: bankAccounts.map((bank) => ({
+        ...bank,
+        accountNumber: bank.accountNumber || "",
+        bankName: bank.bankName || "",
+      })),
+    },
+  };
+
+  try {
+    localStorage.setItem("onboarding-draft", JSON.stringify(draftState));
+    setPackages(sanitizedPackages);
+    showToast("Draft saved successfully!", "success");
+  } catch (err) {
+    console.error(err);
+    showToast("Failed to save draft", "error");
+  } finally {
+    setIsSavingDraft(false);
+  }
+};
 
   // --- Final Submit ---
   const handleSubmit = (e) => {
     e.preventDefault();
 
-    // Check if at least one package is saved
-    const hasSavedPackage = packages.package1.isSaved || packages.package2.isSaved;
+    // Sanitize packages before submitting
+    const sanitizedPackages = {
+      package1: {
+        ...packages.package1,
+        currency:
+          typeof packages.package1.currency === "string"
+            ? packages.package1.currency
+            : "AED",
+        salaryComponents: packages.package1.salaryComponents.map((comp) => ({
+          component_name: comp.name,
+          value:
+            typeof comp.price === "number"
+              ? comp.price
+              : parseFloat(comp.price) || 0,
+        })),
+      },
+      package2: {
+        ...packages.package2,
+        currency:
+          typeof packages.package2.currency === "string"
+            ? packages.package2.currency
+            : "AED",
+        salaryComponents: packages.package2.salaryComponents.map((comp) => ({
+          component_name: comp.name,
+          value:
+            typeof comp.price === "number"
+              ? comp.price
+              : parseFloat(comp.price) || 0,
+        })),
+      },
+    };
+
+    const hasSavedPackage =
+      sanitizedPackages.package1.isSaved || sanitizedPackages.package2.isSaved;
     if (!hasSavedPackage) {
-      showToast("Please save at least one Salary Package before continuing", "warning");
+      showToast(
+        "Please save at least one Salary Package before continuing",
+        "warning",
+      );
       return;
     }
 
     if (bankAccounts.length === 0) {
-      showToast("Please add at least one Bank Account before continuing", "warning");
+      showToast(
+        "Please add at least one Bank Account before continuing",
+        "warning",
+      );
       return;
     }
 
     const finalPayload = {
-      packages,
+      packages: sanitizedPackages,
       paymentCycle,
-      bankAccounts
+      bankAccounts: bankAccounts.map((bank) => ({
+        ...bank,
+        accountNumber: bank.accountNumber || "",
+        bankName: bank.bankName || "",
+      })),
     };
 
     console.log("[SalaryBankDetailsForm] Saving to Redux:", finalPayload);
-    
+
     dispatch(updateEmployeeDetails(finalPayload));
     dispatch(setStep(4));
     showToast("Financial details verified and saved!", "success");
@@ -440,30 +608,44 @@ const SalaryBankDetailsForm = () => {
     dispatch(setStep(2));
   };
 
+  const getIconComponent = (iconName) => {
+    return ICON_MAP[iconName] || FiHome;
+  };
+
   // --- Render Package Component ---
   const renderPackage = (pkgId, pkg) => {
     const isActive = activePackage === pkgId;
     const total = computePackageTotal(pkg.salaryComponents);
+    const IconComponent = getIconComponent(pkg.iconName);
+
+    console.log("Currency value:", pkg.currency, typeof pkg.currency);
+    console.log("Icon name:", pkg.iconName);
 
     return (
-      <div 
+      <div
         className={`border rounded-2xl overflow-hidden transition-all ${
-          isActive ? 'border-green-500 ring-2 ring-green-500/20' : 'border-gray-200 dark:border-gray-700'
+          isActive
+            ? "border-green-500 ring-2 ring-green-500/20"
+            : "border-gray-200 dark:border-gray-700"
         }`}
       >
         {/* Package Header */}
-        <div 
+        <div
           className="px-5 py-4 bg-gray-50/70 dark:bg-gray-800/50 border-b border-gray-100 dark:border-gray-700 flex items-center justify-between cursor-pointer hover:bg-gray-100/50 dark:hover:bg-gray-700/30 transition-all"
           onClick={() => setActivePackage(pkgId)}
         >
           <div className="flex items-center gap-3">
             <div className="w-10 h-10 rounded-xl bg-green-100 dark:bg-green-900/30 flex items-center justify-center text-green-600 dark:text-green-400">
-              {pkg.icon}
+              <IconComponent className={`w-5 h-5 ${pkg.iconClass}`} />
             </div>
             <div>
-              <h4 className="text-sm font-bold text-gray-900 dark:text-white">{pkg.name}</h4>
+              <h4 className="text-sm font-bold text-gray-900 dark:text-white">
+                {pkg.name}
+              </h4>
               <p className="text-xs text-gray-500 dark:text-gray-400">
-                {pkg.isSaved ? `Saved • ${pkg.currency} ${total.toLocaleString()}` : '⚠️ Not configured'}
+                {pkg.isSaved
+                  ? `✅ Saved • ${typeof pkg.currency === "string" ? pkg.currency : "AED"} ${total.toLocaleString()}`
+                  : "⚠️ Not configured"}
               </p>
             </div>
           </div>
@@ -474,7 +656,9 @@ const SalaryBankDetailsForm = () => {
               </span>
             )}
             <span className="text-gray-400">
-              <FiChevronRight className={`transform transition-transform ${isActive ? 'rotate-90' : ''}`} />
+              <FiChevronRight
+                className={`transform transition-transform ${isActive ? "rotate-90" : ""}`}
+              />
             </span>
           </div>
         </div>
@@ -491,12 +675,18 @@ const SalaryBankDetailsForm = () => {
                     Currency <span className="text-red-500">*</span>
                   </label>
                   <select
-                    value={pkg.currency}
-                    onChange={(e) => handlePackageCurrencyChange(pkgId, e.target.value)}
+                    value={
+                      typeof pkg.currency === "string" ? pkg.currency : "AED"
+                    }
+                    onChange={(e) =>
+                      handlePackageCurrencyChange(pkgId, e.target.value)
+                    }
                     className="w-full px-4 py-3 bg-white dark:bg-gray-900 border border-gray-200 dark:border-gray-700 rounded-xl text-gray-900 dark:text-white transition-all outline-none focus:border-green-500 focus:ring-4 focus:ring-green-500/10 cursor-pointer"
                   >
-                    {currenciesList.map(curr => (
-                      <option key={curr.code} value={curr.code}>{curr.name}</option>
+                    {currenciesList.map((curr) => (
+                      <option key={curr.code} value={curr.code}>
+                        {curr.name}
+                      </option>
                     ))}
                   </select>
                 </div>
@@ -550,17 +740,26 @@ const SalaryBankDetailsForm = () => {
                       </thead>
                       <tbody className="divide-y divide-gray-100 dark:divide-gray-700/60 text-sm">
                         {pkg.salaryComponents.map((comp) => (
-                          <tr key={comp.id} className="hover:bg-gray-50/50 dark:hover:bg-gray-900/10">
+                          <tr
+                            key={comp.id}
+                            className="hover:bg-gray-50/50 dark:hover:bg-gray-900/10"
+                          >
                             <td className="px-4 py-3 font-semibold text-gray-800 dark:text-gray-200">
                               {comp.name}
                             </td>
                             <td className="px-4 py-3 text-right font-bold text-gray-900 dark:text-white">
-                              {pkg.currency} {comp.price.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
+                              {pkg.currency}{" "}
+                              {comp.price.toLocaleString(undefined, {
+                                minimumFractionDigits: 2,
+                                maximumFractionDigits: 2,
+                              })}
                             </td>
                             <td className="px-4 py-3 text-center">
                               <button
                                 type="button"
-                                onClick={() => handleDeleteSalaryComponent(pkgId, comp.id)}
+                                onClick={() =>
+                                  handleDeleteSalaryComponent(pkgId, comp.id)
+                                }
                                 className="p-1 text-red-500 hover:text-red-650 hover:bg-red-50 dark:hover:bg-red-950/20 rounded-lg transition-all"
                               >
                                 <FiTrash2 size={16} />
@@ -573,7 +772,11 @@ const SalaryBankDetailsForm = () => {
                             Total
                           </td>
                           <td className="px-4 py-3 text-right text-green-700 dark:text-green-400">
-                            {pkg.currency} {total.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
+                            {pkg.currency}{" "}
+                            {total.toLocaleString(undefined, {
+                              minimumFractionDigits: 2,
+                              maximumFractionDigits: 2,
+                            })}
                           </td>
                           <td></td>
                         </tr>
@@ -582,7 +785,8 @@ const SalaryBankDetailsForm = () => {
                   </div>
                 ) : (
                   <p className="text-center py-4 text-xs text-gray-400 italic">
-                    No components added yet. Add Basic Salary and other allowances.
+                    No components added yet. Add Basic Salary and other
+                    allowances.
                   </p>
                 )}
 
@@ -605,29 +809,25 @@ const SalaryBankDetailsForm = () => {
               <div className="space-y-3">
                 <div className="flex items-center justify-between">
                   <div className="space-y-1">
-                    <p className="text-xs text-gray-500 dark:text-gray-400">Currency</p>
+                    <p className="text-xs text-gray-500 dark:text-gray-400">
+                      Currency
+                    </p>
                     <span className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-xl text-sm font-extrabold text-green-700 dark:text-green-400 bg-green-50 dark:bg-green-950/30 border border-green-100 dark:border-green-900/30">
-                      <FiGlobe className="text-green-600" size={14} />
-                      {pkg.currency}
+                      {typeof pkg.currency === "string" ? pkg.currency : "AED"}
                     </span>
                   </div>
                   <div className="text-right">
-                    <p className="text-xs text-gray-500 dark:text-gray-400">Total Monthly Salary</p>
+                    <p className="text-xs text-gray-500 dark:text-gray-400">
+                      Total Monthly Salary
+                    </p>
                     <p className="text-lg font-extrabold text-green-600 dark:text-green-400">
-                      {pkg.currency} {total.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
+                      {typeof pkg.currency === "string" ? pkg.currency : "AED"}{" "}
+                      {total.toLocaleString(undefined, {
+                        minimumFractionDigits: 2,
+                        maximumFractionDigits: 2,
+                      })}
                     </p>
                   </div>
-                </div>
-
-                <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
-                  {pkg.salaryComponents.map((comp) => (
-                    <div key={comp.id} className="flex justify-between items-center p-3 bg-gray-50/50 dark:bg-gray-900/20 rounded-lg border border-gray-100 dark:border-gray-700/50">
-                      <span className="text-sm font-medium text-gray-700 dark:text-gray-300">{comp.name}</span>
-                      <span className="text-sm font-bold text-gray-900 dark:text-white">
-                        {pkg.currency} {comp.price.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
-                      </span>
-                    </div>
-                  ))}
                 </div>
 
                 <div className="flex justify-end">
@@ -748,7 +948,9 @@ const SalaryBankDetailsForm = () => {
                     }`}
                   />
                   {formErrors.bankName && (
-                    <p className="text-xs font-semibold text-red-500">{formErrors.bankName}</p>
+                    <p className="text-xs font-semibold text-red-500">
+                      {formErrors.bankName}
+                    </p>
                   )}
                 </div>
 
@@ -768,7 +970,9 @@ const SalaryBankDetailsForm = () => {
                     }`}
                   />
                   {formErrors.accountNumber && (
-                    <p className="text-xs font-semibold text-red-500">{formErrors.accountNumber}</p>
+                    <p className="text-xs font-semibold text-red-500">
+                      {formErrors.accountNumber}
+                    </p>
                   )}
                 </div>
 
@@ -807,7 +1011,9 @@ const SalaryBankDetailsForm = () => {
                         }`}
                       />
                       {formErrors.ifsc && (
-                        <p className="text-xs font-semibold text-red-500">{formErrors.ifsc}</p>
+                        <p className="text-xs font-semibold text-red-500">
+                          {formErrors.ifsc}
+                        </p>
                       )}
                     </div>
 
@@ -827,7 +1033,9 @@ const SalaryBankDetailsForm = () => {
                         }`}
                       />
                       {formErrors.branch && (
-                        <p className="text-xs font-semibold text-red-500">{formErrors.branch}</p>
+                        <p className="text-xs font-semibold text-red-500">
+                          {formErrors.branch}
+                        </p>
                       )}
                     </div>
                   </>
@@ -849,7 +1057,9 @@ const SalaryBankDetailsForm = () => {
                         }`}
                       />
                       {formErrors.iban && (
-                        <p className="text-xs font-semibold text-red-500">{formErrors.iban}</p>
+                        <p className="text-xs font-semibold text-red-500">
+                          {formErrors.iban}
+                        </p>
                       )}
                     </div>
 
@@ -869,7 +1079,9 @@ const SalaryBankDetailsForm = () => {
                         }`}
                       />
                       {formErrors.swift && (
-                        <p className="text-xs font-semibold text-red-500">{formErrors.swift}</p>
+                        <p className="text-xs font-semibold text-red-500">
+                          {formErrors.swift}
+                        </p>
                       )}
                     </div>
                   </>
@@ -902,43 +1114,61 @@ const SalaryBankDetailsForm = () => {
                   </thead>
                   <tbody className="divide-y divide-gray-100 dark:divide-gray-750 bg-white dark:bg-gray-800/20">
                     {bankAccounts.map((bank) => (
-                      <tr key={bank.id} className="hover:bg-gray-50/30 dark:hover:bg-gray-800/10 transition-colors">
+                      <tr
+                        key={bank.id}
+                        className="hover:bg-gray-50/30 dark:hover:bg-gray-800/10 transition-colors"
+                      >
                         <td className="px-6 py-5 whitespace-nowrap">
                           <span className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-xl text-sm font-extrabold text-blue-700 dark:text-blue-400 bg-blue-50 dark:bg-blue-950/30 border border-blue-100 dark:border-blue-900/30">
-                            <FiGlobe className="text-blue-600" size={14} />
                             {bank.bankCountry}
                           </span>
                         </td>
                         <td className="px-6 py-5">
                           <div className="space-y-1">
-                            <p className="text-sm font-bold text-gray-900 dark:text-white">{bank.bankName}</p>
-                            <p className="text-xs text-gray-500 dark:text-gray-400 font-medium">
-                              Account: <span className="font-semibold text-gray-700 dark:text-gray-300">{bank.accountNumber}</span>
+                            <p className="text-sm font-bold text-gray-900 dark:text-white">
+                              {bank.bankName}
                             </p>
-                            {bank.bankCountry === "India" && bank.bankBranch && (
-                              <p className="text-xs text-gray-500 dark:text-gray-400 font-medium">
-                                Branch: <span className="font-semibold text-gray-700 dark:text-gray-300">{bank.bankBranch}</span>
-                              </p>
-                            )}
+                            <p className="text-xs text-gray-500 dark:text-gray-400 font-medium">
+                              Account:{" "}
+                              <span className="font-semibold text-gray-700 dark:text-gray-300">
+                                {bank.accountNumber}
+                              </span>
+                            </p>
+                            {bank.bankCountry === "India" &&
+                              bank.bankBranch && (
+                                <p className="text-xs text-gray-500 dark:text-gray-400 font-medium">
+                                  Branch:{" "}
+                                  <span className="font-semibold text-gray-700 dark:text-gray-300">
+                                    {bank.bankBranch}
+                                  </span>
+                                </p>
+                              )}
                           </div>
                         </td>
                         <td className="px-6 py-5">
                           {bank.bankCountry === "India" ? (
                             <div className="space-y-1">
-                              <span className="text-[10px] font-bold text-gray-400 dark:text-gray-500 uppercase tracking-widest block">IFSC</span>
+                              <span className="text-[10px] font-bold text-gray-400 dark:text-gray-500 uppercase tracking-widest block">
+                                IFSC
+                              </span>
                               <span className="font-mono text-sm font-bold text-gray-900 dark:text-white bg-gray-100 dark:bg-gray-900 px-2.5 py-1 rounded border border-gray-200 dark:border-gray-800">
                                 {bank.bankIfsc}
                               </span>
                             </div>
                           ) : (
                             <div className="space-y-1.5">
-                              <span className="text-[10px] font-bold text-gray-400 dark:text-gray-500 uppercase tracking-widest block">IBAN</span>
+                              <span className="text-[10px] font-bold text-gray-400 dark:text-gray-500 uppercase tracking-widest block">
+                                IBAN
+                              </span>
                               <span className="font-mono text-xs font-bold text-gray-900 dark:text-white bg-gray-100 dark:bg-gray-900 px-2 py-1 rounded border border-gray-200 dark:border-gray-800 block w-fit">
                                 {bank.bankIban}
                               </span>
                               {bank.bankSwift && (
                                 <span className="text-[10px] text-gray-400 dark:text-gray-500 font-semibold block">
-                                  SWIFT: <span className="font-mono text-xs font-bold text-gray-700 dark:text-gray-300 bg-gray-100/50 dark:bg-gray-900/50 px-1.5 py-0.5 rounded">{bank.bankSwift}</span>
+                                  SWIFT:{" "}
+                                  <span className="font-mono text-xs font-bold text-gray-700 dark:text-gray-300 bg-gray-100/50 dark:bg-gray-900/50 px-1.5 py-0.5 rounded">
+                                    {bank.bankSwift}
+                                  </span>
                                 </span>
                               )}
                             </div>
@@ -976,7 +1206,8 @@ const SalaryBankDetailsForm = () => {
           <button
             type="submit"
             className={`w-full sm:w-auto px-8 py-3 rounded-full text-sm font-bold flex items-center justify-center gap-2 transition-all shadow-md hover:shadow-lg whitespace-nowrap text-white ${
-              (packages.package1.isSaved || packages.package2.isSaved) && bankAccounts.length > 0
+              (packages.package1.isSaved || packages.package2.isSaved) &&
+              bankAccounts.length > 0
                 ? "bg-green-500 hover:bg-green-600 hover:scale-[1.02]"
                 : "bg-gray-300 dark:bg-gray-700 cursor-not-allowed text-gray-500 dark:text-gray-400 opacity-60"
             }`}

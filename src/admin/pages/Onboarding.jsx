@@ -1,3 +1,5 @@
+// src/admin/pages/Onboarding.jsx
+
 import { useEffect } from "react";
 import { useSelector, useDispatch } from "react-redux";
 import { useNavigate } from "react-router-dom";
@@ -11,11 +13,20 @@ import OnboardingReview from "../components/onboarding/OnboardingReview";
 import Stepper from "../components/onboarding/Stepper";
 
 const Onboarding = () => {
-
   const onboardingState = useSelector((state) => state.onboarding) || {};
   const { currentStep = 1, onboardingComplete = false } = onboardingState;
   const dispatch = useDispatch();
   const navigate = useNavigate();
+
+  // Clear draft when component unmounts (if not completed)
+  useEffect(() => {
+    return () => {
+      // Only clear if not completed
+      if (!onboardingComplete) {
+        // Don't clear draft on unmount to allow resume
+      }
+    };
+  }, [onboardingComplete]);
 
   // Handle restoring draft on mount
   useEffect(() => {
@@ -24,9 +35,14 @@ const Onboarding = () => {
     if (draft && currentStep === 1 && !onboardingState.resumeData) {
       try {
         const parsedDraft = JSON.parse(draft);
-        dispatch(restoreDraft(parsedDraft));
+        // Check if draft has valid data before restoring
+        if (parsedDraft && Object.keys(parsedDraft).length > 0) {
+          dispatch(restoreDraft(parsedDraft));
+        }
       } catch (err) {
         console.error("Failed to restore onboarding draft:", err);
+        // Clear invalid draft
+        localStorage.removeItem("onboarding-draft");
       }
     }
   }, [dispatch, currentStep, onboardingState.resumeData]);
@@ -41,7 +57,7 @@ const Onboarding = () => {
 
   // Handle skip resume upload
   const handleSkipResume = () => {
-    dispatch(setStep(2)); // Move to Employee Details Form
+    dispatch(setStep(2));
   };
 
   const renderStep = () => {
