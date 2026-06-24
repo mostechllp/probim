@@ -30,6 +30,15 @@ class OnboardingService {
   // ONBOARDING WIZARD STEPS
   // ─────────────────────────────────────────────────────────────────────────────
 
+   async getSalaryPackages() {
+    try {
+      const response = await apiClient.get(`${BASE_PATH}/employees/salary-packages`);
+      return response.data;
+    } catch (error) {
+      throw error.response?.data || error;
+    }
+  }
+
   /**
    * Step 1 – Save employee personal & professional details.
    * POST api/admin/onboarding/save-details

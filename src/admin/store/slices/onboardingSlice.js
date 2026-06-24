@@ -32,6 +32,28 @@ export const parseResume = createAsyncThunk(
 );
 
 // ─────────────────────────────────────────────────────────────────────────────
+// SALARY PACKAGES
+// ─────────────────────────────────────────────────────────────────────────────
+
+/**
+ * GET api/admin/employees/salary-packages
+ * Fetch all available salary packages
+ */
+export const fetchSalaryPackages = createAsyncThunk(
+  "onboarding/fetchSalaryPackages",
+  async (_, { rejectWithValue }) => {
+    try {
+      const response = await onboardingService.getSalaryPackages();
+      return response.data || response;
+    } catch (error) {
+      return rejectWithValue(
+        error.message || "Failed to fetch salary packages",
+      );
+    }
+  },
+);
+
+// ─────────────────────────────────────────────────────────────────────────────
 // ONBOARDING WIZARD STEPS
 // ─────────────────────────────────────────────────────────────────────────────
 
@@ -228,6 +250,10 @@ const sanitizePackages = (packages) => {
             ? sanitized[key].totalSalary
             : parseFloat(sanitized[key].totalSalary) || 0;
       }
+      // Ensure packageId is preserved
+      if (sanitized[key].packageId !== undefined) {
+        sanitized[key].packageId = sanitized[key].packageId;
+      }
     }
   });
 
@@ -245,6 +271,9 @@ const initialState = {
   resumeData: null,
   // Persisted IDs returned by the API after each save step
   savedEmployeeId: null,
+  // Available salary packages from API
+  availablePackages: [],
+  packagesLoading: false,
   employeeDetails: {
     fullName: "",
     email: "",
@@ -267,6 +296,7 @@ const initialState = {
         salaryComponents: [],
         isSaved: false,
         totalSalary: 0,
+        packageId: null, // Store the API package ID
       },
       package2: {
         id: "package2",
@@ -275,6 +305,7 @@ const initialState = {
         salaryComponents: [],
         isSaved: false,
         totalSalary: 0,
+        packageId: null,
       },
     },
     bankAccounts: [],
@@ -356,6 +387,10 @@ const onboardingSlice = createSlice({
                   details.packages[key].currency,
                 );
               }
+              // Ensure packageId is preserved
+              if (details.packages[key].packageId !== undefined) {
+                details.packages[key].packageId = details.packages[key].packageId;
+              }
             }
           });
         }
@@ -374,6 +409,9 @@ const onboardingSlice = createSlice({
     clearOnboardingError: (state) => {
       state.error = null;
     },
+    clearPackages: (state) => {
+      state.availablePackages = [];
+    },
   },
   extraReducers: (builder) => {
     builder
@@ -390,6 +428,35 @@ const onboardingSlice = createSlice({
       })
       .addCase(parseResume.rejected, (state, action) => {
         state.isLoading = false;
+        state.error = action.payload;
+      })
+
+      // ── Fetch Salary Packages ──────────────────────────────────────────────
+      .addCase(fetchSalaryPackages.pending, (state) => {
+        state.packagesLoading = true;
+        state.error = null;
+      })
+      .addCase(fetchSalaryPackages.fulfilled, (state, action) => {
+        state.packagesLoading = false;
+        state.availablePackages = action.payload;
+        
+        // Auto-map packages to package1 and package2
+        if (Array.isArray(action.payload) && action.payload.length >= 2) {
+          const pkg1 = action.payload[0];
+          const pkg2 = action.payload[1];
+          
+          if (pkg1) {
+            state.employeeDetails.packages.package1.packageId = pkg1.id;
+            state.employeeDetails.packages.package1.name = pkg1.name;
+          }
+          if (pkg2) {
+            state.employeeDetails.packages.package2.packageId = pkg2.id;
+            state.employeeDetails.packages.package2.name = pkg2.name;
+          }
+        }
+      })
+      .addCase(fetchSalaryPackages.rejected, (state, action) => {
+        state.packagesLoading = false;
         state.error = action.payload;
       })
 
@@ -532,6 +599,7 @@ export const {
   completeOnboarding,
   restoreDraft,
   clearOnboardingError,
+  clearPackages,
 } = onboardingSlice.actions;
 
 export default onboardingSlice.reducer;

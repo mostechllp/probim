@@ -13,10 +13,12 @@ import {
   FiEdit,
   FiHome,
   FiMapPin,
+  FiLoader,
 } from "react-icons/fi";
 import {
   setStep,
   updateEmployeeDetails,
+  fetchSalaryPackages
 } from "../../store/slices/onboardingSlice";
 import { showToast } from "../../components/common/Toast";
 
@@ -29,9 +31,15 @@ const SalaryBankDetailsForm = () => {
   const dispatch = useDispatch();
   const onboardingState = useSelector((state) => state.onboarding) || {};
   const { employeeDetails = {} } = onboardingState;
+  
+  // Get salary packages from Redux
+  const { packages: availablePackages, loading: packagesLoading } = useSelector(
+  (state) => state.onboarding || { availablePackages: [], packagesLoading: false }
+);
 
   // --- Dynamic State Management ---
   const [isSavingDraft, setIsSavingDraft] = useState(false);
+  const [isLoadingPackages, setIsLoadingPackages] = useState(true);
 
   // 1. Salary Packages State
   const [packages, setPackages] = useState({
@@ -44,6 +52,7 @@ const SalaryBankDetailsForm = () => {
       salaryComponents: [],
       isSaved: false,
       totalSalary: 0,
+      packageId: null, // Store the API package ID
     },
     package2: {
       id: "package2",
@@ -54,6 +63,7 @@ const SalaryBankDetailsForm = () => {
       salaryComponents: [],
       isSaved: false,
       totalSalary: 0,
+      packageId: null,
     },
   });
 
@@ -87,7 +97,44 @@ const SalaryBankDetailsForm = () => {
     { code: "LKR", name: "Sri Lankan Rupee (LKR)" },
   ];
 
-  // --- Load Draft / Restore Redux State ---
+  // ─── Fetch Salary Packages ──────────────────────────────────────────────
+  useEffect(() => {
+    const fetchPackages = async () => {
+      setIsLoadingPackages(true);
+      try {
+        const result = await dispatch(fetchSalaryPackages()).unwrap();
+        console.log("Fetched salary packages:", result);
+        
+        // Map API packages to local state
+        if (result && Array.isArray(result)) {
+          const updatedPackages = { ...packages };
+          
+          result.forEach((pkg, index) => {
+            const key = index === 0 ? "package1" : "package2";
+            if (updatedPackages[key]) {
+              updatedPackages[key] = {
+                ...updatedPackages[key],
+                packageId: pkg.id,
+                name: pkg.name,
+                isActive: pkg.is_active,
+              };
+            }
+          });
+          
+          setPackages(updatedPackages);
+        }
+      } catch (error) {
+        console.error("Failed to fetch salary packages:", error);
+        showToast("Failed to load salary packages", "error");
+      } finally {
+        setIsLoadingPackages(false);
+      }
+    };
+
+    fetchPackages();
+  }, [dispatch]);
+
+  // ─── Load Draft / Restore Redux State ──────────────────────────────────
   useEffect(() => {
     const draftStr = localStorage.getItem("onboarding-draft");
     let details = employeeDetails;
@@ -164,7 +211,7 @@ const SalaryBankDetailsForm = () => {
   // Get current active package
   const currentPackage = packages[activePackage];
 
-  // --- Actions: Salary Package Management ---
+  // ─── Actions: Salary Package Management ──────────────────────────────────
   const handlePackageCurrencyChange = (pkgId, currency) => {
     setPackages((prev) => ({
       ...prev,
@@ -240,6 +287,12 @@ const SalaryBankDetailsForm = () => {
       return;
     }
 
+    // Check if package has an API ID
+    if (!pkg.packageId) {
+      showToast("Package not found. Please refresh and try again.", "error");
+      return;
+    }
+
     const total = computePackageTotal(pkg.salaryComponents);
     setPackages((prev) => ({
       ...prev,
@@ -263,7 +316,7 @@ const SalaryBankDetailsForm = () => {
     }));
   };
 
-  // --- Bank Details Functions ---
+  // ─── Bank Details Functions ──────────────────────────────────────────────
   const handleBankCountryChange = (e) => {
     const selectedCountry = e.target.value;
     setBankCountry(selectedCountry);
@@ -471,111 +524,91 @@ const SalaryBankDetailsForm = () => {
     setBankAccounts((prev) => prev.filter((b) => b.id !== id));
   };
 
-  // --- Draft Saving ---
+  // ─── Draft Saving ────────────────────────────────────────────────────────
   const handleSaveDraft = () => {
-  setIsSavingDraft(true);
+    setIsSavingDraft(true);
 
-  // Sanitize packages before saving - ensure currency is a string and icon is stored as name
-  const sanitizedPackages = {
-    package1: {
-      ...packages.package1,
-      icon: undefined, // Remove any icon object
-      iconName: packages.package1.iconName || "FiHome",
-      currency: typeof packages.package1.currency === "string"
-        ? packages.package1.currency
-        : "AED",
-      salaryComponents: packages.package1.salaryComponents.map((comp) => ({
-        ...comp,
-        price: typeof comp.price === "number"
-          ? comp.price
-          : parseFloat(comp.price) || 0,
-      })),
-    },
-    package2: {
-      ...packages.package2,
-      icon: undefined,
-      iconName: packages.package2.iconName || "FiMapPin",
-      currency: typeof packages.package2.currency === "string"
-        ? packages.package2.currency
-        : "AED",
-      salaryComponents: packages.package2.salaryComponents.map((comp) => ({
-        ...comp,
-        price: typeof comp.price === "number"
-          ? comp.price
-          : parseFloat(comp.price) || 0,
-      })),
-    },
-  };
-
-  const draftState = {
-    ...onboardingState,
-    employeeDetails: {
-      ...onboardingState.employeeDetails,
-      packages: sanitizedPackages,
-      paymentCycle,
-      bankAccounts: bankAccounts.map((bank) => ({
-        ...bank,
-        accountNumber: bank.accountNumber || "",
-        bankName: bank.bankName || "",
-      })),
-    },
-  };
-
-  try {
-    localStorage.setItem("onboarding-draft", JSON.stringify(draftState));
-    setPackages(sanitizedPackages);
-    showToast("Draft saved successfully!", "success");
-  } catch (err) {
-    console.error(err);
-    showToast("Failed to save draft", "error");
-  } finally {
-    setIsSavingDraft(false);
-  }
-};
-
-  // --- Final Submit ---
-  const handleSubmit = (e) => {
-    e.preventDefault();
-
-    // Sanitize packages before submitting
     const sanitizedPackages = {
       package1: {
         ...packages.package1,
-        currency:
-          typeof packages.package1.currency === "string"
-            ? packages.package1.currency
-            : "AED",
+        icon: undefined,
+        iconName: packages.package1.iconName || "FiHome",
+        currency: typeof packages.package1.currency === "string"
+          ? packages.package1.currency
+          : "AED",
+        packageId: packages.package1.packageId,
         salaryComponents: packages.package1.salaryComponents.map((comp) => ({
-          component_name: comp.name,
-          value:
-            typeof comp.price === "number"
-              ? comp.price
-              : parseFloat(comp.price) || 0,
+          ...comp,
+          price: typeof comp.price === "number"
+            ? comp.price
+            : parseFloat(comp.price) || 0,
         })),
       },
       package2: {
         ...packages.package2,
-        currency:
-          typeof packages.package2.currency === "string"
-            ? packages.package2.currency
-            : "AED",
+        icon: undefined,
+        iconName: packages.package2.iconName || "FiMapPin",
+        currency: typeof packages.package2.currency === "string"
+          ? packages.package2.currency
+          : "AED",
+        packageId: packages.package2.packageId,
         salaryComponents: packages.package2.salaryComponents.map((comp) => ({
-          component_name: comp.name,
-          value:
-            typeof comp.price === "number"
-              ? comp.price
-              : parseFloat(comp.price) || 0,
+          ...comp,
+          price: typeof comp.price === "number"
+            ? comp.price
+            : parseFloat(comp.price) || 0,
         })),
       },
     };
 
+    const draftState = {
+      ...onboardingState,
+      employeeDetails: {
+        ...onboardingState.employeeDetails,
+        packages: sanitizedPackages,
+        paymentCycle,
+        bankAccounts: bankAccounts.map((bank) => ({
+          ...bank,
+          accountNumber: bank.accountNumber || "",
+          bankName: bank.bankName || "",
+        })),
+      },
+    };
+
+    try {
+      localStorage.setItem("onboarding-draft", JSON.stringify(draftState));
+      setPackages(sanitizedPackages);
+      showToast("Draft saved successfully!", "success");
+    } catch (err) {
+      console.error(err);
+      showToast("Failed to save draft", "error");
+    } finally {
+      setIsSavingDraft(false);
+    }
+  };
+
+  // ─── Final Submit ──────────────────────────────────────────────────────────
+  const handleSubmit = (e) => {
+    e.preventDefault();
+
+    // Validate at least one package is saved
     const hasSavedPackage =
-      sanitizedPackages.package1.isSaved || sanitizedPackages.package2.isSaved;
+      packages.package1.isSaved || packages.package2.isSaved;
     if (!hasSavedPackage) {
       showToast(
         "Please save at least one Salary Package before continuing",
         "warning",
       );
+      return;
+    }
+
+    // Validate saved packages have packageId
+    if (packages.package1.isSaved && !packages.package1.packageId) {
+      showToast("Package 1 is not properly configured. Please refresh.", "error");
+      return;
+    }
+    if (packages.package2.isSaved && !packages.package2.packageId) {
+      showToast("Package 2 is not properly configured. Please refresh.", "error");
       return;
     }
 
@@ -587,8 +620,30 @@ const SalaryBankDetailsForm = () => {
       return;
     }
 
+    // Prepare payload with package IDs
     const finalPayload = {
-      packages: sanitizedPackages,
+      packages: {
+        package1: {
+          package_id: packages.package1.packageId,
+          currency: packages.package1.currency,
+          salaryComponents: packages.package1.salaryComponents.map((comp) => ({
+            component_name: comp.name,
+            value: typeof comp.price === "number"
+              ? comp.price
+              : parseFloat(comp.price) || 0,
+          })),
+        },
+        package2: {
+          package_id: packages.package2.packageId,
+          currency: packages.package2.currency,
+          salaryComponents: packages.package2.salaryComponents.map((comp) => ({
+            component_name: comp.name,
+            value: typeof comp.price === "number"
+              ? comp.price
+              : parseFloat(comp.price) || 0,
+          })),
+        },
+      },
       paymentCycle,
       bankAccounts: bankAccounts.map((bank) => ({
         ...bank,
@@ -612,14 +667,11 @@ const SalaryBankDetailsForm = () => {
     return ICON_MAP[iconName] || FiHome;
   };
 
-  // --- Render Package Component ---
+  // ─── Render Package ──────────────────────────────────────────────────────
   const renderPackage = (pkgId, pkg) => {
     const isActive = activePackage === pkgId;
     const total = computePackageTotal(pkg.salaryComponents);
     const IconComponent = getIconComponent(pkg.iconName);
-
-    console.log("Currency value:", pkg.currency, typeof pkg.currency);
-    console.log("Icon name:", pkg.iconName);
 
     return (
       <div
@@ -644,8 +696,8 @@ const SalaryBankDetailsForm = () => {
               </h4>
               <p className="text-xs text-gray-500 dark:text-gray-400">
                 {pkg.isSaved
-                  ? `✅ Saved • ${typeof pkg.currency === "string" ? pkg.currency : "AED"} ${total.toLocaleString()}`
-                  : "⚠️ Not configured"}
+                  ? `Saved • ${typeof pkg.currency === "string" ? pkg.currency : "AED"} ${total.toLocaleString()}`
+                  : "Not configured"}
               </p>
             </div>
           </div>
@@ -666,7 +718,17 @@ const SalaryBankDetailsForm = () => {
         {/* Package Content */}
         {isActive && (
           <div className="p-5 space-y-5 bg-white dark:bg-gray-800/30">
-            {!pkg.isSaved ? (
+            {isLoadingPackages ? (
+              <div className="flex items-center justify-center py-8">
+                <FiLoader className="w-6 h-6 animate-spin text-green-500" />
+                <span className="ml-2 text-sm text-gray-500">Loading packages...</span>
+              </div>
+            ) : !pkg.packageId ? (
+              <div className="text-center py-8 text-red-500">
+                <p>Package not found in system</p>
+                <p className="text-xs text-gray-400 mt-1">Please refresh and try again</p>
+              </div>
+            ) : !pkg.isSaved ? (
               // Edit Mode
               <div className="space-y-5">
                 {/* Currency Selector */}
