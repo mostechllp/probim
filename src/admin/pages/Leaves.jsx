@@ -31,6 +31,8 @@ const Leaves = () => {
   const { leaves = [], error = null } = useSelector((state) => {
     return state.leaves || { leaves: [] };
   });
+  const { user } = useSelector((state) => state.auth || {});
+  const routePrefix = user?.type === "employee" ? "/employee" : "/admin";
   console.log(leaves);
 
   const [statusFilter, setStatusFilter] = useState("all");
@@ -305,7 +307,7 @@ const Leaves = () => {
             placeholder="Search by employee..."
           />
           <Link
-            to="/admin/leaves/allocations"
+            to={`${routePrefix}/leaves/allocations`}
             className="bg-blue-500 hover:bg-blue-600 text-white px-4 py-2 rounded-full text-sm font-semibold flex items-center justify-center gap-2 transition-all shadow-md hover:shadow-lg w-full sm:w-auto"
           >
             <i className="fas fa-chart-line"></i>
@@ -313,7 +315,7 @@ const Leaves = () => {
             <span className="sm:hidden">Allocations</span>
           </Link>
           <Link
-            to="/admin/leaves/leave-types"
+            to={`${routePrefix}/leaves/leave-types`}
             className="bg-green-500 hover:bg-green-600 text-white px-4 py-2 rounded-full text-sm font-semibold flex items-center justify-center gap-2 transition-all shadow-md hover:shadow-lg w-full sm:w-auto"
           >
             <i className="fas fa-briefcase"></i>
