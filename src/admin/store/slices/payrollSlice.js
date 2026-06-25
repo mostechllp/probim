@@ -8,9 +8,46 @@ export const fetchPayrolls = createAsyncThunk(
   "payroll/fetchPayrolls",
   async (params = {}, { rejectWithValue }) => {
     try {
-      const response = await apiClient.get("/admin/payrolls", { params });
+      const response = await apiClient.get("/admin/payroll", { params });
       console.log("Fetch payrolls response:", response.data);
-      return response.data;
+      
+      // The API returns { success: true, data: [...] }
+      // Extract the data array and handle pagination if present
+      const responseData = response.data;
+      
+      // If the response has a data property that is an array
+      if (responseData?.data && Array.isArray(responseData.data)) {
+        return {
+          payrolls: responseData.data,
+          total: responseData.total || responseData.data.length,
+          current_page: responseData.current_page || 1,
+          last_page: responseData.last_page || 1,
+          per_page: responseData.per_page || 15,
+          stats: responseData.stats || null,
+        };
+      }
+      
+      // If the response itself is an array
+      if (Array.isArray(responseData)) {
+        return {
+          payrolls: responseData,
+          total: responseData.length,
+          current_page: 1,
+          last_page: 1,
+          per_page: 15,
+          stats: null,
+        };
+      }
+      
+      // Fallback
+      return {
+        payrolls: responseData?.data || [],
+        total: responseData?.total || 0,
+        current_page: responseData?.current_page || 1,
+        last_page: responseData?.last_page || 1,
+        per_page: responseData?.per_page || 15,
+        stats: responseData?.stats || null,
+      };
     } catch (error) {
       console.error("Fetch payrolls error:", error);
       return rejectWithValue(
@@ -414,7 +451,7 @@ const payrollSlice = createSlice({
       })
       .addCase(fetchPayrolls.fulfilled, (state, action) => {
         state.loading = false;
-        const data = action.payload?.data || action.payload || {};
+        const data = action.payload || {};
         state.payrolls = data.payrolls || data.data || [];
         state.totalCount = data.total || state.payrolls.length;
         state.currentPage = data.current_page || 1;
