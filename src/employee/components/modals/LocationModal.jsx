@@ -1,10 +1,11 @@
-// LocationModal.jsx
+// LocationModal.jsx - FIXED VERSION
 import { useState, useEffect } from 'react';
 import { getLocationWithTimezone, getAddressFromCoordinates } from '../../services/locationServise';
 
 const LocationModal = ({ isOpen, onClose, onConfirm, type = 'punch-in' }) => {
   const [location, setLocation] = useState(null);
   const [address, setAddress] = useState(null);
+  const [country, setCountry] = useState(null);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState(null);
 
@@ -23,39 +24,64 @@ const LocationModal = ({ isOpen, onClose, onConfirm, type = 'punch-in' }) => {
       const locationData = await getLocationWithTimezone();
       setLocation(locationData);
       
+      // Declare addressData outside the if block so it's accessible in console.log
+      let addressData = null;
+      
       // Get address from coordinates (if coordinates are available)
       if (locationData.latitude && locationData.longitude) {
-        const addressData = await getAddressFromCoordinates(
+        addressData = await getAddressFromCoordinates(
           locationData.latitude, 
           locationData.longitude
         );
         setAddress(addressData);
+        
+        // Extract country from address
+        if (addressData) {
+          // Try to get country from different possible fields
+          const countryName = 
+            addressData.address?.country || 
+            addressData.address?.country_code?.toUpperCase() ||
+            addressData.country ||
+            addressData.country_code?.toUpperCase() ||
+            addressData.display_name?.split(',').pop()?.trim() ||
+            null;
+          
+          setCountry(countryName);
+          console.log("Extracted country:", countryName);
+        }
       }
       
       console.log("Location with timezone:", locationData);
+      console.log("Address data:", addressData); // Now addressData is in scope
+      console.log("Country extracted:", country);
+      
     } catch (err) {
       console.error("Location fetch error:", err);
-      setError(err.message);
+      setError(err.message || "Failed to get location");
     } finally {
       setLoading(false);
     }
   };
 
-  // LocationModal.jsx - Update handleConfirm
-const handleConfirm = () => {
-  if (location) {
-    onConfirm({
-      latitude: location.latitude,
-      longitude: location.longitude,
-      address: address?.display_name || `${location.latitude}, ${location.longitude}`,
-      accuracy: location.accuracy,
-      timestamp: location.timestamp,
-      timezone: location.timezone, // Now returns PHP-compatible (e.g., 'Asia/Kolkata')
-      timezone_offset: location.timezone_offset,
-      timezone_offset_minutes: location.timezone_offset_minutes // Add this
-    });
-  }
-};
+  const handleConfirm = () => {
+    if (location) {
+      onConfirm({
+        latitude: location.latitude,
+        longitude: location.longitude,
+        address: address?.display_name || 
+                 address?.address?.road || 
+                 address?.address?.neighbourhood ||
+                 address?.address?.city ||
+                 `${location.latitude}, ${location.longitude}`,
+        accuracy: location.accuracy,
+        timestamp: location.timestamp,
+        timezone: location.timezone,
+        timezone_offset: location.timezone_offset,
+        timezone_offset_minutes: location.timezone_offset_minutes,
+        work_location: country || 'Unknown'
+      });
+    }
+  };
 
   const getAccuracyColor = () => {
     if (!location?.accuracy) return "text-gray-500";
@@ -109,6 +135,9 @@ const handleConfirm = () => {
                   <p className="text-sm font-semibold mb-1">📍 Location Detected</p>
                   <p className="text-xs text-[var(--muted)] mb-2">
                     {address?.display_name || 
+                     address?.address?.road ||
+                     address?.address?.neighbourhood ||
+                     address?.address?.city ||
                      (location.latitude && location.longitude ? 
                       `${location.latitude.toFixed(6)}, ${location.longitude.toFixed(6)}` : 
                       'Location not available')}
@@ -131,6 +160,12 @@ const handleConfirm = () => {
                       <i className="fas fa-globe text-xs"></i>
                       UTC Offset: {location.timezone_offset || 'Unknown'}
                     </p>
+                    {country && (
+                      <p className="text-green-500 flex items-center gap-1">
+                        <i className="fas fa-flag text-xs"></i>
+                        Country: {country}
+                      </p>
+                    )}
                   </div>
                 </div>
               </div>
@@ -146,6 +181,7 @@ const handleConfirm = () => {
               <button
                 onClick={handleConfirm}
                 className="flex-1 px-4 py-2 bg-green-500 text-white rounded-lg hover:bg-green-600 transition-colors"
+                disabled={!location}
               >
                 Confirm {type === 'punch-in' ? 'Punch In' : 'Punch Out'}
               </button>
