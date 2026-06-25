@@ -51,7 +51,7 @@ const EmployeeDetails = () => {
   const [newComponent, setNewComponent] = useState({
     component_name: "",
     value: "",
-    package_id: null,
+    employee_salary_package_id: null,
   });
   const [newBank, setNewBank] = useState({
     bank_country: "India",
@@ -117,19 +117,23 @@ const EmployeeDetails = () => {
 
   // ─── Package Helpers ──────────────────────────────────────────────────
   const getEmployeePackages = () => {
-  // The API returns 'salary_packages' not 'packages'
-  return currentEmployee.salary_packages || currentEmployee.packages || [];
-};
+    // The API returns 'salary_packages' not 'packages'
+    return currentEmployee.salary_packages || currentEmployee.packages || [];
+  };
 
   const getPackageTotal = (pkg) => {
-  if (!pkg || !pkg.salary_components) return 0;
-  return pkg.salary_components.reduce(
-    (sum, comp) => sum + parseFloat(comp.value || 0),
-    0
-  );
-};
+    if (!pkg || !pkg.salary_components) return 0;
+    return pkg.salary_components.reduce(
+      (sum, comp) => sum + parseFloat(comp.value || 0),
+      0,
+    );
+  };
   // ─── Delete Handlers ──────────────────────────────────────────────────
-  const handleDeleteComponentClick = (componentId, componentName, packageId) => {
+  const handleDeleteComponentClick = (
+    componentId,
+    componentName,
+    packageId,
+  ) => {
     setConfirmModal({
       isOpen: true,
       type: "component",
@@ -193,9 +197,7 @@ const EmployeeDetails = () => {
           setConfirmModal((prev) => ({ ...prev, loading: false }));
         }
       } else if (type === "package") {
-        const response = await apiClient.delete(
-          `/admin/salary-packages/${id}`,
-        );
+        const response = await apiClient.delete(`/admin/salary-packages/${id}`);
         if (response.data.status === "success") {
           showToast("Salary package deleted successfully", "success");
           fetchEmployeeData();
@@ -253,89 +255,99 @@ const EmployeeDetails = () => {
     });
   };
 
-  // ─── Salary Component CRUD ──────────────────────────────────────────
-  // ─── Salary Component CRUD ──────────────────────────────────────────
-const handleUpdateComponent = async (componentId, updatedData, packageId) => {
-  try {
-    const employeeId = currentEmployee.id || currentEmployee.employee_id;
-    const response = await apiClient.put(
-      `/admin/salary-components/${componentId}`,
-      {
-        employee_id: employeeId,
-        package_id: packageId,
-        component_name: updatedData.component_name,
-        value: updatedData.value,
-      },
-    );
-    if (response.data.status === "success") {
-      showToast("Salary component updated successfully", "success");
-      setEditingComponent(null);
-      fetchEmployeeData();
-    } else {
+  const handleUpdateComponent = async (componentId, updatedData, packageId) => {
+    try {
+      const employeeId = currentEmployee.id || currentEmployee.employee_id;
+      const response = await apiClient.put(
+        `/admin/salary-components/${componentId}`,
+        {
+          employee_id: employeeId,
+          employee_salary_package_id: packageId, // Changed from package_id
+          component_name: updatedData.component_name,
+          value: updatedData.value,
+        },
+      );
+      if (response.data.status === "success") {
+        showToast("Salary component updated successfully", "success");
+        setEditingComponent(null);
+        fetchEmployeeData();
+      } else {
+        showToast(
+          response.data.message || "Failed to update salary component",
+          "error",
+        );
+      }
+    } catch (error) {
+      console.error("Error updating salary component:", error);
       showToast(
-        response.data.message || "Failed to update salary component",
+        error.response?.data?.message || "Failed to update salary component",
         "error",
       );
     }
-  } catch (error) {
-    console.error("Error updating salary component:", error);
-    showToast(
-      error.response?.data?.message || "Failed to update salary component",
-      "error",
-    );
-  }
-};
+  };
 
-const handleAddComponent = async () => {
-  if (!newComponent.component_name || !newComponent.value) {
-    showToast("Please fill in all fields", "error");
-    return;
-  }
-
-  if (!newComponent.package_id) {
-    showToast("Please select a package", "error");
-    return;
-  }
-
-  try {
-    // Get the employee_id from currentEmployee
-    const employeeId = currentEmployee.id || currentEmployee.employee_id;
-    
-    if (!employeeId) {
-      showToast("Employee ID not found. Please refresh and try again.", "error");
+  const handleAddComponent = async () => {
+    if (!newComponent.component_name || !newComponent.value) {
+      showToast("Please fill in all fields", "error");
       return;
     }
 
-    const payload = {
-      employee_id: employeeId,
-      package_id: newComponent.package_id,
-      component_name: newComponent.component_name,
-      value: parseFloat(newComponent.value).toFixed(2),
-    };
+    // Fix: Use employee_salary_package_id instead of package_id
+    if (!newComponent.employee_salary_package_id) {
+      showToast("Please select a package", "error");
+      return;
+    }
 
-    console.log("Adding salary component payload:", payload);
+    try {
+      // Get the employee_id from currentEmployee
+      const employeeId = currentEmployee.id || currentEmployee.employee_id;
 
-    const response = await apiClient.post("/admin/salary-components", payload);
+      if (!employeeId) {
+        showToast(
+          "Employee ID not found. Please refresh and try again.",
+          "error",
+        );
+        return;
+      }
 
-    if (response.data.status === "success") {
-      showToast("Salary component added successfully", "success");
-      setShowAddComponent(false);
-      setNewComponent({ component_name: "", value: "", package_id: null });
-      fetchEmployeeData(); // Refresh data
-    } else {
+      const payload = {
+        employee_id: employeeId,
+        employee_salary_package_id: newComponent.employee_salary_package_id, // Use the correct field
+        component_name: newComponent.component_name,
+        value: parseFloat(newComponent.value).toFixed(2),
+      };
+
+      console.log("Adding salary component payload:", payload);
+
+      const response = await apiClient.post(
+        "/admin/salary-components",
+        payload,
+      );
+
+      if (response.data.status === "success") {
+        showToast("Salary component added successfully", "success");
+        setShowAddComponent(false);
+        // Reset with the correct field name
+        setNewComponent({
+          component_name: "",
+          value: "",
+          employee_salary_package_id: null,
+        });
+        fetchEmployeeData(); // Refresh data
+      } else {
+        showToast(
+          response.data.message || "Failed to add salary component",
+          "error",
+        );
+      }
+    } catch (error) {
+      console.error("Error adding salary component:", error);
       showToast(
-        response.data.message || "Failed to add salary component",
+        error.response?.data?.message || "Failed to add salary component",
         "error",
       );
     }
-  } catch (error) {
-    console.error("Error adding salary component:", error);
-    showToast(
-      error.response?.data?.message || "Failed to add salary component",
-      "error",
-    );
-  }
-};
+  };
 
   // ─── Package CRUD ────────────────────────────────────────────────────
   const handleAddPackage = async () => {
@@ -367,8 +379,10 @@ const handleAddComponent = async () => {
         bank_name: newBank.bank_name,
         account_number: newBank.account_number,
         ifsc_code: newBank.bank_country === "India" ? newBank.ifsc_code : null,
-        branch_name: newBank.bank_country === "India" ? newBank.branch_name : null,
-        iban_number: newBank.bank_country === "UAE" ? newBank.iban_number : null,
+        branch_name:
+          newBank.bank_country === "India" ? newBank.branch_name : null,
+        iban_number:
+          newBank.bank_country === "UAE" ? newBank.iban_number : null,
         swift_code: newBank.bank_country === "UAE" ? newBank.swift_code : null,
       };
 
@@ -1026,11 +1040,13 @@ const handleAddComponent = async () => {
                               <span className="px-2 py-1 bg-blue-100 text-blue-700 rounded-full text-xs">
                                 {pkg.currency || "AED"}
                               </span>
-                              <span className={`px-2 py-1 rounded-full text-xs ${
-                                pkg.is_active
-                                  ? "bg-green-100 text-green-700"
-                                  : "bg-gray-100 text-gray-500"
-                              }`}>
+                              <span
+                                className={`px-2 py-1 rounded-full text-xs ${
+                                  pkg.is_active
+                                    ? "bg-green-100 text-green-700"
+                                    : "bg-gray-100 text-gray-500"
+                                }`}
+                              >
                                 {pkg.is_active ? "Active" : "Inactive"}
                               </span>
                             </div>
@@ -1070,100 +1086,124 @@ const handleAddComponent = async () => {
                                   </tr>
                                 </thead>
                                 <tbody className="bg-white divide-y divide-gray-200">
-                                  {pkg.salary_components && pkg.salary_components.length > 0 ? (
+                                  {pkg.salary_components &&
+                                  pkg.salary_components.length > 0 ? (
                                     <>
-                                      {pkg.salary_components.map((comp, compIdx) => (
-                                        <tr key={comp.id || compIdx} className="hover:bg-gray-50">
-                                          <td className="px-4 py-2 whitespace-nowrap text-sm font-medium text-gray-900">
-                                            {editingComponent === comp.id ? (
-                                              <input
-                                                type="text"
-                                                defaultValue={comp.component_name}
-                                                className="px-2 py-1 border border-gray-300 rounded"
-                                                id={`comp-name-${comp.id}`}
-                                              />
-                                            ) : (
-                                              comp.component_name
-                                            )}
-                                          </td>
-                                          <td className="px-4 py-2 whitespace-nowrap text-sm text-gray-900 text-right">
-                                            {editingComponent === comp.id ? (
-                                              <input
-                                                type="number"
-                                                step="0.01"
-                                                defaultValue={comp.value}
-                                                className="px-2 py-1 border border-gray-300 rounded text-right"
-                                                id={`comp-value-${comp.id}`}
-                                              />
-                                            ) : (
-                                              parseFloat(comp.value).toLocaleString(undefined, {
-                                                minimumFractionDigits: 2,
-                                                maximumFractionDigits: 2,
-                                              })
-                                            )}
-                                          </td>
-                                          <td className="px-4 py-2 whitespace-nowrap text-center">
-                                            {editingComponent === comp.id ? (
-                                              <div className="flex items-center justify-center gap-2">
-                                                <button
-                                                  onClick={() => {
-                                                    const newName = document.getElementById(`comp-name-${comp.id}`).value;
-                                                    const newValue = document.getElementById(`comp-value-${comp.id}`).value;
-                                                    handleUpdateComponent(
-                                                      comp.id,
-                                                      {
-                                                        component_name: newName,
-                                                        value: newValue,
-                                                      },
-                                                      pkg.id
-                                                    );
-                                                  }}
-                                                  className="text-green-600 hover:text-green-800"
-                                                  title="Save"
-                                                >
-                                                  <FiSave size={16} />
-                                                </button>
-                                                <button
-                                                  onClick={() => setEditingComponent(null)}
-                                                  className="text-gray-500 hover:text-gray-700"
-                                                  title="Cancel"
-                                                >
-                                                  <FiX size={16} />
-                                                </button>
-                                              </div>
-                                            ) : (
-                                              <div className="flex items-center justify-center gap-2">
-                                                <button
-                                                  onClick={() => setEditingComponent(comp.id)}
-                                                  className="text-blue-600 hover:text-blue-800"
-                                                  title="Edit"
-                                                >
-                                                  <FiEdit size={16} />
-                                                </button>
-                                                <button
-                                                  onClick={() =>
-                                                    handleDeleteComponentClick(
-                                                      comp.id,
-                                                      comp.component_name,
-                                                      pkg.id
-                                                    )
+                                      {pkg.salary_components.map(
+                                        (comp, compIdx) => (
+                                          <tr
+                                            key={comp.id || compIdx}
+                                            className="hover:bg-gray-50"
+                                          >
+                                            <td className="px-4 py-2 whitespace-nowrap text-sm font-medium text-gray-900">
+                                              {editingComponent === comp.id ? (
+                                                <input
+                                                  type="text"
+                                                  defaultValue={
+                                                    comp.component_name
                                                   }
-                                                  className="text-red-600 hover:text-red-800"
-                                                  title="Delete"
-                                                >
-                                                  <FiTrash2 size={16} />
-                                                </button>
-                                              </div>
-                                            )}
-                                          </td>
-                                        </tr>
-                                      ))}
+                                                  className="px-2 py-1 border border-gray-300 rounded"
+                                                  id={`comp-name-${comp.id}`}
+                                                />
+                                              ) : (
+                                                comp.component_name
+                                              )}
+                                            </td>
+                                            <td className="px-4 py-2 whitespace-nowrap text-sm text-gray-900 text-right">
+                                              {editingComponent === comp.id ? (
+                                                <input
+                                                  type="number"
+                                                  step="0.01"
+                                                  defaultValue={comp.value}
+                                                  className="px-2 py-1 border border-gray-300 rounded text-right"
+                                                  id={`comp-value-${comp.id}`}
+                                                />
+                                              ) : (
+                                                parseFloat(
+                                                  comp.value,
+                                                ).toLocaleString(undefined, {
+                                                  minimumFractionDigits: 2,
+                                                  maximumFractionDigits: 2,
+                                                })
+                                              )}
+                                            </td>
+                                            <td className="px-4 py-2 whitespace-nowrap text-center">
+                                              {editingComponent === comp.id ? (
+                                                <div className="flex items-center justify-center gap-2">
+                                                  <button
+                                                    onClick={() => {
+                                                      const newName =
+                                                        document.getElementById(
+                                                          `comp-name-${comp.id}`,
+                                                        ).value;
+                                                      const newValue =
+                                                        document.getElementById(
+                                                          `comp-value-${comp.id}`,
+                                                        ).value;
+                                                      handleUpdateComponent(
+                                                        comp.id,
+                                                        {
+                                                          component_name:
+                                                            newName,
+                                                          value: newValue,
+                                                        },
+                                                        pkg.id,
+                                                      );
+                                                    }}
+                                                    className="text-green-600 hover:text-green-800"
+                                                    title="Save"
+                                                  >
+                                                    <FiSave size={16} />
+                                                  </button>
+                                                  <button
+                                                    onClick={() =>
+                                                      setEditingComponent(null)
+                                                    }
+                                                    className="text-gray-500 hover:text-gray-700"
+                                                    title="Cancel"
+                                                  >
+                                                    <FiX size={16} />
+                                                  </button>
+                                                </div>
+                                              ) : (
+                                                <div className="flex items-center justify-center gap-2">
+                                                  <button
+                                                    onClick={() =>
+                                                      setEditingComponent(
+                                                        comp.id,
+                                                      )
+                                                    }
+                                                    className="text-blue-600 hover:text-blue-800"
+                                                    title="Edit"
+                                                  >
+                                                    <FiEdit size={16} />
+                                                  </button>
+                                                  <button
+                                                    onClick={() =>
+                                                      handleDeleteComponentClick(
+                                                        comp.id,
+                                                        comp.component_name,
+                                                        pkg.id,
+                                                      )
+                                                    }
+                                                    className="text-red-600 hover:text-red-800"
+                                                    title="Delete"
+                                                  >
+                                                    <FiTrash2 size={16} />
+                                                  </button>
+                                                </div>
+                                              )}
+                                            </td>
+                                          </tr>
+                                        ),
+                                      )}
                                       <tr className="bg-gray-50 font-bold">
                                         <td className="px-4 py-2 whitespace-nowrap text-sm font-bold text-gray-900">
                                           Package Total
                                         </td>
                                         <td className="px-4 py-2 whitespace-nowrap text-sm font-bold text-green-600 text-right">
-                                          {pkg.currency || "AED"} {total.toLocaleString(undefined, {
+                                          {pkg.currency || "AED"}{" "}
+                                          {total.toLocaleString(undefined, {
                                             minimumFractionDigits: 2,
                                             maximumFractionDigits: 2,
                                           })}
@@ -1173,7 +1213,10 @@ const handleAddComponent = async () => {
                                     </>
                                   ) : (
                                     <tr>
-                                      <td colSpan="3" className="px-4 py-4 text-center text-gray-500">
+                                      <td
+                                        colSpan="3"
+                                        className="px-4 py-4 text-center text-gray-500"
+                                      >
                                         No salary components in this package
                                       </td>
                                     </tr>
@@ -1189,11 +1232,13 @@ const handleAddComponent = async () => {
                 ) : (
                   <div className="text-center py-8 bg-gray-50 rounded-xl border border-gray-200 mb-6">
                     <FiPackage className="text-4xl text-gray-400 mx-auto mb-2" />
-                    <p className="text-gray-500">No salary packages configured</p>
+                    <p className="text-gray-500">
+                      No salary packages configured
+                    </p>
                   </div>
                 )}
 
-                {/* ─── Add Component Modal ────────────────────────────────────── */}
+                {/* Add Component Modal */}
                 {showAddComponent && (
                   <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50 p-4">
                     <div className="bg-white rounded-xl max-w-md w-full p-6">
@@ -1202,7 +1247,14 @@ const handleAddComponent = async () => {
                           Add Salary Component
                         </h3>
                         <button
-                          onClick={() => setShowAddComponent(false)}
+                          onClick={() => {
+                            setShowAddComponent(false);
+                            setNewComponent({
+                              component_name: "",
+                              value: "",
+                              employee_salary_package_id: null,
+                            });
+                          }}
                           className="text-gray-400 hover:text-gray-600"
                         >
                           <FiX size={20} />
@@ -1211,14 +1263,18 @@ const handleAddComponent = async () => {
                       <div className="space-y-4">
                         <div>
                           <label className="block text-sm font-medium text-gray-700 mb-1">
-                            Package
+                            Employee Salary Package
                           </label>
                           <select
-                            value={newComponent.package_id || ""}
+                            value={
+                              newComponent.employee_salary_package_id || ""
+                            }
                             onChange={(e) =>
                               setNewComponent({
                                 ...newComponent,
-                                package_id: e.target.value,
+                                employee_salary_package_id: e.target.value
+                                  ? parseInt(e.target.value)
+                                  : null,
                               })
                             }
                             className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-green-500 focus:border-green-500"
@@ -1230,6 +1286,10 @@ const handleAddComponent = async () => {
                               </option>
                             ))}
                           </select>
+                          <p className="text-xs text-gray-500 mt-1">
+                            Select the employee's salary package this component
+                            belongs to
+                          </p>
                         </div>
                         <div>
                           <label className="block text-sm font-medium text-gray-700 mb-1">
@@ -1439,7 +1499,8 @@ const handleAddComponent = async () => {
                 )}
 
                 {/* Bank Details List */}
-                {currentEmployee.bank_details && currentEmployee.bank_details.length > 0 ? (
+                {currentEmployee.bank_details &&
+                currentEmployee.bank_details.length > 0 ? (
                   <div className="space-y-4">
                     {currentEmployee.bank_details.map((bank, index) => (
                       <div
@@ -1576,19 +1637,23 @@ const handleAddComponent = async () => {
                                       ).value,
                                     };
                                     if (bank.bank_country === "India") {
-                                      updatedData.ifsc_code = document.getElementById(
-                                        `bank-ifsc-${bank.id}`
-                                      ).value;
-                                      updatedData.branch_name = document.getElementById(
-                                        `bank-branch-${bank.id}`
-                                      ).value;
+                                      updatedData.ifsc_code =
+                                        document.getElementById(
+                                          `bank-ifsc-${bank.id}`,
+                                        ).value;
+                                      updatedData.branch_name =
+                                        document.getElementById(
+                                          `bank-branch-${bank.id}`,
+                                        ).value;
                                     } else {
-                                      updatedData.iban_number = document.getElementById(
-                                        `bank-iban-${bank.id}`
-                                      ).value;
-                                      updatedData.swift_code = document.getElementById(
-                                        `bank-swift-${bank.id}`
-                                      ).value;
+                                      updatedData.iban_number =
+                                        document.getElementById(
+                                          `bank-iban-${bank.id}`,
+                                        ).value;
+                                      updatedData.swift_code =
+                                        document.getElementById(
+                                          `bank-swift-${bank.id}`,
+                                        ).value;
                                     }
                                     handleUpdateBankDetail(
                                       bank.id,
