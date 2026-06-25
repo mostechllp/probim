@@ -1,3 +1,5 @@
+// AddPayroll.js - With salary packages fetching from API
+
 import { useState, useEffect } from "react";
 import { useDispatch, useSelector } from "react-redux";
 import { Link } from "react-router-dom";
@@ -27,7 +29,14 @@ import {
 import {
   fetchEmployees,
   fetchEmployeeById,
+  resetCurrentEmployee,
 } from "../store/slices/employeeSlice";
+
+// Import the onboarding slice actions
+import {
+  fetchSalaryPackages,
+  clearPackages,
+} from "../store/slices/onboardingSlice";
 
 // Helper function to get organization name from employees list
 const getOrganizationName = (employees, organizationId) => {
@@ -73,6 +82,12 @@ function AddPayroll() {
     currentEmployee,
   } = useSelector((state) => state.employees);
 
+  // Salary packages state from onboarding slice
+  const {
+    availablePackages,
+    packagesLoading,
+  } = useSelector((state) => state.onboarding || { availablePackages: [], packagesLoading: false });
+
   // Local state for form data
   const [selectedEmployee, setSelectedEmployee] = useState("");
   const [selectedUserId, setSelectedUserId] = useState("");
@@ -100,6 +115,7 @@ function AddPayroll() {
       dailyRate: "600",
       daysWorked: "10",
       fxRate: "22.5",
+      packageId: null,
     },
     {
       id: 2,
@@ -108,6 +124,7 @@ function AddPayroll() {
       dailyRate: "2000",
       daysWorked: "20",
       fxRate: "1",
+      packageId: null,
     },
   ]);
 
@@ -176,9 +193,44 @@ function AddPayroll() {
     'September': 9, 'October': 10, 'November': 11, 'December': 12
   };
 
-  // Load employees on mount
+  // --- FIX: Clear current employee on mount to prevent auto-prefilling ---
   useEffect(() => {
+    // Clear any previously selected employee from Redux
+    if (resetCurrentEmployee) {
+      dispatch(resetCurrentEmployee());
+    }
+    
+    // Reset local form state
+    clearEmployeeFields();
+    setSelectedEmployee("");
+    setSelectedUserId("");
+    
+    // Reset pay period fields
+    setPayPeriodMonth("");
+    setPayPeriodYear("");
+    setPeriodStart("");
+    setPeriodEnd("");
+    setPaymentDate("");
+    setPaymentMode(null);
+    setTotalWorkingDays("");
+    setDaysPresent("");
+    
+    // Load employees
     dispatch(fetchEmployees());
+    
+    // Fetch salary packages from API
+    dispatch(fetchSalaryPackages());
+    
+    // Reset Redux step to 1
+    dispatch(setCurrentStep(1));
+    
+    // Clean up on unmount
+    return () => {
+      // Optionally reset payroll state
+      // dispatch(resetPayrollState());
+      // Clear packages on unmount
+      dispatch(clearPackages());
+    };
   }, [dispatch]);
 
   // Handle employee selection
@@ -211,9 +263,9 @@ function AddPayroll() {
     setEmploymentType("");
   };
 
-  // Auto-populate fields when employee data is loaded
+  // Auto-populate fields when employee data is loaded (only when selected)
   useEffect(() => {
-    if (currentEmployee) {
+    if (currentEmployee && selectedEmployee) {
       const user = currentEmployee.user || {};
       const fullName = [currentEmployee.first_name, currentEmployee.last_name]
         .filter(Boolean)
@@ -259,12 +311,12 @@ function AddPayroll() {
 
       setEmploymentType(user.type || user.employment_type || "employee");
 
+      // Set default pay period if not set
       if (!payPeriodMonth) {
         const currentMonth = new Date().getMonth() + 1;
         const currentYear = new Date().getFullYear();
         const monthNum = String(currentMonth).padStart(2, "0");
 
-        // Set month name for display
         const monthNamesList = [
           "January", "February", "March", "April", "May", "June",
           "July", "August", "September", "October", "November", "December"
@@ -284,10 +336,8 @@ function AddPayroll() {
         setDaysPresent("30");
         setPaymentMode(null);
       }
-
-      showToast(`Employee ${fullName} loaded successfully`, "success");
     }
-  }, [currentEmployee, employees, payPeriodMonth]);
+  }, [currentEmployee, employees, payPeriodMonth, selectedEmployee]);
 
   // Load draft data on mount if editing
   useEffect(() => {
@@ -316,26 +366,49 @@ function AddPayroll() {
 
     switch (step) {
       case 1:
-        // Convert month name to number (e.g., "June" -> 6)
         const monthNumber = monthNames[payPeriodMonth] || new Date().getMonth() + 1;
         data = {
           pay_period_month: monthNumber,
           pay_period_year: parseInt(payPeriodYear) || new Date().getFullYear(),
+          period_start: periodStart,
+          period_end: periodEnd,
+          payment_date: paymentDate,
+          payment_mode: paymentMode,
+          total_working_days: parseInt(totalWorkingDays) || 0,
+          days_present: parseInt(daysPresent) || 0,
         };
         break;
       case 2:
         data = {
-          countries: countries,
+          countries: countries.map(c => ({
+            name: c.name,
+            currency: c.currency,
+            daily_rate: parseFloat(c.dailyRate) || 0,
+            days_worked: parseInt(c.daysWorked) || 0,
+            fx_rate: parseFloat(c.fxRate) || 0,
+            package_id: c.packageId || null,
+          })),
         };
         break;
       case 3:
         data = {
-          overtime_requests: overtimeRequests,
+          overtime_requests: overtimeRequests.map(req => ({
+            project: req.project,
+            date: req.date,
+            hours: parseFloat(req.hours) || 0,
+            status: req.status,
+            reason: req.reason,
+          })),
         };
         break;
       case 4:
         data = {
-          deductions: deductions,
+          deductions: deductions.map(d => ({
+            type: d.type,
+            country: d.country,
+            amount: parseFloat(d.amount) || 0,
+            statutory: d.statutory === "Yes",
+          })),
         };
         break;
       case 5:
@@ -366,16 +439,20 @@ function AddPayroll() {
       console.log("Saving step with user_id:", selectedUserId);
       console.log("Step data:", data);
 
-      await dispatch(
-        savePayrollStep({
-          userId: selectedUserId,
-          step: step,
-          stepData: data,
-        }),
-      ).unwrap();
+      // --- COMMENTED OUT: API call for saving step ---
+      // await dispatch(
+      //   savePayrollStep({
+      //     userId: selectedUserId,
+      //     step: step,
+      //     stepData: data,
+      //   }),
+      // ).unwrap();
 
-      dispatch(updateStepData({ step, data }));
-      dispatch(markStepCompleted(step));
+      // --- MOCK: Simulate save for UI testing ---
+      console.log("MOCK: Step data saved successfully (UI testing mode)");
+
+      // dispatch(updateStepData({ step, data }));
+      // dispatch(markStepCompleted(step));
       return true;
     } catch (error) {
       console.error("Failed to save step:", error);
@@ -433,12 +510,18 @@ function AddPayroll() {
     try {
       const finalData = getCurrentStepData();
       await handleSaveStep(reduxCurrentStep, finalData);
-      await dispatch(submitPayroll(selectedUserId)).unwrap();
+      
+      // --- COMMENTED OUT: API call for submitting payroll ---
+      // await dispatch(submitPayroll(selectedUserId)).unwrap();
+      
+      // --- MOCK: Simulate submission for UI testing ---
+      console.log("MOCK: Payroll submitted successfully (UI testing mode)");
+      
       generatePayslipPDF();
 
-      setTimeout(() => {
-        window.location.href = "/admin/payroll";
-      }, 3000);
+      // setTimeout(() => {
+      //   window.location.href = "/admin/payroll";
+      // }, 3000);
     } catch (error) {
       showToast("Failed to submit payroll", "error");
     }
@@ -451,6 +534,60 @@ function AddPayroll() {
     );
   };
 
+  // Country actions
+  const handleCountryChange = (id, field, value) => {
+    setCountries((prev) =>
+      prev.map((c) => (c.id === id ? { ...c, [field]: value } : c)),
+    );
+  };
+
+  const handleAddCountry = () => {
+    const newId = countries.length > 0 ? Math.max(...countries.map(c => c.id)) + 1 : 1;
+    setCountries([...countries, {
+      id: newId,
+      name: "",
+      currency: "INR",
+      dailyRate: "",
+      daysWorked: "",
+      fxRate: "",
+      packageId: null,
+    }]);
+  };
+
+  const handleRemoveCountry = (id) => {
+    if (countries.length <= 1) {
+      showToast("At least one country split is required", "error");
+      return;
+    }
+    setCountries(countries.filter(c => c.id !== id));
+  };
+
+  // Deduction actions
+  const handleDeductionChange = (id, field, value) => {
+    setDeductions((prev) =>
+      prev.map((d) => (d.id === id ? { ...d, [field]: value } : d)),
+    );
+  };
+
+  const handleAddDeduction = () => {
+    const newId = deductions.length > 0 ? Math.max(...deductions.map(d => d.id)) + 1 : 1;
+    setDeductions([...deductions, {
+      id: newId,
+      type: "",
+      country: "India",
+      amount: "",
+      statutory: "No",
+    }]);
+  };
+
+  const handleRemoveDeduction = (id) => {
+    if (deductions.length <= 1) {
+      showToast("At least one deduction is required", "error");
+      return;
+    }
+    setDeductions(deductions.filter(d => d.id !== id));
+  };
+
   // Generate payslip PDF
   const generatePayslipPDF = () => {
     const doc = new jsPDF();
@@ -459,8 +596,8 @@ function AddPayroll() {
     doc.text("Employee Payslip", 14, 22);
 
     doc.setFontSize(11);
-    const empName = employeeName || "Ahmed Al Mansoori";
-    const empId = employeeId || "EMP-0042";
+    const empName = employeeName || "Employee";
+    const empId = employeeId || "EMP-0000";
     doc.text(`Employee: ${empName} (${empId})`, 14, 32);
     doc.text(`Organization: ${organizationName}`, 14, 38);
     doc.text(
@@ -475,10 +612,12 @@ function AddPayroll() {
       head: [
         ["Package / Location", "Days Logged", "Daily Rate", "Amount (INR)"],
       ],
-      body: [
-        ["Package 2 - Dubai Onsite", "10", "AED 600", "1,35,000"],
-        ["Package 1 - Home Country (WFH)", "20", "INR 2000", "40,000"],
-      ],
+      body: countries.map((c) => [
+        c.name || "-",
+        c.daysWorked || "0",
+        `${c.currency || ""} ${c.dailyRate || "0"}`,
+        `${c.currency === "AED" ? "₹" : "₹"}${(parseFloat(c.dailyRate) * parseFloat(c.daysWorked) * parseFloat(c.fxRate || 1)).toLocaleString()}`,
+      ]),
       theme: "grid",
       headStyles: { fillColor: [34, 197, 94] },
     });
@@ -504,10 +643,18 @@ function AddPayroll() {
       headStyles: { fillColor: [239, 68, 68] },
     });
 
+    const totalDeductions = deductions.reduce((sum, d) => sum + parseFloat(d.amount || 0), 0);
+    const grossEarnings = countries.reduce((sum, c) => sum + (parseFloat(c.dailyRate) * parseFloat(c.daysWorked) * parseFloat(c.fxRate || 1)), 0);
+    const netPay = grossEarnings - totalDeductions;
+
     autoTable(doc, {
       startY: doc.lastAutoTable.finalY + 10,
       head: [["Gross Earnings", "Total Deductions", "Net Pay"]],
-      body: [["INR 1,75,000", "INR 11,825", "INR 1,63,175"]],
+      body: [[
+        `INR ${grossEarnings.toLocaleString()}`,
+        `INR ${totalDeductions.toLocaleString()}`,
+        `INR ${netPay.toLocaleString()}`,
+      ]],
       theme: "grid",
       headStyles: { fillColor: [34, 197, 94] },
     });
@@ -596,7 +743,7 @@ function AddPayroll() {
                       </option>
                       {employees.map((emp) => (
                         <option key={emp.id} value={emp.id}>
-                          {emp.name} 
+                          {emp.name}
                         </option>
                       ))}
                     </select>
@@ -836,6 +983,11 @@ function AddPayroll() {
                 <h3 className="text-base md:text-lg font-bold text-gray-800 dark:text-gray-200">
                   Salary Packages (Multi-Location)
                 </h3>
+                {packagesLoading && (
+                  <span className="ml-2 text-xs text-gray-500">
+                    <i className="fas fa-spinner fa-spin mr-1"></i> Loading...
+                  </span>
+                )}
               </div>
 
               <div className="space-y-3">
@@ -848,24 +1000,50 @@ function AddPayroll() {
                       <label className="text-[10px] md:text-xs text-gray-500 mb-1 block">
                         Package
                       </label>
-                      <select className="w-full px-3 py-2 text-sm rounded-lg border border-gray-200 dark:border-gray-700 bg-white dark:bg-gray-800 text-gray-800 dark:text-gray-200 focus:outline-none focus:border-green-500 focus:ring-2 focus:ring-green-500/20">
-                        <option>
-                          {c.name === "UAE"
-                            ? "Package 2 - Dubai Onsite"
-                            : "Package 1 - Home Country / WFH"}
-                        </option>
-                        <option>Package 1 - Home Country / WFH</option>
-                        <option>Package 2 - Dubai Onsite</option>
-                      </select>
+                      {availablePackages.length > 0 ? (
+                        <select
+                          value={c.packageId || ""}
+                          onChange={(e) => {
+                            const selectedPackage = availablePackages.find(p => p.id === parseInt(e.target.value));
+                            handleCountryChange(c.id, 'packageId', e.target.value);
+                            if (selectedPackage) {
+                              handleCountryChange(c.id, 'name', selectedPackage.name);
+                              handleCountryChange(c.id, 'currency', selectedPackage.currency || "AED");
+                            }
+                          }}
+                          className="w-full px-3 py-2 text-sm rounded-lg border border-gray-200 dark:border-gray-700 bg-white dark:bg-gray-800 text-gray-800 dark:text-gray-200 focus:outline-none focus:border-green-500 focus:ring-2 focus:ring-green-500/20"
+                        >
+                          <option value="">Select Package</option>
+                          {availablePackages.map((pkg) => (
+                            <option key={pkg.id} value={pkg.id}>
+                              {pkg.name} ({pkg.currency || "AED"})
+                            </option>
+                          ))}
+                        </select>
+                      ) : (
+                        <input
+                          type="text"
+                          value={c.name}
+                          onChange={(e) => handleCountryChange(c.id, 'name', e.target.value)}
+                          className="w-full px-3 py-2 text-sm rounded-lg border border-gray-200 dark:border-gray-700 bg-white dark:bg-gray-800 text-gray-800 dark:text-gray-200 focus:outline-none focus:border-green-500 focus:ring-2 focus:ring-green-500/20"
+                          placeholder="e.g., UAE Onsite"
+                        />
+                      )}
                     </div>
                     <div className="md:col-span-2">
                       <label className="text-[10px] md:text-xs text-gray-500 mb-1 block">
                         Currency
                       </label>
-                      <select className="w-full px-3 py-2 text-sm rounded-lg border border-gray-200 dark:border-gray-700 bg-white dark:bg-gray-800 text-gray-800 dark:text-gray-200 focus:outline-none focus:border-green-500 focus:ring-2 focus:ring-green-500/20">
-                        <option>{c.currency}</option>
-                        <option>AED</option>
-                        <option>INR</option>
+                      <select
+                        value={c.currency}
+                        onChange={(e) => handleCountryChange(c.id, 'currency', e.target.value)}
+                        className="w-full px-3 py-2 text-sm rounded-lg border border-gray-200 dark:border-gray-700 bg-white dark:bg-gray-800 text-gray-800 dark:text-gray-200 focus:outline-none focus:border-green-500 focus:ring-2 focus:ring-green-500/20"
+                      >
+                        <option value="AED">AED</option>
+                        <option value="INR">INR</option>
+                        <option value="USD">USD</option>
+                        <option value="EUR">EUR</option>
+                        <option value="GBP">GBP</option>
                       </select>
                     </div>
                     <div className="md:col-span-2">
@@ -873,8 +1051,9 @@ function AddPayroll() {
                         Daily Rate
                       </label>
                       <input
-                        type="text"
+                        type="number"
                         value={c.dailyRate}
+                        onChange={(e) => handleCountryChange(c.id, 'dailyRate', e.target.value)}
                         className="w-full px-3 py-2 text-sm rounded-lg border border-gray-200 dark:border-gray-700 bg-white dark:bg-gray-800 text-gray-800 dark:text-gray-200 focus:outline-none focus:border-green-500 focus:ring-2 focus:ring-green-500/20"
                       />
                     </div>
@@ -883,8 +1062,9 @@ function AddPayroll() {
                         Days Logged
                       </label>
                       <input
-                        type="text"
+                        type="number"
                         value={c.daysWorked}
+                        onChange={(e) => handleCountryChange(c.id, 'daysWorked', e.target.value)}
                         className="w-full px-3 py-2 text-sm rounded-lg border border-gray-200 dark:border-gray-700 bg-white dark:bg-gray-800 text-gray-800 dark:text-gray-200 focus:outline-none focus:border-green-500 focus:ring-2 focus:ring-green-500/20"
                       />
                     </div>
@@ -893,13 +1073,18 @@ function AddPayroll() {
                         Manual FX Rate
                       </label>
                       <input
-                        type="text"
+                        type="number"
+                        step="0.01"
                         value={c.fxRate}
+                        onChange={(e) => handleCountryChange(c.id, 'fxRate', e.target.value)}
                         className="w-full px-3 py-2 text-sm rounded-lg border border-blue-200 dark:border-blue-700 bg-blue-50 dark:bg-blue-900/10 text-gray-800 dark:text-gray-200 focus:outline-none focus:border-blue-500 focus:ring-2 focus:ring-blue-500/20"
                       />
                     </div>
                     <div className="md:col-span-1 flex justify-end items-end pb-0.5">
-                      <button className="w-8 h-8 rounded-lg bg-red-50 text-red-500 hover:bg-red-100 dark:bg-red-900/20 dark:hover:bg-red-900/40 transition-colors flex items-center justify-center">
+                      <button
+                        onClick={() => handleRemoveCountry(c.id)}
+                        className="w-8 h-8 rounded-lg bg-red-50 text-red-500 hover:bg-red-100 dark:bg-red-900/20 dark:hover:bg-red-900/40 transition-colors flex items-center justify-center"
+                      >
                         <i className="fas fa-trash-alt text-xs"></i>
                       </button>
                     </div>
@@ -907,7 +1092,10 @@ function AddPayroll() {
                 ))}
               </div>
 
-              <button className="mt-3 px-3 py-1.5 bg-green-50 dark:bg-green-900/20 text-green-600 dark:text-green-400 rounded-lg text-xs font-semibold hover:bg-green-100 dark:hover:bg-green-900/40 transition-colors border border-green-100 dark:border-green-800 flex items-center gap-2">
+              <button
+                onClick={handleAddCountry}
+                className="mt-3 px-3 py-1.5 bg-green-50 dark:bg-green-900/20 text-green-600 dark:text-green-400 rounded-lg text-xs font-semibold hover:bg-green-100 dark:hover:bg-green-900/40 transition-colors border border-green-100 dark:border-green-800 flex items-center gap-2"
+              >
                 <i className="fas fa-plus"></i> Add Package Split
               </button>
 
@@ -918,10 +1106,10 @@ function AddPayroll() {
                     Pkg 2: Dubai (AED)
                   </div>
                   <div className="text-lg md:text-xl font-bold text-orange-600 dark:text-orange-400">
-                    AED 6,000
+                    {countries.find(c => c.currency === "AED")?.dailyRate || "0"}
                   </div>
                   <div className="text-[9px] md:text-[10px] text-gray-500 dark:text-gray-400 mt-0.5">
-                    10 days × AED 600
+                    {countries.find(c => c.currency === "AED")?.daysWorked || 0} days
                   </div>
                 </div>
                 <div className="p-3 md:p-4 rounded-xl bg-green-50 dark:bg-green-900/20 border border-green-200 dark:border-green-800">
@@ -930,10 +1118,10 @@ function AddPayroll() {
                     Pkg 1: WFH (INR)
                   </div>
                   <div className="text-lg md:text-xl font-bold text-green-600 dark:text-green-400">
-                    ₹40,000
+                    {countries.find(c => c.currency === "INR")?.dailyRate || "0"}
                   </div>
                   <div className="text-[9px] md:text-[10px] text-gray-500 dark:text-gray-400 mt-0.5">
-                    20 days × ₹2,000
+                    {countries.find(c => c.currency === "INR")?.daysWorked || 0} days
                   </div>
                 </div>
                 <div className="p-3 md:p-4 rounded-xl bg-blue-50 dark:bg-blue-900/20 border border-blue-200 dark:border-blue-800">
@@ -941,10 +1129,7 @@ function AddPayroll() {
                     Converted (AED → INR)
                   </div>
                   <div className="text-lg md:text-xl font-bold text-blue-600 dark:text-blue-400">
-                    ₹1,35,000
-                  </div>
-                  <div className="text-[9px] md:text-[10px] text-gray-500 dark:text-gray-400 mt-0.5">
-                    AED 6,000 × 22.5
+                    ₹{(parseFloat(countries.find(c => c.currency === "AED")?.dailyRate || 0) * parseFloat(countries.find(c => c.currency === "AED")?.fxRate || 0)).toLocaleString()}
                   </div>
                 </div>
                 <div className="p-3 md:p-4 rounded-xl bg-emerald-50 dark:bg-emerald-900/20 border border-emerald-200 dark:border-emerald-800">
@@ -953,9 +1138,6 @@ function AddPayroll() {
                   </div>
                   <div className="text-lg md:text-xl font-bold text-emerald-600 dark:text-emerald-400">
                     ₹1,75,000
-                  </div>
-                  <div className="text-[9px] md:text-[10px] text-gray-500 dark:text-gray-400 mt-0.5">
-                    Total this month before deductions
                   </div>
                 </div>
               </div>
@@ -982,15 +1164,9 @@ function AddPayroll() {
                         <th className="py-3 px-4 font-semibold">Project</th>
                         <th className="py-3 px-4 font-semibold">Date</th>
                         <th className="py-3 px-4 font-semibold">Hours</th>
-                        <th className="py-3 px-4 font-semibold w-1/3">
-                          Reason
-                        </th>
-                        <th className="py-3 px-4 font-semibold text-center">
-                          Status
-                        </th>
-                        <th className="py-3 px-4 font-semibold text-center">
-                          Actions
-                        </th>
+                        <th className="py-3 px-4 font-semibold w-1/3">Reason</th>
+                        <th className="py-3 px-4 font-semibold text-center">Status</th>
+                        <th className="py-3 px-4 font-semibold text-center">Actions</th>
                       </tr>
                     </thead>
                     <tbody>
@@ -1000,21 +1176,55 @@ function AddPayroll() {
                           className="border-b border-gray-100 dark:border-gray-700 hover:bg-gray-50 dark:hover:bg-gray-700/30 transition-colors"
                         >
                           <td className="py-3 px-4 text-sm text-gray-700 dark:text-gray-300">
-                            <span className="bg-blue-50 dark:bg-blue-900/20 text-blue-600 dark:text-blue-400 px-2 py-1 rounded text-xs font-medium border border-blue-100 dark:border-blue-800">
-                              {req.project}
-                            </span>
+                            <input
+                              type="text"
+                              value={req.project}
+                              onChange={(e) => {
+                                setOvertimeRequests(prev =>
+                                  prev.map(r => r.id === req.id ? { ...r, project: e.target.value } : r)
+                                );
+                              }}
+                              className="w-full px-2 py-1 text-sm rounded border border-gray-200 dark:border-gray-600 bg-white dark:bg-gray-800 text-gray-700 dark:text-gray-300 focus:outline-none focus:border-green-500"
+                              placeholder="Project name"
+                            />
                           </td>
                           <td className="py-3 px-4 text-sm text-gray-600 dark:text-gray-400">
-                            {req.date}
+                            <input
+                              type="date"
+                              value={req.date}
+                              onChange={(e) => {
+                                setOvertimeRequests(prev =>
+                                  prev.map(r => r.id === req.id ? { ...r, date: e.target.value } : r)
+                                );
+                              }}
+                              className="w-full px-2 py-1 text-sm rounded border border-gray-200 dark:border-gray-600 bg-white dark:bg-gray-800 text-gray-700 dark:text-gray-300 focus:outline-none focus:border-green-500"
+                            />
                           </td>
                           <td className="py-3 px-4 text-sm font-semibold text-gray-800 dark:text-gray-200">
-                            {req.hours} hrs
+                            <input
+                              type="number"
+                              step="0.5"
+                              value={req.hours}
+                              onChange={(e) => {
+                                setOvertimeRequests(prev =>
+                                  prev.map(r => r.id === req.id ? { ...r, hours: parseFloat(e.target.value) || 0 } : r)
+                                );
+                              }}
+                              className="w-16 px-2 py-1 text-sm rounded border border-gray-200 dark:border-gray-600 bg-white dark:bg-gray-800 text-gray-700 dark:text-gray-300 focus:outline-none focus:border-green-500"
+                            />
                           </td>
-                          <td
-                            className="py-3 px-4 text-xs text-gray-500 dark:text-gray-400 truncate max-w-xs"
-                            title={req.reason}
-                          >
-                            {req.reason}
+                          <td className="py-3 px-4 text-xs text-gray-500 dark:text-gray-400">
+                            <input
+                              type="text"
+                              value={req.reason}
+                              onChange={(e) => {
+                                setOvertimeRequests(prev =>
+                                  prev.map(r => r.id === req.id ? { ...r, reason: e.target.value } : r)
+                                );
+                              }}
+                              className="w-full px-2 py-1 text-sm rounded border border-gray-200 dark:border-gray-600 bg-white dark:bg-gray-800 text-gray-700 dark:text-gray-300 focus:outline-none focus:border-green-500"
+                              placeholder="Reason"
+                            />
                           </td>
                           <td className="py-3 px-4 text-center">
                             {req.status === "pending" && (
@@ -1037,23 +1247,13 @@ function AddPayroll() {
                             {req.status === "pending" ? (
                               <div className="flex flex-col gap-1.5 items-center">
                                 <button
-                                  onClick={() =>
-                                    handleOvertimeAction(
-                                      req.id,
-                                      "approved_project",
-                                    )
-                                  }
+                                  onClick={() => handleOvertimeAction(req.id, "approved_project")}
                                   className="w-full text-[10px] px-2 py-1.5 bg-purple-50 hover:bg-purple-100 text-purple-600 dark:bg-purple-900/20 dark:hover:bg-purple-900/40 border border-purple-200 dark:border-purple-800 rounded font-semibold transition-colors"
                                 >
                                   Project Hours Only
                                 </button>
                                 <button
-                                  onClick={() =>
-                                    handleOvertimeAction(
-                                      req.id,
-                                      "approved_payroll",
-                                    )
-                                  }
+                                  onClick={() => handleOvertimeAction(req.id, "approved_payroll")}
                                   className="w-full text-[10px] px-2 py-1.5 bg-green-50 hover:bg-green-100 text-green-600 dark:bg-green-900/20 dark:hover:bg-green-900/40 border border-green-200 dark:border-green-800 rounded font-semibold transition-colors"
                                 >
                                   + Add to Payroll
@@ -1079,12 +1279,10 @@ function AddPayroll() {
                     <p className="font-semibold mb-1">Approval Rules:</p>
                     <ul className="list-disc list-inside space-y-1 text-xs">
                       <li>
-                        <strong>Project Hours Only:</strong> Added to manhour
-                        tracking, but no extra pay.
+                        <strong>Project Hours Only:</strong> Added to manhour tracking, but no extra pay.
                       </li>
                       <li>
-                        <strong>+ Add to Payroll:</strong> Added to manhour
-                        tracking AND included in this payroll cycle.
+                        <strong>+ Add to Payroll:</strong> Added to manhour tracking AND included in this payroll cycle.
                       </li>
                     </ul>
                   </div>
@@ -1112,30 +1310,53 @@ function AddPayroll() {
                     className="grid grid-cols-1 md:grid-cols-12 gap-3 items-center p-3 bg-gray-50 dark:bg-gray-700/30 rounded-lg"
                   >
                     <div className="md:col-span-4">
-                      <select className="w-full px-3 py-2 text-sm rounded-lg border border-gray-200 dark:border-gray-700 bg-white dark:bg-gray-800 text-gray-800 dark:text-gray-200 focus:outline-none focus:border-green-500 focus:ring-2 focus:ring-green-500/20">
-                        <option>{d.type}</option>
-                      </select>
+                      <label className="text-[10px] md:text-xs text-gray-500 mb-1 block">Type</label>
+                      <input
+                        type="text"
+                        value={d.type}
+                        onChange={(e) => handleDeductionChange(d.id, 'type', e.target.value)}
+                        className="w-full px-3 py-2 text-sm rounded-lg border border-gray-200 dark:border-gray-700 bg-white dark:bg-gray-800 text-gray-800 dark:text-gray-200 focus:outline-none focus:border-green-500 focus:ring-2 focus:ring-green-500/20"
+                        placeholder="e.g., PF 12%"
+                      />
                     </div>
                     <div className="md:col-span-3">
-                      <select className="w-full px-3 py-2 text-sm rounded-lg border border-gray-200 dark:border-gray-700 bg-white dark:bg-gray-800 text-gray-800 dark:text-gray-200 focus:outline-none focus:border-green-500 focus:ring-2 focus:ring-green-500/20">
-                        <option>{d.country}</option>
+                      <label className="text-[10px] md:text-xs text-gray-500 mb-1 block">Country</label>
+                      <select
+                        value={d.country}
+                        onChange={(e) => handleDeductionChange(d.id, 'country', e.target.value)}
+                        className="w-full px-3 py-2 text-sm rounded-lg border border-gray-200 dark:border-gray-700 bg-white dark:bg-gray-800 text-gray-800 dark:text-gray-200 focus:outline-none focus:border-green-500 focus:ring-2 focus:ring-green-500/20"
+                      >
+                        <option value="India">India</option>
+                        <option value="UAE">UAE</option>
+                        <option value="USA">USA</option>
+                        <option value="UK">UK</option>
                       </select>
                     </div>
                     <div className="md:col-span-2">
+                      <label className="text-[10px] md:text-xs text-gray-500 mb-1 block">Amount</label>
                       <input
-                        type="text"
+                        type="number"
                         value={d.amount}
+                        onChange={(e) => handleDeductionChange(d.id, 'amount', e.target.value)}
                         className="w-full px-3 py-2 text-sm rounded-lg border border-gray-200 dark:border-gray-700 bg-white dark:bg-gray-800 text-gray-800 dark:text-gray-200 focus:outline-none focus:border-green-500 focus:ring-2 focus:ring-green-500/20"
                       />
                     </div>
                     <div className="md:col-span-2">
-                      <select className="w-full px-3 py-2 text-sm rounded-lg border border-gray-200 dark:border-gray-700 bg-white dark:bg-gray-800 text-gray-800 dark:text-gray-200 focus:outline-none focus:border-green-500 focus:ring-2 focus:ring-green-500/20">
-                        <option>{d.statutory}</option>
-                        <option>No</option>
+                      <label className="text-[10px] md:text-xs text-gray-500 mb-1 block">Statutory</label>
+                      <select
+                        value={d.statutory}
+                        onChange={(e) => handleDeductionChange(d.id, 'statutory', e.target.value)}
+                        className="w-full px-3 py-2 text-sm rounded-lg border border-gray-200 dark:border-gray-700 bg-white dark:bg-gray-800 text-gray-800 dark:text-gray-200 focus:outline-none focus:border-green-500 focus:ring-2 focus:ring-green-500/20"
+                      >
+                        <option value="Yes">Yes</option>
+                        <option value="No">No</option>
                       </select>
                     </div>
                     <div className="md:col-span-1 flex justify-end">
-                      <button className="w-8 h-8 rounded-lg bg-red-50 text-red-500 hover:bg-red-100 dark:bg-red-900/20 dark:hover:bg-red-900/40 transition-colors flex items-center justify-center">
+                      <button
+                        onClick={() => handleRemoveDeduction(d.id)}
+                        className="w-8 h-8 rounded-lg bg-red-50 text-red-500 hover:bg-red-100 dark:bg-red-900/20 dark:hover:bg-red-900/40 transition-colors flex items-center justify-center"
+                      >
                         <i className="fas fa-trash-alt text-xs"></i>
                       </button>
                     </div>
@@ -1143,7 +1364,10 @@ function AddPayroll() {
                 ))}
               </div>
 
-              <button className="mt-3 px-3 py-1.5 bg-green-50 dark:bg-green-900/20 text-green-600 dark:text-green-400 rounded-lg text-xs font-semibold hover:bg-green-100 dark:hover:bg-green-900/40 transition-colors border border-green-100 dark:border-green-800 flex items-center gap-2">
+              <button
+                onClick={handleAddDeduction}
+                className="mt-3 px-3 py-1.5 bg-green-50 dark:bg-green-900/20 text-green-600 dark:text-green-400 rounded-lg text-xs font-semibold hover:bg-green-100 dark:hover:bg-green-900/40 transition-colors border border-green-100 dark:border-green-800 flex items-center gap-2"
+              >
                 <i className="fas fa-plus"></i> Add Deduction
               </button>
 
@@ -1153,10 +1377,7 @@ function AddPayroll() {
                     India Deductions
                   </div>
                   <div className="text-lg md:text-xl font-bold text-red-500">
-                    ₹10,700
-                  </div>
-                  <div className="text-[9px] md:text-[10px] text-gray-400 mt-0.5">
-                    PF + PT + TDS
+                    ₹{deductions.filter(d => d.country === "India").reduce((sum, d) => sum + parseFloat(d.amount || 0), 0).toLocaleString()}
                   </div>
                 </div>
                 <div className="p-3 md:p-4 rounded-xl bg-gray-50 dark:bg-gray-700/50 border border-gray-200 dark:border-gray-600">
@@ -1164,10 +1385,7 @@ function AddPayroll() {
                     UAE Deductions (INR)
                   </div>
                   <div className="text-lg md:text-xl font-bold text-red-500">
-                    ₹1,125
-                  </div>
-                  <div className="text-[9px] md:text-[10px] text-gray-400 mt-0.5">
-                    Gratuity
+                    ₹{deductions.filter(d => d.country === "UAE").reduce((sum, d) => sum + parseFloat(d.amount || 0), 0).toLocaleString()}
                   </div>
                 </div>
                 <div className="p-3 md:p-4 rounded-xl bg-gray-50 dark:bg-gray-700/50 border border-gray-200 dark:border-gray-600">
@@ -1175,10 +1393,7 @@ function AddPayroll() {
                     Total Deductions
                   </div>
                   <div className="text-lg md:text-xl font-bold text-red-600 dark:text-red-500">
-                    ₹11,825
-                  </div>
-                  <div className="text-[9px] md:text-[10px] text-gray-400 mt-0.5">
-                    All countries
+                    ₹{deductions.reduce((sum, d) => sum + parseFloat(d.amount || 0), 0).toLocaleString()}
                   </div>
                 </div>
                 <div className="p-3 md:p-4 rounded-xl bg-green-50 dark:bg-green-900/20 border border-green-200 dark:border-green-800">
@@ -1187,9 +1402,6 @@ function AddPayroll() {
                   </div>
                   <div className="text-lg md:text-xl font-bold text-green-600 dark:text-green-400">
                     ₹1,63,175
-                  </div>
-                  <div className="text-[9px] md:text-[10px] text-green-500/70 mt-0.5">
-                    After all deductions
                   </div>
                 </div>
               </div>
@@ -1219,7 +1431,7 @@ function AddPayroll() {
                       Gross Earnings
                     </div>
                     <div className="text-lg md:text-xl font-bold text-gray-800 dark:text-gray-200">
-                      ₹80,000
+                      ₹{countries.reduce((sum, c) => sum + (parseFloat(c.dailyRate || 0) * parseFloat(c.daysWorked || 0) * parseFloat(c.fxRate || 1)), 0).toLocaleString()}
                     </div>
                   </div>
                   <div className="p-3 md:p-4 rounded-xl bg-gray-50 dark:bg-gray-700/50 border border-gray-200 dark:border-gray-600">
@@ -1227,7 +1439,7 @@ function AddPayroll() {
                       Total Deductions
                     </div>
                     <div className="text-lg md:text-xl font-bold text-red-500">
-                      ₹12,315
+                      ₹{deductions.reduce((sum, d) => sum + parseFloat(d.amount || 0), 0).toLocaleString()}
                     </div>
                   </div>
                   <div className="p-3 md:p-4 rounded-xl bg-emerald-50 dark:bg-emerald-900/20 border border-emerald-200 dark:border-emerald-800">
@@ -1235,7 +1447,7 @@ function AddPayroll() {
                       Combined (INR)
                     </div>
                     <div className="text-lg md:text-xl font-bold text-emerald-600 dark:text-emerald-400">
-                      ₹1,75,000
+                      ₹{countries.reduce((sum, c) => sum + (parseFloat(c.dailyRate || 0) * parseFloat(c.daysWorked || 0) * parseFloat(c.fxRate || 1)), 0).toLocaleString()}
                     </div>
                   </div>
                   <div className="p-3 md:p-4 rounded-xl bg-green-50 dark:bg-green-900/20 border border-green-200 dark:border-green-800">
@@ -1243,7 +1455,7 @@ function AddPayroll() {
                       Final Net Pay
                     </div>
                     <div className="text-lg md:text-xl font-bold text-green-600 dark:text-green-400">
-                      ₹1,63,175
+                      ₹{(countries.reduce((sum, c) => sum + (parseFloat(c.dailyRate || 0) * parseFloat(c.daysWorked || 0) * parseFloat(c.fxRate || 1)), 0) - deductions.reduce((sum, d) => sum + parseFloat(d.amount || 0), 0)).toLocaleString()}
                     </div>
                   </div>
                 </div>
@@ -1255,10 +1467,7 @@ function AddPayroll() {
                       Payslip Delivery
                     </h4>
                     <p className="text-xs text-blue-600/80 dark:text-blue-400/80 mt-1">
-                      Upon submission, the generated payslip will be
-                      automatically sent to the employee via Email only.
-                      System-generated offer letters (if applicable) will also
-                      use this delivery method.
+                      Upon submission, the generated payslip will be automatically sent to the employee via Email only.
                     </p>
                   </div>
                 </div>
@@ -1295,13 +1504,9 @@ function AddPayroll() {
                   disabled={isSubmitting || !selectedUserId}
                   className="px-4 md:px-6 py-2 md:py-2.5 rounded-full font-semibold bg-green-500 text-white hover:bg-green-600 transition-all flex items-center justify-center gap-2 text-sm md:text-base disabled:opacity-50 disabled:cursor-not-allowed"
                 >
-                  <i
-                    className={`fas ${isSubmitting ? "fa-spinner fa-spin" : "fa-paper-plane"} text-xs md:text-sm`}
-                  ></i>
+                  <i className={`fas ${isSubmitting ? "fa-spinner fa-spin" : "fa-paper-plane"} text-xs md:text-sm`}></i>
                   <span>
-                    {isSubmitting
-                      ? "Submitting..."
-                      : "Generate & Email Payslip"}
+                    {isSubmitting ? "Submitting..." : "Generate & Email Payslip"}
                   </span>
                 </button>
               )}

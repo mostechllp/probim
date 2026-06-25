@@ -88,6 +88,9 @@ const ProjectWorkingHours = lazy(
 const AdminAttendanceRequests = lazy(
   () => import("./admin/pages/AttendanceRequests"),
 );
+const PayrollDetails = lazy(
+  () => import("./admin/pages/PayrollDetails"),
+);
 
 // Lazy load pages - Employee
 const EmployeeDashboard = lazy(() => import("./employee/pages/Dashboard"));
@@ -243,6 +246,7 @@ function App() {
           <Route path="settings" element={<Settings />} />
           <Route path="roles" element={<RoleManagement />} />
           <Route path="modules" element={<ModuleManagement />} />
+          <Route path="payroll/:id" element={<PayrollDetails />} /> 
           <Route
             path="project-working-hours"
             element={<ProjectWorkingHours />}
@@ -372,7 +376,7 @@ function App() {
           />
           <Route path="payroll" element={<Payroll />} />
           <Route path="payroll/add" element={<AddPayroll />} />
-          {/* <Route path="payroll/:id" element={<PayrollDetails />} />  */}
+          <Route path="payroll/:id" element={<PayrollDetails />} /> 
           {/* <Route path="payroll/edit/:id" element={<EditPayroll />} />  */}
         </Route>
 

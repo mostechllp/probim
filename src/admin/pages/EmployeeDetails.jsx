@@ -1050,24 +1050,6 @@ const EmployeeDetails = () => {
                                 {pkg.is_active ? "Active" : "Inactive"}
                               </span>
                             </div>
-                            <div className="flex items-center gap-2">
-                              <button
-                                onClick={() => setEditingPackage(pkg.id)}
-                                className="text-blue-600 hover:text-blue-800"
-                                title="Edit Package"
-                              >
-                                <FiEdit size={16} />
-                              </button>
-                              <button
-                                onClick={() =>
-                                  handleDeletePackageClick(pkg.id, pkg.name)
-                                }
-                                className="text-red-600 hover:text-red-800"
-                                title="Delete Package"
-                              >
-                                <FiTrash2 size={16} />
-                              </button>
-                            </div>
                           </div>
                           <div className="p-4">
                             <div className="overflow-x-auto">
