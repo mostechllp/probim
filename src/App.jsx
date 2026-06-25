@@ -82,8 +82,12 @@ const RoleManagement = lazy(() => import("./admin/pages/RoleManagement"));
 const Payroll = lazy(() => import("./admin/pages/Payroll"));
 const AddPayroll = lazy(() => import("./admin/pages/AddPayroll"));
 const Onboarding = lazy(() => import("./admin/pages/Onboarding"));
-const ProjectWorkingHours = lazy(() => import("./admin/pages/ProjectWorkingHours"));
-const AdminAttendanceRequests = lazy(() => import("./admin/pages/AttendanceRequests"));
+const ProjectWorkingHours = lazy(
+  () => import("./admin/pages/ProjectWorkingHours"),
+);
+const AdminAttendanceRequests = lazy(
+  () => import("./admin/pages/AttendanceRequests"),
+);
 
 // Lazy load pages - Employee
 const EmployeeDashboard = lazy(() => import("./employee/pages/Dashboard"));
@@ -239,8 +243,14 @@ function App() {
           <Route path="settings" element={<Settings />} />
           <Route path="roles" element={<RoleManagement />} />
           <Route path="modules" element={<ModuleManagement />} />
-          <Route path="project-working-hours" element={<ProjectWorkingHours />} />
-          <Route path="attendance-requests" element={<AdminAttendanceRequests />} />
+          <Route
+            path="project-working-hours"
+            element={<ProjectWorkingHours />}
+          />
+          <Route
+            path="attendance-requests"
+            element={<AdminAttendanceRequests />}
+          />
         </Route>
 
         {/* Employee Routes - Layout wrapper */}
@@ -356,7 +366,14 @@ function App() {
           <Route path="settings" element={<Settings />} />
           <Route path="roles" element={<RoleManagement />} />
           <Route path="modules" element={<ModuleManagement />} />
-          <Route path="project-working-hours" element={<ProjectWorkingHours />} />
+          <Route
+            path="project-working-hours"
+            element={<ProjectWorkingHours />}
+          />
+          <Route path="payroll" element={<Payroll />} />
+          <Route path="payroll/add" element={<AddPayroll />} />
+          {/* <Route path="payroll/:id" element={<PayrollDetails />} />  */}
+          {/* <Route path="payroll/edit/:id" element={<EditPayroll />} />  */}
         </Route>
 
         {/* Redirect /admin/employees/add-employee to appropriate route */}
@@ -569,6 +586,37 @@ function App() {
                   <Navigate to="/employee/project-working-hours" replace />
                 ) : (
                   <Navigate to="/admin/project-working-hours" replace />
+                )}
+              </LazyWrapper>
+            </ProtectedRoute>
+          }
+        />
+
+        <Route
+          path="/admin/payroll"
+          element={
+            <ProtectedRoute>
+              <LazyWrapper>
+                {user?.type === "employee" ? (
+                  <Navigate to="/employee/payroll" replace />
+                ) : (
+                  <Navigate to="/admin/payroll" replace />
+                )}
+              </LazyWrapper>
+            </ProtectedRoute>
+          }
+        />
+
+        {/* Redirect /admin/payroll/add to appropriate route */}
+        <Route
+          path="/admin/payroll/add"
+          element={
+            <ProtectedRoute>
+              <LazyWrapper>
+                {user?.type === "employee" ? (
+                  <Navigate to="/employee/payroll/add" replace />
+                ) : (
+                  <Navigate to="/admin/payroll/add" replace />
                 )}
               </LazyWrapper>
             </ProtectedRoute>

@@ -30,7 +30,7 @@ class OnboardingService {
   // ONBOARDING WIZARD STEPS
   // ─────────────────────────────────────────────────────────────────────────────
 
-   async getSalaryPackages() {
+  async getSalaryPackages() {
     try {
       const response = await apiClient.get(`${BASE_PATH}/employees/salary-packages`);
       return response.data;
@@ -41,8 +41,7 @@ class OnboardingService {
 
   /**
    * Step 1 – Save employee personal & professional details.
-   * POST api/admin/onboarding/save-details
-   * → EmployeeOnboardingApiController@saveDetails
+   * POST api/admin/employees/onboard/details
    */
   async saveDetails(payload) {
     try {
@@ -57,24 +56,23 @@ class OnboardingService {
 
   /**
    * Step 2 – Save salary structure (components + payment cycle).
-   * POST api/admin/onboarding/save-salary
-   * → EmployeeOnboardingApiController@saveSalary
+   * POST api/admin/employees/onboard/salary
    */
   async saveSalary(payload) {
     try {
-      console.log('[Onboarding] POST /employees/onboard/salary | Payload:', payload);
+      console.log('[Onboarding] POST /employees/onboard/salary | Payload:', JSON.stringify(payload, null, 2));
       const response = await apiClient.post(`${BASE_PATH}/employees/onboard/salary`, payload);
       console.log('[Onboarding] save-salary response:', response.data);
       return response.data;
     } catch (error) {
+      console.error('[Onboarding] saveSalary error:', error);
       throw handleError(error, 'Failed to save salary structure');
     }
   }
 
   /**
    * Step 3 – Save bank account details.
-   * POST api/admin/onboarding/save-banks
-   * → EmployeeOnboardingApiController@saveBanks
+   * POST api/admin/employees/onboard/banks
    */
   async saveBanks(payload) {
     try {
@@ -89,8 +87,7 @@ class OnboardingService {
 
   /**
    * Step 4 – Complete / finalise the onboarding process.
-   * POST api/admin/onboarding/complete
-   * → EmployeeOnboardingApiController@complete
+   * POST api/admin/employees/onboard/complete
    */
   async completeOnboarding(payload) {
     try {
@@ -107,11 +104,6 @@ class OnboardingService {
   // BANK DETAILS CRUD
   // ─────────────────────────────────────────────────────────────────────────────
 
-  /**
-   * Update a specific bank detail record.
-   * PUT api/admin/bank-details/{id}
-   * → EmployeeBankDetailApiController@update
-   */
   async updateBankDetail(id, payload) {
     try {
       console.log(`[Onboarding] PUT /bank-details/${id} | Payload:`, payload);
@@ -123,11 +115,6 @@ class OnboardingService {
     }
   }
 
-  /**
-   * Delete a specific bank detail record.
-   * DELETE api/admin/bank-details/{id}
-   * → EmployeeBankDetailApiController@destroy
-   */
   async deleteBankDetail(id) {
     try {
       console.log(`[Onboarding] DELETE /bank-details/${id}`);
@@ -143,11 +130,6 @@ class OnboardingService {
   // SALARY COMPONENTS CRUD
   // ─────────────────────────────────────────────────────────────────────────────
 
-  /**
-   * Update a specific salary component record.
-   * PUT api/admin/salary-components/{id}
-   * → EmployeeSalaryComponentApiController@update
-   */
   async updateSalaryComponent(id, payload) {
     try {
       console.log(`[Onboarding] PUT /salary-components/${id} | Payload:`, payload);
@@ -159,11 +141,6 @@ class OnboardingService {
     }
   }
 
-  /**
-   * Delete a specific salary component record.
-   * DELETE api/admin/salary-components/{id}
-   * → EmployeeSalaryComponentApiController@destroy
-   */
   async deleteSalaryComponent(id) {
     try {
       console.log(`[Onboarding] DELETE /salary-components/${id}`);
