@@ -25,6 +25,10 @@ const Payroll = () => {
   const dispatch = useDispatch();
   const navigate = useNavigate();
   
+  // Get user role from Redux
+  const { user } = useSelector((state) => state.auth || {});
+  const isAdmin = user?.type === "admin" || user?.role === "admin";
+  
   // Use selectors from the payroll slice
   const payrolls = useSelector((state) => state.payroll.payrolls);
   const loading = useSelector((state) => state.payroll.loading);
@@ -213,6 +217,9 @@ const Payroll = () => {
     })),
   ];
 
+  // Get the base path based on user role
+  const basePath = isAdmin ? "/admin" : "/employee";
+
   return (
     <div className="w-full overflow-x-hidden px-4 md:px-6">
       {/* Stats Cards */}
@@ -276,7 +283,7 @@ const Payroll = () => {
           </span>
         </h2>
         <Link
-          to="/admin/payroll/add"
+          to={`${basePath}/payroll/add`}
           className="px-4 md:px-6 py-2 md:py-2.5 rounded-full bg-green-500 hover:bg-green-600 text-white text-xs md:text-sm font-bold flex items-center gap-2 shadow-soft hover:shadow-soft-lg transform hover:-translate-y-0.5 transition-all"
         >
           <i className="fas fa-plus text-xs md:text-sm"></i>
@@ -420,21 +427,23 @@ const Payroll = () => {
                           <div className="flex justify-end items-center gap-2">
                             {/* View Button */}
                             <button
-                              onClick={() => navigate(`/admin/payroll/${payroll.id}`)}
+                              onClick={() => navigate(`${basePath}/payroll/${payroll.id}`)}
                               title="View Payroll"
                               className="w-8 h-8 rounded-lg bg-blue-500/10 hover:bg-blue-500 text-blue-500 hover:text-white flex items-center justify-center transition-all shadow-sm hover:shadow-soft"
                             >
                               <i className="fas fa-eye text-xs"></i>
                             </button>
 
-                            {/* Edit Button */}
-                            <button
-                              onClick={() => navigate(`/admin/payroll/edit/${payroll.id}`)}
-                              title="Edit Payroll"
-                              className="w-8 h-8 rounded-lg bg-green-500/10 hover:bg-green-500 text-green-500 hover:text-white flex items-center justify-center transition-all shadow-sm hover:shadow-soft"
-                            >
-                              <i className="fas fa-pencil-alt text-xs"></i>
-                            </button>
+                            {/* Edit Button - Only for Admin */}
+                            {isAdmin && (
+                              <button
+                                onClick={() => navigate(`${basePath}/payroll/edit/${payroll.id}`)}
+                                title="Edit Payroll"
+                                className="w-8 h-8 rounded-lg bg-green-500/10 hover:bg-green-500 text-green-500 hover:text-white flex items-center justify-center transition-all shadow-sm hover:shadow-soft"
+                              >
+                                <i className="fas fa-pencil-alt text-xs"></i>
+                              </button>
+                            )}
 
                             {/* Payslip Button */}
                             <button
@@ -446,14 +455,16 @@ const Payroll = () => {
                               <i className="fas fa-file-pdf text-xs"></i>
                             </button>
 
-                            {/* Delete Button */}
-                            <button
-                              onClick={() => handleDeleteClick(payroll)}
-                              title="Delete Payroll"
-                              className="w-8 h-8 rounded-lg bg-red-500/10 hover:bg-red-500 text-red-500 hover:text-white flex items-center justify-center transition-all shadow-sm hover:shadow-soft"
-                            >
-                              <i className="fas fa-trash-alt text-xs"></i>
-                            </button>
+                            {/* Delete Button - Only for Admin */}
+                            {isAdmin && (
+                              <button
+                                onClick={() => handleDeleteClick(payroll)}
+                                title="Delete Payroll"
+                                className="w-8 h-8 rounded-lg bg-red-500/10 hover:bg-red-500 text-red-500 hover:text-white flex items-center justify-center transition-all shadow-sm hover:shadow-soft"
+                              >
+                                <i className="fas fa-trash-alt text-xs"></i>
+                              </button>
+                            )}
                           </div>
                         </td>
                       </tr>
@@ -477,21 +488,23 @@ const Payroll = () => {
         </>
       )}
 
-      {/* Delete Confirmation Modal */}
-      <ConfirmModal
-        isOpen={deleteModalOpen}
-        onClose={() => {
-          setDeleteModalOpen(false);
-          setSelectedPayroll(null);
-        }}
-        onConfirm={handleConfirmDelete}
-        title="Delete Payroll"
-        message={`Are you sure you want to delete the payroll for "${selectedPayroll?.employee_name || 'this employee'}"? This action cannot be undone.`}
-        confirmText="Delete"
-        cancelText="Cancel"
-        loading={actionLoading}
-        confirmButtonClass="bg-red-500 hover:bg-red-600"
-      />
+      {/* Delete Confirmation Modal - Only for Admin */}
+      {isAdmin && (
+        <ConfirmModal
+          isOpen={deleteModalOpen}
+          onClose={() => {
+            setDeleteModalOpen(false);
+            setSelectedPayroll(null);
+          }}
+          onConfirm={handleConfirmDelete}
+          title="Delete Payroll"
+          message={`Are you sure you want to delete the payroll for "${selectedPayroll?.employee_name || 'this employee'}"? This action cannot be undone.`}
+          confirmText="Delete"
+          cancelText="Cancel"
+          loading={actionLoading}
+          confirmButtonClass="bg-red-500 hover:bg-red-600"
+        />
+      )}
     </div>
   );
 };

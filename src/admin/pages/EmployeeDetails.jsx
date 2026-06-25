@@ -254,72 +254,88 @@ const EmployeeDetails = () => {
   };
 
   // ─── Salary Component CRUD ──────────────────────────────────────────
-  const handleUpdateComponent = async (componentId, updatedData, packageId) => {
-    try {
-      const response = await apiClient.put(
-        `/admin/salary-components/${componentId}`,
-        {
-          component_name: updatedData.component_name,
-          value: updatedData.value,
-          package_id: packageId,
-        },
-      );
-      if (response.data.status === "success") {
-        showToast("Salary component updated successfully", "success");
-        setEditingComponent(null);
-        fetchEmployeeData();
-      } else {
-        showToast(
-          response.data.message || "Failed to update salary component",
-          "error",
-        );
-      }
-    } catch (error) {
-      console.error("Error updating salary component:", error);
+  // ─── Salary Component CRUD ──────────────────────────────────────────
+const handleUpdateComponent = async (componentId, updatedData, packageId) => {
+  try {
+    const employeeId = currentEmployee.id || currentEmployee.employee_id;
+    const response = await apiClient.put(
+      `/admin/salary-components/${componentId}`,
+      {
+        employee_id: employeeId,
+        package_id: packageId,
+        component_name: updatedData.component_name,
+        value: updatedData.value,
+      },
+    );
+    if (response.data.status === "success") {
+      showToast("Salary component updated successfully", "success");
+      setEditingComponent(null);
+      fetchEmployeeData();
+    } else {
       showToast(
-        error.response?.data?.message || "Failed to update salary component",
+        response.data.message || "Failed to update salary component",
         "error",
       );
     }
-  };
+  } catch (error) {
+    console.error("Error updating salary component:", error);
+    showToast(
+      error.response?.data?.message || "Failed to update salary component",
+      "error",
+    );
+  }
+};
 
-  const handleAddComponent = async () => {
-    if (!newComponent.component_name || !newComponent.value) {
-      showToast("Please fill in all fields", "error");
+const handleAddComponent = async () => {
+  if (!newComponent.component_name || !newComponent.value) {
+    showToast("Please fill in all fields", "error");
+    return;
+  }
+
+  if (!newComponent.package_id) {
+    showToast("Please select a package", "error");
+    return;
+  }
+
+  try {
+    // Get the employee_id from currentEmployee
+    const employeeId = currentEmployee.id || currentEmployee.employee_id;
+    
+    if (!employeeId) {
+      showToast("Employee ID not found. Please refresh and try again.", "error");
       return;
     }
 
-    if (!newComponent.package_id) {
-      showToast("Please select a package", "error");
-      return;
-    }
+    const payload = {
+      employee_id: employeeId,
+      package_id: newComponent.package_id,
+      component_name: newComponent.component_name,
+      value: parseFloat(newComponent.value).toFixed(2),
+    };
 
-    try {
-      const response = await apiClient.post("/admin/salary-components", {
-        package_id: newComponent.package_id,
-        component_name: newComponent.component_name,
-        value: parseFloat(newComponent.value).toFixed(2),
-      });
+    console.log("Adding salary component payload:", payload);
 
-      if (response.data.status === "success") {
-        showToast("Salary component added successfully", "success");
-        setShowAddComponent(false);
-        setNewComponent({ component_name: "", value: "", package_id: null });
-        fetchEmployeeData();
-      } else {
-        showToast(
-          response.data.message || "Failed to add salary component",
-          "error",
-        );
-      }
-    } catch (error) {
-      console.error("Error adding salary component:", error);
+    const response = await apiClient.post("/admin/salary-components", payload);
+
+    if (response.data.status === "success") {
+      showToast("Salary component added successfully", "success");
+      setShowAddComponent(false);
+      setNewComponent({ component_name: "", value: "", package_id: null });
+      fetchEmployeeData(); // Refresh data
+    } else {
       showToast(
-        error.response?.data?.message || "Failed to add salary component",
+        response.data.message || "Failed to add salary component",
         "error",
       );
     }
-  };
+  } catch (error) {
+    console.error("Error adding salary component:", error);
+    showToast(
+      error.response?.data?.message || "Failed to add salary component",
+      "error",
+    );
+  }
+};
 
   // ─── Package CRUD ────────────────────────────────────────────────────
   const handleAddPackage = async () => {

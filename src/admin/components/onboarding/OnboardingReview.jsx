@@ -135,78 +135,64 @@ const OnboardingReview = () => {
   };
 
   // ─── Step 2: Save salary details with packages ──────────────────────────
-  // ─── Step 2: Save salary details with packages ──────────────────────────
-  const saveSalaryDetails = async (userId, salaryData) => {
-    console.log("[Onboarding] Step 2: Saving salary details for user:", userId);
+const saveSalaryDetails = async (userId, salaryData) => {
+  console.log("[Onboarding] Step 2: Saving salary details for user:", userId);
 
-    // Get packages from employeeDetails
-    const packages = salaryData.packages || {};
+  // Get packages from employeeDetails
+  const packages = salaryData.packages || {};
 
-    // Build packages array for API
-    const packagesArray = [];
+  // Build packages array for API - WITHOUT ID (backend creates new)
+  const packagesArray = [];
 
-    // Package 1
-    if (
-      packages.package1 &&
-      packages.package1.isSaved &&
-      packages.package1.packageId
-    ) {
-      const pkg1 = packages.package1;
-      packagesArray.push({
-        id: pkg1.packageId,
-        name: pkg1.name || "Home Country / WFH",
-        is_active: true,
-        currency: pkg1.currency || "AED",
-        salary_components: (pkg1.salaryComponents || []).map((comp) => ({
-          component_name: comp.name,
-          value:
-            typeof comp.price === "number"
-              ? comp.price
-              : parseFloat(comp.price) || 0,
-        })),
-      });
-    }
+  // Package 1
+  if (packages.package1 && packages.package1.isSaved) {
+    const pkg1 = packages.package1;
+    packagesArray.push({
+      name: pkg1.name || "Home Country / WFH",
+      is_active: true,
+      currency: pkg1.currency || "AED",
+      salary_components: (pkg1.salaryComponents || []).map((comp) => ({
+        component_name: comp.name,
+        value: typeof comp.price === "number" ? comp.price : parseFloat(comp.price) || 0,
+      })),
+    });
+  }
 
-    // Package 2
-    if (
-      packages.package2 &&
-      packages.package2.isSaved &&
-      packages.package2.packageId
-    ) {
-      const pkg2 = packages.package2;
-      packagesArray.push({
-        id: pkg2.packageId,
-        name: pkg2.name || "Dubai Onsite",
-        is_active: true,
-        currency: pkg2.currency || "AED",
-        salary_components: (pkg2.salaryComponents || []).map((comp) => ({
-          component_name: comp.name,
-          value:
-            typeof comp.price === "number"
-              ? comp.price
-              : parseFloat(comp.price) || 0,
-        })),
-      });
-    }
+  // Package 2
+  if (packages.package2 && packages.package2.isSaved) {
+    const pkg2 = packages.package2;
+    packagesArray.push({
+      name: pkg2.name || "Dubai Onsite",
+      is_active: true,
+      currency: pkg2.currency || "AED",
+      salary_components: (pkg2.salaryComponents || []).map((comp) => ({
+        component_name: comp.name,
+        value: typeof comp.price === "number" ? comp.price : parseFloat(comp.price) || 0,
+      })),
+    });
+  }
 
-    // Prepare payload matching backend expectations
-    const payload = {
-      user_id: userId,
-      payment_cycle: salaryData.paymentCycle || "Monthly",
-      packages: packagesArray,
-    };
+  // Prepare payload matching backend expectations
+  const payload = {
+    user_id: userId,
+    payment_cycle: salaryData.paymentCycle || "Monthly",
+    packages: packagesArray,
+  };
 
-    console.log(
-      "[Onboarding] Salary payload:",
-      JSON.stringify(payload, null, 2),
-    );
+  console.log("[Onboarding] Salary payload:", JSON.stringify(payload, null, 2));
+  
+  try {
     const response = await apiClient.post(
       "/admin/employees/onboard/salary",
       payload,
     );
     console.log("[Onboarding] Salary details saved:", response.data);
     return response.data;
-  };
+  } catch (error) {
+    console.error("[Onboarding] Error saving salary:", error);
+    throw error;
+  }
+};
 
   // ─── Step 3: Save bank details ──────────────────────────────────────────
   const saveBankDetails = async (userId, bankData) => {
