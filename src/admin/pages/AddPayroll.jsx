@@ -150,36 +150,16 @@ function AddPayroll() {
   ]);
 
   // Step 4 - Deductions
-  const [deductions, setDeductions] = useState([
-    {
-      id: 1,
-      type: "PF (Employee 12%)",
-      currency: "INR",
-      amount: "6000",
-      is_statutory: "yes",
-    },
-    {
-      id: 2,
-      type: "Professional Tax",
-      currency: "INR",
-      amount: "200",
-      is_statutory: "yes",
-    },
-    {
-      id: 3,
-      type: "TDS / Income Tax",
-      currency: "INR",
-      amount: "4500",
-      is_statutory: "yes",
-    },
-    {
-      id: 4,
-      type: "Gratuity (UAE 8.33%)",
-      currency: "AED",
-      amount: "1125",
-      is_statutory: "yes",
-    },
-  ]);
+  // Step 4 - Deductions
+const [deductions, setDeductions] = useState([
+  {
+    id: 1,
+    type: "",
+    currency: "INR",
+    amount: "0",
+    is_statutory: "no",
+  },
+]);
 
   // Step 5 - Summary with currency conversion
   const [targetCurrency, setTargetCurrency] = useState("INR");
@@ -988,12 +968,9 @@ function AddPayroll() {
   };
 
   const handleRemoveDeduction = (id) => {
-    if (deductions.length <= 1) {
-      showToast("At least one deduction is required", "error");
-      return;
-    }
-    setDeductions(deductions.filter((d) => d.id !== id));
-  };
+  // Allow removal even if only one deduction exists
+  setDeductions(deductions.filter((d) => d.id !== id));
+};
 
   // Generate payslip PDF
   const generatePayslipPDF = () => {
