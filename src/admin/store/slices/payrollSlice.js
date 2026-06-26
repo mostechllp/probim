@@ -11,11 +11,8 @@ export const fetchPayrolls = createAsyncThunk(
       const response = await apiClient.get("/admin/payroll", { params });
       console.log("Fetch payrolls response:", response.data);
       
-      // The API returns { success: true, data: [...] }
-      // Extract the data array and handle pagination if present
       const responseData = response.data;
       
-      // If the response has a data property that is an array
       if (responseData?.data && Array.isArray(responseData.data)) {
         return {
           payrolls: responseData.data,
@@ -27,7 +24,6 @@ export const fetchPayrolls = createAsyncThunk(
         };
       }
       
-      // If the response itself is an array
       if (Array.isArray(responseData)) {
         return {
           payrolls: responseData,
@@ -39,7 +35,6 @@ export const fetchPayrolls = createAsyncThunk(
         };
       }
       
-      // Fallback
       return {
         payrolls: responseData?.data || [],
         total: responseData?.total || 0,
@@ -166,11 +161,9 @@ export const savePayrollStep = createAsyncThunk(
 // ─── Submit Payroll ────────────────────────────────────────────────────
 export const submitPayroll = createAsyncThunk(
   "payroll/submit",
-  async (userId, { rejectWithValue }) => {
+  async (payload, { rejectWithValue }) => {
     try {
-      const response = await apiClient.post("/admin/payroll/submit", {
-        user_id: userId
-      });
+      const response = await apiClient.post("/admin/payroll/submit", payload);
       console.log("Submit payroll response:", response.data);
       
       if (response.data?.success === true) {
@@ -283,6 +276,108 @@ export const exportPayrolls = createAsyncThunk(
   }
 );
 
+// ─── NEW: Calculate Salary Split (Step 2) ────────────────────────────
+export const calculateSalarySplit = createAsyncThunk(
+  "payroll/calculateSalarySplit",
+  async ({ employeeId, userId, month }, { rejectWithValue }) => {
+    try {
+      // Build the payload with the correct field names
+      const payload = {
+        employee_id: employeeId || userId,
+        month: month, // Format: YYYY-MM
+      };
+      
+      const response = await apiClient.post("/admin/payroll/calculate", payload);
+      console.log("Calculate salary split response:", response.data);
+      
+      if (response.data?.success) {
+        return response.data.data;
+      }
+      return rejectWithValue(response.data?.message || "Failed to calculate salary split");
+    } catch (error) {
+      console.error("Calculate salary split error:", error);
+      return rejectWithValue(
+        error.response?.data?.message || "Failed to calculate salary split"
+      );
+    }
+  }
+);
+
+// ─── NEW: Fetch Overtime Data (Step 3) ───────────────────────────────
+export const fetchOvertimeData = createAsyncThunk(
+  "payroll/fetchOvertimeData",
+  async ({ employeeId, userId, month }, { rejectWithValue }) => {
+    try {
+      const payload = {
+        employee_id: employeeId || userId,
+        month: month, // Format: YYYY-MM
+      };
+      
+      const response = await apiClient.post("/admin/payroll/overtime", payload);
+      console.log("Fetch overtime data response:", response.data);
+      
+      if (response.data?.success) {
+        return response.data.data;
+      }
+      return rejectWithValue(response.data?.message || "Failed to fetch overtime data");
+    } catch (error) {
+      console.error("Fetch overtime data error:", error);
+      return rejectWithValue(
+        error.response?.data?.message || "Failed to fetch overtime data"
+      );
+    }
+  }
+);
+// ─── NEW: Fetch Summary (Step 5) ─────────────────────────────────────
+// ─── NEW: Fetch Summary (Step 5) ─────────────────────────────────────
+export const fetchPayrollSummary = createAsyncThunk(
+  "payroll/fetchSummary",
+  async ({ userId, payPeriodMonth, payPeriodYear }, { rejectWithValue }) => {
+    try {
+      const payload = {
+        user_id: userId,
+        pay_period_month: payPeriodMonth,
+        pay_period_year: payPeriodYear,
+      };
+      
+      const response = await apiClient.post("/admin/payroll/summary", payload);
+      console.log("Fetch summary response:", response.data);
+      
+      if (response.data?.success) {
+        return response.data.data;
+      }
+      return rejectWithValue(response.data?.message || "Failed to fetch summary");
+    } catch (error) {
+      console.error("Fetch summary error:", error);
+      return rejectWithValue(
+        error.response?.data?.message || "Failed to fetch summary"
+      );
+    }
+  }
+);
+
+// ─── NEW: Get Draft Payroll ──────────────────────────────────────────
+export const getDraftPayroll = createAsyncThunk(
+  "payroll/getDraft",
+  async (userId, { rejectWithValue }) => {
+    try {
+      const response = await apiClient.get(`/admin/payroll/draft/${userId}`);
+      console.log("Get draft payroll response:", response.data);
+      
+      if (response.data?.success === true) {
+        return response.data.data;
+      }
+      return rejectWithValue(response.data?.message || "Failed to fetch draft payroll");
+    } catch (error) {
+      console.error("Get draft payroll error:", error);
+      return rejectWithValue(
+        error.response?.data?.message || "Failed to fetch draft payroll"
+      );
+    }
+  }
+);
+
+// ─── Payroll State ─────────────────────────────────────────────────────
 const initialState = {
   // List state
   payrolls: [],
@@ -336,6 +431,14 @@ const initialState = {
   
   // Current payroll being viewed/edited
   currentPayroll: null,
+  
+  // Step-specific data from API
+  calculatedCountries: null,
+  overtimeData: null,
+  summaryData: null,
+  countriesLoading: false,
+  overtimeLoading: false,
+  summaryLoading: false,
   
   // Loading & error states
   loading: false,
@@ -428,6 +531,9 @@ const payrollSlice = createSlice({
       };
       state.completedSteps = [];
       state.currentStep = 1;
+      state.calculatedCountries = null;
+      state.overtimeData = null;
+      state.summaryData = null;
     },
     
     // Set current payroll
@@ -439,6 +545,17 @@ const payrollSlice = createSlice({
     clearPayrollList: (state) => {
       state.payrolls = [];
       state.totalCount = 0;
+    },
+    
+    // Clear step data
+    clearCalculatedCountries: (state) => {
+      state.calculatedCountries = null;
+    },
+    clearOvertimeData: (state) => {
+      state.overtimeData = null;
+    },
+    clearSummaryData: (state) => {
+      state.summaryData = null;
     },
   },
   
@@ -619,6 +736,48 @@ const payrollSlice = createSlice({
       .addCase(saveDraftPayroll.rejected, (state, action) => {
         state.saving = false;
         state.error = action.payload;
+      })
+
+      // ─── Calculate Salary Split ───────────────────────────────────────
+      .addCase(calculateSalarySplit.pending, (state) => {
+        state.countriesLoading = true;
+        state.error = null;
+      })
+      .addCase(calculateSalarySplit.fulfilled, (state, action) => {
+        state.countriesLoading = false;
+        state.calculatedCountries = action.payload;
+      })
+      .addCase(calculateSalarySplit.rejected, (state, action) => {
+        state.countriesLoading = false;
+        state.error = action.payload;
+      })
+
+      // ─── Fetch Overtime Data ──────────────────────────────────────────
+      .addCase(fetchOvertimeData.pending, (state) => {
+        state.overtimeLoading = true;
+        state.error = null;
+      })
+      .addCase(fetchOvertimeData.fulfilled, (state, action) => {
+        state.overtimeLoading = false;
+        state.overtimeData = action.payload;
+      })
+      .addCase(fetchOvertimeData.rejected, (state, action) => {
+        state.overtimeLoading = false;
+        state.error = action.payload;
+      })
+
+      // ─── Fetch Summary ─────────────────────────────────────────────────
+      .addCase(fetchPayrollSummary.pending, (state) => {
+        state.summaryLoading = true;
+        state.error = null;
+      })
+      .addCase(fetchPayrollSummary.fulfilled, (state, action) => {
+        state.summaryLoading = false;
+        state.summaryData = action.payload;
+      })
+      .addCase(fetchPayrollSummary.rejected, (state, action) => {
+        state.summaryLoading = false;
+        state.error = action.payload;
       });
   },
 });
@@ -637,6 +796,9 @@ export const {
   resetPayrollState,
   setCurrentPayroll,
   clearPayrollList,
+  clearCalculatedCountries,
+  clearOvertimeData,
+  clearSummaryData,
 } = payrollSlice.actions;
 
 // ─── Export Selectors ────────────────────────────────────────────────
@@ -673,5 +835,13 @@ export const selectPayrollHistoryFilters = (state) => state.payroll.historyFilte
 // Current payroll selectors
 export const selectCurrentPayroll = (state) => state.payroll.currentPayroll;
 export const selectSubmittedPayroll = (state) => state.payroll.submittedPayroll;
+
+// Step data selectors
+export const selectCalculatedCountries = (state) => state.payroll.calculatedCountries;
+export const selectCountriesLoading = (state) => state.payroll.countriesLoading;
+export const selectOvertimeData = (state) => state.payroll.overtimeData;
+export const selectOvertimeLoading = (state) => state.payroll.overtimeLoading;
+export const selectSummaryData = (state) => state.payroll.summaryData;
+export const selectSummaryLoading = (state) => state.payroll.summaryLoading;
 
 export default payrollSlice.reducer;
