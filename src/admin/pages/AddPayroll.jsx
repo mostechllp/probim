@@ -1,4 +1,4 @@
-// AddPayroll.js - Using Redux thunks instead of direct API calls
+// src/admin/pages/AddPayroll.js
 
 import { useState, useEffect } from "react";
 import { useDispatch, useSelector } from "react-redux";
@@ -24,16 +24,19 @@ import {
   selectPayrollSuccess,
   selectPayrollError,
   selectPayrollSaving,
-  // New thunks
   calculateSalarySplit,
   fetchOvertimeData,
   fetchPayrollSummary,
+  fetchEmployeeSalaryPackages,
   selectCalculatedCountries,
   selectCountriesLoading,
   selectOvertimeData,
   selectOvertimeLoading,
   selectSummaryData,
   selectSummaryLoading,
+  selectEmployeePackages,
+  selectPackagesLoading,
+  clearEmployeePackages,
 } from "../store/slices/payrollSlice";
 
 import {
@@ -41,12 +44,6 @@ import {
   fetchEmployeeById,
   resetCurrentEmployee,
 } from "../store/slices/employeeSlice";
-
-// Import the onboarding slice actions
-import {
-  fetchSalaryPackages,
-  clearPackages,
-} from "../store/slices/onboardingSlice";
 
 // Helper function to get organization name from employees list
 const getOrganizationName = (employees, organizationId) => {
@@ -92,11 +89,9 @@ function AddPayroll() {
     currentEmployee,
   } = useSelector((state) => state.employees);
 
-  // Salary packages state from onboarding slice
-  const { availablePackages, packagesLoading } = useSelector(
-    (state) =>
-      state.onboarding || { availablePackages: [], packagesLoading: false },
-  );
+  // Employee salary packages from payroll slice
+  const employeePackages = useSelector(selectEmployeePackages);
+  const packagesLoading = useSelector(selectPackagesLoading);
 
   // Step data from Redux
   const calculatedCountries = useSelector(selectCalculatedCountries);
@@ -169,7 +164,6 @@ function AddPayroll() {
     },
   ]);
 
-  // Step 4 - Deductions (Country field changed to Currency)
   // Step 4 - Deductions
   const [deductions, setDeductions] = useState([
     {
@@ -259,11 +253,11 @@ function AddPayroll() {
     setDaysPresent("");
 
     dispatch(fetchEmployees());
-    dispatch(fetchSalaryPackages());
     dispatch(setCurrentStep(1));
+    dispatch(clearEmployeePackages());
 
     return () => {
-      dispatch(clearPackages());
+      // Clean up
     };
   }, [dispatch]);
 
@@ -276,6 +270,8 @@ function AddPayroll() {
         const result = await dispatch(fetchEmployeeById(employeeId)).unwrap();
         if (result && result.user_id) {
           setSelectedUserId(result.user_id.toString());
+          // Fetch salary packages for this employee
+          await dispatch(fetchEmployeeSalaryPackages(result.user_id));
         }
       } catch (error) {
         showToast("Failed to fetch employee details", "error");
@@ -283,6 +279,8 @@ function AddPayroll() {
     } else {
       clearEmployeeFields();
       setSelectedUserId("");
+      setCountries([]);
+      dispatch(clearEmployeePackages());
     }
   };
 
@@ -307,6 +305,8 @@ function AddPayroll() {
 
       if (currentEmployee.user_id) {
         setSelectedUserId(currentEmployee.user_id.toString());
+        // Fetch salary packages for this employee
+        dispatch(fetchEmployeeSalaryPackages(currentEmployee.user_id));
       }
 
       setEmployeeId(currentEmployee.employee_id || "");
@@ -380,7 +380,27 @@ function AddPayroll() {
         setPaymentMode(null);
       }
     }
-  }, [currentEmployee, employees, payPeriodMonth, selectedEmployee]);
+  }, [currentEmployee, employees, payPeriodMonth, selectedEmployee, dispatch]);
+
+  // Update countries when employee packages are loaded
+  useEffect(() => {
+    if (employeePackages && employeePackages.length > 0) {
+      // Map employee packages to countries
+      const mappedCountries = employeePackages.map((pkg, index) => ({
+        id: index + 1,
+        name: pkg.name || `Package ${index + 1}`,
+        currency: pkg.currency || "AED",
+        dailyRate: pkg.daily_rate || pkg.rate || 0,
+        daysWorked: pkg.days_worked || pkg.days || 0,
+        fxRate: pkg.fx_rate || pkg.exchange_rate || 1,
+        packageId: pkg.id || null,
+      }));
+      
+      if (mappedCountries.length > 0) {
+        setCountries(mappedCountries);
+      }
+    }
+  }, [employeePackages]);
 
   // Load draft data on mount if editing
   useEffect(() => {
@@ -459,7 +479,7 @@ function AddPayroll() {
     const monthFormatted = `${payPeriodYear}-${String(monthNumber).padStart(2, "0")}`;
 
     try {
-      const result = await dispatch(
+      await dispatch(
         calculateSalarySplit({
           employeeId: selectedUserId,
           userId: selectedUserId,
@@ -485,7 +505,7 @@ function AddPayroll() {
     const monthFormatted = `${payPeriodYear}-${String(monthNumber).padStart(2, "0")}`;
 
     try {
-      const result = await dispatch(
+      await dispatch(
         fetchOvertimeData({
           employeeId: selectedUserId,
           userId: selectedUserId,
@@ -511,7 +531,7 @@ function AddPayroll() {
     const year = parseInt(payPeriodYear) || new Date().getFullYear();
 
     try {
-      const result = await dispatch(
+      await dispatch(
         fetchPayrollSummary({
           userId: selectedUserId,
           payPeriodMonth: monthNumber,
@@ -548,34 +568,78 @@ function AddPayroll() {
           days_present: parseInt(daysPresent) || 0,
         };
         break;
+
       case 2:
         data = {
-          pay_period_month: monthNumber, // ADD THIS
-          pay_period_year: year, // ADD THIS
-          countries: countries.map((c) => ({
-            name: c.name,
-            currency: c.currency,
-            daily_rate: parseFloat(c.dailyRate) || 0,
-            days_worked: parseInt(c.daysWorked) || 0,
-            fx_rate: parseFloat(c.fxRate) || 0,
-            package_id: c.packageId || null,
+          pay_period_month: monthNumber,
+          pay_period_year: year,
+          location_breakdown: countries.map((c) => ({
+            location_name: c.name,
+            package: {
+              id: c.packageId,
+              name: c.name,
+              currency: c.currency,
+            },
+            worked_days: parseInt(c.daysWorked) || 0,
+            currency: {
+              code: c.currency,
+              symbol: c.currency,
+            },
+            salary_components: [],
+            subtotal:
+              (parseFloat(c.dailyRate) || 0) * (parseInt(c.daysWorked) || 0),
           })),
+          total_earnings: countries.reduce(
+            (sum, c) =>
+              sum +
+              (parseFloat(c.dailyRate) || 0) *
+                (parseInt(c.daysWorked) || 0) *
+                (parseFloat(c.fxRate) || 1),
+            0,
+          ),
+          total_deductions: deductions.reduce(
+            (sum, d) => sum + parseFloat(d.amount || 0),
+            0,
+          ),
+          gross_salary: countries.reduce(
+            (sum, c) =>
+              sum +
+              (parseFloat(c.dailyRate) || 0) *
+                (parseInt(c.daysWorked) || 0) *
+                (parseFloat(c.fxRate) || 1),
+            0,
+          ),
+          net_salary:
+            countries.reduce(
+              (sum, c) =>
+                sum +
+                (parseFloat(c.dailyRate) || 0) *
+                  (parseInt(c.daysWorked) || 0) *
+                  (parseFloat(c.fxRate) || 1),
+              0,
+            ) -
+            deductions.reduce((sum, d) => sum + parseFloat(d.amount || 0), 0),
         };
         break;
+
       case 3:
         data = {
-          pay_period_month: monthNumber, // ADD THIS
-          pay_period_year: year, // ADD THIS
-          overtime_requests: overtimeRequests.map((req) => ({
-            project: req.project,
+          pay_period_month: monthNumber,
+          pay_period_year: year,
+          overtime_details: overtimeRequests.map((req) => ({
             date: req.date,
-            hours: parseFloat(req.hours) || 0,
-            overtime_amount: parseFloat(req.overtime_amount) || 0,
-            status: req.status,
-            reason: req.reason,
+            overtime_hours: parseFloat(req.hours) || 0,
+            amount: parseFloat(req.overtime_amount) || 0,
+            status: req.status || "pending",
+            projects: req.projects || [],
           })),
+          total_overtime_amount: overtimeRequests.reduce(
+            (sum, req) => sum + parseFloat(req.overtime_amount || 0),
+            0,
+          ),
         };
         break;
+
       case 4:
         data = {
           pay_period_month: monthNumber,
@@ -586,17 +650,34 @@ function AddPayroll() {
             amount: parseFloat(d.amount) || 0,
             is_statutory: d.is_statutory || "no",
           })),
+          total_deductions: deductions.reduce(
+            (sum, d) => sum + parseFloat(d.amount || 0),
+            0,
+          ),
         };
         break;
+
       case 5:
+        // Build conversion rates as object
+        const conversionRatesObj = {};
+        countries.forEach((c) => {
+          conversionRatesObj[c.currency] = parseFloat(c.fxRate) || 1;
+        });
+
         data = {
-          pay_period_month: monthNumber, // ADD THIS
-          pay_period_year: year, // ADD THIS
-          summary: localSummaryData,
+          pay_period_month: monthNumber,
+          pay_period_year: year,
+          summary: {
+            gross_earnings: localSummaryData.gross_earnings || 0,
+            total_deductions: localSummaryData.total_deductions || 0,
+            combined: localSummaryData.combined || 0,
+            net_pay: localSummaryData.net_pay || 0,
+          },
           target_currency: targetCurrency,
-          conversion_rates: conversionRates,
+          conversion_rates: conversionRatesObj,
         };
         break;
+
       default:
         data = {};
     }
@@ -604,7 +685,6 @@ function AddPayroll() {
     return data;
   };
 
-  // Save current step data
   // Save current step data
   const handleSaveStep = async (step, data) => {
     if (!selectedUserId) {
@@ -637,58 +717,20 @@ function AddPayroll() {
 
       dispatch(updateStepData({ step, data: enrichedData }));
       dispatch(markStepCompleted(step));
+
+      if (result.data && result.data.current_step) {
+        console.log("Current step from server:", result.data.current_step);
+      }
+
       showToast(result.message || "Step data saved successfully", "success");
       return true;
     } catch (error) {
       console.error("Failed to save step:", error);
-      showToast(error || "Failed to save step data", "error");
+      showToast(
+        typeof error === "string" ? error : "Failed to save step data",
+        "error",
+      );
       return false;
-    }
-  };
-  // Handle step change with API data fetch
-  const handleStepChange = async (step) => {
-    if (!selectedUserId) {
-      showToast("Please select an employee first", "error");
-      return;
-    }
-
-    const currentData = getCurrentStepData();
-    const saved = await handleSaveStep(reduxCurrentStep, currentData);
-
-    if (saved || reduxCurrentStep === 5) {
-      dispatch(setCurrentStep(step));
-
-      const monthNumber =
-        monthNames[payPeriodMonth] || new Date().getMonth() + 1;
-      const monthFormatted = `${payPeriodYear}-${String(monthNumber).padStart(2, "0")}`;
-      const year = parseInt(payPeriodYear) || new Date().getFullYear();
-
-      // Fetch data for the new step
-      if (step === 2) {
-        await dispatch(
-          calculateSalarySplit({
-            employeeId: selectedUserId,
-            userId: selectedUserId,
-            month: monthFormatted,
-          }),
-        );
-      } else if (step === 3) {
-        await dispatch(
-          fetchOvertimeData({
-            employeeId: selectedUserId,
-            userId: selectedUserId,
-            month: monthFormatted,
-          }),
-        );
-      } else if (step === 5) {
-        await dispatch(
-          fetchPayrollSummary({
-            userId: selectedUserId,
-            payPeriodMonth: monthNumber,
-            payPeriodYear: year,
-          }),
-        );
-      }
     }
   };
 
@@ -702,7 +744,7 @@ function AddPayroll() {
     const currentData = getCurrentStepData();
     const saved = await handleSaveStep(reduxCurrentStep, currentData);
 
-    if (saved) {
+    if (saved || reduxCurrentStep === 1) {
       const nextStep = reduxCurrentStep + 1;
       if (nextStep <= 5) {
         dispatch(setCurrentStep(nextStep));
@@ -712,8 +754,74 @@ function AddPayroll() {
         const monthFormatted = `${payPeriodYear}-${String(monthNumber).padStart(2, "0")}`;
         const year = parseInt(payPeriodYear) || new Date().getFullYear();
 
-        // Fetch data for the new step
         if (nextStep === 2) {
+          try {
+            await dispatch(
+              calculateSalarySplit({
+                employeeId: selectedUserId,
+                userId: selectedUserId,
+                month: monthFormatted,
+              }),
+            );
+          } catch (error) {
+            console.error("Failed to calculate salary split:", error);
+          }
+        } else if (nextStep === 3) {
+          try {
+            await dispatch(
+              fetchOvertimeData({
+                employeeId: selectedUserId,
+                userId: selectedUserId,
+                month: monthFormatted,
+              }),
+            );
+          } catch (error) {
+            console.error("Failed to fetch overtime:", error);
+          }
+        } else if (nextStep === 5) {
+          try {
+            await dispatch(
+              fetchPayrollSummary({
+                userId: selectedUserId,
+                payPeriodMonth: monthNumber,
+                payPeriodYear: year,
+              }),
+            );
+          } catch (error) {
+            console.error("Failed to fetch summary:", error);
+          }
+        }
+      }
+    } else {
+      showToast("Failed to save current step data", "error");
+    }
+  };
+
+  // Handle step change
+  const handleStepChange = async (step) => {
+    if (!selectedUserId) {
+      showToast("Please select an employee first", "error");
+      return;
+    }
+
+    if (step <= reduxCurrentStep) {
+      dispatch(setCurrentStep(step));
+      return;
+    }
+
+    const currentData = getCurrentStepData();
+    const saved = await handleSaveStep(reduxCurrentStep, currentData);
+
+    if (saved || reduxCurrentStep === 1) {
+      dispatch(setCurrentStep(step));
+
+      const monthNumber =
+        monthNames[payPeriodMonth] || new Date().getMonth() + 1;
+      const monthFormatted = `${payPeriodYear}-${String(monthNumber).padStart(2, "0")}`;
+      const year = parseInt(payPeriodYear) || new Date().getFullYear();
+
+      if (step === 2) {
+        try {
           await dispatch(
             calculateSalarySplit({
               employeeId: selectedUserId,
@@ -721,7 +829,11 @@ function AddPayroll() {
               month: monthFormatted,
             }),
           );
-        } else if (nextStep === 3) {
+        } catch (error) {
+          console.error("Failed to calculate salary split:", error);
+        }
+      } else if (step === 3) {
+        try {
           await dispatch(
             fetchOvertimeData({
               employeeId: selectedUserId,
@@ -729,7 +841,11 @@ function AddPayroll() {
               month: monthFormatted,
             }),
           );
-        } else if (nextStep === 5) {
+        } catch (error) {
+          console.error("Failed to fetch overtime:", error);
+        }
+      } else if (step === 5) {
+        try {
           await dispatch(
             fetchPayrollSummary({
               userId: selectedUserId,
@@ -737,8 +853,12 @@ function AddPayroll() {
               payPeriodYear: year,
             }),
           );
+        } catch (error) {
+          console.error("Failed to fetch summary:", error);
         }
       }
+    } else {
+      showToast("Failed to save current step data", "error");
     }
   };
 
@@ -760,11 +880,9 @@ function AddPayroll() {
       const finalData = getCurrentStepData();
       await handleSaveStep(reduxCurrentStep, finalData);
 
-      // Get month number for submission
       const monthNumber =
         monthNames[payPeriodMonth] || new Date().getMonth() + 1;
 
-      // Prepare submission payload
       const payload = {
         user_id: selectedUserId,
         pay_period_month: monthNumber,
@@ -855,7 +973,7 @@ function AddPayroll() {
         type: "",
         currency: "INR",
         amount: "",
-        statutory: "No",
+        is_statutory: "no",
       },
     ]);
   };
@@ -1294,7 +1412,6 @@ function AddPayroll() {
                 </button>
               </div>
 
-              {/* Rest of Step 2 JSX remains the same... */}
               <div className="space-y-3">
                 {countries.map((c) => (
                   <div
@@ -1305,11 +1422,11 @@ function AddPayroll() {
                       <label className="text-[10px] md:text-xs text-gray-500 mb-1 block">
                         Package
                       </label>
-                      {availablePackages.length > 0 ? (
+                      {employeePackages.length > 0 ? (
                         <select
                           value={c.packageId || ""}
                           onChange={(e) => {
-                            const selectedPackage = availablePackages.find(
+                            const selectedPackage = employeePackages.find(
                               (p) => p.id === parseInt(e.target.value),
                             );
                             handleCountryChange(
@@ -1333,7 +1450,7 @@ function AddPayroll() {
                           className="w-full px-3 py-2 text-sm rounded-lg border border-gray-200 dark:border-gray-700 bg-white dark:bg-gray-800 text-gray-800 dark:text-gray-200 focus:outline-none focus:border-green-500 focus:ring-2 focus:ring-green-500/20"
                         >
                           <option value="">Select Package</option>
-                          {availablePackages.map((pkg) => (
+                          {employeePackages.map((pkg) => (
                             <option key={pkg.id} value={pkg.id}>
                               {pkg.name} ({pkg.currency || "AED"})
                             </option>
@@ -1529,7 +1646,6 @@ function AddPayroll() {
                 </button>
               </div>
 
-              {/* Rest of Step 3 JSX remains the same */}
               <div className="bg-white dark:bg-gray-800 border border-gray-200 dark:border-gray-700 rounded-xl shadow-soft overflow-hidden">
                 <div className="overflow-x-auto">
                   <table className="w-full text-left border-collapse">
@@ -1726,7 +1842,6 @@ function AddPayroll() {
                 </h3>
               </div>
 
-              {/* Rest of Step 4 JSX remains the same */}
               <div className="space-y-3">
                 {deductions.map((d) => (
                   <div
@@ -1880,61 +1995,10 @@ function AddPayroll() {
                 </button>
               </div>
 
-              {/* Rest of Step 5 JSX remains the same */}
               <div className="space-y-4">
                 <p className="text-sm text-gray-500 dark:text-gray-400">
                   Review the payroll details before final submission.
                 </p>
-
-                {/* Currency Conversion Section */}
-                <div className="grid grid-cols-1 md:grid-cols-2 gap-4 p-4 bg-gray-50 dark:bg-gray-700/30 rounded-lg border border-gray-200 dark:border-gray-700">
-                  <div>
-                    <label className="block text-xs font-semibold text-gray-700 dark:text-gray-300 mb-1">
-                      Target Currency
-                    </label>
-                    <select
-                      value={targetCurrency}
-                      onChange={(e) => setTargetCurrency(e.target.value)}
-                      className="w-full px-3 py-2 text-sm rounded-lg border border-gray-200 dark:border-gray-700 bg-white dark:bg-gray-800 text-gray-800 dark:text-gray-200 focus:outline-none focus:border-green-500 focus:ring-2 focus:ring-green-500/20"
-                    >
-                      {currencies.map((curr) => (
-                        <option key={curr} value={curr}>
-                          {curr}
-                        </option>
-                      ))}
-                    </select>
-                  </div>
-                  <div>
-                    <label className="block text-xs font-semibold text-gray-700 dark:text-gray-300 mb-1">
-                      Conversion Rates
-                    </label>
-                    <div className="flex flex-wrap gap-2">
-                      {countries.map((c) => (
-                        <div key={c.id} className="flex items-center gap-1">
-                          <span className="text-xs text-gray-500">
-                            {c.currency}:
-                          </span>
-                          <input
-                            type="number"
-                            step="0.01"
-                            value={c.fxRate}
-                            onChange={(e) =>
-                              handleCountryChange(
-                                c.id,
-                                "fxRate",
-                                e.target.value,
-                              )
-                            }
-                            className="w-16 px-2 py-1 text-sm rounded border border-gray-200 dark:border-gray-600 bg-white dark:bg-gray-800 text-gray-700 dark:text-gray-300 focus:outline-none focus:border-green-500"
-                          />
-                          <span className="text-xs text-gray-500">
-                            → {targetCurrency}
-                          </span>
-                        </div>
-                      ))}
-                    </div>
-                  </div>
-                </div>
 
                 <div className="grid grid-cols-2 md:grid-cols-4 gap-3 md:gap-4 pt-4 border-t border-gray-200 dark:border-gray-700">
                   <div className="p-3 md:p-4 rounded-xl bg-gray-50 dark:bg-gray-700/50 border border-gray-200 dark:border-gray-600">
@@ -2011,6 +2075,56 @@ function AddPayroll() {
                             0,
                           )
                         ).toLocaleString()}
+                    </div>
+                  </div>
+                </div>
+
+                {/* Currency Conversion Section */}
+                <div className="grid grid-cols-1 md:grid-cols-2 gap-4 p-4 bg-gray-50 dark:bg-gray-700/30 rounded-lg border border-gray-200 dark:border-gray-700">
+                  <div>
+                    <label className="block text-xs font-semibold text-gray-700 dark:text-gray-300 mb-1">
+                      Target Currency
+                    </label>
+                    <select
+                      value={targetCurrency}
+                      onChange={(e) => setTargetCurrency(e.target.value)}
+                      className="w-full px-3 py-2 text-sm rounded-lg border border-gray-200 dark:border-gray-700 bg-white dark:bg-gray-800 text-gray-800 dark:text-gray-200 focus:outline-none focus:border-green-500 focus:ring-2 focus:ring-green-500/20"
+                    >
+                      {currencies.map((curr) => (
+                        <option key={curr} value={curr}>
+                          {curr}
+                        </option>
+                      ))}
+                    </select>
+                  </div>
+                  <div>
+                    <label className="block text-xs font-semibold text-gray-700 dark:text-gray-300 mb-1">
+                      Conversion Rates
+                    </label>
+                    <div className="flex flex-wrap gap-2">
+                      {countries.map((c) => (
+                        <div key={c.id} className="flex items-center gap-1">
+                          <span className="text-xs text-gray-500">
+                            {c.currency}:
+                          </span>
+                          <input
+                            type="number"
+                            step="0.01"
+                            value={c.fxRate}
+                            onChange={(e) =>
+                              handleCountryChange(
+                                c.id,
+                                "fxRate",
+                                e.target.value,
+                              )
+                            }
+                            className="w-16 px-2 py-1 text-sm rounded border border-gray-200 dark:border-gray-600 bg-white dark:bg-gray-800 text-gray-700 dark:text-gray-300 focus:outline-none focus:border-green-500"
+                          />
+                          <span className="text-xs text-gray-500">
+                            → {targetCurrency}
+                          </span>
+                        </div>
+                      ))}
                     </div>
                   </div>
                 </div>

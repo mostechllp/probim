@@ -276,15 +276,14 @@ export const exportPayrolls = createAsyncThunk(
   }
 );
 
-// ─── NEW: Calculate Salary Split (Step 2) ────────────────────────────
+// ─── Calculate Salary Split (Step 2) ────────────────────────────────
 export const calculateSalarySplit = createAsyncThunk(
   "payroll/calculateSalarySplit",
   async ({ employeeId, userId, month }, { rejectWithValue }) => {
     try {
-      // Build the payload with the correct field names
       const payload = {
         employee_id: employeeId || userId,
-        month: month, // Format: YYYY-MM
+        month: month,
       };
       
       const response = await apiClient.post("/admin/payroll/calculate", payload);
@@ -303,14 +302,14 @@ export const calculateSalarySplit = createAsyncThunk(
   }
 );
 
-// ─── NEW: Fetch Overtime Data (Step 3) ───────────────────────────────
+// ─── Fetch Overtime Data (Step 3) ───────────────────────────────────
 export const fetchOvertimeData = createAsyncThunk(
   "payroll/fetchOvertimeData",
   async ({ employeeId, userId, month }, { rejectWithValue }) => {
     try {
       const payload = {
         employee_id: employeeId || userId,
-        month: month, // Format: YYYY-MM
+        month: month,
       };
       
       const response = await apiClient.post("/admin/payroll/overtime", payload);
@@ -328,8 +327,8 @@ export const fetchOvertimeData = createAsyncThunk(
     }
   }
 );
-// ─── NEW: Fetch Summary (Step 5) ─────────────────────────────────────
-// ─── NEW: Fetch Summary (Step 5) ─────────────────────────────────────
+
+// ─── Fetch Summary (Step 5) ──────────────────────────────────────────
 export const fetchPayrollSummary = createAsyncThunk(
   "payroll/fetchSummary",
   async ({ userId, payPeriodMonth, payPeriodYear }, { rejectWithValue }) => {
@@ -356,22 +355,22 @@ export const fetchPayrollSummary = createAsyncThunk(
   }
 );
 
-// ─── NEW: Get Draft Payroll ──────────────────────────────────────────
-export const getDraftPayroll = createAsyncThunk(
-  "payroll/getDraft",
-  async (userId, { rejectWithValue }) => {
+// ─── Fetch Employee Salary Packages ──────────────────────────────────
+export const fetchEmployeeSalaryPackages = createAsyncThunk(
+  "payroll/fetchEmployeeSalaryPackages",
+  async (employeeId, { rejectWithValue }) => {
     try {
-      const response = await apiClient.get(`/admin/payroll/draft/${userId}`);
-      console.log("Get draft payroll response:", response.data);
+      const response = await apiClient.get(`/admin/employees/salary-packages/${employeeId}`);
+      console.log("Fetch employee salary packages response:", response.data);
       
-      if (response.data?.success === true) {
-        return response.data.data;
+      if (response.data?.success) {
+        return response.data.data || response.data;
       }
-      return rejectWithValue(response.data?.message || "Failed to fetch draft payroll");
+      return rejectWithValue(response.data?.message || "Failed to fetch salary packages");
     } catch (error) {
-      console.error("Get draft payroll error:", error);
+      console.error("Fetch employee salary packages error:", error);
       return rejectWithValue(
-        error.response?.data?.message || "Failed to fetch draft payroll"
+        error.response?.data?.message || "Failed to fetch salary packages"
       );
     }
   }
@@ -439,6 +438,10 @@ const initialState = {
   countriesLoading: false,
   overtimeLoading: false,
   summaryLoading: false,
+  
+  // Employee salary packages
+  employeePackages: [],
+  packagesLoading: false,
   
   // Loading & error states
   loading: false,
@@ -534,6 +537,7 @@ const payrollSlice = createSlice({
       state.calculatedCountries = null;
       state.overtimeData = null;
       state.summaryData = null;
+      state.employeePackages = [];
     },
     
     // Set current payroll
@@ -556,6 +560,9 @@ const payrollSlice = createSlice({
     },
     clearSummaryData: (state) => {
       state.summaryData = null;
+    },
+    clearEmployeePackages: (state) => {
+      state.employeePackages = [];
     },
   },
   
@@ -778,6 +785,20 @@ const payrollSlice = createSlice({
       .addCase(fetchPayrollSummary.rejected, (state, action) => {
         state.summaryLoading = false;
         state.error = action.payload;
+      })
+
+      // ─── Fetch Employee Salary Packages ───────────────────────────────
+      .addCase(fetchEmployeeSalaryPackages.pending, (state) => {
+        state.packagesLoading = true;
+        state.error = null;
+      })
+      .addCase(fetchEmployeeSalaryPackages.fulfilled, (state, action) => {
+        state.packagesLoading = false;
+        state.employeePackages = action.payload || [];
+      })
+      .addCase(fetchEmployeeSalaryPackages.rejected, (state, action) => {
+        state.packagesLoading = false;
+        state.error = action.payload;
       });
   },
 });
@@ -799,6 +820,7 @@ export const {
   clearCalculatedCountries,
   clearOvertimeData,
   clearSummaryData,
+  clearEmployeePackages,
 } = payrollSlice.actions;
 
 // ─── Export Selectors ────────────────────────────────────────────────
@@ -843,5 +865,9 @@ export const selectOvertimeData = (state) => state.payroll.overtimeData;
 export const selectOvertimeLoading = (state) => state.payroll.overtimeLoading;
 export const selectSummaryData = (state) => state.payroll.summaryData;
 export const selectSummaryLoading = (state) => state.payroll.summaryLoading;
+
+// Employee packages selectors
+export const selectEmployeePackages = (state) => state.payroll.employeePackages;
+export const selectPackagesLoading = (state) => state.payroll.packagesLoading;
 
 export default payrollSlice.reducer;
