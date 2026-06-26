@@ -1,6 +1,6 @@
-// src/admin/pages/Payroll.js
+// src/admin/pages/Payroll.js - Fixed edit button and PDF icon
 
-import React, { useEffect, useState } from "react";
+import React, { useEffect, useState, useCallback } from "react";
 import { useDispatch, useSelector } from "react-redux";
 import { Link, useNavigate } from "react-router-dom";
 import { showToast } from "../../components/common/Toast";
@@ -50,8 +50,8 @@ const Payroll = () => {
   const [selectedPayroll, setSelectedPayroll] = useState(null);
   const [currentPageState, setCurrentPageState] = useState(1);
 
-  // Load payrolls on mount and when filters change
-  useEffect(() => {
+  // Function to fetch payrolls with current filters
+  const fetchPayrollsData = useCallback(() => {
     const params = {
       page: currentPageState,
       per_page: perPage || 15,
@@ -62,6 +62,11 @@ const Payroll = () => {
     };
     dispatch(fetchPayrolls(params));
   }, [dispatch, currentPageState, searchTerm, statusFilter, monthFilter, yearFilter, perPage]);
+
+  // Load payrolls on mount and when filters change
+  useEffect(() => {
+    fetchPayrollsData();
+  }, [fetchPayrollsData]);
 
   // Handle errors and success messages
   useEffect(() => {
@@ -91,16 +96,7 @@ const Payroll = () => {
 
   const handlePerPageChange = (value) => {
     setCurrentPageState(1);
-    // Re-fetch with new per_page value
-    const params = {
-      page: 1,
-      per_page: value,
-      search: searchTerm || undefined,
-      status: statusFilter !== "all" ? statusFilter : undefined,
-      month: monthFilter || undefined,
-      year: yearFilter || undefined,
-    };
-    dispatch(fetchPayrolls(params));
+    fetchPayrollsData();
   };
 
   const handleSearchChange = (value) => {
@@ -134,16 +130,7 @@ const Payroll = () => {
       await dispatch(deletePayroll(selectedPayroll.id)).unwrap();
       setDeleteModalOpen(false);
       setSelectedPayroll(null);
-      // Refresh list
-      const params = {
-        page: currentPageState,
-        per_page: perPage || 15,
-        search: searchTerm || undefined,
-        status: statusFilter !== "all" ? statusFilter : undefined,
-        month: monthFilter || undefined,
-        year: yearFilter || undefined,
-      };
-      dispatch(fetchPayrolls(params));
+      fetchPayrollsData();
     } catch (error) {
       // Error is handled by the slice
     }
@@ -152,7 +139,6 @@ const Payroll = () => {
   const handleGeneratePayslip = async (payrollId) => {
     try {
       const result = await dispatch(generatePayslip(payrollId)).unwrap();
-      // If the response contains a URL, open it
       if (result?.data?.url) {
         window.open(result.data.url, "_blank");
       }
@@ -173,10 +159,11 @@ const Payroll = () => {
 
   const getStatusBadge = (status) => {
     const statusMap = {
-      paid: "bg-green-100 text-green-700 dark:bg-green-900/30 dark:text-green-400",
-      pending: "bg-yellow-100 text-yellow-700 dark:bg-yellow-900/30 dark:text-yellow-400",
-      draft: "bg-gray-100 text-gray-700 dark:bg-gray-700 dark:text-gray-400",
-      failed: "bg-red-100 text-red-700 dark:bg-red-900/30 dark:text-red-400",
+      completed: "bg-green-100 text-green-700 dark:bg-green-900/30 dark:text-green-400 border border-green-200 dark:border-green-800",
+      paid: "bg-blue-100 text-blue-700 dark:bg-blue-900/30 dark:text-blue-400 border border-blue-200 dark:border-blue-800",
+      pending: "bg-yellow-100 text-yellow-700 dark:bg-yellow-900/30 dark:text-yellow-400 border border-yellow-200 dark:border-yellow-800",
+      draft: "bg-gray-100 text-gray-700 dark:bg-gray-700 dark:text-gray-400 border border-gray-200 dark:border-gray-600",
+      failed: "bg-red-100 text-red-700 dark:bg-red-900/30 dark:text-red-400 border border-red-200 dark:border-red-800",
     };
     return statusMap[status?.toLowerCase()] || statusMap.draft;
   };
@@ -188,6 +175,28 @@ const Payroll = () => {
     } catch {
       return date;
     }
+  };
+
+  // Get month name from month number
+  const getMonthName = (monthNumber) => {
+    const months = [
+      "January", "February", "March", "April", "May", "June",
+      "July", "August", "September", "October", "November", "December"
+    ];
+    return months[monthNumber - 1] || monthNumber;
+  };
+
+  // Get avatar URL
+  const getAvatarUrl = (avatar) => {
+    if (!avatar) return null;
+    if (avatar.startsWith("http://") || avatar.startsWith("https://")) {
+      return avatar;
+    }
+    const baseUrl = import.meta.env.VITE_API_URL?.replace("/api", "") || "";
+    if (avatar.startsWith("/storage/")) {
+      return `${baseUrl}${avatar}`;
+    }
+    return `${baseUrl}/storage/${avatar}`;
   };
 
   // Generate month options
@@ -306,6 +315,7 @@ const Payroll = () => {
             className="px-3 py-2 rounded-lg border border-gray-200 dark:border-gray-700 bg-white dark:bg-gray-800 text-xs text-gray-700 dark:text-gray-200 focus:outline-none focus:border-green-500 focus:ring-2 focus:ring-green-500/20"
           >
             <option value="all">All Status</option>
+            <option value="completed">Completed</option>
             <option value="paid">Paid</option>
             <option value="pending">Pending</option>
             <option value="draft">Draft</option>
@@ -387,88 +397,105 @@ const Payroll = () => {
                       </td>
                     </tr>
                   ) : (
-                    payrolls.map((payroll) => (
-                      <tr
-                        key={payroll.id}
-                        className="hover:bg-gray-50 dark:hover:bg-gray-700/10 transition-colors"
-                      >
-                        <td className="px-3 md:px-4 py-2 md:py-3">
-                          <div>
-                            <div className="text-xs md:text-sm font-semibold text-gray-800 dark:text-gray-200">
-                              {payroll.employee_name || payroll.employee?.name || 
-                                (payroll.employee?.first_name && payroll.employee?.last_name 
-                                  ? `${payroll.employee.first_name} ${payroll.employee.last_name}`
-                                  : "-")}
+                    payrolls.map((payroll) => {
+                      const avatarUrl = getAvatarUrl(payroll.avatar);
+                      const employeeName = payroll.employee_name || payroll.employee?.name || 
+                        (payroll.employee?.first_name && payroll.employee?.last_name 
+                          ? `${payroll.employee.first_name} ${payroll.employee.last_name}`
+                          : "-");
+                      const monthDisplay = payroll.month ? getMonthName(payroll.month) : (payroll.pay_period_month || "-");
+                      const yearDisplay = payroll.year || payroll.pay_period_year || "-";
+                      const isCompletedOrPaid = payroll.status === "completed" || payroll.status === "paid";
+                      
+                      return (
+                        <tr
+                          key={payroll.id}
+                          className="hover:bg-gray-50 dark:hover:bg-gray-700/10 transition-colors"
+                        >
+                          <td className="px-3 md:px-4 py-2 md:py-3">
+                            <div className="flex items-center gap-2">
+                              {avatarUrl ? (
+                                <img
+                                  src={avatarUrl}
+                                  alt={employeeName}
+                                  className="w-8 h-8 rounded-full object-cover border border-gray-200 dark:border-gray-600"
+                                  onError={(e) => {
+                                    e.target.style.display = "none";
+                                    e.target.parentElement.querySelector('.avatar-fallback').style.display = "flex";
+                                  }}
+                                />
+                              ) : null}
+                              <div className={`w-8 h-8 rounded-full flex items-center justify-center text-white text-xs font-semibold bg-gradient-to-br from-green-500 to-green-600 avatar-fallback ${avatarUrl ? 'hidden' : ''}`}>
+                                {employeeName.charAt(0).toUpperCase()}
+                              </div>
+                              <div>
+                                <div className="text-xs md:text-sm font-semibold text-gray-800 dark:text-gray-200">
+                                  {employeeName}
+                                </div>
+                              </div>
                             </div>
-                            <div className="text-[10px] text-gray-400 dark:text-gray-500">
-                              {payroll.employee_id || payroll.employee?.employee_id || `#${payroll.employee?.id}`}
+                          </td>
+                          <td className="px-3 md:px-4 py-2 md:py-3 text-xs md:text-sm text-gray-600 dark:text-gray-400">
+                            {`${monthDisplay} ${yearDisplay}`}
+                          </td>
+                          <td className="px-3 md:px-4 py-2 md:py-3 text-right text-xs md:text-sm font-bold text-gray-800 dark:text-gray-200">
+                            {formatCurrency(payroll.net_pay || payroll.total_amount || 0)}
+                          </td>
+                          <td className="px-3 md:px-4 py-2 md:py-3 text-center">
+                            <span className={`inline-block px-2.5 py-1 rounded-full text-[10px] md:text-xs font-semibold ${getStatusBadge(payroll.status)}`}>
+                              {payroll.status ? payroll.status.charAt(0).toUpperCase() + payroll.status.slice(1) : "Draft"}
+                            </span>
+                          </td>
+                          <td className="px-3 md:px-4 py-2 md:py-3 text-xs md:text-sm text-gray-600 dark:text-gray-400">
+                            {formatDate(payroll.payment_date)}
+                          </td>
+                          <td className="px-3 md:px-4 py-2 md:py-3 text-right">
+                            <div className="flex justify-end items-center gap-2">
+                              {/* View Button */}
+                              <button
+                                onClick={() => navigate(`${basePath}/payroll/${payroll.id}`)}
+                                title="View Payroll"
+                                className="w-8 h-8 rounded-lg bg-blue-500/10 hover:bg-blue-500 text-blue-500 hover:text-white flex items-center justify-center transition-all shadow-sm hover:shadow-soft"
+                              >
+                                <i className="fas fa-eye text-xs"></i>
+                              </button>
+
+                              {/* Edit Button - Only for Admin */}
+                              {isAdmin && (
+                                <button
+                                  onClick={() => navigate(`${basePath}/payroll/edit/${payroll.id}`)}
+                                  title="Edit Payroll"
+                                  className="w-8 h-8 rounded-lg bg-green-500/10 hover:bg-green-500 text-green-500 hover:text-white flex items-center justify-center transition-all shadow-sm hover:shadow-soft"
+                                >
+                                  <i className="fas fa-pencil-alt text-xs"></i>
+                                </button>
+                              )}
+
+                              {/* Payslip Button - Always show with PDF icon */}
+                              <button
+                                onClick={() => handleGeneratePayslip(payroll.id)}
+                                disabled={actionLoading}
+                                title="Generate Payslip"
+                                className="w-8 h-8 rounded-lg bg-red-500/10 hover:bg-red-500 text-red-500 hover:text-white flex items-center justify-center transition-all shadow-sm hover:shadow-soft disabled:opacity-50 disabled:cursor-not-allowed"
+                              >
+                                <i className="fas fa-file-pdf text-xs"></i>
+                              </button>
+
+                              {/* Delete Button - Only for Admin */}
+                              {isAdmin && (
+                                <button
+                                  onClick={() => handleDeleteClick(payroll)}
+                                  title="Delete Payroll"
+                                  className="w-8 h-8 rounded-lg bg-red-500/10 hover:bg-red-500 text-red-500 hover:text-white flex items-center justify-center transition-all shadow-sm hover:shadow-soft"
+                                >
+                                  <i className="fas fa-trash-alt text-xs"></i>
+                                </button>
+                              )}
                             </div>
-                          </div>
-                        </td>
-                        <td className="px-3 md:px-4 py-2 md:py-3 text-xs md:text-sm text-gray-600 dark:text-gray-400">
-                          {payroll.pay_period_month && payroll.pay_period_year ? (
-                            `${payroll.pay_period_month} ${payroll.pay_period_year}`
-                          ) : (
-                            payroll.pay_period || "-"
-                          )}
-                        </td>
-                        <td className="px-3 md:px-4 py-2 md:py-3 text-right text-xs md:text-sm font-bold text-gray-800 dark:text-gray-200">
-                          {formatCurrency(payroll.net_pay || payroll.total_amount || 0)}
-                        </td>
-                        <td className="px-3 md:px-4 py-2 md:py-3 text-center">
-                          <span className={`inline-block px-2 py-0.5 rounded-full text-[9px] md:text-xs font-medium ${getStatusBadge(payroll.status)}`}>
-                            {payroll.status || "Draft"}
-                          </span>
-                        </td>
-                        <td className="px-3 md:px-4 py-2 md:py-3 text-xs md:text-sm text-gray-600 dark:text-gray-400">
-                          {formatDate(payroll.payment_date)}
-                        </td>
-                        <td className="px-3 md:px-4 py-2 md:py-3 text-right">
-                          <div className="flex justify-end items-center gap-2">
-                            {/* View Button */}
-                            <button
-                              onClick={() => navigate(`${basePath}/payroll/${payroll.id}`)}
-                              title="View Payroll"
-                              className="w-8 h-8 rounded-lg bg-blue-500/10 hover:bg-blue-500 text-blue-500 hover:text-white flex items-center justify-center transition-all shadow-sm hover:shadow-soft"
-                            >
-                              <i className="fas fa-eye text-xs"></i>
-                            </button>
-
-                            {/* Edit Button - Only for Admin */}
-                            {isAdmin && (
-                              <button
-                                onClick={() => navigate(`${basePath}/payroll/edit/${payroll.id}`)}
-                                title="Edit Payroll"
-                                className="w-8 h-8 rounded-lg bg-green-500/10 hover:bg-green-500 text-green-500 hover:text-white flex items-center justify-center transition-all shadow-sm hover:shadow-soft"
-                              >
-                                <i className="fas fa-pencil-alt text-xs"></i>
-                              </button>
-                            )}
-
-                            {/* Payslip Button */}
-                            <button
-                              onClick={() => handleGeneratePayslip(payroll.id)}
-                              disabled={actionLoading}
-                              title="Generate Payslip"
-                              className="w-8 h-8 rounded-lg bg-purple-500/10 hover:bg-purple-500 text-purple-500 hover:text-white flex items-center justify-center transition-all shadow-sm hover:shadow-soft disabled:opacity-50 disabled:cursor-not-allowed"
-                            >
-                              <i className="fas fa-file-pdf text-xs"></i>
-                            </button>
-
-                            {/* Delete Button - Only for Admin */}
-                            {isAdmin && (
-                              <button
-                                onClick={() => handleDeleteClick(payroll)}
-                                title="Delete Payroll"
-                                className="w-8 h-8 rounded-lg bg-red-500/10 hover:bg-red-500 text-red-500 hover:text-white flex items-center justify-center transition-all shadow-sm hover:shadow-soft"
-                              >
-                                <i className="fas fa-trash-alt text-xs"></i>
-                              </button>
-                            )}
-                          </div>
-                        </td>
-                      </tr>
-                    ))
+                          </td>
+                        </tr>
+                      );
+                    })
                   )}
                 </tbody>
               </table>
