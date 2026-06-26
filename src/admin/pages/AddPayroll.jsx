@@ -1,4 +1,4 @@
-// AddPayroll.js - With salary packages fetching from API
+// AddPayroll.js - Using Redux thunks instead of direct API calls
 
 import { useState, useEffect } from "react";
 import { useDispatch, useSelector } from "react-redux";
@@ -24,6 +24,16 @@ import {
   selectPayrollSuccess,
   selectPayrollError,
   selectPayrollSaving,
+  // New thunks
+  calculateSalarySplit,
+  fetchOvertimeData,
+  fetchPayrollSummary,
+  selectCalculatedCountries,
+  selectCountriesLoading,
+  selectOvertimeData,
+  selectOvertimeLoading,
+  selectSummaryData,
+  selectSummaryLoading,
 } from "../store/slices/payrollSlice";
 
 import {
@@ -83,10 +93,18 @@ function AddPayroll() {
   } = useSelector((state) => state.employees);
 
   // Salary packages state from onboarding slice
-  const {
-    availablePackages,
-    packagesLoading,
-  } = useSelector((state) => state.onboarding || { availablePackages: [], packagesLoading: false });
+  const { availablePackages, packagesLoading } = useSelector(
+    (state) =>
+      state.onboarding || { availablePackages: [], packagesLoading: false },
+  );
+
+  // Step data from Redux
+  const calculatedCountries = useSelector(selectCalculatedCountries);
+  const countriesLoading = useSelector(selectCountriesLoading);
+  const overtimeData = useSelector(selectOvertimeData);
+  const overtimeLoading = useSelector(selectOvertimeLoading);
+  const summaryData = useSelector(selectSummaryData);
+  const summaryLoading = useSelector(selectSummaryLoading);
 
   // Local state for form data
   const [selectedEmployee, setSelectedEmployee] = useState("");
@@ -107,6 +125,7 @@ function AddPayroll() {
   const [totalWorkingDays, setTotalWorkingDays] = useState("");
   const [daysPresent, setDaysPresent] = useState("");
 
+  // Step 2 - Country Split
   const [countries, setCountries] = useState([
     {
       id: 1,
@@ -128,12 +147,14 @@ function AddPayroll() {
     },
   ]);
 
+  // Step 3 - Overtime with overtime_amount field
   const [overtimeRequests, setOvertimeRequests] = useState([
     {
       id: 1,
       project: "Dubai Mall Expansion",
       date: "2026-05-20",
       hours: 4,
+      overtime_amount: 0,
       status: "pending",
       reason: "Client requested emergency revisions",
     },
@@ -142,41 +163,54 @@ function AddPayroll() {
       project: "Airport Terminal 3",
       date: "2026-05-21",
       hours: 2.5,
+      overtime_amount: 0,
       status: "pending",
       reason: "Project deadline approaching",
     },
   ]);
 
+  // Step 4 - Deductions (Country field changed to Currency)
+  // Step 4 - Deductions
   const [deductions, setDeductions] = useState([
     {
       id: 1,
       type: "PF (Employee 12%)",
-      country: "India",
+      currency: "INR",
       amount: "6000",
-      statutory: "Yes",
+      is_statutory: "yes",
     },
     {
       id: 2,
       type: "Professional Tax",
-      country: "India",
+      currency: "INR",
       amount: "200",
-      statutory: "Yes",
+      is_statutory: "yes",
     },
     {
       id: 3,
       type: "TDS / Income Tax",
-      country: "India",
+      currency: "INR",
       amount: "4500",
-      statutory: "Yes",
+      is_statutory: "yes",
     },
     {
       id: 4,
       type: "Gratuity (UAE 8.33%)",
-      country: "UAE",
+      currency: "AED",
       amount: "1125",
-      statutory: "Yes",
+      is_statutory: "yes",
     },
   ]);
+
+  // Step 5 - Summary with currency conversion
+  const [targetCurrency, setTargetCurrency] = useState("INR");
+  const [conversionRates, setConversionRates] = useState({});
+  const [localSummaryData, setLocalSummaryData] = useState({
+    gross_earnings: 0,
+    total_deductions: 0,
+    combined: 0,
+    net_pay: 0,
+  });
 
   const steps = [
     { id: 1, label: "Basic Info" },
@@ -188,24 +222,33 @@ function AddPayroll() {
 
   // Month name to number mapping
   const monthNames = {
-    'January': 1, 'February': 2, 'March': 3, 'April': 4,
-    'May': 5, 'June': 6, 'July': 7, 'August': 8,
-    'September': 9, 'October': 10, 'November': 11, 'December': 12
+    January: 1,
+    February: 2,
+    March: 3,
+    April: 4,
+    May: 5,
+    June: 6,
+    July: 7,
+    August: 8,
+    September: 9,
+    October: 10,
+    November: 11,
+    December: 12,
   };
 
-  // --- FIX: Clear current employee on mount to prevent auto-prefilling ---
+  // Available currencies
+  const currencies = ["AED", "INR", "USD", "EUR", "GBP", "PHP", "LKR"];
+
+  // --- Clear current employee on mount ---
   useEffect(() => {
-    // Clear any previously selected employee from Redux
     if (resetCurrentEmployee) {
       dispatch(resetCurrentEmployee());
     }
-    
-    // Reset local form state
+
     clearEmployeeFields();
     setSelectedEmployee("");
     setSelectedUserId("");
-    
-    // Reset pay period fields
+
     setPayPeriodMonth("");
     setPayPeriodYear("");
     setPeriodStart("");
@@ -214,21 +257,12 @@ function AddPayroll() {
     setPaymentMode(null);
     setTotalWorkingDays("");
     setDaysPresent("");
-    
-    // Load employees
+
     dispatch(fetchEmployees());
-    
-    // Fetch salary packages from API
     dispatch(fetchSalaryPackages());
-    
-    // Reset Redux step to 1
     dispatch(setCurrentStep(1));
-    
-    // Clean up on unmount
+
     return () => {
-      // Optionally reset payroll state
-      // dispatch(resetPayrollState());
-      // Clear packages on unmount
       dispatch(clearPackages());
     };
   }, [dispatch]);
@@ -263,7 +297,7 @@ function AddPayroll() {
     setEmploymentType("");
   };
 
-  // Auto-populate fields when employee data is loaded (only when selected)
+  // Auto-populate fields when employee data is loaded
   useEffect(() => {
     if (currentEmployee && selectedEmployee) {
       const user = currentEmployee.user || {};
@@ -311,15 +345,24 @@ function AddPayroll() {
 
       setEmploymentType(user.type || user.employment_type || "employee");
 
-      // Set default pay period if not set
       if (!payPeriodMonth) {
         const currentMonth = new Date().getMonth() + 1;
         const currentYear = new Date().getFullYear();
         const monthNum = String(currentMonth).padStart(2, "0");
 
         const monthNamesList = [
-          "January", "February", "March", "April", "May", "June",
-          "July", "August", "September", "October", "November", "December"
+          "January",
+          "February",
+          "March",
+          "April",
+          "May",
+          "June",
+          "July",
+          "August",
+          "September",
+          "October",
+          "November",
+          "December",
         ];
         setPayPeriodMonth(monthNamesList[currentMonth - 1]);
         setPayPeriodYear(currentYear.toString());
@@ -359,17 +402,144 @@ function AddPayroll() {
     }
   }, [successMessage, error, dispatch]);
 
-  // Get current step data based on form state - ONLY SEND RELEVANT FIELDS
+  // Update countries when calculated data arrives
+  useEffect(() => {
+    if (calculatedCountries && calculatedCountries.countries) {
+      setCountries(
+        calculatedCountries.countries.map((c, index) => ({
+          id: index + 1,
+          name: c.name || c.package_name || "",
+          currency: c.currency || "AED",
+          dailyRate: c.daily_rate || c.rate || 0,
+          daysWorked: c.days_worked || c.days || 0,
+          fxRate: c.fx_rate || c.exchange_rate || 1,
+          packageId: c.package_id || null,
+        })),
+      );
+    }
+  }, [calculatedCountries]);
+
+  // Update overtime when data arrives
+  useEffect(() => {
+    if (overtimeData && overtimeData.overtime_requests) {
+      setOvertimeRequests(
+        overtimeData.overtime_requests.map((req, index) => ({
+          id: index + 1,
+          project: req.project || req.project_name || "",
+          date: req.date || "",
+          hours: req.hours || 0,
+          overtime_amount: req.overtime_amount || 0,
+          status: req.status || "pending",
+          reason: req.reason || "",
+        })),
+      );
+    }
+  }, [overtimeData]);
+
+  // Update summary when data arrives
+  useEffect(() => {
+    if (summaryData) {
+      setLocalSummaryData({
+        gross_earnings: summaryData.gross_earnings || 0,
+        total_deductions: summaryData.total_deductions || 0,
+        combined: summaryData.combined || 0,
+        net_pay: summaryData.net_pay || 0,
+      });
+    }
+  }, [summaryData]);
+
+  // ─── STEP 2: Calculate salary split by location ──────────────────────
+  const handleCalculateSalarySplit = async () => {
+    if (!selectedUserId) {
+      showToast("Please select an employee first", "error");
+      return;
+    }
+
+    const monthNumber = monthNames[payPeriodMonth] || new Date().getMonth() + 1;
+    const monthFormatted = `${payPeriodYear}-${String(monthNumber).padStart(2, "0")}`;
+
+    try {
+      const result = await dispatch(
+        calculateSalarySplit({
+          employeeId: selectedUserId,
+          userId: selectedUserId,
+          month: monthFormatted,
+        }),
+      ).unwrap();
+
+      showToast("Salary split calculated successfully", "success");
+    } catch (error) {
+      console.error("Calculate salary split error:", error);
+      showToast(error || "Failed to calculate salary split", "error");
+    }
+  };
+
+  // ─── STEP 3: Fetch Overtime data ──────────────────────────────────────
+  const handleFetchOvertime = async () => {
+    if (!selectedUserId) {
+      showToast("Please select an employee first", "error");
+      return;
+    }
+
+    const monthNumber = monthNames[payPeriodMonth] || new Date().getMonth() + 1;
+    const monthFormatted = `${payPeriodYear}-${String(monthNumber).padStart(2, "0")}`;
+
+    try {
+      const result = await dispatch(
+        fetchOvertimeData({
+          employeeId: selectedUserId,
+          userId: selectedUserId,
+          month: monthFormatted,
+        }),
+      ).unwrap();
+
+      showToast("Overtime data fetched successfully", "success");
+    } catch (error) {
+      console.error("Fetch overtime error:", error);
+      showToast(error || "Failed to fetch overtime data", "error");
+    }
+  };
+
+  // ─── STEP 5: Get Summary ──────────────────────────────────────────────
+  const handleFetchSummary = async () => {
+    if (!selectedUserId) {
+      showToast("Please select an employee first", "error");
+      return;
+    }
+
+    const monthNumber = monthNames[payPeriodMonth] || new Date().getMonth() + 1;
+    const year = parseInt(payPeriodYear) || new Date().getFullYear();
+
+    try {
+      const result = await dispatch(
+        fetchPayrollSummary({
+          userId: selectedUserId,
+          payPeriodMonth: monthNumber,
+          payPeriodYear: year,
+        }),
+      ).unwrap();
+
+      showToast("Summary fetched successfully", "success");
+    } catch (error) {
+      console.error("Fetch summary error:", error);
+      showToast(error || "Failed to fetch summary", "error");
+    }
+  };
+
+  // Get current step data based on form state
   const getCurrentStepData = () => {
     const step = reduxCurrentStep;
     let data = {};
 
+    // Always include pay_period_month and pay_period_year for all steps
+    const monthNumber = monthNames[payPeriodMonth] || new Date().getMonth() + 1;
+    const year = parseInt(payPeriodYear) || new Date().getFullYear();
+
     switch (step) {
       case 1:
-        const monthNumber = monthNames[payPeriodMonth] || new Date().getMonth() + 1;
         data = {
           pay_period_month: monthNumber,
-          pay_period_year: parseInt(payPeriodYear) || new Date().getFullYear(),
+          pay_period_year: year,
           period_start: periodStart,
           period_end: periodEnd,
           payment_date: paymentDate,
@@ -380,7 +550,9 @@ function AddPayroll() {
         break;
       case 2:
         data = {
-          countries: countries.map(c => ({
+          pay_period_month: monthNumber, // ADD THIS
+          pay_period_year: year, // ADD THIS
+          countries: countries.map((c) => ({
             name: c.name,
             currency: c.currency,
             daily_rate: parseFloat(c.dailyRate) || 0,
@@ -392,10 +564,13 @@ function AddPayroll() {
         break;
       case 3:
         data = {
-          overtime_requests: overtimeRequests.map(req => ({
+          pay_period_month: monthNumber, // ADD THIS
+          pay_period_year: year, // ADD THIS
+          overtime_requests: overtimeRequests.map((req) => ({
             project: req.project,
             date: req.date,
             hours: parseFloat(req.hours) || 0,
+            overtime_amount: parseFloat(req.overtime_amount) || 0,
             status: req.status,
             reason: req.reason,
           })),
@@ -403,22 +578,23 @@ function AddPayroll() {
         break;
       case 4:
         data = {
-          deductions: deductions.map(d => ({
+          pay_period_month: monthNumber,
+          pay_period_year: year,
+          deductions: deductions.map((d) => ({
             type: d.type,
-            country: d.country,
+            currency: d.currency,
             amount: parseFloat(d.amount) || 0,
-            statutory: d.statutory === "Yes",
+            is_statutory: d.is_statutory || "no",
           })),
         };
         break;
       case 5:
         data = {
-          summary: {
-            gross_earnings: "₹80,000",
-            total_deductions: "₹12,315",
-            combined: "₹1,75,000",
-            net_pay: "₹1,63,175",
-          },
+          pay_period_month: monthNumber, // ADD THIS
+          pay_period_year: year, // ADD THIS
+          summary: localSummaryData,
+          target_currency: targetCurrency,
+          conversion_rates: conversionRates,
         };
         break;
       default:
@@ -429,6 +605,7 @@ function AddPayroll() {
   };
 
   // Save current step data
+  // Save current step data
   const handleSaveStep = async (step, data) => {
     if (!selectedUserId) {
       showToast("Please select an employee first", "error");
@@ -436,32 +613,39 @@ function AddPayroll() {
     }
 
     try {
+      // Ensure pay_period_month and pay_period_year are always included
+      const monthNumber =
+        monthNames[payPeriodMonth] || new Date().getMonth() + 1;
+      const year = parseInt(payPeriodYear) || new Date().getFullYear();
+
+      const enrichedData = {
+        ...data,
+        pay_period_month: data.pay_period_month || monthNumber,
+        pay_period_year: data.pay_period_year || year,
+      };
+
       console.log("Saving step with user_id:", selectedUserId);
-      console.log("Step data:", data);
+      console.log("Step data:", enrichedData);
 
-      // --- COMMENTED OUT: API call for saving step ---
-      // await dispatch(
-      //   savePayrollStep({
-      //     userId: selectedUserId,
-      //     step: step,
-      //     stepData: data,
-      //   }),
-      // ).unwrap();
+      const result = await dispatch(
+        savePayrollStep({
+          userId: selectedUserId,
+          step: step,
+          stepData: enrichedData,
+        }),
+      ).unwrap();
 
-      // --- MOCK: Simulate save for UI testing ---
-      console.log("MOCK: Step data saved successfully (UI testing mode)");
-
-      // dispatch(updateStepData({ step, data }));
-      // dispatch(markStepCompleted(step));
+      dispatch(updateStepData({ step, data: enrichedData }));
+      dispatch(markStepCompleted(step));
+      showToast(result.message || "Step data saved successfully", "success");
       return true;
     } catch (error) {
       console.error("Failed to save step:", error);
-      showToast("Failed to save step data", "error");
+      showToast(error || "Failed to save step data", "error");
       return false;
     }
   };
-
-  // Handle step change
+  // Handle step change with API data fetch
   const handleStepChange = async (step) => {
     if (!selectedUserId) {
       showToast("Please select an employee first", "error");
@@ -473,6 +657,38 @@ function AddPayroll() {
 
     if (saved || reduxCurrentStep === 5) {
       dispatch(setCurrentStep(step));
+
+      const monthNumber =
+        monthNames[payPeriodMonth] || new Date().getMonth() + 1;
+      const monthFormatted = `${payPeriodYear}-${String(monthNumber).padStart(2, "0")}`;
+      const year = parseInt(payPeriodYear) || new Date().getFullYear();
+
+      // Fetch data for the new step
+      if (step === 2) {
+        await dispatch(
+          calculateSalarySplit({
+            employeeId: selectedUserId,
+            userId: selectedUserId,
+            month: monthFormatted,
+          }),
+        );
+      } else if (step === 3) {
+        await dispatch(
+          fetchOvertimeData({
+            employeeId: selectedUserId,
+            userId: selectedUserId,
+            month: monthFormatted,
+          }),
+        );
+      } else if (step === 5) {
+        await dispatch(
+          fetchPayrollSummary({
+            userId: selectedUserId,
+            payPeriodMonth: monthNumber,
+            payPeriodYear: year,
+          }),
+        );
+      }
     }
   };
 
@@ -487,8 +703,41 @@ function AddPayroll() {
     const saved = await handleSaveStep(reduxCurrentStep, currentData);
 
     if (saved) {
-      if (reduxCurrentStep < 5) {
-        dispatch(setCurrentStep(reduxCurrentStep + 1));
+      const nextStep = reduxCurrentStep + 1;
+      if (nextStep <= 5) {
+        dispatch(setCurrentStep(nextStep));
+
+        const monthNumber =
+          monthNames[payPeriodMonth] || new Date().getMonth() + 1;
+        const monthFormatted = `${payPeriodYear}-${String(monthNumber).padStart(2, "0")}`;
+        const year = parseInt(payPeriodYear) || new Date().getFullYear();
+
+        // Fetch data for the new step
+        if (nextStep === 2) {
+          await dispatch(
+            calculateSalarySplit({
+              employeeId: selectedUserId,
+              userId: selectedUserId,
+              month: monthFormatted,
+            }),
+          );
+        } else if (nextStep === 3) {
+          await dispatch(
+            fetchOvertimeData({
+              employeeId: selectedUserId,
+              userId: selectedUserId,
+              month: monthFormatted,
+            }),
+          );
+        } else if (nextStep === 5) {
+          await dispatch(
+            fetchPayrollSummary({
+              userId: selectedUserId,
+              payPeriodMonth: monthNumber,
+              payPeriodYear: year,
+            }),
+          );
+        }
       }
     }
   };
@@ -510,20 +759,37 @@ function AddPayroll() {
     try {
       const finalData = getCurrentStepData();
       await handleSaveStep(reduxCurrentStep, finalData);
-      
-      // --- COMMENTED OUT: API call for submitting payroll ---
-      // await dispatch(submitPayroll(selectedUserId)).unwrap();
-      
-      // --- MOCK: Simulate submission for UI testing ---
-      console.log("MOCK: Payroll submitted successfully (UI testing mode)");
-      
+
+      // Get month number for submission
+      const monthNumber =
+        monthNames[payPeriodMonth] || new Date().getMonth() + 1;
+
+      // Prepare submission payload
+      const payload = {
+        user_id: selectedUserId,
+        pay_period_month: monthNumber,
+        pay_period_year: parseInt(payPeriodYear) || new Date().getFullYear(),
+        target_currency: targetCurrency,
+        conversion_rates: countries.reduce((acc, c) => {
+          acc[c.currency] = parseFloat(c.fxRate) || 1;
+          return acc;
+        }, {}),
+      };
+
+      const result = await dispatch(submitPayroll(payload)).unwrap();
+
+      showToast(
+        result.message ||
+          "Payroll submitted successfully! Payslip has been generated and emailed.",
+        "success",
+      );
       generatePayslipPDF();
 
-      // setTimeout(() => {
-      //   window.location.href = "/admin/payroll";
-      // }, 3000);
+      setTimeout(() => {
+        window.location.href = "/admin/payroll";
+      }, 3000);
     } catch (error) {
-      showToast("Failed to submit payroll", "error");
+      showToast(error || "Failed to submit payroll", "error");
     }
   };
 
@@ -531,6 +797,12 @@ function AddPayroll() {
   const handleOvertimeAction = (id, newStatus) => {
     setOvertimeRequests((prev) =>
       prev.map((req) => (req.id === id ? { ...req, status: newStatus } : req)),
+    );
+  };
+
+  const handleOvertimeChange = (id, field, value) => {
+    setOvertimeRequests((prev) =>
+      prev.map((req) => (req.id === id ? { ...req, [field]: value } : req)),
     );
   };
 
@@ -542,16 +814,20 @@ function AddPayroll() {
   };
 
   const handleAddCountry = () => {
-    const newId = countries.length > 0 ? Math.max(...countries.map(c => c.id)) + 1 : 1;
-    setCountries([...countries, {
-      id: newId,
-      name: "",
-      currency: "INR",
-      dailyRate: "",
-      daysWorked: "",
-      fxRate: "",
-      packageId: null,
-    }]);
+    const newId =
+      countries.length > 0 ? Math.max(...countries.map((c) => c.id)) + 1 : 1;
+    setCountries([
+      ...countries,
+      {
+        id: newId,
+        name: "",
+        currency: "INR",
+        dailyRate: "",
+        daysWorked: "",
+        fxRate: "",
+        packageId: null,
+      },
+    ]);
   };
 
   const handleRemoveCountry = (id) => {
@@ -559,7 +835,7 @@ function AddPayroll() {
       showToast("At least one country split is required", "error");
       return;
     }
-    setCountries(countries.filter(c => c.id !== id));
+    setCountries(countries.filter((c) => c.id !== id));
   };
 
   // Deduction actions
@@ -570,14 +846,18 @@ function AddPayroll() {
   };
 
   const handleAddDeduction = () => {
-    const newId = deductions.length > 0 ? Math.max(...deductions.map(d => d.id)) + 1 : 1;
-    setDeductions([...deductions, {
-      id: newId,
-      type: "",
-      country: "India",
-      amount: "",
-      statutory: "No",
-    }]);
+    const newId =
+      deductions.length > 0 ? Math.max(...deductions.map((d) => d.id)) + 1 : 1;
+    setDeductions([
+      ...deductions,
+      {
+        id: newId,
+        type: "",
+        currency: "INR",
+        amount: "",
+        statutory: "No",
+      },
+    ]);
   };
 
   const handleRemoveDeduction = (id) => {
@@ -585,7 +865,7 @@ function AddPayroll() {
       showToast("At least one deduction is required", "error");
       return;
     }
-    setDeductions(deductions.filter(d => d.id !== id));
+    setDeductions(deductions.filter((d) => d.id !== id));
   };
 
   // Generate payslip PDF
@@ -609,14 +889,12 @@ function AddPayroll() {
 
     autoTable(doc, {
       startY: 56,
-      head: [
-        ["Package / Location", "Days Logged", "Daily Rate", "Amount (INR)"],
-      ],
+      head: [["Package / Location", "Days Logged", "Daily Rate", "Amount"]],
       body: countries.map((c) => [
         c.name || "-",
         c.daysWorked || "0",
         `${c.currency || ""} ${c.dailyRate || "0"}`,
-        `${c.currency === "AED" ? "₹" : "₹"}${(parseFloat(c.dailyRate) * parseFloat(c.daysWorked) * parseFloat(c.fxRate || 1)).toLocaleString()}`,
+        `${(parseFloat(c.dailyRate) * parseFloat(c.daysWorked) * parseFloat(c.fxRate || 1)).toLocaleString()} ${targetCurrency}`,
       ]),
       theme: "grid",
       headStyles: { fillColor: [34, 197, 94] },
@@ -624,12 +902,12 @@ function AddPayroll() {
 
     autoTable(doc, {
       startY: doc.lastAutoTable.finalY + 10,
-      head: [["Overtime Project", "Date", "Hours", "Status"]],
+      head: [["Overtime Project", "Date", "Hours", "Overtime Amount"]],
       body: overtimeRequests.map((req) => [
         req.project,
         req.date,
         req.hours.toString(),
-        req.status,
+        `${req.overtime_amount} ${targetCurrency}`,
       ]),
       theme: "grid",
       headStyles: { fillColor: [34, 197, 94] },
@@ -637,24 +915,40 @@ function AddPayroll() {
 
     autoTable(doc, {
       startY: doc.lastAutoTable.finalY + 10,
-      head: [["Deduction Type", "Country", "Amount (INR)"]],
-      body: deductions.map((d) => [d.type, d.country, d.amount.toString()]),
+      head: [["Deduction Type", "Currency", "Amount"]],
+      body: deductions.map((d) => [
+        d.type,
+        d.currency,
+        `${d.amount} ${d.currency}`,
+      ]),
       theme: "grid",
       headStyles: { fillColor: [239, 68, 68] },
     });
 
-    const totalDeductions = deductions.reduce((sum, d) => sum + parseFloat(d.amount || 0), 0);
-    const grossEarnings = countries.reduce((sum, c) => sum + (parseFloat(c.dailyRate) * parseFloat(c.daysWorked) * parseFloat(c.fxRate || 1)), 0);
+    const totalDeductions = deductions.reduce(
+      (sum, d) => sum + parseFloat(d.amount || 0),
+      0,
+    );
+    const grossEarnings = countries.reduce(
+      (sum, c) =>
+        sum +
+        parseFloat(c.dailyRate) *
+          parseFloat(c.daysWorked) *
+          parseFloat(c.fxRate || 1),
+      0,
+    );
     const netPay = grossEarnings - totalDeductions;
 
     autoTable(doc, {
       startY: doc.lastAutoTable.finalY + 10,
       head: [["Gross Earnings", "Total Deductions", "Net Pay"]],
-      body: [[
-        `INR ${grossEarnings.toLocaleString()}`,
-        `INR ${totalDeductions.toLocaleString()}`,
-        `INR ${netPay.toLocaleString()}`,
-      ]],
+      body: [
+        [
+          `${grossEarnings.toLocaleString()} ${targetCurrency}`,
+          `${totalDeductions.toLocaleString()} ${targetCurrency}`,
+          `${netPay.toLocaleString()} ${targetCurrency}`,
+        ],
+      ],
       theme: "grid",
       headStyles: { fillColor: [34, 197, 94] },
     });
@@ -988,8 +1282,19 @@ function AddPayroll() {
                     <i className="fas fa-spinner fa-spin mr-1"></i> Loading...
                   </span>
                 )}
+                <button
+                  onClick={handleCalculateSalarySplit}
+                  disabled={countriesLoading}
+                  className="ml-auto px-3 py-1 text-xs bg-blue-500 text-white rounded-lg hover:bg-blue-600 transition-colors disabled:opacity-50"
+                >
+                  <i
+                    className={`fas ${countriesLoading ? "fa-spinner fa-spin" : "fa-calculator"} mr-1`}
+                  ></i>
+                  {countriesLoading ? "Calculating..." : "Calculate"}
+                </button>
               </div>
 
+              {/* Rest of Step 2 JSX remains the same... */}
               <div className="space-y-3">
                 {countries.map((c) => (
                   <div
@@ -1004,11 +1309,25 @@ function AddPayroll() {
                         <select
                           value={c.packageId || ""}
                           onChange={(e) => {
-                            const selectedPackage = availablePackages.find(p => p.id === parseInt(e.target.value));
-                            handleCountryChange(c.id, 'packageId', e.target.value);
+                            const selectedPackage = availablePackages.find(
+                              (p) => p.id === parseInt(e.target.value),
+                            );
+                            handleCountryChange(
+                              c.id,
+                              "packageId",
+                              e.target.value,
+                            );
                             if (selectedPackage) {
-                              handleCountryChange(c.id, 'name', selectedPackage.name);
-                              handleCountryChange(c.id, 'currency', selectedPackage.currency || "AED");
+                              handleCountryChange(
+                                c.id,
+                                "name",
+                                selectedPackage.name,
+                              );
+                              handleCountryChange(
+                                c.id,
+                                "currency",
+                                selectedPackage.currency || "AED",
+                              );
                             }
                           }}
                           className="w-full px-3 py-2 text-sm rounded-lg border border-gray-200 dark:border-gray-700 bg-white dark:bg-gray-800 text-gray-800 dark:text-gray-200 focus:outline-none focus:border-green-500 focus:ring-2 focus:ring-green-500/20"
@@ -1024,7 +1343,9 @@ function AddPayroll() {
                         <input
                           type="text"
                           value={c.name}
-                          onChange={(e) => handleCountryChange(c.id, 'name', e.target.value)}
+                          onChange={(e) =>
+                            handleCountryChange(c.id, "name", e.target.value)
+                          }
                           className="w-full px-3 py-2 text-sm rounded-lg border border-gray-200 dark:border-gray-700 bg-white dark:bg-gray-800 text-gray-800 dark:text-gray-200 focus:outline-none focus:border-green-500 focus:ring-2 focus:ring-green-500/20"
                           placeholder="e.g., UAE Onsite"
                         />
@@ -1036,14 +1357,16 @@ function AddPayroll() {
                       </label>
                       <select
                         value={c.currency}
-                        onChange={(e) => handleCountryChange(c.id, 'currency', e.target.value)}
+                        onChange={(e) =>
+                          handleCountryChange(c.id, "currency", e.target.value)
+                        }
                         className="w-full px-3 py-2 text-sm rounded-lg border border-gray-200 dark:border-gray-700 bg-white dark:bg-gray-800 text-gray-800 dark:text-gray-200 focus:outline-none focus:border-green-500 focus:ring-2 focus:ring-green-500/20"
                       >
-                        <option value="AED">AED</option>
-                        <option value="INR">INR</option>
-                        <option value="USD">USD</option>
-                        <option value="EUR">EUR</option>
-                        <option value="GBP">GBP</option>
+                        {currencies.map((curr) => (
+                          <option key={curr} value={curr}>
+                            {curr}
+                          </option>
+                        ))}
                       </select>
                     </div>
                     <div className="md:col-span-2">
@@ -1053,7 +1376,9 @@ function AddPayroll() {
                       <input
                         type="number"
                         value={c.dailyRate}
-                        onChange={(e) => handleCountryChange(c.id, 'dailyRate', e.target.value)}
+                        onChange={(e) =>
+                          handleCountryChange(c.id, "dailyRate", e.target.value)
+                        }
                         className="w-full px-3 py-2 text-sm rounded-lg border border-gray-200 dark:border-gray-700 bg-white dark:bg-gray-800 text-gray-800 dark:text-gray-200 focus:outline-none focus:border-green-500 focus:ring-2 focus:ring-green-500/20"
                       />
                     </div>
@@ -1064,7 +1389,13 @@ function AddPayroll() {
                       <input
                         type="number"
                         value={c.daysWorked}
-                        onChange={(e) => handleCountryChange(c.id, 'daysWorked', e.target.value)}
+                        onChange={(e) =>
+                          handleCountryChange(
+                            c.id,
+                            "daysWorked",
+                            e.target.value,
+                          )
+                        }
                         className="w-full px-3 py-2 text-sm rounded-lg border border-gray-200 dark:border-gray-700 bg-white dark:bg-gray-800 text-gray-800 dark:text-gray-200 focus:outline-none focus:border-green-500 focus:ring-2 focus:ring-green-500/20"
                       />
                     </div>
@@ -1076,7 +1407,9 @@ function AddPayroll() {
                         type="number"
                         step="0.01"
                         value={c.fxRate}
-                        onChange={(e) => handleCountryChange(c.id, 'fxRate', e.target.value)}
+                        onChange={(e) =>
+                          handleCountryChange(c.id, "fxRate", e.target.value)
+                        }
                         className="w-full px-3 py-2 text-sm rounded-lg border border-blue-200 dark:border-blue-700 bg-blue-50 dark:bg-blue-900/10 text-gray-800 dark:text-gray-200 focus:outline-none focus:border-blue-500 focus:ring-2 focus:ring-blue-500/20"
                       />
                     </div>
@@ -1103,41 +1436,71 @@ function AddPayroll() {
                 <div className="p-3 md:p-4 rounded-xl bg-orange-50 dark:bg-orange-900/20 border border-orange-200 dark:border-orange-800">
                   <div className="flex items-center gap-1.5 text-[10px] md:text-xs text-gray-600 dark:text-gray-400 font-semibold mb-1">
                     <span className="w-3 h-2 bg-green-500 rounded-sm"></span>
-                    Pkg 2: Dubai (AED)
+                    Dubai Package
                   </div>
                   <div className="text-lg md:text-xl font-bold text-orange-600 dark:text-orange-400">
-                    {countries.find(c => c.currency === "AED")?.dailyRate || "0"}
+                    {countries.find((c) => c.currency === "AED")?.dailyRate ||
+                      "0"}{" "}
+                    {countries.find((c) => c.currency === "AED")?.currency ||
+                      "AED"}
                   </div>
                   <div className="text-[9px] md:text-[10px] text-gray-500 dark:text-gray-400 mt-0.5">
-                    {countries.find(c => c.currency === "AED")?.daysWorked || 0} days
+                    {countries.find((c) => c.currency === "AED")?.daysWorked ||
+                      0}{" "}
+                    days
                   </div>
                 </div>
                 <div className="p-3 md:p-4 rounded-xl bg-green-50 dark:bg-green-900/20 border border-green-200 dark:border-green-800">
                   <div className="flex items-center gap-1.5 text-[10px] md:text-xs text-gray-600 dark:text-gray-400 font-semibold mb-1">
                     <span className="w-3 h-2 bg-green-500 rounded-sm"></span>
-                    Pkg 1: WFH (INR)
+                    WFH Package
                   </div>
                   <div className="text-lg md:text-xl font-bold text-green-600 dark:text-green-400">
-                    {countries.find(c => c.currency === "INR")?.dailyRate || "0"}
+                    {countries.find((c) => c.currency === "INR")?.dailyRate ||
+                      "0"}{" "}
+                    {countries.find((c) => c.currency === "INR")?.currency ||
+                      "INR"}
                   </div>
                   <div className="text-[9px] md:text-[10px] text-gray-500 dark:text-gray-400 mt-0.5">
-                    {countries.find(c => c.currency === "INR")?.daysWorked || 0} days
+                    {countries.find((c) => c.currency === "INR")?.daysWorked ||
+                      0}{" "}
+                    days
                   </div>
                 </div>
                 <div className="p-3 md:p-4 rounded-xl bg-blue-50 dark:bg-blue-900/20 border border-blue-200 dark:border-blue-800">
                   <div className="text-[10px] md:text-xs text-blue-600 dark:text-blue-400 font-semibold mb-1">
-                    Converted (AED → INR)
+                    Converted
                   </div>
                   <div className="text-lg md:text-xl font-bold text-blue-600 dark:text-blue-400">
-                    ₹{(parseFloat(countries.find(c => c.currency === "AED")?.dailyRate || 0) * parseFloat(countries.find(c => c.currency === "AED")?.fxRate || 0)).toLocaleString()}
+                    {targetCurrency}{" "}
+                    {(
+                      parseFloat(
+                        countries.find((c) => c.currency === "AED")
+                          ?.dailyRate || 0,
+                      ) *
+                      parseFloat(
+                        countries.find((c) => c.currency === "AED")?.fxRate ||
+                          0,
+                      )
+                    ).toLocaleString()}
                   </div>
                 </div>
                 <div className="p-3 md:p-4 rounded-xl bg-emerald-50 dark:bg-emerald-900/20 border border-emerald-200 dark:border-emerald-800">
                   <div className="text-[10px] md:text-xs text-emerald-600 dark:text-emerald-400 font-semibold mb-1">
-                    Combined Base (INR)
+                    Combined Base
                   </div>
                   <div className="text-lg md:text-xl font-bold text-emerald-600 dark:text-emerald-400">
-                    ₹1,75,000
+                    {targetCurrency}{" "}
+                    {countries
+                      .reduce(
+                        (sum, c) =>
+                          sum +
+                          parseFloat(c.dailyRate || 0) *
+                            parseFloat(c.daysWorked || 0) *
+                            parseFloat(c.fxRate || 1),
+                        0,
+                      )
+                      .toLocaleString()}
                   </div>
                 </div>
               </div>
@@ -1152,10 +1515,21 @@ function AddPayroll() {
                   <i className="fas fa-clock text-green-600 dark:text-green-400 text-xs md:text-sm"></i>
                 </div>
                 <h3 className="text-base md:text-lg font-bold text-gray-800 dark:text-gray-200">
-                  Overtime (Unprocessed)
+                  Overtime
                 </h3>
+                <button
+                  onClick={handleFetchOvertime}
+                  disabled={overtimeLoading}
+                  className="ml-auto px-3 py-1 text-xs bg-blue-500 text-white rounded-lg hover:bg-blue-600 transition-colors disabled:opacity-50"
+                >
+                  <i
+                    className={`fas ${overtimeLoading ? "fa-spinner fa-spin" : "fa-sync"} mr-1`}
+                  ></i>
+                  {overtimeLoading ? "Loading..." : "Fetch Overtime"}
+                </button>
               </div>
 
+              {/* Rest of Step 3 JSX remains the same */}
               <div className="bg-white dark:bg-gray-800 border border-gray-200 dark:border-gray-700 rounded-xl shadow-soft overflow-hidden">
                 <div className="overflow-x-auto">
                   <table className="w-full text-left border-collapse">
@@ -1164,9 +1538,18 @@ function AddPayroll() {
                         <th className="py-3 px-4 font-semibold">Project</th>
                         <th className="py-3 px-4 font-semibold">Date</th>
                         <th className="py-3 px-4 font-semibold">Hours</th>
-                        <th className="py-3 px-4 font-semibold w-1/3">Reason</th>
-                        <th className="py-3 px-4 font-semibold text-center">Status</th>
-                        <th className="py-3 px-4 font-semibold text-center">Actions</th>
+                        <th className="py-3 px-4 font-semibold">
+                          Overtime Amount
+                        </th>
+                        <th className="py-3 px-4 font-semibold w-1/4">
+                          Reason
+                        </th>
+                        <th className="py-3 px-4 font-semibold text-center">
+                          Status
+                        </th>
+                        <th className="py-3 px-4 font-semibold text-center">
+                          Actions
+                        </th>
                       </tr>
                     </thead>
                     <tbody>
@@ -1179,11 +1562,13 @@ function AddPayroll() {
                             <input
                               type="text"
                               value={req.project}
-                              onChange={(e) => {
-                                setOvertimeRequests(prev =>
-                                  prev.map(r => r.id === req.id ? { ...r, project: e.target.value } : r)
-                                );
-                              }}
+                              onChange={(e) =>
+                                handleOvertimeChange(
+                                  req.id,
+                                  "project",
+                                  e.target.value,
+                                )
+                              }
                               className="w-full px-2 py-1 text-sm rounded border border-gray-200 dark:border-gray-600 bg-white dark:bg-gray-800 text-gray-700 dark:text-gray-300 focus:outline-none focus:border-green-500"
                               placeholder="Project name"
                             />
@@ -1192,11 +1577,13 @@ function AddPayroll() {
                             <input
                               type="date"
                               value={req.date}
-                              onChange={(e) => {
-                                setOvertimeRequests(prev =>
-                                  prev.map(r => r.id === req.id ? { ...r, date: e.target.value } : r)
-                                );
-                              }}
+                              onChange={(e) =>
+                                handleOvertimeChange(
+                                  req.id,
+                                  "date",
+                                  e.target.value,
+                                )
+                              }
                               className="w-full px-2 py-1 text-sm rounded border border-gray-200 dark:border-gray-600 bg-white dark:bg-gray-800 text-gray-700 dark:text-gray-300 focus:outline-none focus:border-green-500"
                             />
                           </td>
@@ -1205,23 +1592,43 @@ function AddPayroll() {
                               type="number"
                               step="0.5"
                               value={req.hours}
-                              onChange={(e) => {
-                                setOvertimeRequests(prev =>
-                                  prev.map(r => r.id === req.id ? { ...r, hours: parseFloat(e.target.value) || 0 } : r)
-                                );
-                              }}
+                              onChange={(e) =>
+                                handleOvertimeChange(
+                                  req.id,
+                                  "hours",
+                                  parseFloat(e.target.value) || 0,
+                                )
+                              }
                               className="w-16 px-2 py-1 text-sm rounded border border-gray-200 dark:border-gray-600 bg-white dark:bg-gray-800 text-gray-700 dark:text-gray-300 focus:outline-none focus:border-green-500"
+                            />
+                          </td>
+                          <td className="py-3 px-4 text-sm">
+                            <input
+                              type="number"
+                              step="0.01"
+                              value={req.overtime_amount}
+                              onChange={(e) =>
+                                handleOvertimeChange(
+                                  req.id,
+                                  "overtime_amount",
+                                  parseFloat(e.target.value) || 0,
+                                )
+                              }
+                              className="w-full px-2 py-1 text-sm rounded border border-blue-200 dark:border-blue-700 bg-blue-50 dark:bg-blue-900/10 text-gray-700 dark:text-gray-300 focus:outline-none focus:border-blue-500"
+                              placeholder="0.00"
                             />
                           </td>
                           <td className="py-3 px-4 text-xs text-gray-500 dark:text-gray-400">
                             <input
                               type="text"
                               value={req.reason}
-                              onChange={(e) => {
-                                setOvertimeRequests(prev =>
-                                  prev.map(r => r.id === req.id ? { ...r, reason: e.target.value } : r)
-                                );
-                              }}
+                              onChange={(e) =>
+                                handleOvertimeChange(
+                                  req.id,
+                                  "reason",
+                                  e.target.value,
+                                )
+                              }
                               className="w-full px-2 py-1 text-sm rounded border border-gray-200 dark:border-gray-600 bg-white dark:bg-gray-800 text-gray-700 dark:text-gray-300 focus:outline-none focus:border-green-500"
                               placeholder="Reason"
                             />
@@ -1247,13 +1654,23 @@ function AddPayroll() {
                             {req.status === "pending" ? (
                               <div className="flex flex-col gap-1.5 items-center">
                                 <button
-                                  onClick={() => handleOvertimeAction(req.id, "approved_project")}
+                                  onClick={() =>
+                                    handleOvertimeAction(
+                                      req.id,
+                                      "approved_project",
+                                    )
+                                  }
                                   className="w-full text-[10px] px-2 py-1.5 bg-purple-50 hover:bg-purple-100 text-purple-600 dark:bg-purple-900/20 dark:hover:bg-purple-900/40 border border-purple-200 dark:border-purple-800 rounded font-semibold transition-colors"
                                 >
                                   Project Hours Only
                                 </button>
                                 <button
-                                  onClick={() => handleOvertimeAction(req.id, "approved_payroll")}
+                                  onClick={() =>
+                                    handleOvertimeAction(
+                                      req.id,
+                                      "approved_payroll",
+                                    )
+                                  }
                                   className="w-full text-[10px] px-2 py-1.5 bg-green-50 hover:bg-green-100 text-green-600 dark:bg-green-900/20 dark:hover:bg-green-900/40 border border-green-200 dark:border-green-800 rounded font-semibold transition-colors"
                                 >
                                   + Add to Payroll
@@ -1279,10 +1696,16 @@ function AddPayroll() {
                     <p className="font-semibold mb-1">Approval Rules:</p>
                     <ul className="list-disc list-inside space-y-1 text-xs">
                       <li>
-                        <strong>Project Hours Only:</strong> Added to manhour tracking, but no extra pay.
+                        <strong>Project Hours Only:</strong> Added to manhour
+                        tracking, but no extra pay.
                       </li>
                       <li>
-                        <strong>+ Add to Payroll:</strong> Added to manhour tracking AND included in this payroll cycle.
+                        <strong>+ Add to Payroll:</strong> Added to manhour
+                        tracking AND included in this payroll cycle.
+                      </li>
+                      <li>
+                        <strong>Overtime Amount:</strong> Enter the overtime
+                        amount to be paid for each request.
                       </li>
                     </ul>
                   </div>
@@ -1303,6 +1726,7 @@ function AddPayroll() {
                 </h3>
               </div>
 
+              {/* Rest of Step 4 JSX remains the same */}
               <div className="space-y-3">
                 {deductions.map((d) => (
                   <div
@@ -1310,46 +1734,71 @@ function AddPayroll() {
                     className="grid grid-cols-1 md:grid-cols-12 gap-3 items-center p-3 bg-gray-50 dark:bg-gray-700/30 rounded-lg"
                   >
                     <div className="md:col-span-4">
-                      <label className="text-[10px] md:text-xs text-gray-500 mb-1 block">Type</label>
+                      <label className="text-[10px] md:text-xs text-gray-500 mb-1 block">
+                        Type
+                      </label>
                       <input
                         type="text"
                         value={d.type}
-                        onChange={(e) => handleDeductionChange(d.id, 'type', e.target.value)}
+                        onChange={(e) =>
+                          handleDeductionChange(d.id, "type", e.target.value)
+                        }
                         className="w-full px-3 py-2 text-sm rounded-lg border border-gray-200 dark:border-gray-700 bg-white dark:bg-gray-800 text-gray-800 dark:text-gray-200 focus:outline-none focus:border-green-500 focus:ring-2 focus:ring-green-500/20"
                         placeholder="e.g., PF 12%"
                       />
                     </div>
                     <div className="md:col-span-3">
-                      <label className="text-[10px] md:text-xs text-gray-500 mb-1 block">Country</label>
+                      <label className="text-[10px] md:text-xs text-gray-500 mb-1 block">
+                        Currency
+                      </label>
                       <select
-                        value={d.country}
-                        onChange={(e) => handleDeductionChange(d.id, 'country', e.target.value)}
+                        value={d.currency}
+                        onChange={(e) =>
+                          handleDeductionChange(
+                            d.id,
+                            "currency",
+                            e.target.value,
+                          )
+                        }
                         className="w-full px-3 py-2 text-sm rounded-lg border border-gray-200 dark:border-gray-700 bg-white dark:bg-gray-800 text-gray-800 dark:text-gray-200 focus:outline-none focus:border-green-500 focus:ring-2 focus:ring-green-500/20"
                       >
-                        <option value="India">India</option>
-                        <option value="UAE">UAE</option>
-                        <option value="USA">USA</option>
-                        <option value="UK">UK</option>
+                        {currencies.map((curr) => (
+                          <option key={curr} value={curr}>
+                            {curr}
+                          </option>
+                        ))}
                       </select>
                     </div>
                     <div className="md:col-span-2">
-                      <label className="text-[10px] md:text-xs text-gray-500 mb-1 block">Amount</label>
+                      <label className="text-[10px] md:text-xs text-gray-500 mb-1 block">
+                        Amount
+                      </label>
                       <input
                         type="number"
                         value={d.amount}
-                        onChange={(e) => handleDeductionChange(d.id, 'amount', e.target.value)}
+                        onChange={(e) =>
+                          handleDeductionChange(d.id, "amount", e.target.value)
+                        }
                         className="w-full px-3 py-2 text-sm rounded-lg border border-gray-200 dark:border-gray-700 bg-white dark:bg-gray-800 text-gray-800 dark:text-gray-200 focus:outline-none focus:border-green-500 focus:ring-2 focus:ring-green-500/20"
                       />
                     </div>
                     <div className="md:col-span-2">
-                      <label className="text-[10px] md:text-xs text-gray-500 mb-1 block">Statutory</label>
+                      <label className="text-[10px] md:text-xs text-gray-500 mb-1 block">
+                        Statutory
+                      </label>
                       <select
-                        value={d.statutory}
-                        onChange={(e) => handleDeductionChange(d.id, 'statutory', e.target.value)}
+                        value={d.is_statutory}
+                        onChange={(e) =>
+                          handleDeductionChange(
+                            d.id,
+                            "is_statutory",
+                            e.target.value,
+                          )
+                        }
                         className="w-full px-3 py-2 text-sm rounded-lg border border-gray-200 dark:border-gray-700 bg-white dark:bg-gray-800 text-gray-800 dark:text-gray-200 focus:outline-none focus:border-green-500 focus:ring-2 focus:ring-green-500/20"
                       >
-                        <option value="Yes">Yes</option>
-                        <option value="No">No</option>
+                        <option value="yes">Yes</option>
+                        <option value="no">No</option>
                       </select>
                     </div>
                     <div className="md:col-span-1 flex justify-end">
@@ -1374,26 +1823,13 @@ function AddPayroll() {
               <div className="grid grid-cols-2 md:grid-cols-4 gap-3 md:gap-4 mt-6 pt-4 border-t border-gray-200 dark:border-gray-700">
                 <div className="p-3 md:p-4 rounded-xl bg-gray-50 dark:bg-gray-700/50 border border-gray-200 dark:border-gray-600">
                   <div className="text-[10px] md:text-xs text-gray-500 dark:text-gray-400 font-medium mb-1">
-                    India Deductions
-                  </div>
-                  <div className="text-lg md:text-xl font-bold text-red-500">
-                    ₹{deductions.filter(d => d.country === "India").reduce((sum, d) => sum + parseFloat(d.amount || 0), 0).toLocaleString()}
-                  </div>
-                </div>
-                <div className="p-3 md:p-4 rounded-xl bg-gray-50 dark:bg-gray-700/50 border border-gray-200 dark:border-gray-600">
-                  <div className="text-[10px] md:text-xs text-gray-500 dark:text-gray-400 font-medium mb-1">
-                    UAE Deductions (INR)
-                  </div>
-                  <div className="text-lg md:text-xl font-bold text-red-500">
-                    ₹{deductions.filter(d => d.country === "UAE").reduce((sum, d) => sum + parseFloat(d.amount || 0), 0).toLocaleString()}
-                  </div>
-                </div>
-                <div className="p-3 md:p-4 rounded-xl bg-gray-50 dark:bg-gray-700/50 border border-gray-200 dark:border-gray-600">
-                  <div className="text-[10px] md:text-xs text-gray-500 dark:text-gray-400 font-medium mb-1">
                     Total Deductions
                   </div>
                   <div className="text-lg md:text-xl font-bold text-red-600 dark:text-red-500">
-                    ₹{deductions.reduce((sum, d) => sum + parseFloat(d.amount || 0), 0).toLocaleString()}
+                    {targetCurrency}{" "}
+                    {deductions
+                      .reduce((sum, d) => sum + parseFloat(d.amount || 0), 0)
+                      .toLocaleString()}
                   </div>
                 </div>
                 <div className="p-3 md:p-4 rounded-xl bg-green-50 dark:bg-green-900/20 border border-green-200 dark:border-green-800">
@@ -1401,7 +1837,21 @@ function AddPayroll() {
                     Final Net Pay
                   </div>
                   <div className="text-lg md:text-xl font-bold text-green-600 dark:text-green-400">
-                    ₹1,63,175
+                    {targetCurrency}{" "}
+                    {(
+                      countries.reduce(
+                        (sum, c) =>
+                          sum +
+                          parseFloat(c.dailyRate || 0) *
+                            parseFloat(c.daysWorked || 0) *
+                            parseFloat(c.fxRate || 1),
+                        0,
+                      ) -
+                      deductions.reduce(
+                        (sum, d) => sum + parseFloat(d.amount || 0),
+                        0,
+                      )
+                    ).toLocaleString()}
                   </div>
                 </div>
               </div>
@@ -1418,12 +1868,73 @@ function AddPayroll() {
                 <h3 className="text-base md:text-lg font-bold text-gray-800 dark:text-gray-200">
                   Payroll Summary
                 </h3>
+                <button
+                  onClick={handleFetchSummary}
+                  disabled={summaryLoading}
+                  className="ml-auto px-3 py-1 text-xs bg-blue-500 text-white rounded-lg hover:bg-blue-600 transition-colors disabled:opacity-50"
+                >
+                  <i
+                    className={`fas ${summaryLoading ? "fa-spinner fa-spin" : "fa-sync"} mr-1`}
+                  ></i>
+                  {summaryLoading ? "Loading..." : "Refresh Summary"}
+                </button>
               </div>
 
+              {/* Rest of Step 5 JSX remains the same */}
               <div className="space-y-4">
                 <p className="text-sm text-gray-500 dark:text-gray-400">
                   Review the payroll details before final submission.
                 </p>
+
+                {/* Currency Conversion Section */}
+                <div className="grid grid-cols-1 md:grid-cols-2 gap-4 p-4 bg-gray-50 dark:bg-gray-700/30 rounded-lg border border-gray-200 dark:border-gray-700">
+                  <div>
+                    <label className="block text-xs font-semibold text-gray-700 dark:text-gray-300 mb-1">
+                      Target Currency
+                    </label>
+                    <select
+                      value={targetCurrency}
+                      onChange={(e) => setTargetCurrency(e.target.value)}
+                      className="w-full px-3 py-2 text-sm rounded-lg border border-gray-200 dark:border-gray-700 bg-white dark:bg-gray-800 text-gray-800 dark:text-gray-200 focus:outline-none focus:border-green-500 focus:ring-2 focus:ring-green-500/20"
+                    >
+                      {currencies.map((curr) => (
+                        <option key={curr} value={curr}>
+                          {curr}
+                        </option>
+                      ))}
+                    </select>
+                  </div>
+                  <div>
+                    <label className="block text-xs font-semibold text-gray-700 dark:text-gray-300 mb-1">
+                      Conversion Rates
+                    </label>
+                    <div className="flex flex-wrap gap-2">
+                      {countries.map((c) => (
+                        <div key={c.id} className="flex items-center gap-1">
+                          <span className="text-xs text-gray-500">
+                            {c.currency}:
+                          </span>
+                          <input
+                            type="number"
+                            step="0.01"
+                            value={c.fxRate}
+                            onChange={(e) =>
+                              handleCountryChange(
+                                c.id,
+                                "fxRate",
+                                e.target.value,
+                              )
+                            }
+                            className="w-16 px-2 py-1 text-sm rounded border border-gray-200 dark:border-gray-600 bg-white dark:bg-gray-800 text-gray-700 dark:text-gray-300 focus:outline-none focus:border-green-500"
+                          />
+                          <span className="text-xs text-gray-500">
+                            → {targetCurrency}
+                          </span>
+                        </div>
+                      ))}
+                    </div>
+                  </div>
+                </div>
 
                 <div className="grid grid-cols-2 md:grid-cols-4 gap-3 md:gap-4 pt-4 border-t border-gray-200 dark:border-gray-700">
                   <div className="p-3 md:p-4 rounded-xl bg-gray-50 dark:bg-gray-700/50 border border-gray-200 dark:border-gray-600">
@@ -1431,7 +1942,18 @@ function AddPayroll() {
                       Gross Earnings
                     </div>
                     <div className="text-lg md:text-xl font-bold text-gray-800 dark:text-gray-200">
-                      ₹{countries.reduce((sum, c) => sum + (parseFloat(c.dailyRate || 0) * parseFloat(c.daysWorked || 0) * parseFloat(c.fxRate || 1)), 0).toLocaleString()}
+                      {targetCurrency}{" "}
+                      {localSummaryData.gross_earnings?.toLocaleString() ||
+                        countries
+                          .reduce(
+                            (sum, c) =>
+                              sum +
+                              parseFloat(c.dailyRate || 0) *
+                                parseFloat(c.daysWorked || 0) *
+                                parseFloat(c.fxRate || 1),
+                            0,
+                          )
+                          .toLocaleString()}
                     </div>
                   </div>
                   <div className="p-3 md:p-4 rounded-xl bg-gray-50 dark:bg-gray-700/50 border border-gray-200 dark:border-gray-600">
@@ -1439,7 +1961,14 @@ function AddPayroll() {
                       Total Deductions
                     </div>
                     <div className="text-lg md:text-xl font-bold text-red-500">
-                      ₹{deductions.reduce((sum, d) => sum + parseFloat(d.amount || 0), 0).toLocaleString()}
+                      {targetCurrency}{" "}
+                      {localSummaryData.total_deductions?.toLocaleString() ||
+                        deductions
+                          .reduce(
+                            (sum, d) => sum + parseFloat(d.amount || 0),
+                            0,
+                          )
+                          .toLocaleString()}
                     </div>
                   </div>
                   <div className="p-3 md:p-4 rounded-xl bg-emerald-50 dark:bg-emerald-900/20 border border-emerald-200 dark:border-emerald-800">
@@ -1447,7 +1976,18 @@ function AddPayroll() {
                       Combined (INR)
                     </div>
                     <div className="text-lg md:text-xl font-bold text-emerald-600 dark:text-emerald-400">
-                      ₹{countries.reduce((sum, c) => sum + (parseFloat(c.dailyRate || 0) * parseFloat(c.daysWorked || 0) * parseFloat(c.fxRate || 1)), 0).toLocaleString()}
+                      {targetCurrency}{" "}
+                      {localSummaryData.combined?.toLocaleString() ||
+                        countries
+                          .reduce(
+                            (sum, c) =>
+                              sum +
+                              parseFloat(c.dailyRate || 0) *
+                                parseFloat(c.daysWorked || 0) *
+                                parseFloat(c.fxRate || 1),
+                            0,
+                          )
+                          .toLocaleString()}
                     </div>
                   </div>
                   <div className="p-3 md:p-4 rounded-xl bg-green-50 dark:bg-green-900/20 border border-green-200 dark:border-green-800">
@@ -1455,7 +1995,22 @@ function AddPayroll() {
                       Final Net Pay
                     </div>
                     <div className="text-lg md:text-xl font-bold text-green-600 dark:text-green-400">
-                      ₹{(countries.reduce((sum, c) => sum + (parseFloat(c.dailyRate || 0) * parseFloat(c.daysWorked || 0) * parseFloat(c.fxRate || 1)), 0) - deductions.reduce((sum, d) => sum + parseFloat(d.amount || 0), 0)).toLocaleString()}
+                      {targetCurrency}{" "}
+                      {localSummaryData.net_pay?.toLocaleString() ||
+                        (
+                          countries.reduce(
+                            (sum, c) =>
+                              sum +
+                              parseFloat(c.dailyRate || 0) *
+                                parseFloat(c.daysWorked || 0) *
+                                parseFloat(c.fxRate || 1),
+                            0,
+                          ) -
+                          deductions.reduce(
+                            (sum, d) => sum + parseFloat(d.amount || 0),
+                            0,
+                          )
+                        ).toLocaleString()}
                     </div>
                   </div>
                 </div>
@@ -1467,7 +2022,8 @@ function AddPayroll() {
                       Payslip Delivery
                     </h4>
                     <p className="text-xs text-blue-600/80 dark:text-blue-400/80 mt-1">
-                      Upon submission, the generated payslip will be automatically sent to the employee via Email only.
+                      Upon submission, the generated payslip will be
+                      automatically sent to the employee via Email only.
                     </p>
                   </div>
                 </div>
@@ -1504,9 +2060,13 @@ function AddPayroll() {
                   disabled={isSubmitting || !selectedUserId}
                   className="px-4 md:px-6 py-2 md:py-2.5 rounded-full font-semibold bg-green-500 text-white hover:bg-green-600 transition-all flex items-center justify-center gap-2 text-sm md:text-base disabled:opacity-50 disabled:cursor-not-allowed"
                 >
-                  <i className={`fas ${isSubmitting ? "fa-spinner fa-spin" : "fa-paper-plane"} text-xs md:text-sm`}></i>
+                  <i
+                    className={`fas ${isSubmitting ? "fa-spinner fa-spin" : "fa-paper-plane"} text-xs md:text-sm`}
+                  ></i>
                   <span>
-                    {isSubmitting ? "Submitting..." : "Generate & Email Payslip"}
+                    {isSubmitting
+                      ? "Submitting..."
+                      : "Generate & Email Payslip"}
                   </span>
                 </button>
               )}
