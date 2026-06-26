@@ -39,7 +39,11 @@ function PayrollView() {
   const successMessage = useSelector(selectPayrollSuccess);
 
   // Employee state
-  const { employees, currentEmployee, loading: employeesLoading } = useSelector((state) => state.employees);
+  const {
+    employees,
+    currentEmployee,
+    loading: employeesLoading,
+  } = useSelector((state) => state.employees);
 
   // Local state
   const [activeTab, setActiveTab] = useState("basic");
@@ -74,10 +78,11 @@ function PayrollView() {
   useEffect(() => {
     if (currentPayroll?.employee_id && employees && employees.length > 0) {
       const foundEmployee = employees.find(
-        (emp) => emp.user_id === parseInt(currentPayroll.employee_id) || 
-                 emp.id === parseInt(currentPayroll.employee_id)
+        (emp) =>
+          emp.user_id === parseInt(currentPayroll.employee_id) ||
+          emp.id === parseInt(currentPayroll.employee_id),
       );
-      
+
       if (foundEmployee) {
         dispatch(fetchEmployeeById(foundEmployee.id))
           .unwrap()
@@ -147,8 +152,18 @@ function PayrollView() {
   // Get month name from month number
   const getMonthName = (monthNumber) => {
     const months = [
-      "January", "February", "March", "April", "May", "June",
-      "July", "August", "September", "October", "November", "December"
+      "January",
+      "February",
+      "March",
+      "April",
+      "May",
+      "June",
+      "July",
+      "August",
+      "September",
+      "October",
+      "November",
+      "December",
     ];
     return months[monthNumber - 1] || monthNumber;
   };
@@ -157,10 +172,12 @@ function PayrollView() {
   const getStatusBadge = (status) => {
     const statusMap = {
       paid: "bg-green-100 text-green-700 dark:bg-green-900/30 dark:text-green-400",
-      pending: "bg-yellow-100 text-yellow-700 dark:bg-yellow-900/30 dark:text-yellow-400",
+      pending:
+        "bg-yellow-100 text-yellow-700 dark:bg-yellow-900/30 dark:text-yellow-400",
       draft: "bg-gray-100 text-gray-700 dark:bg-gray-700 dark:text-gray-400",
       failed: "bg-red-100 text-red-700 dark:bg-red-900/30 dark:text-red-400",
-      completed: "bg-green-100 text-green-700 dark:bg-green-900/30 dark:text-green-400",
+      completed:
+        "bg-green-100 text-green-700 dark:bg-green-900/30 dark:text-green-400",
     };
     return statusMap[status?.toLowerCase()] || statusMap.draft;
   };
@@ -186,10 +203,14 @@ function PayrollView() {
     doc.text("Employee Payslip", 14, 22);
 
     doc.setFontSize(12);
-    const empName = payroll?.employee_name || employeeDetails?.name || "Unknown Employee";
+    const empName =
+      payroll?.employee_name || employeeDetails?.name || "Unknown Employee";
     const empId = payroll?.employee_id || employeeDetails?.employee_id || "-";
-    const orgName = employeeDetails?.organization?.name || employeeDetails?.user?.organization?.name || "-";
-    
+    const orgName =
+      employeeDetails?.organization?.name ||
+      employeeDetails?.user?.organization?.name ||
+      "-";
+
     doc.text(`Employee: ${empName} (${empId})`, 14, 32);
     doc.text(`Organization: ${orgName}`, 14, 38);
     doc.text(
@@ -204,11 +225,20 @@ function PayrollView() {
     if (stepData.step_2?.location_breakdown) {
       autoTable(doc, {
         startY: 62,
-        head: [["Package / Location", "Days Logged", "Salary Components", "Subtotal"]],
+        head: [
+          [
+            "Package / Location",
+            "Days Logged",
+            "Salary Components",
+            "Subtotal",
+          ],
+        ],
         body: stepData.step_2.location_breakdown.map((loc) => [
           loc.location_name || "-",
           loc.worked_days || 0,
-          loc.salary_components?.map(c => `${c.name}: ${c.amount}`).join(', ') || '-',
+          loc.salary_components
+            ?.map((c) => `${c.name}: ${c.amount}`)
+            .join(", ") || "-",
           formatCurrency(loc.subtotal || 0, loc.currency?.code || "INR"),
         ]),
         theme: "grid",
@@ -251,11 +281,15 @@ function PayrollView() {
     autoTable(doc, {
       startY: doc.lastAutoTable?.finalY + 10 || 100,
       head: [["Gross Earnings", "Total Deductions", "Net Pay"]],
-      body: [[
-        formatCurrency(payroll?.net_pay || stepData.step_2?.total_earnings || 0),
-        formatCurrency(stepData.step_4?.total_deductions || 0),
-        formatCurrency(payroll?.net_pay || 0),
-      ]],
+      body: [
+        [
+          formatCurrency(
+            payroll?.net_pay || stepData.step_2?.total_earnings || 0,
+          ),
+          formatCurrency(stepData.step_4?.total_deductions || 0),
+          formatCurrency(payroll?.net_pay || 0),
+        ],
+      ],
       theme: "grid",
       headStyles: { fillColor: [34, 197, 94] },
     });
@@ -273,10 +307,20 @@ function PayrollView() {
     const stepData = payroll.step_data || {};
     const empName = payroll.employee_name || employeeDetails?.name || "-";
     const empId = payroll.employee_id || employeeDetails?.employee_id || "-";
-    const orgName = employeeDetails?.organization?.name || employeeDetails?.user?.organization?.name || "-";
-    const deptName = employeeDetails?.department?.name || employeeDetails?.user?.department?.name || "-";
-    const desigName = employeeDetails?.designation?.name || employeeDetails?.user?.designation?.name || "-";
-    const empType = employeeDetails?.employment_type || employeeDetails?.user?.type || "-";
+    const orgName =
+      employeeDetails?.organization?.name ||
+      employeeDetails?.user?.organization?.name ||
+      "-";
+    const deptName =
+      employeeDetails?.department?.name ||
+      employeeDetails?.user?.department?.name ||
+      "-";
+    const desigName =
+      employeeDetails?.designation?.name ||
+      employeeDetails?.user?.designation?.name ||
+      "-";
+    const empType =
+      employeeDetails?.employment_type || employeeDetails?.user?.type || "-";
 
     switch (activeTab) {
       case "basic":
@@ -386,8 +430,13 @@ function PayrollView() {
                     Status
                   </label>
                   <div className="px-4 py-3 bg-gray-100 dark:bg-gray-700 rounded-lg">
-                    <span className={`inline-block px-3 py-1 rounded-full text-sm font-semibold ${getStatusBadge(payroll.status)}`}>
-                      {payroll.status ? payroll.status.charAt(0).toUpperCase() + payroll.status.slice(1) : "Draft"}
+                    <span
+                      className={`inline-block px-3 py-1 rounded-full text-sm font-semibold ${getStatusBadge(payroll.status)}`}
+                    >
+                      {payroll.status
+                        ? payroll.status.charAt(0).toUpperCase() +
+                          payroll.status.slice(1)
+                        : "Draft"}
                     </span>
                   </div>
                 </div>
@@ -422,12 +471,16 @@ function PayrollView() {
                           {loc.location_name || "Location"}
                         </h4>
                         <span className="text-xs text-gray-500 dark:text-gray-400">
-                          Package: {loc.package?.name || "-"} ({loc.package?.currency || "-"})
+                          Package: {loc.package?.name || "-"} (
+                          {loc.package?.currency || "-"})
                         </span>
                       </div>
                       <div className="text-right">
                         <div className="text-sm font-semibold text-green-600 dark:text-green-400">
-                          {formatCurrency(loc.subtotal || 0, loc.currency?.code || "INR")}
+                          {formatCurrency(
+                            loc.subtotal || 0,
+                            loc.currency?.code || "INR",
+                          )}
                         </div>
                         <div className="text-xs text-gray-500 dark:text-gray-400">
                           {loc.worked_days || 0} days worked
@@ -439,23 +492,40 @@ function PayrollView() {
                         <table className="w-full text-sm">
                           <thead>
                             <tr className="border-b border-gray-200 dark:border-gray-700">
-                              <th className="text-left py-2 px-3 text-gray-600 dark:text-gray-400 font-semibold">Component</th>
-                              <th className="text-right py-2 px-3 text-gray-600 dark:text-gray-400 font-semibold">Amount</th>
+                              <th className="text-left py-2 px-3 text-gray-600 dark:text-gray-400 font-semibold">
+                                Component
+                              </th>
+                              <th className="text-right py-2 px-3 text-gray-600 dark:text-gray-400 font-semibold">
+                                Amount
+                              </th>
                             </tr>
                           </thead>
                           <tbody>
                             {loc.salary_components?.map((comp, idx) => (
-                              <tr key={idx} className="border-b border-gray-100 dark:border-gray-700/50">
-                                <td className="py-2 px-3 text-gray-800 dark:text-gray-200">{comp.name}</td>
+                              <tr
+                                key={idx}
+                                className="border-b border-gray-100 dark:border-gray-700/50"
+                              >
+                                <td className="py-2 px-3 text-gray-800 dark:text-gray-200">
+                                  {comp.name}
+                                </td>
                                 <td className="py-2 px-3 text-right text-gray-800 dark:text-gray-200">
-                                  {formatCurrency(comp.amount, loc.currency?.code || "INR")}
+                                  {formatCurrency(
+                                    comp.amount,
+                                    loc.currency?.code || "INR",
+                                  )}
                                 </td>
                               </tr>
                             ))}
                             <tr className="bg-gray-50 dark:bg-gray-700/30 font-bold">
-                              <td className="py-2 px-3 text-gray-800 dark:text-gray-200">Subtotal</td>
+                              <td className="py-2 px-3 text-gray-800 dark:text-gray-200">
+                                Subtotal
+                              </td>
                               <td className="py-2 px-3 text-right text-green-600 dark:text-green-400">
-                                {formatCurrency(loc.subtotal || 0, loc.currency?.code || "INR")}
+                                {formatCurrency(
+                                  loc.subtotal || 0,
+                                  loc.currency?.code || "INR",
+                                )}
                               </td>
                             </tr>
                           </tbody>
@@ -496,7 +566,9 @@ function PayrollView() {
                       Net Salary
                     </div>
                     <div className="text-xl font-bold text-emerald-600 dark:text-emerald-400">
-                      {formatCurrency(stepData.step_2?.net_salary || payroll.net_pay || 0)}
+                      {formatCurrency(
+                        stepData.step_2?.net_salary || payroll.net_pay || 0,
+                      )}
                     </div>
                   </div>
                 </div>
@@ -523,7 +595,8 @@ function PayrollView() {
               </h3>
               {stepData.step_3?.total_overtime_amount !== undefined && (
                 <span className="ml-auto text-sm font-semibold text-blue-600 dark:text-blue-400">
-                  Total: {formatCurrency(stepData.step_3.total_overtime_amount || 0)}
+                  Total:{" "}
+                  {formatCurrency(stepData.step_3.total_overtime_amount || 0)}
                 </span>
               )}
             </div>
@@ -537,43 +610,59 @@ function PayrollView() {
                   >
                     <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
                       <div>
-                        <label className="text-xs text-gray-500 dark:text-gray-400 block">Date</label>
+                        <label className="text-xs text-gray-500 dark:text-gray-400 block">
+                          Date
+                        </label>
                         <div className="text-sm font-semibold text-gray-800 dark:text-gray-200">
                           {formatDate(ot.date)}
                         </div>
                       </div>
                       <div>
-                        <label className="text-xs text-gray-500 dark:text-gray-400 block">Overtime Hours</label>
+                        <label className="text-xs text-gray-500 dark:text-gray-400 block">
+                          Overtime Hours
+                        </label>
                         <div className="text-sm font-semibold text-gray-800 dark:text-gray-200">
                           {ot.overtime_hours || 0} hrs
                         </div>
                       </div>
                       <div>
-                        <label className="text-xs text-gray-500 dark:text-gray-400 block">Amount</label>
+                        <label className="text-xs text-gray-500 dark:text-gray-400 block">
+                          Amount
+                        </label>
                         <div className="text-sm font-semibold text-green-600 dark:text-green-400">
                           {formatCurrency(ot.amount || 0)}
                         </div>
                       </div>
                       <div>
-                        <label className="text-xs text-gray-500 dark:text-gray-400 block">Status</label>
-                        <span className={`inline-block px-2 py-1 rounded-full text-xs font-semibold ${
-                          ot.status === "pending"
-                            ? "bg-yellow-100 text-yellow-700 dark:bg-yellow-900/30 dark:text-yellow-400"
-                            : ot.status === "approved"
-                            ? "bg-green-100 text-green-700 dark:bg-green-900/30 dark:text-green-400"
-                            : "bg-gray-100 text-gray-700 dark:bg-gray-700 dark:text-gray-400"
-                        }`}>
+                        <label className="text-xs text-gray-500 dark:text-gray-400 block">
+                          Status
+                        </label>
+                        <span
+                          className={`inline-block px-2 py-1 rounded-full text-xs font-semibold ${
+                            ot.status === "pending"
+                              ? "bg-yellow-100 text-yellow-700 dark:bg-yellow-900/30 dark:text-yellow-400"
+                              : ot.status === "approved"
+                                ? "bg-green-100 text-green-700 dark:bg-green-900/30 dark:text-green-400"
+                                : "bg-gray-100 text-gray-700 dark:bg-gray-700 dark:text-gray-400"
+                          }`}
+                        >
                           {ot.status || "pending"}
                         </span>
                       </div>
                     </div>
                     {ot.projects && ot.projects.length > 0 && (
                       <div className="mt-3 pt-3 border-t border-gray-200 dark:border-gray-700">
-                        <label className="text-xs text-gray-500 dark:text-gray-400 block mb-2">Projects</label>
+                        <label className="text-xs text-gray-500 dark:text-gray-400 block mb-2">
+                          Projects
+                        </label>
                         <div className="flex flex-wrap gap-2">
                           {ot.projects.map((project, idx) => (
-                            <span key={idx} className="inline-block px-3 py-1 bg-blue-50 dark:bg-blue-900/20 text-blue-600 dark:text-blue-400 rounded-full text-xs border border-blue-200 dark:border-blue-800">
-                              {project.project_name} ({project.time_taken_hours || 0}h)
+                            <span
+                              key={idx}
+                              className="inline-block px-3 py-1 bg-blue-50 dark:bg-blue-900/20 text-blue-600 dark:text-blue-400 rounded-full text-xs border border-blue-200 dark:border-blue-800"
+                            >
+                              {project.project_name} (
+                              {project.time_taken_hours || 0}h)
                             </span>
                           ))}
                         </div>
@@ -617,30 +706,40 @@ function PayrollView() {
                     className="grid grid-cols-1 md:grid-cols-12 gap-3 items-center p-4 bg-gray-50 dark:bg-gray-700/30 rounded-lg border border-gray-200 dark:border-gray-700"
                   >
                     <div className="md:col-span-4">
-                      <label className="text-xs text-gray-500 dark:text-gray-400 block">Type</label>
+                      <label className="text-xs text-gray-500 dark:text-gray-400 block">
+                        Type
+                      </label>
                       <div className="text-sm font-semibold text-gray-800 dark:text-gray-200">
                         {d.type || "-"}
                       </div>
                     </div>
                     <div className="md:col-span-3">
-                      <label className="text-xs text-gray-500 dark:text-gray-400 block">Currency</label>
+                      <label className="text-xs text-gray-500 dark:text-gray-400 block">
+                        Currency
+                      </label>
                       <div className="text-sm font-semibold text-gray-800 dark:text-gray-200">
                         {d.currency || "-"}
                       </div>
                     </div>
                     <div className="md:col-span-3">
-                      <label className="text-xs text-gray-500 dark:text-gray-400 block">Amount</label>
+                      <label className="text-xs text-gray-500 dark:text-gray-400 block">
+                        Amount
+                      </label>
                       <div className="text-sm font-semibold text-red-600 dark:text-red-400">
                         {formatCurrency(d.amount, d.currency || "INR")}
                       </div>
                     </div>
                     <div className="md:col-span-2">
-                      <label className="text-xs text-gray-500 dark:text-gray-400 block">Statutory</label>
-                      <span className={`inline-block px-2 py-1 rounded-full text-xs font-semibold ${
-                        d.is_statutory === "yes"
-                          ? "bg-green-100 text-green-700 dark:bg-green-900/30 dark:text-green-400"
-                          : "bg-gray-100 text-gray-700 dark:bg-gray-700 dark:text-gray-400"
-                      }`}>
+                      <label className="text-xs text-gray-500 dark:text-gray-400 block">
+                        Statutory
+                      </label>
+                      <span
+                        className={`inline-block px-2 py-1 rounded-full text-xs font-semibold ${
+                          d.is_statutory === "yes"
+                            ? "bg-green-100 text-green-700 dark:bg-green-900/30 dark:text-green-400"
+                            : "bg-gray-100 text-gray-700 dark:bg-gray-700 dark:text-gray-400"
+                        }`}
+                      >
                         {d.is_statutory === "yes" ? "Yes" : "No"}
                       </span>
                     </div>
@@ -676,7 +775,9 @@ function PayrollView() {
                     Gross Earnings
                   </div>
                   <div className="text-xl font-bold text-gray-800 dark:text-gray-200">
-                    {formatCurrency(stepData.step_2?.total_earnings || payroll.net_pay || 0)}
+                    {formatCurrency(
+                      stepData.step_2?.total_earnings || payroll.net_pay || 0,
+                    )}
                   </div>
                 </div>
                 <div className="p-4 rounded-xl bg-red-50 dark:bg-red-900/20 border border-red-200 dark:border-red-800">
@@ -692,7 +793,9 @@ function PayrollView() {
                     Conversion Rate
                   </div>
                   <div className="text-xl font-bold text-blue-600 dark:text-blue-400">
-                    {stepData.conversion_rate || 1} ({stepData.conversion_from || "AED"} → {stepData.currency || "INR"})
+                    {stepData.conversion_rate || 1} (
+                    {stepData.conversion_from || "AED"} →{" "}
+                    {stepData.currency || "INR"})
                   </div>
                 </div>
                 <div className="p-4 rounded-xl bg-green-50 dark:bg-green-900/20 border border-green-200 dark:border-green-800">
@@ -715,27 +818,14 @@ function PayrollView() {
                         Currency Conversion
                       </h4>
                       <p className="text-xs text-blue-600/80 dark:text-blue-400/80">
-                        {stepData.conversion_from || "AED"} → {stepData.currency || "INR"} at rate {stepData.conversion_rate || 1}
+                        {stepData.conversion_from || "AED"} →{" "}
+                        {stepData.currency || "INR"} at rate{" "}
+                        {stepData.conversion_rate || 1}
                       </p>
                     </div>
                   </div>
                 </div>
               )}
-
-              {/* Payslip Delivery */}
-              <div className="p-4 bg-blue-50 dark:bg-blue-900/20 rounded-xl border border-blue-200 dark:border-blue-800 flex items-start gap-3">
-                <i className="fas fa-envelope text-blue-500 mt-1"></i>
-                <div>
-                  <h4 className="text-sm font-semibold text-blue-800 dark:text-blue-300">
-                    Payslip Delivery
-                  </h4>
-                  <p className="text-xs text-blue-600/80 dark:text-blue-400/80 mt-1">
-                    {payroll.status === "completed" || payroll.status === "paid"
-                      ? "Payslip has been sent to the employee via Email."
-                      : "Upon submission, the generated payslip will be automatically sent to the employee via Email."}
-                  </p>
-                </div>
-              </div>
             </div>
           </div>
         );
@@ -799,18 +889,19 @@ function PayrollView() {
               <i className="fas fa-file-invoice mr-2"></i> Payroll Details
             </h2>
             <p className="text-sm text-gray-500 dark:text-gray-400 mt-1">
-              {currentPayroll.employee_name || employeeDetails?.name || "Employee"} - {monthDisplay} {yearDisplay}
+              {currentPayroll.employee_name ||
+                employeeDetails?.name ||
+                "Employee"}{" "}
+              - {monthDisplay} {yearDisplay}
             </p>
           </div>
           <div className="flex flex-wrap gap-3">
-            <button
-              onClick={handleGeneratePayslip}
-              disabled={actionLoading}
-              className="px-4 py-2 bg-red-500 text-white rounded-lg hover:bg-red-600 transition-colors flex items-center gap-2 text-sm disabled:opacity-50"
+            <Link
+              to={`/admin/send-payslip/${currentPayroll.id}`}
+              className="px-4 py-2 bg-blue-500 text-white rounded-lg hover:bg-blue-600 transition-colors flex items-center gap-2 text-sm"
             >
-              <i className={`fas ${actionLoading ? "fa-spinner fa-spin" : "fa-file-pdf"}`}></i>
-              {actionLoading ? "Generating..." : "Download Payslip"}
-            </button>
+              <i className="fas fa-envelope"></i> Send Payslip
+            </Link>
             <Link
               to={`/admin/payroll/edit/${currentPayroll.id}`}
               className="px-4 py-2 bg-green-500 text-white rounded-lg hover:bg-green-600 transition-colors flex items-center gap-2 text-sm"
@@ -828,31 +919,42 @@ function PayrollView() {
       </div>
 
       {/* Status Banner */}
-      <div className={`mb-4 p-3 rounded-lg border ${
-        currentPayroll.status === "completed" || currentPayroll.status === "paid"
-          ? "bg-green-50 dark:bg-green-900/20 border-green-200 dark:border-green-800 text-green-700 dark:text-green-300"
-          : currentPayroll.status === "pending"
-          ? "bg-yellow-50 dark:bg-yellow-900/20 border-yellow-200 dark:border-yellow-800 text-yellow-700 dark:text-yellow-300"
-          : "bg-gray-50 dark:bg-gray-800 border-gray-200 dark:border-gray-700 text-gray-600 dark:text-gray-400"
-      }`}>
+      <div
+        className={`mb-4 p-3 rounded-lg border ${
+          currentPayroll.status === "completed" ||
+          currentPayroll.status === "paid"
+            ? "bg-green-50 dark:bg-green-900/20 border-green-200 dark:border-green-800 text-green-700 dark:text-green-300"
+            : currentPayroll.status === "pending"
+              ? "bg-yellow-50 dark:bg-yellow-900/20 border-yellow-200 dark:border-yellow-800 text-yellow-700 dark:text-yellow-300"
+              : "bg-gray-50 dark:bg-gray-800 border-gray-200 dark:border-gray-700 text-gray-600 dark:text-gray-400"
+        }`}
+      >
         <div className="flex items-center gap-2">
-          <i className={`fas ${
-            currentPayroll.status === "completed" || currentPayroll.status === "paid"
-              ? "fa-check-circle"
-              : currentPayroll.status === "pending"
-              ? "fa-clock"
-              : "fa-file"
-          }`}></i>
+          <i
+            className={`fas ${
+              currentPayroll.status === "completed" ||
+              currentPayroll.status === "paid"
+                ? "fa-check-circle"
+                : currentPayroll.status === "pending"
+                  ? "fa-clock"
+                  : "fa-file"
+            }`}
+          ></i>
           <span className="font-semibold capitalize">
-            Status: {currentPayroll.status ? currentPayroll.status.charAt(0).toUpperCase() + currentPayroll.status.slice(1) : "Draft"}
+            Status:{" "}
+            {currentPayroll.status
+              ? currentPayroll.status.charAt(0).toUpperCase() +
+                currentPayroll.status.slice(1)
+              : "Draft"}
           </span>
-          <span className="text-sm opacity-75">
-            {currentPayroll.status === "completed" || currentPayroll.status === "paid"
+          {/* <span className="text-sm opacity-75">
+            {currentPayroll.status === "completed" ||
+            currentPayroll.status === "paid"
               ? `• Processed on ${formatDate(currentPayroll.updated_at)}`
               : currentPayroll.status === "pending"
-              ? "• Awaiting finalization"
-              : "• In progress"}
-          </span>
+                ? "• Awaiting finalization"
+                : "• In progress"}
+          </span> */}
         </div>
       </div>
 
