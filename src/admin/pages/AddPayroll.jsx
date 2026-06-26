@@ -1,4 +1,4 @@
-// src/admin/pages/AddPayroll.js
+// src/admin/pages/AddPayroll.js - Updated Country Split Tab
 
 import { useState, useEffect } from "react";
 import { useDispatch, useSelector } from "react-redux";
@@ -121,26 +121,11 @@ function AddPayroll() {
   const [daysPresent, setDaysPresent] = useState("");
 
   // Step 2 - Country Split
-  const [countries, setCountries] = useState([
-    {
-      id: 1,
-      name: "UAE",
-      currency: "AED",
-      dailyRate: "600",
-      daysWorked: "10",
-      fxRate: "22.5",
-      packageId: null,
-    },
-    {
-      id: 2,
-      name: "India",
-      currency: "INR",
-      dailyRate: "2000",
-      daysWorked: "20",
-      fxRate: "1",
-      packageId: null,
-    },
-  ]);
+  const [countries, setCountries] = useState([]);
+  const [totalEarnings, setTotalEarnings] = useState(0);
+  const [totalDeductions, setTotalDeductions] = useState(0);
+  const [grossSalary, setGrossSalary] = useState(0);
+  const [netSalary, setNetSalary] = useState(0);
 
   // Step 3 - Overtime with overtime_amount field
   const [overtimeRequests, setOvertimeRequests] = useState([
@@ -261,6 +246,20 @@ function AddPayroll() {
     };
   }, [dispatch]);
 
+  const formatDate = (dateString) => {
+    if (!dateString) return "-";
+    try {
+      const date = new Date(dateString);
+      return date.toLocaleDateString("en-GB", {
+        day: "2-digit",
+        month: "short",
+        year: "numeric",
+      });
+    } catch {
+      return dateString;
+    }
+  };
+
   // Handle employee selection
   const handleEmployeeSelect = async (employeeId) => {
     setSelectedEmployee(employeeId);
@@ -274,7 +273,7 @@ function AddPayroll() {
           await dispatch(fetchEmployeeSalaryPackages(result.user_id));
         }
       } catch (error) {
-        showToast("Failed to fetch employee details", "error");
+        showToast("Failed to fetch employee details", error);
       }
     } else {
       clearEmployeeFields();
@@ -385,7 +384,6 @@ function AddPayroll() {
   // Update countries when employee packages are loaded
   useEffect(() => {
     if (employeePackages && employeePackages.length > 0) {
-      // Map employee packages to countries
       const mappedCountries = employeePackages.map((pkg, index) => ({
         id: index + 1,
         name: pkg.name || `Package ${index + 1}`,
@@ -394,8 +392,11 @@ function AddPayroll() {
         daysWorked: pkg.days_worked || pkg.days || 0,
         fxRate: pkg.fx_rate || pkg.exchange_rate || 1,
         packageId: pkg.id || null,
+        salary_components: [],
+        subtotal: 0,
+        is_saved: false,
       }));
-      
+
       if (mappedCountries.length > 0) {
         setCountries(mappedCountries);
       }
@@ -424,46 +425,81 @@ function AddPayroll() {
 
   // Update countries when calculated data arrives
   useEffect(() => {
-    if (calculatedCountries && calculatedCountries.countries) {
-      setCountries(
-        calculatedCountries.countries.map((c, index) => ({
+    if (calculatedCountries) {
+      const data = calculatedCountries;
+
+      if (data.location_breakdown) {
+        const updatedCountries = data.location_breakdown.map((loc, index) => ({
           id: index + 1,
-          name: c.name || c.package_name || "",
-          currency: c.currency || "AED",
-          dailyRate: c.daily_rate || c.rate || 0,
-          daysWorked: c.days_worked || c.days || 0,
-          fxRate: c.fx_rate || c.exchange_rate || 1,
-          packageId: c.package_id || null,
-        })),
-      );
+          name: loc.location_name || "",
+          currency: loc.currency?.code || loc.package?.currency || "AED",
+          dailyRate:
+            loc.salary_components?.length > 0
+              ? loc.salary_components.reduce(
+                  (sum, comp) => sum + comp.amount,
+                  0,
+                ) / (loc.worked_days || 1)
+              : 0,
+          daysWorked: loc.worked_days || 0,
+          fxRate: 1,
+          packageId: loc.package?.id || null,
+          salary_components: loc.salary_components || [],
+          subtotal: loc.subtotal || 0,
+          is_saved: true,
+        }));
+        setCountries(updatedCountries);
+      }
+
+      setTotalEarnings(data.total_earnings || 0);
+      setTotalDeductions(data.total_deductions || 0);
+      setGrossSalary(data.gross_salary || 0);
+      setNetSalary(data.net_salary || 0);
     }
   }, [calculatedCountries]);
 
   // Update overtime when data arrives
+  // Update overtime when data arrives
   useEffect(() => {
-    if (overtimeData && overtimeData.overtime_requests) {
+    if (
+      overtimeData &&
+      Array.isArray(overtimeData) &&
+      overtimeData.length > 0
+    ) {
+      // The API returns an array of objects with date, projects, etc.
       setOvertimeRequests(
-        overtimeData.overtime_requests.map((req, index) => ({
+        overtimeData.map((item, index) => ({
           id: index + 1,
-          project: req.project || req.project_name || "",
-          date: req.date || "",
-          hours: req.hours || 0,
-          overtime_amount: req.overtime_amount || 0,
-          status: req.status || "pending",
-          reason: req.reason || "",
+          date: item.date || "",
+          day: item.day || "",
+          required_working_hours: item.required_working_hours || 0,
+          total_logged_hours: item.total_logged_hours || 0,
+          overtime_hours: item.overtime_hours || 0,
+          projects: item.projects || [],
+          // For backward compatibility with existing UI
+          project: item.projects?.map((p) => p.project_name).join(", ") || "",
+          hours: item.total_logged_hours || 0,
+          overtime_amount: 0, // This will be set by user
+          status: "pending",
+          reason: "",
         })),
       );
     }
   }, [overtimeData]);
 
   // Update summary when data arrives
+  // Update summary when data arrives
   useEffect(() => {
     if (summaryData) {
+      // The API returns: { gross_salary, overtime_amount, deductions, net_pay }
       setLocalSummaryData({
-        gross_earnings: summaryData.gross_earnings || 0,
-        total_deductions: summaryData.total_deductions || 0,
-        combined: summaryData.combined || 0,
+        gross_salary: summaryData.gross_salary || 0,
+        overtime_amount: summaryData.overtime_amount || 0,
+        deductions: summaryData.deductions || 0,
         net_pay: summaryData.net_pay || 0,
+        // Keep backward compatibility
+        gross_earnings: summaryData.gross_salary || 0,
+        total_deductions: summaryData.deductions || 0,
+        combined: summaryData.gross_salary || 0,
       });
     }
   }, [summaryData]);
@@ -551,7 +587,6 @@ function AddPayroll() {
     const step = reduxCurrentStep;
     let data = {};
 
-    // Always include pay_period_month and pay_period_year for all steps
     const monthNumber = monthNames[payPeriodMonth] || new Date().getMonth() + 1;
     const year = parseInt(payPeriodYear) || new Date().getFullYear();
 
@@ -585,40 +620,13 @@ function AddPayroll() {
               code: c.currency,
               symbol: c.currency,
             },
-            salary_components: [],
-            subtotal:
-              (parseFloat(c.dailyRate) || 0) * (parseInt(c.daysWorked) || 0),
+            salary_components: c.salary_components || [],
+            subtotal: c.subtotal || 0,
           })),
-          total_earnings: countries.reduce(
-            (sum, c) =>
-              sum +
-              (parseFloat(c.dailyRate) || 0) *
-                (parseInt(c.daysWorked) || 0) *
-                (parseFloat(c.fxRate) || 1),
-            0,
-          ),
-          total_deductions: deductions.reduce(
-            (sum, d) => sum + parseFloat(d.amount || 0),
-            0,
-          ),
-          gross_salary: countries.reduce(
-            (sum, c) =>
-              sum +
-              (parseFloat(c.dailyRate) || 0) *
-                (parseInt(c.daysWorked) || 0) *
-                (parseFloat(c.fxRate) || 1),
-            0,
-          ),
-          net_salary:
-            countries.reduce(
-              (sum, c) =>
-                sum +
-                (parseFloat(c.dailyRate) || 0) *
-                  (parseInt(c.daysWorked) || 0) *
-                  (parseFloat(c.fxRate) || 1),
-              0,
-            ) -
-            deductions.reduce((sum, d) => sum + parseFloat(d.amount || 0), 0),
+          total_earnings: totalEarnings,
+          total_deductions: totalDeductions,
+          gross_salary: grossSalary,
+          net_salary: netSalary,
         };
         break;
 
@@ -658,7 +666,6 @@ function AddPayroll() {
         break;
 
       case 5:
-        // Build conversion rates as object
         const conversionRatesObj = {};
         countries.forEach((c) => {
           conversionRatesObj[c.currency] = parseFloat(c.fxRate) || 1;
@@ -668,9 +675,9 @@ function AddPayroll() {
           pay_period_month: monthNumber,
           pay_period_year: year,
           summary: {
-            gross_earnings: localSummaryData.gross_earnings || 0,
-            total_deductions: localSummaryData.total_deductions || 0,
-            combined: localSummaryData.combined || 0,
+            gross_salary: localSummaryData.gross_salary || 0,
+            overtime_amount: localSummaryData.overtime_amount || 0,
+            deductions: localSummaryData.deductions || 0,
             net_pay: localSummaryData.net_pay || 0,
           },
           target_currency: targetCurrency,
@@ -693,7 +700,6 @@ function AddPayroll() {
     }
 
     try {
-      // Ensure pay_period_month and pay_period_year are always included
       const monthNumber =
         monthNames[payPeriodMonth] || new Date().getMonth() + 1;
       const year = parseInt(payPeriodYear) || new Date().getFullYear();
@@ -944,6 +950,9 @@ function AddPayroll() {
         daysWorked: "",
         fxRate: "",
         packageId: null,
+        salary_components: [],
+        subtotal: 0,
+        is_saved: false,
       },
     ]);
   };
@@ -1385,7 +1394,7 @@ function AddPayroll() {
             </>
           )}
 
-          {/* Step 2 - Country Split / Packages */}
+          {/* Step 2 - Country Split / Packages - UPDATED DESIGN */}
           {reduxCurrentStep === 2 && (
             <div>
               <div className="flex items-center gap-2 pb-3 border-b-2 border-green-100 dark:border-green-900/30 mb-4 md:mb-6">
@@ -1412,218 +1421,162 @@ function AddPayroll() {
                 </button>
               </div>
 
-              <div className="space-y-3">
-                {countries.map((c) => (
+              {/* Employee Summary Card */}
+              {selectedEmployee && countries.length > 0 && (
+                <div className="bg-gradient-to-r from-green-50 to-emerald-50 dark:from-green-900/20 dark:to-emerald-900/20 rounded-xl p-4 md:p-6 mb-6 border border-green-100 dark:border-green-800">
+                  <div className="flex flex-wrap items-center justify-between gap-4">
+                    <div className="flex items-center gap-3">
+                      <div className="w-12 h-12 bg-green-100 dark:bg-green-900/30 rounded-full flex items-center justify-center text-green-600 dark:text-green-400 font-bold text-lg">
+                        {employeeName?.charAt(0) || "E"}
+                      </div>
+                      <div>
+                        <h4 className="font-semibold text-gray-800 dark:text-gray-200">
+                          {employeeName || "Employee"}
+                        </h4>
+                        <p className="text-xs text-gray-500 dark:text-gray-400">
+                          Employee #{employeeId || "N/A"} • {payPeriodMonth}{" "}
+                          {payPeriodYear}
+                        </p>
+                      </div>
+                    </div>
+                    <div className="flex items-center gap-6">
+                      <div className="text-center">
+                        <div className="text-2xl font-bold text-gray-800 dark:text-gray-200">
+                          {totalEarnings.toFixed(2)}
+                        </div>
+                        <div className="text-[10px] text-gray-500 dark:text-gray-400 uppercase tracking-wider">
+                          Total Earnings
+                        </div>
+                      </div>
+                      <div className="h-10 w-px bg-gray-300 dark:bg-gray-600"></div>
+                      <div className="text-center">
+                        <div className="text-2xl font-bold text-gray-800 dark:text-gray-200">
+                          {countries.reduce((sum, c) => sum + c.daysWorked, 0)}
+                        </div>
+                        <div className="text-[10px] text-gray-500 dark:text-gray-400 uppercase tracking-wider">
+                          Worked Days
+                        </div>
+                      </div>
+                    </div>
+                  </div>
+                </div>
+              )}
+
+              {/* Country Cards */}
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                {countries.map((country) => (
                   <div
-                    key={c.id}
-                    className="grid grid-cols-1 md:grid-cols-12 gap-3 items-center p-3 bg-gray-50 dark:bg-gray-700/30 rounded-lg"
+                    key={country.id}
+                    className="bg-white dark:bg-gray-800 border border-gray-200 dark:border-gray-700 rounded-xl overflow-hidden shadow-sm hover:shadow-md transition-shadow"
                   >
-                    <div className="md:col-span-3">
-                      <label className="text-[10px] md:text-xs text-gray-500 mb-1 block">
-                        Package
-                      </label>
-                      {employeePackages.length > 0 ? (
-                        <select
-                          value={c.packageId || ""}
-                          onChange={(e) => {
-                            const selectedPackage = employeePackages.find(
-                              (p) => p.id === parseInt(e.target.value),
-                            );
-                            handleCountryChange(
-                              c.id,
-                              "packageId",
-                              e.target.value,
-                            );
-                            if (selectedPackage) {
-                              handleCountryChange(
-                                c.id,
-                                "name",
-                                selectedPackage.name,
-                              );
-                              handleCountryChange(
-                                c.id,
-                                "currency",
-                                selectedPackage.currency || "AED",
-                              );
-                            }
-                          }}
-                          className="w-full px-3 py-2 text-sm rounded-lg border border-gray-200 dark:border-gray-700 bg-white dark:bg-gray-800 text-gray-800 dark:text-gray-200 focus:outline-none focus:border-green-500 focus:ring-2 focus:ring-green-500/20"
-                        >
-                          <option value="">Select Package</option>
-                          {employeePackages.map((pkg) => (
-                            <option key={pkg.id} value={pkg.id}>
-                              {pkg.name} ({pkg.currency || "AED"})
-                            </option>
+                    {/* Header */}
+                    <div className="bg-gray-50 dark:bg-gray-700/50 px-4 py-3 border-b border-gray-200 dark:border-gray-700 flex justify-between items-center">
+                      <div>
+                        <h4 className="font-semibold text-gray-800 dark:text-gray-200">
+                          {country.name || "Location"}
+                        </h4>
+                        <div className="flex items-center gap-2 text-xs text-gray-500 dark:text-gray-400">
+                          <span>{country.packageId ? "Saved" : "Unsaved"}</span>
+                          <span className="w-1 h-1 rounded-full bg-gray-400"></span>
+                          <span>{country.currency}</span>
+                        </div>
+                      </div>
+                      <div className="text-right">
+                        <div className="text-sm font-semibold text-gray-800 dark:text-gray-200">
+                          {country.daysWorked || 0}
+                        </div>
+                        <div className="text-[10px] text-gray-500 dark:text-gray-400 uppercase">
+                          Worked Days
+                        </div>
+                      </div>
+                    </div>
+
+                    {/* Body */}
+                    <div className="p-4 space-y-3">
+                      {/* Salary Components */}
+                      {country.salary_components &&
+                      country.salary_components.length > 0 ? (
+                        <div className="space-y-1.5">
+                          {country.salary_components.map((comp, idx) => (
+                            <div
+                              key={idx}
+                              className="flex justify-between text-sm"
+                            >
+                              <span className="text-gray-600 dark:text-gray-400">
+                                {comp.name}
+                              </span>
+                              <span className="font-medium text-gray-800 dark:text-gray-200">
+                                {country.currency} {comp.amount.toFixed(2)}
+                              </span>
+                            </div>
                           ))}
-                        </select>
+                          <div className="pt-2 mt-2 border-t border-gray-200 dark:border-gray-700 flex justify-between font-semibold">
+                            <span className="text-gray-800 dark:text-gray-200">
+                              Subtotal
+                            </span>
+                            <span className="text-green-600 dark:text-green-400">
+                              {country.currency} {country.subtotal.toFixed(2)}
+                            </span>
+                          </div>
+                        </div>
                       ) : (
-                        <input
-                          type="text"
-                          value={c.name}
-                          onChange={(e) =>
-                            handleCountryChange(c.id, "name", e.target.value)
-                          }
-                          className="w-full px-3 py-2 text-sm rounded-lg border border-gray-200 dark:border-gray-700 bg-white dark:bg-gray-800 text-gray-800 dark:text-gray-200 focus:outline-none focus:border-green-500 focus:ring-2 focus:ring-green-500/20"
-                          placeholder="e.g., UAE Onsite"
-                        />
+                        <div className="text-center py-2 text-gray-400 text-sm">
+                          No salary components
+                        </div>
                       )}
-                    </div>
-                    <div className="md:col-span-2">
-                      <label className="text-[10px] md:text-xs text-gray-500 mb-1 block">
-                        Currency
-                      </label>
-                      <select
-                        value={c.currency}
-                        onChange={(e) =>
-                          handleCountryChange(c.id, "currency", e.target.value)
-                        }
-                        className="w-full px-3 py-2 text-sm rounded-lg border border-gray-200 dark:border-gray-700 bg-white dark:bg-gray-800 text-gray-800 dark:text-gray-200 focus:outline-none focus:border-green-500 focus:ring-2 focus:ring-green-500/20"
-                      >
-                        {currencies.map((curr) => (
-                          <option key={curr} value={curr}>
-                            {curr}
-                          </option>
-                        ))}
-                      </select>
-                    </div>
-                    <div className="md:col-span-2">
-                      <label className="text-[10px] md:text-xs text-gray-500 mb-1 block">
-                        Daily Rate
-                      </label>
-                      <input
-                        type="number"
-                        value={c.dailyRate}
-                        onChange={(e) =>
-                          handleCountryChange(c.id, "dailyRate", e.target.value)
-                        }
-                        className="w-full px-3 py-2 text-sm rounded-lg border border-gray-200 dark:border-gray-700 bg-white dark:bg-gray-800 text-gray-800 dark:text-gray-200 focus:outline-none focus:border-green-500 focus:ring-2 focus:ring-green-500/20"
-                      />
-                    </div>
-                    <div className="md:col-span-2">
-                      <label className="text-[10px] md:text-xs text-gray-500 mb-1 block">
-                        Days Logged
-                      </label>
-                      <input
-                        type="number"
-                        value={c.daysWorked}
-                        onChange={(e) =>
-                          handleCountryChange(
-                            c.id,
-                            "daysWorked",
-                            e.target.value,
-                          )
-                        }
-                        className="w-full px-3 py-2 text-sm rounded-lg border border-gray-200 dark:border-gray-700 bg-white dark:bg-gray-800 text-gray-800 dark:text-gray-200 focus:outline-none focus:border-green-500 focus:ring-2 focus:ring-green-500/20"
-                      />
-                    </div>
-                    <div className="md:col-span-2">
-                      <label className="text-[10px] md:text-xs text-gray-500 mb-1 block text-blue-500">
-                        Manual FX Rate
-                      </label>
-                      <input
-                        type="number"
-                        step="0.01"
-                        value={c.fxRate}
-                        onChange={(e) =>
-                          handleCountryChange(c.id, "fxRate", e.target.value)
-                        }
-                        className="w-full px-3 py-2 text-sm rounded-lg border border-blue-200 dark:border-blue-700 bg-blue-50 dark:bg-blue-900/10 text-gray-800 dark:text-gray-200 focus:outline-none focus:border-blue-500 focus:ring-2 focus:ring-blue-500/20"
-                      />
-                    </div>
-                    <div className="md:col-span-1 flex justify-end items-end pb-0.5">
-                      <button
-                        onClick={() => handleRemoveCountry(c.id)}
-                        className="w-8 h-8 rounded-lg bg-red-50 text-red-500 hover:bg-red-100 dark:bg-red-900/20 dark:hover:bg-red-900/40 transition-colors flex items-center justify-center"
-                      >
-                        <i className="fas fa-trash-alt text-xs"></i>
-                      </button>
                     </div>
                   </div>
                 ))}
               </div>
 
-              <button
-                onClick={handleAddCountry}
-                className="mt-3 px-3 py-1.5 bg-green-50 dark:bg-green-900/20 text-green-600 dark:text-green-400 rounded-lg text-xs font-semibold hover:bg-green-100 dark:hover:bg-green-900/40 transition-colors border border-green-100 dark:border-green-800 flex items-center gap-2"
-              >
-                <i className="fas fa-plus"></i> Add Package Split
-              </button>
-
+              {/* Summary Cards */}
               <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-4 gap-3 md:gap-4 mt-6 pt-4 border-t border-gray-200 dark:border-gray-700">
-                <div className="p-3 md:p-4 rounded-xl bg-orange-50 dark:bg-orange-900/20 border border-orange-200 dark:border-orange-800">
-                  <div className="flex items-center gap-1.5 text-[10px] md:text-xs text-gray-600 dark:text-gray-400 font-semibold mb-1">
-                    <span className="w-3 h-2 bg-green-500 rounded-sm"></span>
-                    Dubai Package
+                <div className="p-3 md:p-4 rounded-xl bg-blue-50 dark:bg-blue-900/20 border border-blue-200 dark:border-blue-800">
+                  <div className="text-[10px] md:text-xs text-gray-600 dark:text-gray-400 font-semibold mb-1">
+                    Total Earnings
                   </div>
-                  <div className="text-lg md:text-xl font-bold text-orange-600 dark:text-orange-400">
-                    {countries.find((c) => c.currency === "AED")?.dailyRate ||
-                      "0"}{" "}
-                    {countries.find((c) => c.currency === "AED")?.currency ||
-                      "AED"}
+                  <div className="text-lg md:text-xl font-bold text-blue-600 dark:text-blue-400">
+                    {totalEarnings.toFixed(2)}
                   </div>
-                  <div className="text-[9px] md:text-[10px] text-gray-500 dark:text-gray-400 mt-0.5">
-                    {countries.find((c) => c.currency === "AED")?.daysWorked ||
-                      0}{" "}
-                    days
+                </div>
+                <div className="p-3 md:p-4 rounded-xl bg-red-50 dark:bg-red-900/20 border border-red-200 dark:border-red-800">
+                  <div className="text-[10px] md:text-xs text-gray-600 dark:text-gray-400 font-semibold mb-1">
+                    Total Deductions
+                  </div>
+                  <div className="text-lg md:text-xl font-bold text-red-600 dark:text-red-400">
+                    {totalDeductions.toFixed(2)}
+                  </div>
+                </div>
+                <div className="p-3 md:p-4 rounded-xl bg-purple-50 dark:bg-purple-900/20 border border-purple-200 dark:border-purple-800">
+                  <div className="text-[10px] md:text-xs text-gray-600 dark:text-gray-400 font-semibold mb-1">
+                    Gross Salary
+                  </div>
+                  <div className="text-lg md:text-xl font-bold text-purple-600 dark:text-purple-400">
+                    {grossSalary.toFixed(2)}
                   </div>
                 </div>
                 <div className="p-3 md:p-4 rounded-xl bg-green-50 dark:bg-green-900/20 border border-green-200 dark:border-green-800">
-                  <div className="flex items-center gap-1.5 text-[10px] md:text-xs text-gray-600 dark:text-gray-400 font-semibold mb-1">
-                    <span className="w-3 h-2 bg-green-500 rounded-sm"></span>
-                    WFH Package
+                  <div className="text-[10px] md:text-xs text-gray-600 dark:text-gray-400 font-semibold mb-1">
+                    Net Salary
                   </div>
                   <div className="text-lg md:text-xl font-bold text-green-600 dark:text-green-400">
-                    {countries.find((c) => c.currency === "INR")?.dailyRate ||
-                      "0"}{" "}
-                    {countries.find((c) => c.currency === "INR")?.currency ||
-                      "INR"}
-                  </div>
-                  <div className="text-[9px] md:text-[10px] text-gray-500 dark:text-gray-400 mt-0.5">
-                    {countries.find((c) => c.currency === "INR")?.daysWorked ||
-                      0}{" "}
-                    days
-                  </div>
-                </div>
-                <div className="p-3 md:p-4 rounded-xl bg-blue-50 dark:bg-blue-900/20 border border-blue-200 dark:border-blue-800">
-                  <div className="text-[10px] md:text-xs text-blue-600 dark:text-blue-400 font-semibold mb-1">
-                    Converted
-                  </div>
-                  <div className="text-lg md:text-xl font-bold text-blue-600 dark:text-blue-400">
-                    {targetCurrency}{" "}
-                    {(
-                      parseFloat(
-                        countries.find((c) => c.currency === "AED")
-                          ?.dailyRate || 0,
-                      ) *
-                      parseFloat(
-                        countries.find((c) => c.currency === "AED")?.fxRate ||
-                          0,
-                      )
-                    ).toLocaleString()}
-                  </div>
-                </div>
-                <div className="p-3 md:p-4 rounded-xl bg-emerald-50 dark:bg-emerald-900/20 border border-emerald-200 dark:border-emerald-800">
-                  <div className="text-[10px] md:text-xs text-emerald-600 dark:text-emerald-400 font-semibold mb-1">
-                    Combined Base
-                  </div>
-                  <div className="text-lg md:text-xl font-bold text-emerald-600 dark:text-emerald-400">
-                    {targetCurrency}{" "}
-                    {countries
-                      .reduce(
-                        (sum, c) =>
-                          sum +
-                          parseFloat(c.dailyRate || 0) *
-                            parseFloat(c.daysWorked || 0) *
-                            parseFloat(c.fxRate || 1),
-                        0,
-                      )
-                      .toLocaleString()}
+                    {netSalary.toFixed(2)}
                   </div>
                 </div>
               </div>
+
+              {/* Mixed Currencies Notice */}
+              {countries.some((c) => c.currency !== targetCurrency) && (
+                <div className="mt-4 p-3 bg-yellow-50 dark:bg-yellow-900/20 border border-yellow-200 dark:border-yellow-800 rounded-lg text-sm text-yellow-700 dark:text-yellow-300">
+                  <i className="fas fa-exclamation-triangle mr-2"></i>
+                  Mixed currencies detected. Please review conversion rates in
+                  the Summary tab.
+                </div>
+              )}
             </div>
           )}
 
+          {/* Step 3 - Overtime */}
           {/* Step 3 - Overtime */}
           {reduxCurrentStep === 3 && (
             <div>
@@ -1651,182 +1604,131 @@ function AddPayroll() {
                   <table className="w-full text-left border-collapse">
                     <thead>
                       <tr className="bg-gray-50 dark:bg-gray-700/50 border-b border-gray-200 dark:border-gray-700 text-xs md:text-sm text-gray-500 dark:text-gray-400">
-                        <th className="py-3 px-4 font-semibold">Project</th>
                         <th className="py-3 px-4 font-semibold">Date</th>
-                        <th className="py-3 px-4 font-semibold">Hours</th>
+                        <th className="py-3 px-4 font-semibold">Day</th>
                         <th className="py-3 px-4 font-semibold">
+                          Required Hours
+                        </th>
+                        <th className="py-3 px-4 font-semibold">
+                          Logged Hours
+                        </th>
+                        <th className="py-3 px-4 font-semibold">
+                          Overtime Hours
+                        </th>
+                        <th className="py-3 px-4 font-semibold">Projects</th>
+                        <th className="py-3 px-4 font-semibold text-center">
                           Overtime Amount
-                        </th>
-                        <th className="py-3 px-4 font-semibold w-1/4">
-                          Reason
-                        </th>
-                        <th className="py-3 px-4 font-semibold text-center">
-                          Status
-                        </th>
-                        <th className="py-3 px-4 font-semibold text-center">
-                          Actions
                         </th>
                       </tr>
                     </thead>
                     <tbody>
-                      {overtimeRequests.map((req) => (
-                        <tr
-                          key={req.id}
-                          className="border-b border-gray-100 dark:border-gray-700 hover:bg-gray-50 dark:hover:bg-gray-700/30 transition-colors"
-                        >
-                          <td className="py-3 px-4 text-sm text-gray-700 dark:text-gray-300">
-                            <input
-                              type="text"
-                              value={req.project}
-                              onChange={(e) =>
-                                handleOvertimeChange(
-                                  req.id,
-                                  "project",
-                                  e.target.value,
-                                )
-                              }
-                              className="w-full px-2 py-1 text-sm rounded border border-gray-200 dark:border-gray-600 bg-white dark:bg-gray-800 text-gray-700 dark:text-gray-300 focus:outline-none focus:border-green-500"
-                              placeholder="Project name"
-                            />
-                          </td>
-                          <td className="py-3 px-4 text-sm text-gray-600 dark:text-gray-400">
-                            <input
-                              type="date"
-                              value={req.date}
-                              onChange={(e) =>
-                                handleOvertimeChange(
-                                  req.id,
-                                  "date",
-                                  e.target.value,
-                                )
-                              }
-                              className="w-full px-2 py-1 text-sm rounded border border-gray-200 dark:border-gray-600 bg-white dark:bg-gray-800 text-gray-700 dark:text-gray-300 focus:outline-none focus:border-green-500"
-                            />
-                          </td>
-                          <td className="py-3 px-4 text-sm font-semibold text-gray-800 dark:text-gray-200">
-                            <input
-                              type="number"
-                              step="0.5"
-                              value={req.hours}
-                              onChange={(e) =>
-                                handleOvertimeChange(
-                                  req.id,
-                                  "hours",
-                                  parseFloat(e.target.value) || 0,
-                                )
-                              }
-                              className="w-16 px-2 py-1 text-sm rounded border border-gray-200 dark:border-gray-600 bg-white dark:bg-gray-800 text-gray-700 dark:text-gray-300 focus:outline-none focus:border-green-500"
-                            />
-                          </td>
-                          <td className="py-3 px-4 text-sm">
-                            <input
-                              type="number"
-                              step="0.01"
-                              value={req.overtime_amount}
-                              onChange={(e) =>
-                                handleOvertimeChange(
-                                  req.id,
-                                  "overtime_amount",
-                                  parseFloat(e.target.value) || 0,
-                                )
-                              }
-                              className="w-full px-2 py-1 text-sm rounded border border-blue-200 dark:border-blue-700 bg-blue-50 dark:bg-blue-900/10 text-gray-700 dark:text-gray-300 focus:outline-none focus:border-blue-500"
-                              placeholder="0.00"
-                            />
-                          </td>
-                          <td className="py-3 px-4 text-xs text-gray-500 dark:text-gray-400">
-                            <input
-                              type="text"
-                              value={req.reason}
-                              onChange={(e) =>
-                                handleOvertimeChange(
-                                  req.id,
-                                  "reason",
-                                  e.target.value,
-                                )
-                              }
-                              className="w-full px-2 py-1 text-sm rounded border border-gray-200 dark:border-gray-600 bg-white dark:bg-gray-800 text-gray-700 dark:text-gray-300 focus:outline-none focus:border-green-500"
-                              placeholder="Reason"
-                            />
-                          </td>
-                          <td className="py-3 px-4 text-center">
-                            {req.status === "pending" && (
-                              <span className="bg-yellow-50 dark:bg-yellow-900/20 text-yellow-600 dark:text-yellow-400 px-2 py-1 rounded-full text-[10px] font-bold border border-yellow-200 dark:border-yellow-800 uppercase">
-                                Pending
-                              </span>
-                            )}
-                            {req.status === "approved_project" && (
-                              <span className="bg-purple-50 dark:bg-purple-900/20 text-purple-600 dark:text-purple-400 px-2 py-1 rounded-full text-[10px] font-bold border border-purple-200 dark:border-purple-800 uppercase">
-                                Proj Hours
-                              </span>
-                            )}
-                            {req.status === "approved_payroll" && (
-                              <span className="bg-green-50 dark:bg-green-900/20 text-green-600 dark:text-green-400 px-2 py-1 rounded-full text-[10px] font-bold border border-green-200 dark:border-green-800 uppercase">
-                                + Payroll
-                              </span>
-                            )}
-                          </td>
-                          <td className="py-3 px-4">
-                            {req.status === "pending" ? (
-                              <div className="flex flex-col gap-1.5 items-center">
-                                <button
-                                  onClick={() =>
-                                    handleOvertimeAction(
-                                      req.id,
-                                      "approved_project",
-                                    )
-                                  }
-                                  className="w-full text-[10px] px-2 py-1.5 bg-purple-50 hover:bg-purple-100 text-purple-600 dark:bg-purple-900/20 dark:hover:bg-purple-900/40 border border-purple-200 dark:border-purple-800 rounded font-semibold transition-colors"
-                                >
-                                  Project Hours Only
-                                </button>
-                                <button
-                                  onClick={() =>
-                                    handleOvertimeAction(
-                                      req.id,
-                                      "approved_payroll",
-                                    )
-                                  }
-                                  className="w-full text-[10px] px-2 py-1.5 bg-green-50 hover:bg-green-100 text-green-600 dark:bg-green-900/20 dark:hover:bg-green-900/40 border border-green-200 dark:border-green-800 rounded font-semibold transition-colors"
-                                >
-                                  + Add to Payroll
-                                </button>
-                              </div>
-                            ) : (
-                              <div className="flex justify-center text-gray-400 text-xs">
-                                Actioned
-                              </div>
-                            )}
+                      {overtimeRequests.length > 0 ? (
+                        overtimeRequests.map((req) => (
+                          <tr
+                            key={req.id}
+                            className="border-b border-gray-100 dark:border-gray-700 hover:bg-gray-50 dark:hover:bg-gray-700/30 transition-colors"
+                          >
+                            <td className="py-3 px-4 text-sm text-gray-600 dark:text-gray-400">
+                              {formatDate(req.date)}
+                            </td>
+                            <td className="py-3 px-4 text-sm text-gray-600 dark:text-gray-400">
+                              {req.day || "-"}
+                            </td>
+                            <td className="py-3 px-4 text-sm text-gray-600 dark:text-gray-400">
+                              {req.required_working_hours || 0}h
+                            </td>
+                            <td className="py-3 px-4 text-sm font-semibold text-gray-800 dark:text-gray-200">
+                              {req.total_logged_hours || 0}h
+                            </td>
+                            <td className="py-3 px-4 text-sm font-semibold text-yellow-600 dark:text-yellow-400">
+                              {req.overtime_hours || 0}h
+                            </td>
+                            <td className="py-3 px-4 text-xs text-gray-500 dark:text-gray-400">
+                              {req.projects && req.projects.length > 0 ? (
+                                <div className="flex flex-wrap gap-1">
+                                  {req.projects.map((project, idx) => (
+                                    <span
+                                      key={idx}
+                                      className="bg-blue-50 dark:bg-blue-900/20 text-blue-600 dark:text-blue-400 px-2 py-0.5 rounded text-[10px] border border-blue-200 dark:border-blue-800"
+                                    >
+                                      {project.project_name} (
+                                      {project.time_taken_hours || 0}h)
+                                    </span>
+                                  ))}
+                                </div>
+                              ) : (
+                                <span className="text-gray-400">-</span>
+                              )}
+                            </td>
+                            <td className="py-3 px-4 text-center">
+                              <input
+                                type="number"
+                                step="0.01"
+                                value={req.overtime_amount}
+                                onChange={(e) =>
+                                  handleOvertimeChange(
+                                    req.id,
+                                    "overtime_amount",
+                                    parseFloat(e.target.value) || 0,
+                                  )
+                                }
+                                className="w-24 px-2 py-1 text-sm rounded border border-blue-200 dark:border-blue-700 bg-blue-50 dark:bg-blue-900/10 text-gray-700 dark:text-gray-300 focus:outline-none focus:border-blue-500"
+                                placeholder="0.00"
+                              />
+                            </td>
+                          </tr>
+                        ))
+                      ) : (
+                        <tr>
+                          <td
+                            colSpan={7}
+                            className="py-8 text-center text-gray-500 dark:text-gray-400"
+                          >
+                            <i className="fas fa-clock text-4xl mb-3 block"></i>
+                            No overtime data available. Click "Fetch Overtime"
+                            to load data.
                           </td>
                         </tr>
-                      ))}
+                      )}
                     </tbody>
                   </table>
                 </div>
               </div>
 
-              <div className="mt-4 p-4 bg-blue-50 dark:bg-blue-900/20 border border-blue-200 dark:border-blue-800 rounded-lg text-sm text-blue-800 dark:text-blue-300">
-                <div className="flex gap-2">
-                  <i className="fas fa-info-circle mt-0.5"></i>
-                  <div>
-                    <p className="font-semibold mb-1">Approval Rules:</p>
-                    <ul className="list-disc list-inside space-y-1 text-xs">
-                      <li>
-                        <strong>Project Hours Only:</strong> Added to manhour
-                        tracking, but no extra pay.
-                      </li>
-                      <li>
-                        <strong>+ Add to Payroll:</strong> Added to manhour
-                        tracking AND included in this payroll cycle.
-                      </li>
-                      <li>
-                        <strong>Overtime Amount:</strong> Enter the overtime
-                        amount to be paid for each request.
-                      </li>
-                    </ul>
+              {overtimeRequests.length > 0 && (
+                <div className="mt-4 p-4 bg-blue-50 dark:bg-blue-900/20 border border-blue-200 dark:border-blue-800 rounded-lg text-sm text-blue-800 dark:text-blue-300">
+                  <div className="flex gap-2">
+                    <i className="fas fa-info-circle mt-0.5"></i>
+                    <div>
+                      <p className="font-semibold mb-1">Overtime Details:</p>
+                      <ul className="list-disc list-inside space-y-1 text-xs">
+                        <li>
+                          <strong>Overtime Hours:</strong> Hours worked beyond
+                          required working hours.
+                        </li>
+                        <li>
+                          <strong>Overtime Amount:</strong> Enter the amount to
+                          be paid for overtime (if applicable).
+                        </li>
+                        <li>
+                          <strong>Total Overtime:</strong>{" "}
+                          {overtimeRequests.reduce(
+                            (sum, req) => sum + (req.overtime_hours || 0),
+                            0,
+                          )}{" "}
+                          hours across{" "}
+                          {
+                            overtimeRequests.filter(
+                              (r) => (r.overtime_hours || 0) > 0,
+                            ).length
+                          }{" "}
+                          days.
+                        </li>
+                      </ul>
+                    </div>
                   </div>
                 </div>
-              </div>
+              )}
             </div>
           )}
 
@@ -1974,6 +1876,7 @@ function AddPayroll() {
           )}
 
           {/* Step 5 - Summary */}
+          {/* Step 5 - Summary */}
           {reduxCurrentStep === 5 && (
             <div>
               <div className="flex items-center gap-2 pb-3 border-b-2 border-green-100 dark:border-green-900/30 mb-4 md:mb-6">
@@ -2000,81 +1903,117 @@ function AddPayroll() {
                   Review the payroll details before final submission.
                 </p>
 
+                {/* Summary Cards */}
                 <div className="grid grid-cols-2 md:grid-cols-4 gap-3 md:gap-4 pt-4 border-t border-gray-200 dark:border-gray-700">
-                  <div className="p-3 md:p-4 rounded-xl bg-gray-50 dark:bg-gray-700/50 border border-gray-200 dark:border-gray-600">
+                  <div className="p-3 md:p-4 rounded-xl bg-blue-50 dark:bg-blue-900/20 border border-blue-200 dark:border-blue-800">
                     <div className="text-[10px] md:text-xs text-gray-500 dark:text-gray-400 font-medium mb-1">
-                      Gross Earnings
+                      Gross Salary
                     </div>
-                    <div className="text-lg md:text-xl font-bold text-gray-800 dark:text-gray-200">
+                    <div className="text-lg md:text-xl font-bold text-blue-600 dark:text-blue-400">
                       {targetCurrency}{" "}
-                      {localSummaryData.gross_earnings?.toLocaleString() ||
-                        countries
-                          .reduce(
-                            (sum, c) =>
-                              sum +
-                              parseFloat(c.dailyRate || 0) *
-                                parseFloat(c.daysWorked || 0) *
-                                parseFloat(c.fxRate || 1),
-                            0,
-                          )
-                          .toLocaleString()}
+                      {localSummaryData.gross_salary?.toLocaleString() ||
+                        localSummaryData.gross_earnings?.toLocaleString() ||
+                        "0"}
                     </div>
                   </div>
-                  <div className="p-3 md:p-4 rounded-xl bg-gray-50 dark:bg-gray-700/50 border border-gray-200 dark:border-gray-600">
+                  <div className="p-3 md:p-4 rounded-xl bg-orange-50 dark:bg-orange-900/20 border border-orange-200 dark:border-orange-800">
                     <div className="text-[10px] md:text-xs text-gray-500 dark:text-gray-400 font-medium mb-1">
-                      Total Deductions
+                      Overtime Amount
+                    </div>
+                    <div className="text-lg md:text-xl font-bold text-orange-600 dark:text-orange-400">
+                      {targetCurrency}{" "}
+                      {localSummaryData.overtime_amount?.toLocaleString() ||
+                        "0"}
+                    </div>
+                  </div>
+                  <div className="p-3 md:p-4 rounded-xl bg-red-50 dark:bg-red-900/20 border border-red-200 dark:border-red-800">
+                    <div className="text-[10px] md:text-xs text-gray-500 dark:text-gray-400 font-medium mb-1">
+                      Deductions
                     </div>
                     <div className="text-lg md:text-xl font-bold text-red-500">
                       {targetCurrency}{" "}
-                      {localSummaryData.total_deductions?.toLocaleString() ||
-                        deductions
-                          .reduce(
-                            (sum, d) => sum + parseFloat(d.amount || 0),
-                            0,
-                          )
-                          .toLocaleString()}
-                    </div>
-                  </div>
-                  <div className="p-3 md:p-4 rounded-xl bg-emerald-50 dark:bg-emerald-900/20 border border-emerald-200 dark:border-emerald-800">
-                    <div className="text-[10px] md:text-xs text-emerald-600 dark:text-emerald-400 font-medium mb-1">
-                      Combined (INR)
-                    </div>
-                    <div className="text-lg md:text-xl font-bold text-emerald-600 dark:text-emerald-400">
-                      {targetCurrency}{" "}
-                      {localSummaryData.combined?.toLocaleString() ||
-                        countries
-                          .reduce(
-                            (sum, c) =>
-                              sum +
-                              parseFloat(c.dailyRate || 0) *
-                                parseFloat(c.daysWorked || 0) *
-                                parseFloat(c.fxRate || 1),
-                            0,
-                          )
-                          .toLocaleString()}
+                      {localSummaryData.deductions?.toLocaleString() ||
+                        localSummaryData.total_deductions?.toLocaleString() ||
+                        "0"}
                     </div>
                   </div>
                   <div className="p-3 md:p-4 rounded-xl bg-green-50 dark:bg-green-900/20 border border-green-200 dark:border-green-800">
                     <div className="text-[10px] md:text-xs text-green-600 dark:text-green-400 font-medium mb-1">
-                      Final Net Pay
+                      Net Pay
                     </div>
                     <div className="text-lg md:text-xl font-bold text-green-600 dark:text-green-400">
                       {targetCurrency}{" "}
-                      {localSummaryData.net_pay?.toLocaleString() ||
-                        (
-                          countries.reduce(
-                            (sum, c) =>
-                              sum +
-                              parseFloat(c.dailyRate || 0) *
-                                parseFloat(c.daysWorked || 0) *
-                                parseFloat(c.fxRate || 1),
-                            0,
-                          ) -
-                          deductions.reduce(
-                            (sum, d) => sum + parseFloat(d.amount || 0),
-                            0,
-                          )
-                        ).toLocaleString()}
+                      {localSummaryData.net_pay?.toLocaleString() || "0"}
+                    </div>
+                  </div>
+                </div>
+
+                {/* Detailed Breakdown */}
+                <div className="grid grid-cols-1 md:grid-cols-2 gap-4 mt-2">
+                  <div className="bg-gray-50 dark:bg-gray-700/30 rounded-lg p-4 border border-gray-200 dark:border-gray-700">
+                    <h4 className="text-sm font-semibold text-gray-700 dark:text-gray-300 mb-3">
+                      <i className="fas fa-calculator text-blue-500 mr-2"></i>
+                      Salary Calculation
+                    </h4>
+                    <div className="space-y-2">
+                      <div className="flex justify-between text-sm">
+                        <span className="text-gray-600 dark:text-gray-400">
+                          Gross Salary
+                        </span>
+                        <span className="font-medium text-gray-800 dark:text-gray-200">
+                          {targetCurrency}{" "}
+                          {localSummaryData.gross_salary?.toLocaleString() ||
+                            "0"}
+                        </span>
+                      </div>
+                      <div className="flex justify-between text-sm">
+                        <span className="text-gray-600 dark:text-gray-400">
+                          Overtime Amount
+                        </span>
+                        <span className="font-medium text-orange-600 dark:text-orange-400">
+                          {targetCurrency}{" "}
+                          {localSummaryData.overtime_amount?.toLocaleString() ||
+                            "0"}
+                        </span>
+                      </div>
+                      <div className="flex justify-between text-sm border-t border-gray-200 dark:border-gray-600 pt-2 font-semibold">
+                        <span className="text-gray-700 dark:text-gray-300">
+                          Total Earnings
+                        </span>
+                        <span className="text-blue-600 dark:text-blue-400">
+                          {targetCurrency}{" "}
+                          {(
+                            localSummaryData.gross_salary +
+                            localSummaryData.overtime_amount
+                          )?.toLocaleString() || "0"}
+                        </span>
+                      </div>
+                    </div>
+                  </div>
+                  <div className="bg-gray-50 dark:bg-gray-700/30 rounded-lg p-4 border border-gray-200 dark:border-gray-700">
+                    <h4 className="text-sm font-semibold text-gray-700 dark:text-gray-300 mb-3">
+                      <i className="fas fa-receipt text-red-500 mr-2"></i>
+                      Deductions Breakdown
+                    </h4>
+                    <div className="space-y-2">
+                      <div className="flex justify-between text-sm">
+                        <span className="text-gray-600 dark:text-gray-400">
+                          Total Deductions
+                        </span>
+                        <span className="font-medium text-red-500">
+                          -{targetCurrency}{" "}
+                          {localSummaryData.deductions?.toLocaleString() || "0"}
+                        </span>
+                      </div>
+                      <div className="flex justify-between text-sm border-t border-gray-200 dark:border-gray-600 pt-2 font-semibold">
+                        <span className="text-gray-700 dark:text-gray-300">
+                          Net Pay
+                        </span>
+                        <span className="text-green-600 dark:text-green-400">
+                          {targetCurrency}{" "}
+                          {localSummaryData.net_pay?.toLocaleString() || "0"}
+                        </span>
+                      </div>
                     </div>
                   </div>
                 </div>

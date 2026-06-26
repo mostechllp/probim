@@ -57,7 +57,7 @@ export const deletePayroll = createAsyncThunk(
   "payroll/deletePayroll",
   async (id, { rejectWithValue }) => {
     try {
-      const response = await apiClient.delete(`/admin/payrolls/${id}`);
+      const response = await apiClient.delete(`/admin/payroll/${id}`);
       console.log("Delete payroll response:", response.data);
       
       if (response.data?.success === true) {
@@ -95,7 +95,7 @@ export const fetchPayrollById = createAsyncThunk(
   "payroll/fetchPayrollById",
   async (id, { rejectWithValue }) => {
     try {
-      const response = await apiClient.get(`/admin/payrolls/${id}`);
+      const response = await apiClient.get(`/admin/payroll/${id}`);
       console.log("Fetch payroll by ID response:", response.data);
       return response.data?.data || response.data;
     } catch (error) {
@@ -303,6 +303,7 @@ export const calculateSalarySplit = createAsyncThunk(
 );
 
 // ─── Fetch Overtime Data (Step 3) ───────────────────────────────────
+// ─── Fetch Overtime Data (Step 3) ───────────────────────────────────
 export const fetchOvertimeData = createAsyncThunk(
   "payroll/fetchOvertimeData",
   async ({ employeeId, userId, month }, { rejectWithValue }) => {
@@ -316,7 +317,8 @@ export const fetchOvertimeData = createAsyncThunk(
       console.log("Fetch overtime data response:", response.data);
       
       if (response.data?.success) {
-        return response.data.data;
+        // The API returns data directly as an array
+        return response.data.data || [];
       }
       return rejectWithValue(response.data?.message || "Failed to fetch overtime data");
     } catch (error) {
@@ -356,6 +358,7 @@ export const fetchPayrollSummary = createAsyncThunk(
 );
 
 // ─── Fetch Employee Salary Packages ──────────────────────────────────
+// ─── Fetch Employee Salary Packages ──────────────────────────────────
 export const fetchEmployeeSalaryPackages = createAsyncThunk(
   "payroll/fetchEmployeeSalaryPackages",
   async (employeeId, { rejectWithValue }) => {
@@ -364,7 +367,8 @@ export const fetchEmployeeSalaryPackages = createAsyncThunk(
       console.log("Fetch employee salary packages response:", response.data);
       
       if (response.data?.success) {
-        return response.data.data || response.data;
+        // Only return the data, not the entire response with message
+        return response.data.data || [];
       }
       return rejectWithValue(response.data?.message || "Failed to fetch salary packages");
     } catch (error) {
@@ -665,7 +669,7 @@ const payrollSlice = createSlice({
         if (!state.completedSteps.includes(step)) {
           state.completedSteps.push(step);
         }
-        state.successMessage = message || "Step data saved successfully";
+        state.successMessage = message;
       })
       .addCase(savePayrollStep.rejected, (state, action) => {
         state.isStepSaving = false;

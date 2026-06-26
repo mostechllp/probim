@@ -1,4 +1,4 @@
-// src/admin/pages/Payroll.js - Fixed edit button and PDF icon
+// src/admin/pages/Payroll.js - Added SL No column
 
 import React, { useEffect, useState, useCallback } from "react";
 import { useDispatch, useSelector } from "react-redux";
@@ -286,7 +286,7 @@ const Payroll = () => {
       <div className="flex flex-wrap justify-between items-center mb-4 md:mb-6">
         <h2 className="text-lg md:text-2xl font-bold gradient-heading bg-clip-text text-transparent flex items-center gap-2">
           <i className="fas fa-file-invoice-dollar text-green-500"></i>
-          Payroll Management
+          Payroll
           <span className="text-[10px] md:text-sm bg-green-100 dark:bg-green-900/30 text-green-600 dark:text-green-400 px-2 md:px-3 py-0.5 md:py-1 rounded-full">
             <i className="fas fa-calendar-check mr-1"></i> Monthly
           </span>
@@ -364,10 +364,13 @@ const Payroll = () => {
       ) : (
         <>
           <div className="bg-white dark:bg-gray-800 rounded-xl border border-gray-200 dark:border-gray-700 overflow-x-auto shadow-soft">
-            <div className="min-w-[900px] md:min-w-0">
+            <div className="min-w-[1000px] md:min-w-0">
               <table className="w-full border-collapse">
                 <thead>
                   <tr className="bg-gray-50 dark:bg-gray-700/50 border-b border-gray-200 dark:border-gray-700">
+                    <th className="px-3 md:px-4 py-2 md:py-3 text-center text-[10px] md:text-xs font-semibold text-gray-500 dark:text-gray-400 uppercase tracking-wider">
+                      SL No
+                    </th>
                     <th className="px-3 md:px-4 py-2 md:py-3 text-left text-[10px] md:text-xs font-semibold text-gray-500 dark:text-gray-400 uppercase tracking-wider">
                       Employee
                     </th>
@@ -391,13 +394,13 @@ const Payroll = () => {
                 <tbody className="divide-y divide-gray-100 dark:divide-gray-700/60">
                   {payrolls.length === 0 ? (
                     <tr>
-                      <td colSpan={6} className="px-4 py-8 text-center text-gray-500 dark:text-gray-400">
+                      <td colSpan={7} className="px-4 py-8 text-center text-gray-500 dark:text-gray-400">
                         <i className="fas fa-inbox text-3xl text-gray-300 dark:text-gray-600 mb-2 block"></i>
                         No payroll records found
                       </td>
                     </tr>
                   ) : (
-                    payrolls.map((payroll) => {
+                    payrolls.map((payroll, index) => {
                       const avatarUrl = getAvatarUrl(payroll.avatar);
                       const employeeName = payroll.employee_name || payroll.employee?.name || 
                         (payroll.employee?.first_name && payroll.employee?.last_name 
@@ -405,13 +408,18 @@ const Payroll = () => {
                           : "-");
                       const monthDisplay = payroll.month ? getMonthName(payroll.month) : (payroll.pay_period_month || "-");
                       const yearDisplay = payroll.year || payroll.pay_period_year || "-";
-                      const isCompletedOrPaid = payroll.status === "completed" || payroll.status === "paid";
+                      
+                      // Calculate serial number based on pagination
+                      const serialNumber = (currentPageState - 1) * (perPage || 15) + index + 1;
                       
                       return (
                         <tr
                           key={payroll.id}
                           className="hover:bg-gray-50 dark:hover:bg-gray-700/10 transition-colors"
                         >
+                          <td className="px-3 md:px-4 py-2 md:py-3 text-center text-xs text-gray-500 dark:text-gray-400">
+                            {serialNumber}
+                          </td>
                           <td className="px-3 md:px-4 py-2 md:py-3">
                             <div className="flex items-center gap-2">
                               {avatarUrl ? (
