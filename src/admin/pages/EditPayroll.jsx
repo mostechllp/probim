@@ -1839,38 +1839,7 @@ function EditPayroll() {
                 <i className="fas fa-plus"></i> Add Deduction
               </button>
 
-              <div className="grid grid-cols-2 md:grid-cols-4 gap-3 md:gap-4 mt-6 pt-4 border-t border-gray-200 dark:border-gray-700">
-                <div className="p-3 md:p-4 rounded-xl bg-gray-50 dark:bg-gray-700/50 border border-gray-200 dark:border-gray-600">
-                  <div className="text-[10px] md:text-xs text-gray-500 dark:text-gray-400 font-medium mb-1">
-                    Total Deductions
-                  </div>
-                  <div className="text-lg md:text-xl font-bold text-red-600 dark:text-red-500">
-                    {targetCurrency}{" "}
-                    {deductions
-                      .reduce((sum, d) => sum + parseFloat(d.amount || 0), 0)
-                      .toLocaleString()}
-                  </div>
-                </div>
-                <div className="p-3 md:p-4 rounded-xl bg-green-50 dark:bg-green-900/20 border border-green-200 dark:border-green-800">
-                  <div className="text-[10px] md:text-xs text-green-600 dark:text-green-400 font-medium mb-1">
-                    Final Net Pay
-                  </div>
-                  <div className="text-lg md:text-xl font-bold text-green-600 dark:text-green-400">
-                    {targetCurrency}{" "}
-                    {(
-                      countries.reduce(
-                        (sum, c) =>
-                          sum +
-                          parseFloat(c.dailyRate || 0) *
-                            parseFloat(c.daysWorked || 0) *
-                            parseFloat(c.fxRate || 1),
-                        0
-                      ) -
-                      deductions.reduce((sum, d) => sum + parseFloat(d.amount || 0), 0)
-                    ).toLocaleString()}
-                  </div>
-                </div>
-              </div>
+
             </div>
           )}
 

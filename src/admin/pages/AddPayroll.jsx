@@ -1417,15 +1417,7 @@ const [deductions, setDeductions] = useState([
                       </div>
                     </div>
                     <div className="flex items-center gap-6">
-                      <div className="text-center">
-                        <div className="text-2xl font-bold text-gray-800 dark:text-gray-200">
-                          {totalEarnings.toFixed(2)}
-                        </div>
-                        <div className="text-[10px] text-gray-500 dark:text-gray-400 uppercase tracking-wider">
-                          Total Earnings
-                        </div>
-                      </div>
-                      <div className="h-10 w-px bg-gray-300 dark:bg-gray-600"></div>
+
                       <div className="text-center">
                         <div className="text-2xl font-bold text-gray-800 dark:text-gray-200">
                           {countries.reduce((sum, c) => sum + c.daysWorked, 0)}
@@ -1506,41 +1498,6 @@ const [deductions, setDeductions] = useState([
                 ))}
               </div>
 
-              {/* Summary Cards */}
-              <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-4 gap-3 md:gap-4 mt-6 pt-4 border-t border-gray-200 dark:border-gray-700">
-                <div className="p-3 md:p-4 rounded-xl bg-blue-50 dark:bg-blue-900/20 border border-blue-200 dark:border-blue-800">
-                  <div className="text-[10px] md:text-xs text-gray-600 dark:text-gray-400 font-semibold mb-1">
-                    Total Earnings
-                  </div>
-                  <div className="text-lg md:text-xl font-bold text-blue-600 dark:text-blue-400">
-                    {totalEarnings.toFixed(2)}
-                  </div>
-                </div>
-                <div className="p-3 md:p-4 rounded-xl bg-red-50 dark:bg-red-900/20 border border-red-200 dark:border-red-800">
-                  <div className="text-[10px] md:text-xs text-gray-600 dark:text-gray-400 font-semibold mb-1">
-                    Total Deductions
-                  </div>
-                  <div className="text-lg md:text-xl font-bold text-red-600 dark:text-red-400">
-                    {totalDeductions.toFixed(2)}
-                  </div>
-                </div>
-                <div className="p-3 md:p-4 rounded-xl bg-purple-50 dark:bg-purple-900/20 border border-purple-200 dark:border-purple-800">
-                  <div className="text-[10px] md:text-xs text-gray-600 dark:text-gray-400 font-semibold mb-1">
-                    Gross Salary
-                  </div>
-                  <div className="text-lg md:text-xl font-bold text-purple-600 dark:text-purple-400">
-                    {grossSalary.toFixed(2)}
-                  </div>
-                </div>
-                <div className="p-3 md:p-4 rounded-xl bg-green-50 dark:bg-green-900/20 border border-green-200 dark:border-green-800">
-                  <div className="text-[10px] md:text-xs text-gray-600 dark:text-gray-400 font-semibold mb-1">
-                    Net Salary
-                  </div>
-                  <div className="text-lg md:text-xl font-bold text-green-600 dark:text-green-400">
-                    {netSalary.toFixed(2)}
-                  </div>
-                </div>
-              </div>
 
               {/* Mixed Currencies Notice */}
               {countries.some((c) => c.currency !== targetCurrency) && (
@@ -1814,41 +1771,7 @@ const [deductions, setDeductions] = useState([
                 <i className="fas fa-plus"></i> Add Deduction
               </button>
 
-              <div className="grid grid-cols-2 md:grid-cols-4 gap-3 md:gap-4 mt-6 pt-4 border-t border-gray-200 dark:border-gray-700">
-                <div className="p-3 md:p-4 rounded-xl bg-gray-50 dark:bg-gray-700/50 border border-gray-200 dark:border-gray-600">
-                  <div className="text-[10px] md:text-xs text-gray-500 dark:text-gray-400 font-medium mb-1">
-                    Total Deductions
-                  </div>
-                  <div className="text-lg md:text-xl font-bold text-red-600 dark:text-red-500">
-                    {targetCurrency}{" "}
-                    {deductions
-                      .reduce((sum, d) => sum + parseFloat(d.amount || 0), 0)
-                      .toLocaleString()}
-                  </div>
-                </div>
-                <div className="p-3 md:p-4 rounded-xl bg-green-50 dark:bg-green-900/20 border border-green-200 dark:border-green-800">
-                  <div className="text-[10px] md:text-xs text-green-600 dark:text-green-400 font-medium mb-1">
-                    Final Net Pay
-                  </div>
-                  <div className="text-lg md:text-xl font-bold text-green-600 dark:text-green-400">
-                    {targetCurrency}{" "}
-                    {(
-                      countries.reduce(
-                        (sum, c) =>
-                          sum +
-                          parseFloat(c.dailyRate || 0) *
-                            parseFloat(c.daysWorked || 0) *
-                            parseFloat(c.fxRate || 1),
-                        0,
-                      ) -
-                      deductions.reduce(
-                        (sum, d) => sum + parseFloat(d.amount || 0),
-                        0,
-                      )
-                    ).toLocaleString()}
-                  </div>
-                </div>
-              </div>
+
             </div>
           )}
 
@@ -1879,6 +1802,56 @@ const [deductions, setDeductions] = useState([
                 <p className="text-sm text-gray-500 dark:text-gray-400">
                   Review the payroll details before final submission.
                 </p>
+
+                {/* Currency Conversion Section */}
+                <div className="grid grid-cols-1 md:grid-cols-2 gap-4 p-4 bg-gray-50 dark:bg-gray-700/30 rounded-lg border border-gray-200 dark:border-gray-700">
+                  <div>
+                    <label className="block text-xs font-semibold text-gray-700 dark:text-gray-300 mb-1">
+                      Target Currency
+                    </label>
+                    <select
+                      value={targetCurrency}
+                      onChange={(e) => setTargetCurrency(e.target.value)}
+                      className="w-full px-3 py-2 text-sm rounded-lg border border-gray-200 dark:border-gray-700 bg-white dark:bg-gray-800 text-gray-800 dark:text-gray-200 focus:outline-none focus:border-green-500 focus:ring-2 focus:ring-green-500/20"
+                    >
+                      {currencies.map((curr) => (
+                        <option key={curr} value={curr}>
+                          {curr}
+                        </option>
+                      ))}
+                    </select>
+                  </div>
+                  <div>
+                    <label className="block text-xs font-semibold text-gray-700 dark:text-gray-300 mb-1">
+                      Conversion Rates
+                    </label>
+                    <div className="flex flex-wrap gap-2">
+                      {countries.map((c) => (
+                        <div key={c.id} className="flex items-center gap-1">
+                          <span className="text-xs text-gray-500">
+                            {c.currency}:
+                          </span>
+                          <input
+                            type="number"
+                            step="0.01"
+                            value={c.fxRate}
+                            onChange={(e) =>
+                              handleCountryChange(
+                                c.id,
+                                "fxRate",
+                                e.target.value,
+                              )
+                            }
+                            className="w-16 px-2 py-1 text-sm rounded border border-gray-200 dark:border-gray-600 bg-white dark:bg-gray-800 text-gray-700 dark:text-gray-300 focus:outline-none focus:border-green-500"
+                          />
+                          <span className="text-xs text-gray-500">
+                            → {targetCurrency}
+                          </span>
+                        </div>
+                      ))}
+                    </div>
+                  </div>
+                </div>
 
                 {/* Summary Cards */}
                 <div className="grid grid-cols-2 md:grid-cols-4 gap-3 md:gap-4 pt-4 border-t border-gray-200 dark:border-gray-700">
@@ -1995,55 +1968,7 @@ const [deductions, setDeductions] = useState([
                   </div>
                 </div>
 
-                {/* Currency Conversion Section */}
-                <div className="grid grid-cols-1 md:grid-cols-2 gap-4 p-4 bg-gray-50 dark:bg-gray-700/30 rounded-lg border border-gray-200 dark:border-gray-700">
-                  <div>
-                    <label className="block text-xs font-semibold text-gray-700 dark:text-gray-300 mb-1">
-                      Target Currency
-                    </label>
-                    <select
-                      value={targetCurrency}
-                      onChange={(e) => setTargetCurrency(e.target.value)}
-                      className="w-full px-3 py-2 text-sm rounded-lg border border-gray-200 dark:border-gray-700 bg-white dark:bg-gray-800 text-gray-800 dark:text-gray-200 focus:outline-none focus:border-green-500 focus:ring-2 focus:ring-green-500/20"
-                    >
-                      {currencies.map((curr) => (
-                        <option key={curr} value={curr}>
-                          {curr}
-                        </option>
-                      ))}
-                    </select>
-                  </div>
-                  <div>
-                    <label className="block text-xs font-semibold text-gray-700 dark:text-gray-300 mb-1">
-                      Conversion Rates
-                    </label>
-                    <div className="flex flex-wrap gap-2">
-                      {countries.map((c) => (
-                        <div key={c.id} className="flex items-center gap-1">
-                          <span className="text-xs text-gray-500">
-                            {c.currency}:
-                          </span>
-                          <input
-                            type="number"
-                            step="0.01"
-                            value={c.fxRate}
-                            onChange={(e) =>
-                              handleCountryChange(
-                                c.id,
-                                "fxRate",
-                                e.target.value,
-                              )
-                            }
-                            className="w-16 px-2 py-1 text-sm rounded border border-gray-200 dark:border-gray-600 bg-white dark:bg-gray-800 text-gray-700 dark:text-gray-300 focus:outline-none focus:border-green-500"
-                          />
-                          <span className="text-xs text-gray-500">
-                            → {targetCurrency}
-                          </span>
-                        </div>
-                      ))}
-                    </div>
-                  </div>
-                </div>
+
 
                 <div className="mt-4 p-4 bg-blue-50 dark:bg-blue-900/20 rounded-xl border border-blue-200 dark:border-blue-800 flex items-start gap-3">
                   <i className="fas fa-envelope text-blue-500 mt-1"></i>

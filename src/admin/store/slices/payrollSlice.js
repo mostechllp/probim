@@ -366,9 +366,11 @@ export const fetchEmployeeSalaryPackages = createAsyncThunk(
       const response = await apiClient.get(`/admin/employees/salary-packages/${employeeId}`);
       console.log("Fetch employee salary packages response:", response.data);
       
-      if (response.data?.success) {
-        // Only return the data, not the entire response with message
-        return response.data.data || [];
+      if (response.data?.success !== false) {
+        return {
+          data: response.data?.data || response.data || [],
+          message: response.data?.message || "Salary packages fetched successfully"
+        };
       }
       return rejectWithValue(response.data?.message || "Failed to fetch salary packages");
     } catch (error) {
@@ -798,7 +800,8 @@ const payrollSlice = createSlice({
       })
       .addCase(fetchEmployeeSalaryPackages.fulfilled, (state, action) => {
         state.packagesLoading = false;
-        state.employeePackages = action.payload || [];
+        state.employeePackages = action.payload?.data || [];
+        state.successMessage = action.payload?.message;
       })
       .addCase(fetchEmployeeSalaryPackages.rejected, (state, action) => {
         state.packagesLoading = false;
