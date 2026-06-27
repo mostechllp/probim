@@ -116,11 +116,24 @@ export const fetchLeaveBalances = createAsyncThunk(
   }
 );
 
+export const fetchLeaveAllocations = createAsyncThunk(
+  "leaves/fetchAllocations",
+  async (_, { rejectWithValue }) => {
+    try {
+      const response = await apiClient.get("/admin/leave-allocations");
+      return response.data.data || response.data;
+    } catch (error) {
+      return rejectWithValue(error.response?.data?.message || "Failed to fetch leave allocations");
+    }
+  }
+);
+
 export const updateLeaveAllocation = createAsyncThunk(
   "leaves/updateAllocation",
   async ({ employee_id, allocations }, { rejectWithValue }) => {
     try {
-      const response = await apiClient.post(`/admin/leave-allocations/${employee_id}`, {
+      const response = await apiClient.post("/admin/leave-allocations", {
+        employee_id,
         allocations
       });
       return response.data.data;
@@ -140,6 +153,20 @@ export const fetchLeaveTypes = createAsyncThunk(
     } catch (err) {
       return rejectWithValue(
         err.response?.data?.message || "Failed to fetch leave types",
+      );
+    }
+  },
+);
+
+export const fetchLeaveTypeById = createAsyncThunk(
+  "leaves/fetchTypeById",
+  async (id, { rejectWithValue }) => {
+    try {
+      const res = await apiClient.get(`/admin/leave-types/${id}`);
+      return res.data.data || res.data;
+    } catch (err) {
+      return rejectWithValue(
+        err.response?.data?.message || "Failed to fetch leave type",
       );
     }
   },
@@ -227,6 +254,7 @@ const leaveSlice = createSlice({
     leaves: [],
     currentLeave: null,
     leaveTypes: [],
+    leaveAllocations: [],
     loading: false,
     error: null,
     totalCount: 0,
@@ -288,6 +316,20 @@ const leaveSlice = createSlice({
         }
       })
       .addCase(updateLeaveStatus.rejected, (state, action) => {
+        state.loading = false;
+        state.error = action.payload || action.error.message;
+      })
+
+      // Fetch leave allocations (admin list)
+      .addCase(fetchLeaveAllocations.pending, (state) => {
+        state.loading = true;
+        state.error = null;
+      })
+      .addCase(fetchLeaveAllocations.fulfilled, (state, action) => {
+        state.loading = false;
+        state.leaveAllocations = action.payload || [];
+      })
+      .addCase(fetchLeaveAllocations.rejected, (state, action) => {
         state.loading = false;
         state.error = action.payload || action.error.message;
       })
