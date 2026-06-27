@@ -21,6 +21,10 @@ import projectAssignmentReducer from "../admin/store/slices/projectAssignmentSli
 import payrollReducer from "../admin/store/slices/payrollSlice"
 import moduleReducer from "../admin/store/slices/moduleSlice"
 import adminAttendanceReducer from "../admin/store/slices/attendanceRequestSlice"
+import offboardingReducer from "../admin/store/slices/offboardingSlice";
+import checklistCategoryReducer from "../admin/store/slices/checklistCategorySlice";
+import assetReducer from "../admin/store/slices/assetSlice";
+import checklistReducer from "../admin/store/slices/checklistSlice";
 
 // Employee reducers
 import leavesReducer from "../employee/store/slices/leavesSlice";
@@ -57,6 +61,10 @@ export const store = configureStore({
     payroll: payrollReducer,
     modules: moduleReducer,
     adminAttendance: adminAttendanceReducer,
+    offboarding: offboardingReducer,
+    assets: assetReducer,
+    checklist: checklistReducer,
+    checklistCategory: checklistCategoryReducer,
 
     // Employee
     EmpLeaves: leavesReducer,
