@@ -1623,6 +1623,7 @@ function EditPayroll() {
                         <th className="py-3 px-4 font-semibold">Date</th>
                         <th className="py-3 px-4 font-semibold">Hours</th>
                         <th className="py-3 px-4 font-semibold">Overtime Amount</th>
+                        <th className="py-3 px-4 font-semibold">Currency</th>
                         <th className="py-3 px-4 font-semibold w-1/4">Reason</th>
                         <th className="py-3 px-4 font-semibold text-center">Status</th>
                         <th className="py-3 px-4 font-semibold text-center">Actions</th>
@@ -1673,6 +1674,20 @@ function EditPayroll() {
                               placeholder="0.00"
                               disabled={currentPayroll?.status === "completed" || currentPayroll?.status === "paid"}
                             />
+                          </td>
+                          <td className="py-3 px-4 text-sm">
+                            <select
+                                value={req.currency || targetCurrency}
+                                onChange={(e) => handleOvertimeChange(req.id, "currency", e.target.value)}
+                                className="w-20 px-2 py-1 text-sm rounded border border-gray-200 dark:border-gray-600 bg-white dark:bg-gray-800 text-gray-700 dark:text-gray-300 focus:outline-none focus:border-green-500"
+                                disabled={currentPayroll?.status === "completed" || currentPayroll?.status === "paid"}
+                              >
+                                {currencies.map((curr) => (
+                                  <option key={curr} value={curr}>
+                                    {curr}
+                                  </option>
+                                ))}
+                            </select>
                           </td>
                           <td className="py-3 px-4 text-xs text-gray-500 dark:text-gray-400">
                             <input

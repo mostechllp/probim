@@ -1553,6 +1553,9 @@ const [deductions, setDeductions] = useState([
                         <th className="py-3 px-4 font-semibold text-center">
                           Overtime Amount
                         </th>
+                        <th className="py-3 px-4 font-semibold text-center">
+                          Currency
+                        </th>
                       </tr>
                     </thead>
                     <tbody>
@@ -1610,12 +1613,31 @@ const [deductions, setDeductions] = useState([
                                 placeholder="0.00"
                               />
                             </td>
+                            <td className="py-3 px-4 text-center">
+                              <select
+                                value={req.currency || targetCurrency}
+                                onChange={(e) =>
+                                  handleOvertimeChange(
+                                    req.id,
+                                    "currency",
+                                    e.target.value,
+                                  )
+                                }
+                                className="w-20 px-2 py-1 text-sm rounded border border-gray-200 dark:border-gray-600 bg-white dark:bg-gray-800 text-gray-700 dark:text-gray-300 focus:outline-none focus:border-green-500"
+                              >
+                                {currencies.map((curr) => (
+                                  <option key={curr} value={curr}>
+                                    {curr}
+                                  </option>
+                                ))}
+                              </select>
+                            </td>
                           </tr>
                         ))
                       ) : (
                         <tr>
                           <td
-                            colSpan={7}
+                            colSpan={8}
                             className="py-8 text-center text-gray-500 dark:text-gray-400"
                           >
                             <i className="fas fa-clock text-4xl mb-3 block"></i>
