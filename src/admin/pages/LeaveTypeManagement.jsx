@@ -17,6 +17,8 @@ import ConfirmModal from "../components/common/ConfirmModal";
 const LeaveTypeManagement = () => {
   const dispatch = useDispatch();
   const { leaveTypes, loading } = useSelector((state) => state.leaves);
+  const { user } = useSelector((state) => state.auth || {});
+  const leavesUrl = user?.type === "employee" ? "/employee/leave-management" : "/admin/leaves";
   const [searchTerm, setSearchTerm] = useState("");
   const [currentPage, setCurrentPage] = useState(1);
   const [perPage, setPerPage] = useState(10);
@@ -107,7 +109,7 @@ const LeaveTypeManagement = () => {
           {/* Breadcrumbs - Responsive */}
           <div className="flex items-center gap-2 text-xs md:text-sm mb-4 md:mb-6 flex-wrap">
             <Link
-              to="/admin/leaves"
+              to={leavesUrl}
               className="text-green-500 hover:text-green-600 font-medium"
             >
               Leaves

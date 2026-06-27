@@ -7,7 +7,7 @@ import Pagination from "@admin/components/common/Paginations";
 import { fetchEmployees } from "@admin/store/slices/employeeSlice";
 import {
   fetchLeaveTypes,
-  fetchLeaveBalances,
+  fetchLeaveAllocations,
 } from "@admin/store/slices/LeaveSlice";
 
 const LeaveAllocations = () => {
@@ -19,51 +19,83 @@ const LeaveAllocations = () => {
   const [perPage, setPerPage] = useState(10);
   const [loading, setLoading] = useState(false);
   const [leaveBalances, setLeaveBalances] = useState({});
+  const { user } = useSelector((state) => state.auth || {});
+  const routePrefix = user?.type === "employee" ? "/employee" : "/admin";
+  const leavesUrl = user?.type === "employee" ? "/employee/leave-management" : "/admin/leaves";
 
   useEffect(() => {
     const fetchData = async () => {
       setLoading(true);
       await dispatch(fetchEmployees());
       await dispatch(fetchLeaveTypes());
+      try {
+        const result = await dispatch(fetchLeaveAllocations()).unwrap();
+        console.log("Fetched all leave allocations:", result);
+        
+        const balances = {};
+        let allocationsList = [];
+        
+        if (Array.isArray(result)) {
+          allocationsList = result;
+        } else if (result && Array.isArray(result.data)) {
+          allocationsList = result.data;
+        } else if (result && typeof result === "object") {
+          allocationsList = Object.entries(result).map(([employeeId, data]) => ({
+            employee_id: parseInt(employeeId),
+            allocations: data.allocations || data
+          }));
+        }
+
+        allocationsList.forEach(item => {
+          const employeeId = item.employee_id || item.employee?.id;
+          if (employeeId) {
+            let allocs = [];
+            if (item.allocations) {
+              allocs = Array.isArray(item.allocations) 
+                ? item.allocations 
+                : Object.values(item.allocations);
+            } else if (item.balances) {
+              allocs = Array.isArray(item.balances)
+                ? item.balances
+                : Object.values(item.balances);
+            } else if (Array.isArray(item)) {
+              allocs = item;
+            } else {
+              if (!balances[employeeId]) {
+                balances[employeeId] = [];
+              }
+              balances[employeeId].push(item);
+              return;
+            }
+            balances[employeeId] = allocs;
+          }
+        });
+
+        // Handle case where it's a flat list of allocation items
+        if (Array.isArray(allocationsList) && allocationsList.length > 0 && !allocationsList[0].allocations) {
+          allocationsList.forEach(alloc => {
+            const employeeId = alloc.employee_id || alloc.employee?.id;
+            if (employeeId) {
+              if (!balances[employeeId]) {
+                balances[employeeId] = [];
+              }
+              // Prevent duplicates if already added
+              const exists = balances[employeeId].some(existing => existing.id === alloc.id || existing.leave_type_id === alloc.leave_type_id);
+              if (!exists) {
+                balances[employeeId].push(alloc);
+              }
+            }
+          });
+        }
+
+        setLeaveBalances(balances);
+      } catch (error) {
+        console.error("Failed to fetch leave allocations:", error);
+      }
       setLoading(false);
     };
     fetchData();
   }, [dispatch]);
-
-  // Fetch leave balances for each employee
-  useEffect(() => {
-    const fetchAllBalances = async () => {
-      if (employees.length > 0 && leaveTypes.length > 0) {
-        setLoading(true);
-        const balances = {};
-        for (const employee of employees) {
-          try {
-            const result = await dispatch(fetchLeaveBalances({ employee_id: employee.id })).unwrap();
-            console.log(`Balances for employee ${employee.id}:`, result);
-            
-            // Handle the allocations object structure
-            if (result && result.allocations) {
-              // Convert allocations object to array
-              const allocationsArray = Object.values(result.allocations);
-              balances[employee.id] = allocationsArray;
-            } else if (result && Array.isArray(result)) {
-              balances[employee.id] = result;
-            } else if (result && result.data && Array.isArray(result.data)) {
-              balances[employee.id] = result.data;
-            } else {
-              balances[employee.id] = [];
-            }
-          } catch (error) {
-            console.error(`Failed to fetch balances for employee ${employee.id}:`, error);
-            balances[employee.id] = [];
-          }
-        }
-        setLeaveBalances(balances);
-        setLoading(false);
-      }
-    };
-    fetchAllBalances();
-  }, [dispatch, employees, leaveTypes]);
 
   const getFilteredEmployees = () => {
     let filtered = [...employees];
@@ -130,7 +162,7 @@ const LeaveAllocations = () => {
       {/* Breadcrumbs */}
       <div className="flex items-center gap-2 text-xs md:text-sm mb-4 md:mb-6 flex-wrap">
         <Link
-          to="/admin/leaves"
+          to={leavesUrl}
           className="text-green-500 hover:text-green-600 font-medium"
         >
           Leaves
@@ -152,7 +184,7 @@ const LeaveAllocations = () => {
           </p>
         </div>
         <Link
-          to="/admin/leaves"
+          to={leavesUrl}
           className="bg-gray-100 hover:bg-gray-200 dark:bg-gray-700 dark:hover:bg-gray-600 text-gray-700 dark:text-gray-300 px-4 py-2 rounded-full text-sm font-semibold flex items-center gap-2 transition-all"
         >
           <i className="fas fa-arrow-left"></i>
@@ -424,7 +456,7 @@ const LeaveAllocations = () => {
 
                       <td className="px-3 md:px-4 py-2 md:py-3">
                         <Link
-                          to={`/admin/leaves/allocations/${employee.id}`}
+                          to={`${routePrefix}/leaves/allocations/${employee.id}`}
                           className="p-1.5 rounded-lg hover:bg-gray-100 dark:hover:bg-gray-700 text-amber-500 transition-colors inline-block"
                           title="Edit Allocations"
                         >

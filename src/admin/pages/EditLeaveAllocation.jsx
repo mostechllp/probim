@@ -16,6 +16,9 @@ const EditLeaveAllocation = () => {
   const [leaveBalances, setLeaveBalances] = useState({});
   const [photoError, setPhotoError] = useState(false);
   const [fetchingBalances, setFetchingBalances] = useState(true);
+  const { user } = useSelector((state) => state.auth || {});
+  const routePrefix = user?.type === "employee" ? "/employee" : "/admin";
+  const leavesUrl = user?.type === "employee" ? "/employee/leave-management" : "/admin/leaves";
   
   console.log("Employee: ", currentEmployee);
 
@@ -164,7 +167,7 @@ const EditLeaveAllocation = () => {
       
       if (result) {
         showToast('Leave allocations updated successfully', 'success');
-        navigate('/admin/leaves/allocations');
+        navigate(`${routePrefix}/leaves/allocations`);
       }
     } catch (error) {
       console.error("Update error:", error);
@@ -205,11 +208,11 @@ const EditLeaveAllocation = () => {
     <div className="w-full px-4 md:px-6">
       {/* Breadcrumbs */}
       <div className="flex items-center gap-2 text-xs md:text-sm mb-4 md:mb-6 flex-wrap">
-        <Link to="/admin/leaves" className="text-green-500 hover:text-green-600 font-medium">
+        <Link to={leavesUrl} className="text-green-500 hover:text-green-600 font-medium">
           Leaves
         </Link>
         <i className="fas fa-chevron-right text-gray-400 text-[10px] md:text-xs"></i>
-        <Link to="/admin/leaves/allocations" className="text-green-500 hover:text-green-600 font-medium">
+        <Link to={`${routePrefix}/leaves/allocations`} className="text-green-500 hover:text-green-600 font-medium">
           Leave Allocations
         </Link>
         <i className="fas fa-chevron-right text-gray-400 text-[10px] md:text-xs"></i>
@@ -374,7 +377,7 @@ const EditLeaveAllocation = () => {
           {/* Action Buttons */}
           <div className="flex justify-end gap-3 pt-4 mt-4 border-t border-gray-200 dark:border-gray-700">
             <Link
-              to="/admin/leaves/allocations"
+              to={`${routePrefix}/leaves/allocations`}
               className="px-4 py-1.5 rounded-full text-xs font-semibold bg-gray-100 dark:bg-gray-700 text-gray-700 dark:text-gray-300 hover:bg-gray-200 dark:hover:bg-gray-600 transition-all"
             >
               Cancel
