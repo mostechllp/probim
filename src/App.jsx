@@ -95,6 +95,39 @@ const EditPayroll = lazy(
   () => import("./admin/pages/EditPayroll"),
 );
 
+const Offboarding = lazy(() => import("./admin/pages/Offboarding"));
+const OffboardingInitiation = lazy(
+  () => import("./admin/components/offboarding/OffboardingInitiation"),
+);
+const OffboardingChecklistManager = lazy(
+  () => import("./admin/components/offboarding/OffboardingChecklistManager"),
+);
+const AssetManagement = lazy(() => import("./admin/pages/AssetManagement"));
+const AssetTypeManagement = lazy(
+  () => import("./admin/pages/AssetTypeManagement"),
+);
+const VisaCancellationAndExit = lazy(
+  () => import("./admin/components/offboarding/VisaCancellationAndExit"),
+);
+const OffboardingChecklist = lazy(
+  () => import("./admin/components/offboarding/OffboardingChecklist"),
+);
+const AssetReturn = lazy(
+  () => import("./admin/components/offboarding/AssetReturn"),
+);
+const ExitInterview = lazy(
+  () => import("./admin/components/offboarding/ExitInterview"),
+);
+const FinalSettlement = lazy(
+  () => import("./admin/components/offboarding/FinalSettlement"),
+);
+const LettersAndClearance = lazy(
+  () => import("./admin/components/offboarding/LettersAndClearance"),
+);
+const ChecklistCategories = lazy(
+  () => import("./admin/pages/ChecklistCategoriesManagement"),
+);
+
 // Lazy load pages - Employee
 const EmployeeDashboard = lazy(() => import("./employee/pages/Dashboard"));
 const EmployeeLeaves = lazy(() => import("./employee/pages/Leaves"));
@@ -258,6 +291,46 @@ function App() {
           <Route
             path="attendance-requests"
             element={<AdminAttendanceRequests />}
+          />
+
+          <Route path="employees/offboarding" element={<Offboarding />} />
+          <Route
+            path="employees/offboarding-initiation"
+            element={<OffboardingInitiation />}
+          />
+          <Route
+            path="employees/offboarding-checklist-manager"
+            element={<OffboardingChecklistManager />}
+          />
+          <Route
+            path="employees/checklist-categories"
+            element={<ChecklistCategories />}
+          />
+          <Route
+            path="employees/asset-management"
+            element={<AssetManagement />}
+          />
+          <Route
+            path="employees/assets/types"
+            element={<AssetTypeManagement />}
+          />
+          <Route
+            path="employees/visa-cancellation"
+            element={<VisaCancellationAndExit />}
+          />
+          <Route
+            path="employees/offboarding-checklist"
+            element={<OffboardingChecklist />}
+          />
+          <Route path="employees/asset-return" element={<AssetReturn />} />
+          <Route path="employees/exit-interview" element={<ExitInterview />} />
+          <Route
+            path="employees/final-settlement"
+            element={<FinalSettlement />}
+          />
+          <Route
+            path="employees/letters-and-clearance"
+            element={<LettersAndClearance />}
           />
         </Route>
 
