@@ -133,6 +133,7 @@ export const savePayrollStep = createAsyncThunk(
   "payroll/saveStep",
   async ({ userId, step, stepData }, { rejectWithValue }) => {
     try {
+      console.log("API CALL savePayrollStep payload:", { userId, step, stepData });
       const response = await apiClient.post("/admin/payroll/save-step", {
         user_id: userId,
         step: step,

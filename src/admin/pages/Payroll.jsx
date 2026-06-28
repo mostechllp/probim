@@ -147,11 +147,11 @@ const Payroll = () => {
     }
   };
 
-  const formatCurrency = (amount) => {
+  const formatCurrency = (amount, currencyCode = "INR") => {
     if (!amount) return "₹0";
     return new Intl.NumberFormat("en-IN", {
       style: "currency",
-      currency: "INR",
+      currency: currencyCode,
       minimumFractionDigits: 0,
       maximumFractionDigits: 0,
     }).format(amount);
@@ -447,7 +447,7 @@ const Payroll = () => {
                             {`${monthDisplay} ${yearDisplay}`}
                           </td>
                           <td className="px-3 md:px-4 py-2 md:py-3 text-right text-xs md:text-sm font-bold text-gray-800 dark:text-gray-200">
-                            {formatCurrency(payroll.net_pay || payroll.total_amount || 0)}
+                            {formatCurrency(payroll.net_pay || payroll.total_amount || 0, payroll.target_currency || "INR")}
                           </td>
                           <td className="px-3 md:px-4 py-2 md:py-3 text-center">
                             <span className={`inline-block px-2.5 py-1 rounded-full text-[10px] md:text-xs font-semibold ${getStatusBadge(payroll.status)}`}>

@@ -135,6 +135,7 @@ function AddPayroll() {
       date: "2026-05-20",
       hours: 4,
       overtime_amount: 0,
+      currency: "INR",
       status: "pending",
       reason: "Client requested emergency revisions",
     },
@@ -144,6 +145,7 @@ function AddPayroll() {
       date: "2026-05-21",
       hours: 2.5,
       overtime_amount: 0,
+      currency: "INR",
       status: "pending",
       reason: "Project deadline approaching",
     },
@@ -170,6 +172,13 @@ const [deductions, setDeductions] = useState([
     combined: 0,
     net_pay: 0,
   });
+  const [conversionDetails, setConversionDetails] = useState({
+    gross_salary: null,
+    overtime_amount: null,
+    deductions: null,
+    net_pay: null
+  });
+  const [isConverted, setIsConverted] = useState(false);
 
   const steps = [
     { id: 1, label: "Basic Info" },
@@ -459,6 +468,7 @@ const [deductions, setDeductions] = useState([
           project: item.projects?.map((p) => p.project_name).join(", ") || "",
           hours: item.total_logged_hours || 0,
           overtime_amount: 0, // This will be set by user
+          currency: item.currency || targetCurrency || "INR",
           status: "pending",
           reason: "",
         })),
@@ -618,6 +628,7 @@ const [deductions, setDeductions] = useState([
             date: req.date,
             overtime_hours: parseFloat(req.hours) || 0,
             amount: parseFloat(req.overtime_amount) || 0,
+            currency: req.currency || targetCurrency || "INR",
             status: req.status || "pending",
             projects: req.projects || [],
           })),
@@ -659,6 +670,7 @@ const [deductions, setDeductions] = useState([
             overtime_amount: localSummaryData.overtime_amount || 0,
             deductions: localSummaryData.deductions || 0,
             net_pay: localSummaryData.net_pay || 0,
+            conversions: conversionDetails,
           },
           target_currency: targetCurrency,
           conversion_rates: conversionRatesObj,
@@ -1872,123 +1884,138 @@ const [deductions, setDeductions] = useState([
                         </div>
                       ))}
                     </div>
+                    <div className="mt-4 flex justify-end">
+                      <button
+                        onClick={() => {
+                          const baseCurrency = countries.length > 0 ? countries[0].currency : "INR";
+                          const exchangeRate = countries.length > 0 ? parseFloat(countries[0].fxRate) || 1 : 1;
+                          
+                          const calculateConversion = (amount) => ({
+                            amount: amount,
+                            baseCurrency: baseCurrency,
+                            targetCurrency: targetCurrency,
+                            exchangeRate: exchangeRate,
+                            convertedAmount: amount * exchangeRate
+                          });
+
+                          setConversionDetails({
+                            gross_salary: calculateConversion(localSummaryData.gross_salary || localSummaryData.gross_earnings || 0),
+                            overtime_amount: calculateConversion(localSummaryData.overtime_amount || 0),
+                            deductions: calculateConversion(localSummaryData.deductions || localSummaryData.total_deductions || 0),
+                            net_pay: calculateConversion(localSummaryData.net_pay || 0)
+                          });
+                          setIsConverted(true);
+                        }}
+                        className="px-4 py-2 bg-blue-500 text-white text-sm font-semibold rounded-lg hover:bg-blue-600 transition-colors shadow-sm"
+                      >
+                        Convert
+                      </button>
+                    </div>
                   </div>
                 </div>
 
                 {/* Summary Cards */}
-                <div className="grid grid-cols-2 md:grid-cols-4 gap-3 md:gap-4 pt-4 border-t border-gray-200 dark:border-gray-700">
-                  <div className="p-3 md:p-4 rounded-xl bg-blue-50 dark:bg-blue-900/20 border border-blue-200 dark:border-blue-800">
-                    <div className="text-[10px] md:text-xs text-gray-500 dark:text-gray-400 font-medium mb-1">
-                      Gross Salary
+                {isConverted && conversionDetails.gross_salary && (
+                  <div className="grid grid-cols-1 md:grid-cols-2 gap-4 pt-4 border-t border-gray-200 dark:border-gray-700">
+                    {/* Gross Salary */}
+                    <div className="p-4 rounded-xl bg-blue-50 dark:bg-blue-900/20 border border-blue-200 dark:border-blue-800 flex flex-col justify-between">
+                      <div className="text-xs text-gray-500 dark:text-gray-400 font-medium mb-3">Gross Salary</div>
+                      <div className="flex justify-between items-center gap-2">
+                        <div className="flex-1">
+                          <div className="text-[10px] text-gray-500">Original Amount</div>
+                          <div className="text-sm font-bold text-gray-700 dark:text-gray-300">
+                            {conversionDetails.gross_salary.baseCurrency} {conversionDetails.gross_salary.amount.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
+                          </div>
+                        </div>
+                        <div className="text-center px-1">
+                          <div className="text-[9px] text-gray-400">Rate: {conversionDetails.gross_salary.exchangeRate}</div>
+                          <i className="fas fa-arrow-right text-blue-400 my-1"></i>
+                          <div className="text-[9px] text-gray-400">{conversionDetails.gross_salary.baseCurrency} → {conversionDetails.gross_salary.targetCurrency}</div>
+                        </div>
+                        <div className="text-right flex-1">
+                          <div className="text-[10px] text-blue-500">Converted</div>
+                          <div className="text-base font-bold text-blue-600 dark:text-blue-400">
+                            {conversionDetails.gross_salary.targetCurrency} {conversionDetails.gross_salary.convertedAmount.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
+                          </div>
+                        </div>
+                      </div>
                     </div>
-                    <div className="text-lg md:text-xl font-bold text-blue-600 dark:text-blue-400">
-                      {targetCurrency}{" "}
-                      {localSummaryData.gross_salary?.toLocaleString() ||
-                        localSummaryData.gross_earnings?.toLocaleString() ||
-                        "0"}
-                    </div>
-                  </div>
-                  <div className="p-3 md:p-4 rounded-xl bg-orange-50 dark:bg-orange-900/20 border border-orange-200 dark:border-orange-800">
-                    <div className="text-[10px] md:text-xs text-gray-500 dark:text-gray-400 font-medium mb-1">
-                      Overtime Amount
-                    </div>
-                    <div className="text-lg md:text-xl font-bold text-orange-600 dark:text-orange-400">
-                      {targetCurrency}{" "}
-                      {localSummaryData.overtime_amount?.toLocaleString() ||
-                        "0"}
-                    </div>
-                  </div>
-                  <div className="p-3 md:p-4 rounded-xl bg-red-50 dark:bg-red-900/20 border border-red-200 dark:border-red-800">
-                    <div className="text-[10px] md:text-xs text-gray-500 dark:text-gray-400 font-medium mb-1">
-                      Deductions
-                    </div>
-                    <div className="text-lg md:text-xl font-bold text-red-500">
-                      {targetCurrency}{" "}
-                      {localSummaryData.deductions?.toLocaleString() ||
-                        localSummaryData.total_deductions?.toLocaleString() ||
-                        "0"}
-                    </div>
-                  </div>
-                  <div className="p-3 md:p-4 rounded-xl bg-green-50 dark:bg-green-900/20 border border-green-200 dark:border-green-800">
-                    <div className="text-[10px] md:text-xs text-green-600 dark:text-green-400 font-medium mb-1">
-                      Net Pay
-                    </div>
-                    <div className="text-lg md:text-xl font-bold text-green-600 dark:text-green-400">
-                      {targetCurrency}{" "}
-                      {localSummaryData.net_pay?.toLocaleString() || "0"}
-                    </div>
-                  </div>
-                </div>
 
-                {/* Detailed Breakdown */}
-                <div className="grid grid-cols-1 md:grid-cols-2 gap-4 mt-2">
-                  <div className="bg-gray-50 dark:bg-gray-700/30 rounded-lg p-4 border border-gray-200 dark:border-gray-700">
-                    <h4 className="text-sm font-semibold text-gray-700 dark:text-gray-300 mb-3">
-                      <i className="fas fa-calculator text-blue-500 mr-2"></i>
-                      Salary Calculation
-                    </h4>
-                    <div className="space-y-2">
-                      <div className="flex justify-between text-sm">
-                        <span className="text-gray-600 dark:text-gray-400">
-                          Gross Salary
-                        </span>
-                        <span className="font-medium text-gray-800 dark:text-gray-200">
-                          {targetCurrency}{" "}
-                          {localSummaryData.gross_salary?.toLocaleString() ||
-                            "0"}
-                        </span>
+                    {/* Overtime Amount */}
+                    <div className="p-4 rounded-xl bg-orange-50 dark:bg-orange-900/20 border border-orange-200 dark:border-orange-800 flex flex-col justify-between">
+                      <div className="text-xs text-gray-500 dark:text-gray-400 font-medium mb-3">Overtime Amount</div>
+                      <div className="flex justify-between items-center gap-2">
+                        <div className="flex-1">
+                          <div className="text-[10px] text-gray-500">Original Amount</div>
+                          <div className="text-sm font-bold text-gray-700 dark:text-gray-300">
+                            {conversionDetails.overtime_amount.baseCurrency} {conversionDetails.overtime_amount.amount.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
+                          </div>
+                        </div>
+                        <div className="text-center px-1">
+                          <div className="text-[9px] text-gray-400">Rate: {conversionDetails.overtime_amount.exchangeRate}</div>
+                          <i className="fas fa-arrow-right text-orange-400 my-1"></i>
+                          <div className="text-[9px] text-gray-400">{conversionDetails.overtime_amount.baseCurrency} → {conversionDetails.overtime_amount.targetCurrency}</div>
+                        </div>
+                        <div className="text-right flex-1">
+                          <div className="text-[10px] text-orange-500">Converted</div>
+                          <div className="text-base font-bold text-orange-600 dark:text-orange-400">
+                            {conversionDetails.overtime_amount.targetCurrency} {conversionDetails.overtime_amount.convertedAmount.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
+                          </div>
+                        </div>
                       </div>
-                      <div className="flex justify-between text-sm">
-                        <span className="text-gray-600 dark:text-gray-400">
-                          Overtime Amount
-                        </span>
-                        <span className="font-medium text-orange-600 dark:text-orange-400">
-                          {targetCurrency}{" "}
-                          {localSummaryData.overtime_amount?.toLocaleString() ||
-                            "0"}
-                        </span>
+                    </div>
+
+                    {/* Deductions */}
+                    <div className="p-4 rounded-xl bg-red-50 dark:bg-red-900/20 border border-red-200 dark:border-red-800 flex flex-col justify-between">
+                      <div className="text-xs text-gray-500 dark:text-gray-400 font-medium mb-3">Deductions</div>
+                      <div className="flex justify-between items-center gap-2">
+                        <div className="flex-1">
+                          <div className="text-[10px] text-gray-500">Original Amount</div>
+                          <div className="text-sm font-bold text-gray-700 dark:text-gray-300">
+                            {conversionDetails.deductions.baseCurrency} {conversionDetails.deductions.amount.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
+                          </div>
+                        </div>
+                        <div className="text-center px-1">
+                          <div className="text-[9px] text-gray-400">Rate: {conversionDetails.deductions.exchangeRate}</div>
+                          <i className="fas fa-arrow-right text-red-400 my-1"></i>
+                          <div className="text-[9px] text-gray-400">{conversionDetails.deductions.baseCurrency} → {conversionDetails.deductions.targetCurrency}</div>
+                        </div>
+                        <div className="text-right flex-1">
+                          <div className="text-[10px] text-red-500">Converted</div>
+                          <div className="text-base font-bold text-red-500">
+                            {conversionDetails.deductions.targetCurrency} {conversionDetails.deductions.convertedAmount.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
+                          </div>
+                        </div>
                       </div>
-                      <div className="flex justify-between text-sm border-t border-gray-200 dark:border-gray-600 pt-2 font-semibold">
-                        <span className="text-gray-700 dark:text-gray-300">
-                          Total Earnings
-                        </span>
-                        <span className="text-blue-600 dark:text-blue-400">
-                          {targetCurrency}{" "}
-                          {(
-                            localSummaryData.gross_salary +
-                            localSummaryData.overtime_amount
-                          )?.toLocaleString() || "0"}
-                        </span>
+                    </div>
+
+                    {/* Net Pay */}
+                    <div className="p-4 rounded-xl bg-green-50 dark:bg-green-900/20 border border-green-200 dark:border-green-800 flex flex-col justify-between">
+                      <div className="text-xs text-gray-500 dark:text-gray-400 font-medium mb-3">Net Pay</div>
+                      <div className="flex justify-between items-center gap-2">
+                        <div className="flex-1">
+                          <div className="text-[10px] text-gray-500">Original Amount</div>
+                          <div className="text-sm font-bold text-gray-700 dark:text-gray-300">
+                            {conversionDetails.net_pay.baseCurrency} {conversionDetails.net_pay.amount.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
+                          </div>
+                        </div>
+                        <div className="text-center px-1">
+                          <div className="text-[9px] text-gray-400">Rate: {conversionDetails.net_pay.exchangeRate}</div>
+                          <i className="fas fa-arrow-right text-green-400 my-1"></i>
+                          <div className="text-[9px] text-gray-400">{conversionDetails.net_pay.baseCurrency} → {conversionDetails.net_pay.targetCurrency}</div>
+                        </div>
+                        <div className="text-right flex-1">
+                          <div className="text-[10px] text-green-500">Converted</div>
+                          <div className="text-base font-bold text-green-600 dark:text-green-400">
+                            {conversionDetails.net_pay.targetCurrency} {conversionDetails.net_pay.convertedAmount.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
+                          </div>
+                        </div>
                       </div>
                     </div>
                   </div>
-                  <div className="bg-gray-50 dark:bg-gray-700/30 rounded-lg p-4 border border-gray-200 dark:border-gray-700">
-                    <h4 className="text-sm font-semibold text-gray-700 dark:text-gray-300 mb-3">
-                      <i className="fas fa-receipt text-red-500 mr-2"></i>
-                      Deductions Breakdown
-                    </h4>
-                    <div className="space-y-2">
-                      <div className="flex justify-between text-sm">
-                        <span className="text-gray-600 dark:text-gray-400">
-                          Total Deductions
-                        </span>
-                        <span className="font-medium text-red-500">
-                          -{targetCurrency}{" "}
-                          {localSummaryData.deductions?.toLocaleString() || "0"}
-                        </span>
-                      </div>
-                      <div className="flex justify-between text-sm border-t border-gray-200 dark:border-gray-600 pt-2 font-semibold">
-                        <span className="text-gray-700 dark:text-gray-300">
-                          Net Pay
-                        </span>
-                        <span className="text-green-600 dark:text-green-400">
-                          {targetCurrency}{" "}
-                          {localSummaryData.net_pay?.toLocaleString() || "0"}
-                        </span>
-                      </div>
-                    </div>
-                  </div>
-                </div>
+                )}
+
+
 
 
 

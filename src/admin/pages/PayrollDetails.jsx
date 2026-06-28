@@ -254,7 +254,7 @@ function PayrollView() {
         body: stepData.step_3.overtime_details.map((ot) => [
           formatDate(ot.date),
           ot.overtime_hours || 0,
-          formatCurrency(ot.amount || 0),
+          formatCurrency(ot.amount || 0, ot.currency || payroll?.target_currency || "INR"),
           ot.status || "pending",
         ]),
         theme: "grid",
@@ -596,7 +596,7 @@ function PayrollView() {
               {stepData.step_3?.total_overtime_amount !== undefined && (
                 <span className="ml-auto text-sm font-semibold text-blue-600 dark:text-blue-400">
                   Total:{" "}
-                  {formatCurrency(stepData.step_3.total_overtime_amount || 0)}
+                  {formatCurrency(stepData.step_3.total_overtime_amount || 0, currentPayroll?.target_currency || "INR")}
                 </span>
               )}
             </div>
@@ -630,7 +630,7 @@ function PayrollView() {
                           Amount
                         </label>
                         <div className="text-sm font-semibold text-green-600 dark:text-green-400">
-                          {formatCurrency(ot.amount || 0)}
+                          {formatCurrency(ot.amount || 0, ot.currency || currentPayroll?.target_currency || "INR")}
                         </div>
                       </div>
                       <div>
@@ -769,44 +769,152 @@ function PayrollView() {
 
             <div className="space-y-6">
               {/* Summary Cards */}
-              <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
-                <div className="p-4 rounded-xl bg-gray-50 dark:bg-gray-700/50 border border-gray-200 dark:border-gray-600">
-                  <div className="text-xs text-gray-500 dark:text-gray-400 font-medium mb-1">
-                    Gross Earnings
+              {stepData.step_5?.summary?.conversions ? (
+                <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                  {/* Gross Salary */}
+                  {stepData.step_5.summary.conversions.gross_salary && (
+                    <div className="p-4 rounded-xl bg-blue-50 dark:bg-blue-900/20 border border-blue-200 dark:border-blue-800 flex flex-col justify-between">
+                      <div className="text-xs text-gray-500 dark:text-gray-400 font-medium mb-3">Gross Salary</div>
+                      <div className="flex justify-between items-center gap-2">
+                        <div className="flex-1">
+                          <div className="text-[10px] text-gray-500">Original Amount</div>
+                          <div className="text-sm font-bold text-gray-700 dark:text-gray-300">
+                            {stepData.step_5.summary.conversions.gross_salary.baseCurrency} {stepData.step_5.summary.conversions.gross_salary.amount.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
+                          </div>
+                        </div>
+                        <div className="text-center px-1">
+                          <div className="text-[9px] text-gray-400">Rate: {stepData.step_5.summary.conversions.gross_salary.exchangeRate}</div>
+                          <i className="fas fa-arrow-right text-blue-400 my-1"></i>
+                          <div className="text-[9px] text-gray-400">{stepData.step_5.summary.conversions.gross_salary.baseCurrency} → {stepData.step_5.summary.conversions.gross_salary.targetCurrency}</div>
+                        </div>
+                        <div className="text-right flex-1">
+                          <div className="text-[10px] text-blue-500">Converted</div>
+                          <div className="text-base font-bold text-blue-600 dark:text-blue-400">
+                            {stepData.step_5.summary.conversions.gross_salary.targetCurrency} {stepData.step_5.summary.conversions.gross_salary.convertedAmount.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
+                          </div>
+                        </div>
+                      </div>
+                    </div>
+                  )}
+
+                  {/* Overtime Amount */}
+                  {stepData.step_5.summary.conversions.overtime_amount && (
+                    <div className="p-4 rounded-xl bg-orange-50 dark:bg-orange-900/20 border border-orange-200 dark:border-orange-800 flex flex-col justify-between">
+                      <div className="text-xs text-gray-500 dark:text-gray-400 font-medium mb-3">Overtime Amount</div>
+                      <div className="flex justify-between items-center gap-2">
+                        <div className="flex-1">
+                          <div className="text-[10px] text-gray-500">Original Amount</div>
+                          <div className="text-sm font-bold text-gray-700 dark:text-gray-300">
+                            {stepData.step_5.summary.conversions.overtime_amount.baseCurrency} {stepData.step_5.summary.conversions.overtime_amount.amount.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
+                          </div>
+                        </div>
+                        <div className="text-center px-1">
+                          <div className="text-[9px] text-gray-400">Rate: {stepData.step_5.summary.conversions.overtime_amount.exchangeRate}</div>
+                          <i className="fas fa-arrow-right text-orange-400 my-1"></i>
+                          <div className="text-[9px] text-gray-400">{stepData.step_5.summary.conversions.overtime_amount.baseCurrency} → {stepData.step_5.summary.conversions.overtime_amount.targetCurrency}</div>
+                        </div>
+                        <div className="text-right flex-1">
+                          <div className="text-[10px] text-orange-500">Converted</div>
+                          <div className="text-base font-bold text-orange-600 dark:text-orange-400">
+                            {stepData.step_5.summary.conversions.overtime_amount.targetCurrency} {stepData.step_5.summary.conversions.overtime_amount.convertedAmount.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
+                          </div>
+                        </div>
+                      </div>
+                    </div>
+                  )}
+
+                  {/* Deductions */}
+                  {stepData.step_5.summary.conversions.deductions && (
+                    <div className="p-4 rounded-xl bg-red-50 dark:bg-red-900/20 border border-red-200 dark:border-red-800 flex flex-col justify-between">
+                      <div className="text-xs text-gray-500 dark:text-gray-400 font-medium mb-3">Deductions</div>
+                      <div className="flex justify-between items-center gap-2">
+                        <div className="flex-1">
+                          <div className="text-[10px] text-gray-500">Original Amount</div>
+                          <div className="text-sm font-bold text-gray-700 dark:text-gray-300">
+                            {stepData.step_5.summary.conversions.deductions.baseCurrency} {stepData.step_5.summary.conversions.deductions.amount.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
+                          </div>
+                        </div>
+                        <div className="text-center px-1">
+                          <div className="text-[9px] text-gray-400">Rate: {stepData.step_5.summary.conversions.deductions.exchangeRate}</div>
+                          <i className="fas fa-arrow-right text-red-400 my-1"></i>
+                          <div className="text-[9px] text-gray-400">{stepData.step_5.summary.conversions.deductions.baseCurrency} → {stepData.step_5.summary.conversions.deductions.targetCurrency}</div>
+                        </div>
+                        <div className="text-right flex-1">
+                          <div className="text-[10px] text-red-500">Converted</div>
+                          <div className="text-base font-bold text-red-500">
+                            {stepData.step_5.summary.conversions.deductions.targetCurrency} {stepData.step_5.summary.conversions.deductions.convertedAmount.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
+                          </div>
+                        </div>
+                      </div>
+                    </div>
+                  )}
+
+                  {/* Net Pay */}
+                  {stepData.step_5.summary.conversions.net_pay && (
+                    <div className="p-4 rounded-xl bg-green-50 dark:bg-green-900/20 border border-green-200 dark:border-green-800 flex flex-col justify-between">
+                      <div className="text-xs text-gray-500 dark:text-gray-400 font-medium mb-3">Net Pay</div>
+                      <div className="flex justify-between items-center gap-2">
+                        <div className="flex-1">
+                          <div className="text-[10px] text-gray-500">Original Amount</div>
+                          <div className="text-sm font-bold text-gray-700 dark:text-gray-300">
+                            {stepData.step_5.summary.conversions.net_pay.baseCurrency} {stepData.step_5.summary.conversions.net_pay.amount.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
+                          </div>
+                        </div>
+                        <div className="text-center px-1">
+                          <div className="text-[9px] text-gray-400">Rate: {stepData.step_5.summary.conversions.net_pay.exchangeRate}</div>
+                          <i className="fas fa-arrow-right text-green-400 my-1"></i>
+                          <div className="text-[9px] text-gray-400">{stepData.step_5.summary.conversions.net_pay.baseCurrency} → {stepData.step_5.summary.conversions.net_pay.targetCurrency}</div>
+                        </div>
+                        <div className="text-right flex-1">
+                          <div className="text-[10px] text-green-500">Converted</div>
+                          <div className="text-base font-bold text-green-600 dark:text-green-400">
+                            {stepData.step_5.summary.conversions.net_pay.targetCurrency} {stepData.step_5.summary.conversions.net_pay.convertedAmount.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
+                          </div>
+                        </div>
+                      </div>
+                    </div>
+                  )}
+                </div>
+              ) : (
+                <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
+                  <div className="p-4 rounded-xl bg-gray-50 dark:bg-gray-700/50 border border-gray-200 dark:border-gray-600">
+                    <div className="text-xs text-gray-500 dark:text-gray-400 font-medium mb-1">
+                      Gross Earnings
+                    </div>
+                    <div className="text-xl font-bold text-gray-800 dark:text-gray-200">
+                      {formatCurrency(
+                        stepData.step_2?.total_earnings || payroll.net_pay || 0,
+                      )}
+                    </div>
                   </div>
-                  <div className="text-xl font-bold text-gray-800 dark:text-gray-200">
-                    {formatCurrency(
-                      stepData.step_2?.total_earnings || payroll.net_pay || 0,
-                    )}
+                  <div className="p-4 rounded-xl bg-red-50 dark:bg-red-900/20 border border-red-200 dark:border-red-800">
+                    <div className="text-xs text-red-600 dark:text-red-400 font-medium mb-1">
+                      Total Deductions
+                    </div>
+                    <div className="text-xl font-bold text-red-600 dark:text-red-400">
+                      {formatCurrency(stepData.step_4?.total_deductions || 0)}
+                    </div>
+                  </div>
+                  <div className="p-4 rounded-xl bg-blue-50 dark:bg-blue-900/20 border border-blue-200 dark:border-blue-800">
+                    <div className="text-xs text-blue-600 dark:text-blue-400 font-medium mb-1">
+                      Conversion Rate
+                    </div>
+                    <div className="text-xl font-bold text-blue-600 dark:text-blue-400">
+                      {stepData.conversion_rate || 1} (
+                      {stepData.conversion_from || "AED"} →{" "}
+                      {stepData.currency || "INR"})
+                    </div>
+                  </div>
+                  <div className="p-4 rounded-xl bg-green-50 dark:bg-green-900/20 border border-green-200 dark:border-green-800">
+                    <div className="text-xs text-green-600 dark:text-green-400 font-medium mb-1">
+                      Final Net Pay
+                    </div>
+                    <div className="text-xl font-bold text-green-600 dark:text-green-400">
+                      {formatCurrency(payroll.net_pay || 0)}
+                    </div>
                   </div>
                 </div>
-                <div className="p-4 rounded-xl bg-red-50 dark:bg-red-900/20 border border-red-200 dark:border-red-800">
-                  <div className="text-xs text-red-600 dark:text-red-400 font-medium mb-1">
-                    Total Deductions
-                  </div>
-                  <div className="text-xl font-bold text-red-600 dark:text-red-400">
-                    {formatCurrency(stepData.step_4?.total_deductions || 0)}
-                  </div>
-                </div>
-                <div className="p-4 rounded-xl bg-blue-50 dark:bg-blue-900/20 border border-blue-200 dark:border-blue-800">
-                  <div className="text-xs text-blue-600 dark:text-blue-400 font-medium mb-1">
-                    Conversion Rate
-                  </div>
-                  <div className="text-xl font-bold text-blue-600 dark:text-blue-400">
-                    {stepData.conversion_rate || 1} (
-                    {stepData.conversion_from || "AED"} →{" "}
-                    {stepData.currency || "INR"})
-                  </div>
-                </div>
-                <div className="p-4 rounded-xl bg-green-50 dark:bg-green-900/20 border border-green-200 dark:border-green-800">
-                  <div className="text-xs text-green-600 dark:text-green-400 font-medium mb-1">
-                    Final Net Pay
-                  </div>
-                  <div className="text-xl font-bold text-green-600 dark:text-green-400">
-                    {formatCurrency(payroll.net_pay || 0)}
-                  </div>
-                </div>
-              </div>
+              )}
 
               {/* Currency Conversion Info */}
               {stepData.currency && (
