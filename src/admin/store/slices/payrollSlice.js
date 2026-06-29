@@ -10,9 +10,9 @@ export const fetchPayrolls = createAsyncThunk(
     try {
       const response = await apiClient.get("/admin/payroll", { params });
       console.log("Fetch payrolls response:", response.data);
-      
+
       const responseData = response.data;
-      
+
       if (responseData?.data && Array.isArray(responseData.data)) {
         return {
           payrolls: responseData.data,
@@ -23,7 +23,7 @@ export const fetchPayrolls = createAsyncThunk(
           stats: responseData.stats || null,
         };
       }
-      
+
       if (Array.isArray(responseData)) {
         return {
           payrolls: responseData,
@@ -34,7 +34,7 @@ export const fetchPayrolls = createAsyncThunk(
           stats: null,
         };
       }
-      
+
       return {
         payrolls: responseData?.data || [],
         total: responseData?.total || 0,
@@ -46,10 +46,10 @@ export const fetchPayrolls = createAsyncThunk(
     } catch (error) {
       console.error("Fetch payrolls error:", error);
       return rejectWithValue(
-        error.response?.data?.message || "Failed to fetch payrolls"
+        error.response?.data?.message || "Failed to fetch payrolls",
       );
     }
-  }
+  },
 );
 
 // ─── Delete Payroll ────────────────────────────────────────────────────
@@ -59,18 +59,20 @@ export const deletePayroll = createAsyncThunk(
     try {
       const response = await apiClient.delete(`/admin/payroll/${id}`);
       console.log("Delete payroll response:", response.data);
-      
+
       if (response.data?.success === true) {
         return id;
       }
-      return rejectWithValue(response.data?.message || "Failed to delete payroll");
+      return rejectWithValue(
+        response.data?.message || "Failed to delete payroll",
+      );
     } catch (error) {
       console.error("Delete payroll error:", error);
       return rejectWithValue(
-        error.response?.data?.message || "Failed to delete payroll"
+        error.response?.data?.message || "Failed to delete payroll",
       );
     }
-  }
+  },
 );
 
 // ─── Generate Payslip ──────────────────────────────────────────────────
@@ -84,10 +86,10 @@ export const generatePayslip = createAsyncThunk(
     } catch (error) {
       console.error("Generate payslip error:", error);
       return rejectWithValue(
-        error.response?.data?.message || "Failed to generate payslip"
+        error.response?.data?.message || "Failed to generate payslip",
       );
     }
-  }
+  },
 );
 
 // ─── Fetch Payroll by ID ──────────────────────────────────────────────
@@ -101,10 +103,10 @@ export const fetchPayrollById = createAsyncThunk(
     } catch (error) {
       console.error("Fetch payroll by ID error:", error);
       return rejectWithValue(
-        error.response?.data?.message || "Failed to fetch payroll"
+        error.response?.data?.message || "Failed to fetch payroll",
       );
     }
-  }
+  },
 );
 
 // ─── Fetch Draft Payroll ──────────────────────────────────────────────
@@ -114,18 +116,20 @@ export const fetchDraftPayroll = createAsyncThunk(
     try {
       const response = await apiClient.get(`/admin/payroll/draft/${userId}`);
       console.log("Fetch draft payroll response:", response.data);
-      
+
       if (response.data?.success === true) {
         return response.data.data;
       }
-      return rejectWithValue(response.data?.message || "Failed to fetch draft payroll");
+      return rejectWithValue(
+        response.data?.message || "Failed to fetch draft payroll",
+      );
     } catch (error) {
       console.error("Fetch draft payroll error:", error);
       return rejectWithValue(
-        error.response?.data?.message || "Failed to fetch draft payroll"
+        error.response?.data?.message || "Failed to fetch draft payroll",
       );
     }
-  }
+  },
 );
 
 // ─── Save Payroll Step ────────────────────────────────────────────────
@@ -133,83 +137,174 @@ export const savePayrollStep = createAsyncThunk(
   "payroll/saveStep",
   async ({ userId, step, stepData }, { rejectWithValue }) => {
     try {
-      console.log("API CALL savePayrollStep payload:", { userId, step, stepData });
+      console.log("API CALL savePayrollStep payload:", {
+        userId,
+        step,
+        stepData,
+      });
       const response = await apiClient.post("/admin/payroll/save-step", {
         user_id: userId,
         step: step,
-        step_data: stepData
+        step_data: stepData,
       });
       console.log("Save payroll step response:", response.data);
-      
+
       if (response.data?.success === true) {
-        return { 
-          step, 
-          stepData, 
+        return {
+          step,
+          stepData,
           message: response.data.message,
-          data: response.data.data 
+          data: response.data.data,
         };
       }
-      return rejectWithValue(response.data?.message || "Failed to save step data");
+      return rejectWithValue(
+        response.data?.message || "Failed to save step data",
+      );
     } catch (error) {
       console.error("Save payroll step error:", error);
       return rejectWithValue(
-        error.response?.data?.message || "Failed to save step data"
+        error.response?.data?.message || "Failed to save step data",
       );
     }
-  }
+  },
 );
 
+// ─── Submit Payroll ────────────────────────────────────────────────────
 // ─── Submit Payroll ────────────────────────────────────────────────────
 export const submitPayroll = createAsyncThunk(
   "payroll/submit",
   async (payload, { rejectWithValue }) => {
     try {
-      const response = await apiClient.post("/admin/payroll/submit", payload);
+      // Validate required fields before sending
+      const requiredFields = [
+        "user_id",
+        "pay_period_month",
+        "pay_period_year",
+        "gross_salary",
+        "overtime",
+        "deductions",
+        "net_pay",
+        "currency",
+      ];
+
+      const missingFields = requiredFields.filter(
+        (field) =>
+          payload[field] === undefined ||
+          payload[field] === null ||
+          payload[field] === "",
+      );
+
+      if (missingFields.length > 0) {
+        return rejectWithValue(
+          `Missing required fields: ${missingFields.join(", ")}`,
+        );
+      }
+
+      // Ensure numeric values are properly formatted
+      const formattedPayload = {
+        ...payload,
+        gross_salary: parseFloat(payload.gross_salary) || 0,
+        overtime: parseFloat(payload.overtime) || 0,
+        deductions: parseFloat(payload.deductions) || 0,
+        net_pay: parseFloat(payload.net_pay) || 0,
+        pay_period_month: parseInt(payload.pay_period_month),
+        pay_period_year: parseInt(payload.pay_period_year),
+        user_id: parseInt(payload.user_id),
+      };
+
+      console.log(
+        "Submitting payroll with formatted payload:",
+        formattedPayload,
+      );
+
+      const response = await apiClient.post(
+        "/admin/payroll/submit",
+        formattedPayload,
+      );
       console.log("Submit payroll response:", response.data);
-      
+
       if (response.data?.success === true) {
         return response.data;
       }
-      return rejectWithValue(response.data?.message || "Failed to submit payroll");
+      return rejectWithValue(
+        response.data?.message || "Failed to submit payroll",
+      );
     } catch (error) {
       console.error("Submit payroll error:", error);
+      // Handle validation errors from backend
+      if (error.response?.data?.errors) {
+        const errorMessages = Object.values(error.response.data.errors)
+          .flat()
+          .join(", ");
+        return rejectWithValue(errorMessages);
+      }
       return rejectWithValue(
-        error.response?.data?.message || "Failed to submit payroll"
+        error.response?.data?.message || "Failed to submit payroll",
       );
     }
-  }
+  },
 );
 
 // ─── Convert Salary (Currency Conversion) ─────────────────────────────
 export const convertSalary = createAsyncThunk(
   "payroll/convertSalary",
-  async ({ userId, payPeriodMonth, payPeriodYear, targetCurrency, conversionRates }, { rejectWithValue }) => {
+  async (
+    { userId, payPeriodMonth, payPeriodYear, targetCurrency, conversionRates },
+    { rejectWithValue },
+  ) => {
     try {
+      // Validate input
+      if (!userId) {
+        return rejectWithValue("User ID is required");
+      }
+      if (!payPeriodMonth || !payPeriodYear) {
+        return rejectWithValue("Pay period month and year are required");
+      }
+      if (!targetCurrency) {
+        return rejectWithValue("Target currency is required");
+      }
+      if (!conversionRates || conversionRates.length === 0) {
+        return rejectWithValue("At least one conversion rate is required");
+      }
+
       const payload = {
-        user_id: userId,
-        pay_period_month: payPeriodMonth,
-        pay_period_year: payPeriodYear,
+        user_id: parseInt(userId),
+        pay_period_month: parseInt(payPeriodMonth),
+        pay_period_year: parseInt(payPeriodYear),
         target_currency: targetCurrency,
-        conversion_rates: conversionRates.map(rate => ({
+        conversion_rates: conversionRates.map((rate) => ({
           from_currency: rate.currency,
-          rate: rate.rate
-        }))
+          rate: parseFloat(rate.rate) || 1,
+        })),
       };
-      
-      const response = await apiClient.post("/admin/payroll/convert-salary", payload);
+
+      console.log("Convert salary payload:", payload);
+
+      const response = await apiClient.post(
+        "/admin/payroll/convert-salary",
+        payload,
+      );
       console.log("Convert salary response:", response.data);
-      
+
       if (response.data?.success) {
         return response.data.data;
       }
-      return rejectWithValue(response.data?.message || "Failed to convert salary");
+      return rejectWithValue(
+        response.data?.message || "Failed to convert salary",
+      );
     } catch (error) {
       console.error("Convert salary error:", error);
+      if (error.response?.data?.errors) {
+        const errorMessages = Object.values(error.response.data.errors)
+          .flat()
+          .join(", ");
+        return rejectWithValue(errorMessages);
+      }
       return rejectWithValue(
-        error.response?.data?.message || "Failed to convert salary"
+        error.response?.data?.message || "Failed to convert salary",
       );
     }
-  }
+  },
 );
 
 // ─── Fetch Payroll History ────────────────────────────────────────────
@@ -217,20 +312,24 @@ export const fetchPayrollHistory = createAsyncThunk(
   "payroll/fetchHistory",
   async (params = {}, { rejectWithValue }) => {
     try {
-      const response = await apiClient.get("/admin/payroll/history", { params });
+      const response = await apiClient.get("/admin/payroll/history", {
+        params,
+      });
       console.log("Fetch payroll history response:", response.data);
-      
+
       if (response.data?.success === true) {
         return response.data.data || [];
       }
-      return rejectWithValue(response.data?.message || "Failed to fetch payroll history");
+      return rejectWithValue(
+        response.data?.message || "Failed to fetch payroll history",
+      );
     } catch (error) {
       console.error("Fetch payroll history error:", error);
       return rejectWithValue(
-        error.response?.data?.message || "Failed to fetch payroll history"
+        error.response?.data?.message || "Failed to fetch payroll history",
       );
     }
-  }
+  },
 );
 
 // ─── Save Draft Payroll ────────────────────────────────────────────────
@@ -238,9 +337,12 @@ export const saveDraftPayroll = createAsyncThunk(
   "payroll/saveDraft",
   async (payrollData, { rejectWithValue }) => {
     try {
-      const response = await apiClient.post("/admin/payroll/draft", payrollData);
+      const response = await apiClient.post(
+        "/admin/payroll/draft",
+        payrollData,
+      );
       console.log("Save draft payroll response:", response.data);
-      
+
       if (response.data?.success === true) {
         return response.data.data;
       }
@@ -248,10 +350,10 @@ export const saveDraftPayroll = createAsyncThunk(
     } catch (error) {
       console.error("Save draft payroll error:", error);
       return rejectWithValue(
-        error.response?.data?.message || "Failed to save draft"
+        error.response?.data?.message || "Failed to save draft",
       );
     }
-  }
+  },
 );
 
 // ─── Get Payroll Stats ────────────────────────────────────────────────
@@ -265,10 +367,10 @@ export const fetchPayrollStats = createAsyncThunk(
     } catch (error) {
       console.error("Fetch payroll stats error:", error);
       return rejectWithValue(
-        error.response?.data?.message || "Failed to fetch payroll stats"
+        error.response?.data?.message || "Failed to fetch payroll stats",
       );
     }
-  }
+  },
 );
 
 // ─── Update Payroll Status ─────────────────────────────────────────────
@@ -277,17 +379,17 @@ export const updatePayrollStatus = createAsyncThunk(
   async ({ id, status }, { rejectWithValue }) => {
     try {
       const response = await apiClient.patch(`/admin/payrolls/${id}/status`, {
-        status
+        status,
       });
       console.log("Update payroll status response:", response.data);
       return response.data;
     } catch (error) {
       console.error("Update payroll status error:", error);
       return rejectWithValue(
-        error.response?.data?.message || "Failed to update payroll status"
+        error.response?.data?.message || "Failed to update payroll status",
       );
     }
-  }
+  },
 );
 
 // ─── Export Payroll Data ───────────────────────────────────────────────
@@ -297,16 +399,16 @@ export const exportPayrolls = createAsyncThunk(
     try {
       const response = await apiClient.get("/admin/payrolls/export", {
         params,
-        responseType: 'blob'
+        responseType: "blob",
       });
       return response.data;
     } catch (error) {
       console.error("Export payrolls error:", error);
       return rejectWithValue(
-        error.response?.data?.message || "Failed to export payrolls"
+        error.response?.data?.message || "Failed to export payrolls",
       );
     }
-  }
+  },
 );
 
 // ─── Calculate Salary Split (Step 2) ────────────────────────────────
@@ -318,21 +420,26 @@ export const calculateSalarySplit = createAsyncThunk(
         employee_id: employeeId || userId,
         month: month,
       };
-      
-      const response = await apiClient.post("/admin/payroll/calculate", payload);
+
+      const response = await apiClient.post(
+        "/admin/payroll/calculate",
+        payload,
+      );
       console.log("Calculate salary split response:", response.data);
-      
+
       if (response.data?.success) {
         return response.data.data;
       }
-      return rejectWithValue(response.data?.message || "Failed to calculate salary split");
+      return rejectWithValue(
+        response.data?.message || "Failed to calculate salary split",
+      );
     } catch (error) {
       console.error("Calculate salary split error:", error);
       return rejectWithValue(
-        error.response?.data?.message || "Failed to calculate salary split"
+        error.response?.data?.message || "Failed to calculate salary split",
       );
     }
-  }
+  },
 );
 
 // ─── Fetch Overtime Data (Step 3) ───────────────────────────────────
@@ -345,22 +452,24 @@ export const fetchOvertimeData = createAsyncThunk(
         employee_id: employeeId || userId,
         month: month,
       };
-      
+
       const response = await apiClient.post("/admin/payroll/overtime", payload);
       console.log("Fetch overtime data response:", response.data);
-      
+
       if (response.data?.success) {
         // The API returns data directly as an array
         return response.data.data || [];
       }
-      return rejectWithValue(response.data?.message || "Failed to fetch overtime data");
+      return rejectWithValue(
+        response.data?.message || "Failed to fetch overtime data",
+      );
     } catch (error) {
       console.error("Fetch overtime data error:", error);
       return rejectWithValue(
-        error.response?.data?.message || "Failed to fetch overtime data"
+        error.response?.data?.message || "Failed to fetch overtime data",
       );
     }
-  }
+  },
 );
 
 // ─── Fetch Summary (Step 5) ──────────────────────────────────────────
@@ -373,21 +482,23 @@ export const fetchPayrollSummary = createAsyncThunk(
         pay_period_month: payPeriodMonth,
         pay_period_year: payPeriodYear,
       };
-      
+
       const response = await apiClient.post("/admin/payroll/summary", payload);
       console.log("Fetch summary response:", response.data);
-      
+
       if (response.data?.success) {
         return response.data.data;
       }
-      return rejectWithValue(response.data?.message || "Failed to fetch summary");
+      return rejectWithValue(
+        response.data?.message || "Failed to fetch summary",
+      );
     } catch (error) {
       console.error("Fetch summary error:", error);
       return rejectWithValue(
-        error.response?.data?.message || "Failed to fetch summary"
+        error.response?.data?.message || "Failed to fetch summary",
       );
     }
-  }
+  },
 );
 
 // ─── Send Payslip via Email ─────────────────────────────────────────────
@@ -395,20 +506,24 @@ export const sendPayslip = createAsyncThunk(
   "payroll/sendPayslip",
   async (id, { rejectWithValue }) => {
     try {
-      const response = await apiClient.post(`/admin/payroll/${id}/send-payslip`);
+      const response = await apiClient.post(
+        `/admin/payroll/${id}/send-payslip`,
+      );
       console.log("Send payslip response:", response.data);
-      
+
       if (response.data?.success === true) {
         return response.data;
       }
-      return rejectWithValue(response.data?.message || "Failed to send payslip");
+      return rejectWithValue(
+        response.data?.message || "Failed to send payslip",
+      );
     } catch (error) {
       console.error("Send payslip error:", error);
       return rejectWithValue(
-        error.response?.data?.message || "Failed to send payslip"
+        error.response?.data?.message || "Failed to send payslip",
       );
     }
-  }
+  },
 );
 
 // ─── Fetch Employee Salary Packages ──────────────────────────────────
@@ -416,23 +531,28 @@ export const fetchEmployeeSalaryPackages = createAsyncThunk(
   "payroll/fetchEmployeeSalaryPackages",
   async (employeeId, { rejectWithValue }) => {
     try {
-      const response = await apiClient.get(`/admin/employees/salary-packages/${employeeId}`);
+      const response = await apiClient.get(
+        `/admin/employees/salary-packages/${employeeId}`,
+      );
       console.log("Fetch employee salary packages response:", response.data);
-      
+
       if (response.data?.success !== false) {
         return {
           data: response.data?.data || response.data || [],
-          message: response.data?.message || "Salary packages fetched successfully"
+          message:
+            response.data?.message || "Salary packages fetched successfully",
         };
       }
-      return rejectWithValue(response.data?.message || "Failed to fetch salary packages");
+      return rejectWithValue(
+        response.data?.message || "Failed to fetch salary packages",
+      );
     } catch (error) {
       console.error("Fetch employee salary packages error:", error);
       return rejectWithValue(
-        error.response?.data?.message || "Failed to fetch salary packages"
+        error.response?.data?.message || "Failed to fetch salary packages",
       );
     }
-  }
+  },
 );
 
 // ─── Payroll State ─────────────────────────────────────────────────────
@@ -443,7 +563,7 @@ const initialState = {
   currentPage: 1,
   lastPage: 1,
   perPage: 15,
-  
+
   // Stats
   stats: {
     totalPayrolls: 0,
@@ -453,10 +573,10 @@ const initialState = {
     draftCount: 0,
     failedCount: 0,
   },
-  
+
   // Draft payroll data
   draftData: null,
-  
+
   // Step data storage
   stepData: {
     1: {}, // Basic Info
@@ -467,11 +587,11 @@ const initialState = {
   },
   currentStep: 1,
   isStepSaving: false,
-  
+
   // Submission state
   isSubmitting: false,
   submittedPayroll: null,
-  
+
   // History
   history: [],
   historyLoading: false,
@@ -481,15 +601,15 @@ const initialState = {
     total: 0,
   },
   historyFilters: {
-    search: '',
-    fromDate: '',
-    toDate: '',
-    status: 'all',
+    search: "",
+    fromDate: "",
+    toDate: "",
+    status: "all",
   },
-  
+
   // Current payroll being viewed/edited
   currentPayroll: null,
-  
+
   // Step-specific data from API
   calculatedCountries: null,
   overtimeData: null,
@@ -497,39 +617,39 @@ const initialState = {
   countriesLoading: false,
   overtimeLoading: false,
   summaryLoading: false,
-  
+
   // Employee salary packages
   employeePackages: [],
   packagesLoading: false,
-  
+
   // Loading & error states
   loading: false,
   actionLoading: false,
   saving: false,
   error: null,
-  
+
   // Success messages
   successMessage: null,
-  
+
   // Track which steps have been completed/saved
   completedSteps: [],
 };
 
 const payrollSlice = createSlice({
-  name: 'payroll',
+  name: "payroll",
   initialState,
   reducers: {
     // Set current step
     setCurrentStep: (state, action) => {
       state.currentStep = action.payload;
     },
-    
+
     // Update step data locally
     updateStepData: (state, action) => {
       const { step, data } = action.payload;
       state.stepData[step] = { ...state.stepData[step], ...data };
     },
-    
+
     // Mark step as completed
     markStepCompleted: (state, action) => {
       const step = action.payload;
@@ -537,7 +657,7 @@ const payrollSlice = createSlice({
         state.completedSteps.push(step);
       }
     },
-    
+
     // Clear step data
     clearStepData: (state) => {
       state.stepData = {
@@ -549,33 +669,36 @@ const payrollSlice = createSlice({
       };
       state.completedSteps = [];
     },
-    
+
     // Set draft data
     setDraftData: (state, action) => {
       state.draftData = action.payload;
     },
-    
+
     // Set history filters
     setHistoryFilters: (state, action) => {
       state.historyFilters = { ...state.historyFilters, ...action.payload };
       state.historyPagination.currentPage = 1;
     },
-    
+
     // Set history pagination
     setHistoryPagination: (state, action) => {
-      state.historyPagination = { ...state.historyPagination, ...action.payload };
+      state.historyPagination = {
+        ...state.historyPagination,
+        ...action.payload,
+      };
     },
-    
+
     // Clear errors
     clearPayrollError: (state) => {
       state.error = null;
     },
-    
+
     // Clear success message
     clearPayrollSuccess: (state) => {
       state.successMessage = null;
     },
-    
+
     // Reset payroll state
     resetPayrollState: (state) => {
       state.draftData = null;
@@ -598,18 +721,18 @@ const payrollSlice = createSlice({
       state.summaryData = null;
       state.employeePackages = [];
     },
-    
+
     // Set current payroll
     setCurrentPayroll: (state, action) => {
       state.currentPayroll = action.payload;
     },
-    
+
     // Clear payroll list
     clearPayrollList: (state) => {
       state.payrolls = [];
       state.totalCount = 0;
     },
-    
+
     // Clear step data
     clearCalculatedCountries: (state) => {
       state.calculatedCountries = null;
@@ -623,8 +746,14 @@ const payrollSlice = createSlice({
     clearEmployeePackages: (state) => {
       state.employeePackages = [];
     },
+    clearSubmissionState: (state) => {
+      state.isSubmitting = false;
+      state.submittedPayroll = null;
+      state.error = null;
+      state.successMessage = null;
+    },
   },
-  
+
   extraReducers: (builder) => {
     builder
       // ─── Fetch Payrolls ────────────────────────────────────────────────
@@ -656,7 +785,7 @@ const payrollSlice = createSlice({
       })
       .addCase(deletePayroll.fulfilled, (state, action) => {
         state.actionLoading = false;
-        state.payrolls = state.payrolls.filter(p => p.id !== action.payload);
+        state.payrolls = state.payrolls.filter((p) => p.id !== action.payload);
         state.totalCount = state.payrolls.length;
         state.successMessage = "Payroll deleted successfully";
       })
@@ -688,7 +817,7 @@ const payrollSlice = createSlice({
       .addCase(updatePayrollStatus.fulfilled, (state, action) => {
         const updated = action.payload?.data || action.payload;
         if (updated?.id) {
-          const index = state.payrolls.findIndex(p => p.id === updated.id);
+          const index = state.payrolls.findIndex((p) => p.id === updated.id);
           if (index !== -1) {
             state.payrolls[index] = { ...state.payrolls[index], ...updated };
           }
@@ -711,7 +840,7 @@ const payrollSlice = createSlice({
         state.loading = false;
         state.error = action.payload;
       })
-      
+
       // ─── Save Step ─────────────────────────────────────────────────────
       .addCase(savePayrollStep.pending, (state) => {
         state.isStepSaving = true;
@@ -730,16 +859,21 @@ const payrollSlice = createSlice({
         state.isStepSaving = false;
         state.error = action.payload;
       })
-      
+
+      // ─── Submit Payroll ────────────────────────────────────────────────
       // ─── Submit Payroll ────────────────────────────────────────────────
       .addCase(submitPayroll.pending, (state) => {
         state.isSubmitting = true;
         state.error = null;
+        state.successMessage = null;
       })
       .addCase(submitPayroll.fulfilled, (state, action) => {
         state.isSubmitting = false;
         state.submittedPayroll = action.payload;
-        state.successMessage = "Payroll submitted successfully! Payslip has been generated and emailed.";
+        state.successMessage =
+          action.payload?.message ||
+          "Payroll submitted successfully! Payslip has been generated and emailed.";
+        // Reset step data after successful submission
         state.stepData = {
           1: {},
           2: {},
@@ -749,12 +883,16 @@ const payrollSlice = createSlice({
         };
         state.completedSteps = [];
         state.currentStep = 1;
+        // Clear calculated data
+        state.calculatedCountries = null;
+        state.overtimeData = null;
+        state.summaryData = null;
       })
       .addCase(submitPayroll.rejected, (state, action) => {
         state.isSubmitting = false;
-        state.error = action.payload;
+        state.error = action.payload || "Failed to submit payroll";
+        state.successMessage = null;
       })
-      
       // ─── Fetch History ──────────────────────────────────────────────────
       .addCase(fetchPayrollHistory.pending, (state) => {
         state.historyLoading = true;
@@ -774,7 +912,7 @@ const payrollSlice = createSlice({
         state.historyLoading = false;
         state.error = action.payload;
       })
-      
+
       // ─── Fetch Payroll by ID ───────────────────────────────────────────
       .addCase(fetchPayrollById.pending, (state) => {
         state.loading = true;
@@ -788,7 +926,7 @@ const payrollSlice = createSlice({
         state.loading = false;
         state.error = action.payload;
       })
-      
+
       // ─── Save Draft ────────────────────────────────────────────────────
       .addCase(saveDraftPayroll.pending, (state) => {
         state.saving = true;
@@ -881,6 +1019,7 @@ export const {
   clearOvertimeData,
   clearSummaryData,
   clearEmployeePackages,
+  clearSubmissionState
 } = payrollSlice.actions;
 
 // ─── Export Selectors ────────────────────────────────────────────────
@@ -888,7 +1027,8 @@ export const selectPayrollState = (state) => state.payroll;
 export const selectPayrolls = (state) => state.payroll.payrolls;
 export const selectPayrollStats = (state) => state.payroll.stats;
 export const selectPayrollLoading = (state) => state.payroll.loading;
-export const selectPayrollActionLoading = (state) => state.payroll.actionLoading;
+export const selectPayrollActionLoading = (state) =>
+  state.payroll.actionLoading;
 export const selectPayrollTotalCount = (state) => state.payroll.totalCount;
 export const selectPayrollCurrentPage = (state) => state.payroll.currentPage;
 export const selectPayrollLastPage = (state) => state.payroll.lastPage;
@@ -899,9 +1039,11 @@ export const selectPayrollSuccess = (state) => state.payroll.successMessage;
 // Step selectors
 export const selectCurrentStep = (state) => state.payroll.currentStep;
 export const selectStepData = (state) => state.payroll.stepData;
-export const selectStepDataByStep = (step) => (state) => state.payroll.stepData[step];
+export const selectStepDataByStep = (step) => (state) =>
+  state.payroll.stepData[step];
 export const selectCompletedSteps = (state) => state.payroll.completedSteps;
-export const selectIsStepCompleted = (step) => (state) => state.payroll.completedSteps.includes(step);
+export const selectIsStepCompleted = (step) => (state) =>
+  state.payroll.completedSteps.includes(step);
 
 // Draft selectors
 export const selectDraftData = (state) => state.payroll.draftData;
@@ -910,16 +1052,20 @@ export const selectPayrollIsSubmitting = (state) => state.payroll.isSubmitting;
 
 // History selectors
 export const selectPayrollHistory = (state) => state.payroll.history;
-export const selectPayrollHistoryLoading = (state) => state.payroll.historyLoading;
-export const selectPayrollHistoryPagination = (state) => state.payroll.historyPagination;
-export const selectPayrollHistoryFilters = (state) => state.payroll.historyFilters;
+export const selectPayrollHistoryLoading = (state) =>
+  state.payroll.historyLoading;
+export const selectPayrollHistoryPagination = (state) =>
+  state.payroll.historyPagination;
+export const selectPayrollHistoryFilters = (state) =>
+  state.payroll.historyFilters;
 
 // Current payroll selectors
 export const selectCurrentPayroll = (state) => state.payroll.currentPayroll;
 export const selectSubmittedPayroll = (state) => state.payroll.submittedPayroll;
 
 // Step data selectors
-export const selectCalculatedCountries = (state) => state.payroll.calculatedCountries;
+export const selectCalculatedCountries = (state) =>
+  state.payroll.calculatedCountries;
 export const selectCountriesLoading = (state) => state.payroll.countriesLoading;
 export const selectOvertimeData = (state) => state.payroll.overtimeData;
 export const selectOvertimeLoading = (state) => state.payroll.overtimeLoading;
@@ -929,5 +1075,10 @@ export const selectSummaryLoading = (state) => state.payroll.summaryLoading;
 // Employee packages selectors
 export const selectEmployeePackages = (state) => state.payroll.employeePackages;
 export const selectPackagesLoading = (state) => state.payroll.packagesLoading;
-
+export const selectPayrollSubmissionState = (state) => ({
+  isSubmitting: state.payroll.isSubmitting,
+  submittedPayroll: state.payroll.submittedPayroll,
+  error: state.payroll.error,
+  successMessage: state.payroll.successMessage,
+});
 export default payrollSlice.reducer;
