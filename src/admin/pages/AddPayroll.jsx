@@ -990,7 +990,7 @@ function AddPayroll() {
 
       showToast(
         result.message ||
-          "Payroll submitted successfully! Payslip has been generated and emailed.",
+          "Payroll submitted successfully! Payslip has been generated!.",
         "success",
       );
       generatePayslipPDF();
@@ -2507,7 +2507,7 @@ function AddPayroll() {
                     isLoading ||
                     isSubmitting ||
                     !selectedUserId ||
-                    (reduxCurrentStep === 2 && !isStep2Saved) // Disable Next in Step 2 until saved
+                    (reduxCurrentStep === 2 && !isStep2Saved)
                   }
                   className={`px-4 md:px-6 py-2 md:py-2.5 rounded-full font-semibold bg-green-500 text-white hover:bg-green-600 transition-all flex items-center justify-center gap-2 text-sm md:text-base disabled:opacity-50 disabled:cursor-not-allowed`}
                 >
@@ -2517,16 +2517,14 @@ function AddPayroll() {
               ) : (
                 <button
                   onClick={handleSubmitPayroll}
-                  disabled={isSubmitting || !selectedUserId}
+                  disabled={isSubmitting || !selectedUserId || !isConverted} // Add !isConverted to disable until conversion is done
                   className="px-4 md:px-6 py-2 md:py-2.5 rounded-full font-semibold bg-green-500 text-white hover:bg-green-600 transition-all flex items-center justify-center gap-2 text-sm md:text-base disabled:opacity-50 disabled:cursor-not-allowed"
                 >
                   <i
-                    className={`fas ${isSubmitting ? "fa-spinner fa-spin" : "fa-paper-plane"} text-xs md:text-sm`}
+                    className={`fas ${isSubmitting ? "fa-spinner fa-spin" : "fa-file-invoice"} text-xs md:text-sm`}
                   ></i>
                   <span>
-                    {isSubmitting
-                      ? "Submitting..."
-                      : "Generate & Email Payslip"}
+                    {isSubmitting ? "Submitting..." : "Generate Payslip"}
                   </span>
                 </button>
               )}

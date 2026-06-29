@@ -17,6 +17,7 @@ import {
   selectPayrollActionLoading,
   selectPayrollError,
   selectPayrollSuccess,
+  sendPayslip,
 } from "../store/slices/payrollSlice";
 
 import {
@@ -33,7 +34,10 @@ function PayrollView() {
 
   // Get user from Redux to determine base path
   const { user } = useSelector((state) => state.auth || {});
-  const isAdmin = user?.type === "admin" || user?.role?.name === "admin" || user?.role?.name === "Admin";
+  const isAdmin =
+    user?.type === "admin" ||
+    user?.role?.name === "admin" ||
+    user?.role?.name === "Admin";
   const basePath = isAdmin ? "/admin" : "/employee";
 
   // Redux state
@@ -138,6 +142,17 @@ function PayrollView() {
       minimumFractionDigits: 2,
       maximumFractionDigits: 2,
     }).format(amount);
+  };
+
+  // Handle send payslip email
+  const handleSendPayslip = async () => {
+    if (!id) return;
+    try {
+      const result = await dispatch(sendPayslip(id)).unwrap();
+      showToast(result.message || "Payslip sent successfully!", "success");
+    } catch (error) {
+      showToast(error || "Failed to send payslip", "error");
+    }
   };
 
   // Format date
@@ -259,7 +274,10 @@ function PayrollView() {
         body: stepData.step_3.overtime_details.map((ot) => [
           formatDate(ot.date),
           ot.overtime_hours || 0,
-          formatCurrency(ot.amount || 0, ot.currency || payroll?.target_currency || "INR"),
+          formatCurrency(
+            ot.amount || 0,
+            ot.currency || payroll?.target_currency || "INR",
+          ),
           ot.status || "pending",
         ]),
         theme: "grid",
@@ -601,7 +619,10 @@ function PayrollView() {
               {stepData.step_3?.total_overtime_amount !== undefined && (
                 <span className="ml-auto text-sm font-semibold text-blue-600 dark:text-blue-400">
                   Total:{" "}
-                  {formatCurrency(stepData.step_3.total_overtime_amount || 0, currentPayroll?.target_currency || "INR")}
+                  {formatCurrency(
+                    stepData.step_3.total_overtime_amount || 0,
+                    currentPayroll?.target_currency || "INR",
+                  )}
                 </span>
               )}
             </div>
@@ -635,7 +656,12 @@ function PayrollView() {
                           Amount
                         </label>
                         <div className="text-sm font-semibold text-green-600 dark:text-green-400">
-                          {formatCurrency(ot.amount || 0, ot.currency || currentPayroll?.target_currency || "INR")}
+                          {formatCurrency(
+                            ot.amount || 0,
+                            ot.currency ||
+                              currentPayroll?.target_currency ||
+                              "INR",
+                          )}
                         </div>
                       </div>
                       <div>
@@ -779,23 +805,65 @@ function PayrollView() {
                   {/* Gross Salary */}
                   {stepData.step_5.summary.conversions.gross_salary && (
                     <div className="p-4 rounded-xl bg-blue-50 dark:bg-blue-900/20 border border-blue-200 dark:border-blue-800 flex flex-col justify-between">
-                      <div className="text-xs text-gray-500 dark:text-gray-400 font-medium mb-3">Gross Salary</div>
+                      <div className="text-xs text-gray-500 dark:text-gray-400 font-medium mb-3">
+                        Gross Salary
+                      </div>
                       <div className="flex justify-between items-center gap-2">
                         <div className="flex-1">
-                          <div className="text-[10px] text-gray-500">Original Amount</div>
+                          <div className="text-[10px] text-gray-500">
+                            Original Amount
+                          </div>
                           <div className="text-sm font-bold text-gray-700 dark:text-gray-300">
-                            {stepData.step_5.summary.conversions.gross_salary.baseCurrency} {stepData.step_5.summary.conversions.gross_salary.amount.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
+                            {
+                              stepData.step_5.summary.conversions.gross_salary
+                                .baseCurrency
+                            }{" "}
+                            {stepData.step_5.summary.conversions.gross_salary.amount.toLocaleString(
+                              undefined,
+                              {
+                                minimumFractionDigits: 2,
+                                maximumFractionDigits: 2,
+                              },
+                            )}
                           </div>
                         </div>
                         <div className="text-center px-1">
-                          <div className="text-[9px] text-gray-400">Rate: {stepData.step_5.summary.conversions.gross_salary.exchangeRate}</div>
+                          <div className="text-[9px] text-gray-400">
+                            Rate:{" "}
+                            {
+                              stepData.step_5.summary.conversions.gross_salary
+                                .exchangeRate
+                            }
+                          </div>
                           <i className="fas fa-arrow-right text-blue-400 my-1"></i>
-                          <div className="text-[9px] text-gray-400">{stepData.step_5.summary.conversions.gross_salary.baseCurrency} → {stepData.step_5.summary.conversions.gross_salary.targetCurrency}</div>
+                          <div className="text-[9px] text-gray-400">
+                            {
+                              stepData.step_5.summary.conversions.gross_salary
+                                .baseCurrency
+                            }{" "}
+                            →{" "}
+                            {
+                              stepData.step_5.summary.conversions.gross_salary
+                                .targetCurrency
+                            }
+                          </div>
                         </div>
                         <div className="text-right flex-1">
-                          <div className="text-[10px] text-blue-500">Converted</div>
+                          <div className="text-[10px] text-blue-500">
+                            Converted
+                          </div>
                           <div className="text-base font-bold text-blue-600 dark:text-blue-400">
-                            {stepData.step_5.summary.conversions.gross_salary.targetCurrency} {stepData.step_5.summary.conversions.gross_salary.convertedAmount.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
+                            {
+                              stepData.step_5.summary.conversions.gross_salary
+                                .targetCurrency
+                            }{" "}
+                            {stepData.step_5.summary.conversions.gross_salary.convertedAmount.toLocaleString(
+                              undefined,
+                              {
+                                minimumFractionDigits: 2,
+                                maximumFractionDigits: 2,
+                              },
+                            )}
                           </div>
                         </div>
                       </div>
@@ -805,23 +873,65 @@ function PayrollView() {
                   {/* Overtime Amount */}
                   {stepData.step_5.summary.conversions.overtime_amount && (
                     <div className="p-4 rounded-xl bg-orange-50 dark:bg-orange-900/20 border border-orange-200 dark:border-orange-800 flex flex-col justify-between">
-                      <div className="text-xs text-gray-500 dark:text-gray-400 font-medium mb-3">Overtime Amount</div>
+                      <div className="text-xs text-gray-500 dark:text-gray-400 font-medium mb-3">
+                        Overtime Amount
+                      </div>
                       <div className="flex justify-between items-center gap-2">
                         <div className="flex-1">
-                          <div className="text-[10px] text-gray-500">Original Amount</div>
+                          <div className="text-[10px] text-gray-500">
+                            Original Amount
+                          </div>
                           <div className="text-sm font-bold text-gray-700 dark:text-gray-300">
-                            {stepData.step_5.summary.conversions.overtime_amount.baseCurrency} {stepData.step_5.summary.conversions.overtime_amount.amount.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
+                            {
+                              stepData.step_5.summary.conversions
+                                .overtime_amount.baseCurrency
+                            }{" "}
+                            {stepData.step_5.summary.conversions.overtime_amount.amount.toLocaleString(
+                              undefined,
+                              {
+                                minimumFractionDigits: 2,
+                                maximumFractionDigits: 2,
+                              },
+                            )}
                           </div>
                         </div>
                         <div className="text-center px-1">
-                          <div className="text-[9px] text-gray-400">Rate: {stepData.step_5.summary.conversions.overtime_amount.exchangeRate}</div>
+                          <div className="text-[9px] text-gray-400">
+                            Rate:{" "}
+                            {
+                              stepData.step_5.summary.conversions
+                                .overtime_amount.exchangeRate
+                            }
+                          </div>
                           <i className="fas fa-arrow-right text-orange-400 my-1"></i>
-                          <div className="text-[9px] text-gray-400">{stepData.step_5.summary.conversions.overtime_amount.baseCurrency} → {stepData.step_5.summary.conversions.overtime_amount.targetCurrency}</div>
+                          <div className="text-[9px] text-gray-400">
+                            {
+                              stepData.step_5.summary.conversions
+                                .overtime_amount.baseCurrency
+                            }{" "}
+                            →{" "}
+                            {
+                              stepData.step_5.summary.conversions
+                                .overtime_amount.targetCurrency
+                            }
+                          </div>
                         </div>
                         <div className="text-right flex-1">
-                          <div className="text-[10px] text-orange-500">Converted</div>
+                          <div className="text-[10px] text-orange-500">
+                            Converted
+                          </div>
                           <div className="text-base font-bold text-orange-600 dark:text-orange-400">
-                            {stepData.step_5.summary.conversions.overtime_amount.targetCurrency} {stepData.step_5.summary.conversions.overtime_amount.convertedAmount.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
+                            {
+                              stepData.step_5.summary.conversions
+                                .overtime_amount.targetCurrency
+                            }{" "}
+                            {stepData.step_5.summary.conversions.overtime_amount.convertedAmount.toLocaleString(
+                              undefined,
+                              {
+                                minimumFractionDigits: 2,
+                                maximumFractionDigits: 2,
+                              },
+                            )}
                           </div>
                         </div>
                       </div>
@@ -831,23 +941,65 @@ function PayrollView() {
                   {/* Deductions */}
                   {stepData.step_5.summary.conversions.deductions && (
                     <div className="p-4 rounded-xl bg-red-50 dark:bg-red-900/20 border border-red-200 dark:border-red-800 flex flex-col justify-between">
-                      <div className="text-xs text-gray-500 dark:text-gray-400 font-medium mb-3">Deductions</div>
+                      <div className="text-xs text-gray-500 dark:text-gray-400 font-medium mb-3">
+                        Deductions
+                      </div>
                       <div className="flex justify-between items-center gap-2">
                         <div className="flex-1">
-                          <div className="text-[10px] text-gray-500">Original Amount</div>
+                          <div className="text-[10px] text-gray-500">
+                            Original Amount
+                          </div>
                           <div className="text-sm font-bold text-gray-700 dark:text-gray-300">
-                            {stepData.step_5.summary.conversions.deductions.baseCurrency} {stepData.step_5.summary.conversions.deductions.amount.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
+                            {
+                              stepData.step_5.summary.conversions.deductions
+                                .baseCurrency
+                            }{" "}
+                            {stepData.step_5.summary.conversions.deductions.amount.toLocaleString(
+                              undefined,
+                              {
+                                minimumFractionDigits: 2,
+                                maximumFractionDigits: 2,
+                              },
+                            )}
                           </div>
                         </div>
                         <div className="text-center px-1">
-                          <div className="text-[9px] text-gray-400">Rate: {stepData.step_5.summary.conversions.deductions.exchangeRate}</div>
+                          <div className="text-[9px] text-gray-400">
+                            Rate:{" "}
+                            {
+                              stepData.step_5.summary.conversions.deductions
+                                .exchangeRate
+                            }
+                          </div>
                           <i className="fas fa-arrow-right text-red-400 my-1"></i>
-                          <div className="text-[9px] text-gray-400">{stepData.step_5.summary.conversions.deductions.baseCurrency} → {stepData.step_5.summary.conversions.deductions.targetCurrency}</div>
+                          <div className="text-[9px] text-gray-400">
+                            {
+                              stepData.step_5.summary.conversions.deductions
+                                .baseCurrency
+                            }{" "}
+                            →{" "}
+                            {
+                              stepData.step_5.summary.conversions.deductions
+                                .targetCurrency
+                            }
+                          </div>
                         </div>
                         <div className="text-right flex-1">
-                          <div className="text-[10px] text-red-500">Converted</div>
+                          <div className="text-[10px] text-red-500">
+                            Converted
+                          </div>
                           <div className="text-base font-bold text-red-500">
-                            {stepData.step_5.summary.conversions.deductions.targetCurrency} {stepData.step_5.summary.conversions.deductions.convertedAmount.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
+                            {
+                              stepData.step_5.summary.conversions.deductions
+                                .targetCurrency
+                            }{" "}
+                            {stepData.step_5.summary.conversions.deductions.convertedAmount.toLocaleString(
+                              undefined,
+                              {
+                                minimumFractionDigits: 2,
+                                maximumFractionDigits: 2,
+                              },
+                            )}
                           </div>
                         </div>
                       </div>
@@ -857,23 +1009,65 @@ function PayrollView() {
                   {/* Net Pay */}
                   {stepData.step_5.summary.conversions.net_pay && (
                     <div className="p-4 rounded-xl bg-green-50 dark:bg-green-900/20 border border-green-200 dark:border-green-800 flex flex-col justify-between">
-                      <div className="text-xs text-gray-500 dark:text-gray-400 font-medium mb-3">Net Pay</div>
+                      <div className="text-xs text-gray-500 dark:text-gray-400 font-medium mb-3">
+                        Net Pay
+                      </div>
                       <div className="flex justify-between items-center gap-2">
                         <div className="flex-1">
-                          <div className="text-[10px] text-gray-500">Original Amount</div>
+                          <div className="text-[10px] text-gray-500">
+                            Original Amount
+                          </div>
                           <div className="text-sm font-bold text-gray-700 dark:text-gray-300">
-                            {stepData.step_5.summary.conversions.net_pay.baseCurrency} {stepData.step_5.summary.conversions.net_pay.amount.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
+                            {
+                              stepData.step_5.summary.conversions.net_pay
+                                .baseCurrency
+                            }{" "}
+                            {stepData.step_5.summary.conversions.net_pay.amount.toLocaleString(
+                              undefined,
+                              {
+                                minimumFractionDigits: 2,
+                                maximumFractionDigits: 2,
+                              },
+                            )}
                           </div>
                         </div>
                         <div className="text-center px-1">
-                          <div className="text-[9px] text-gray-400">Rate: {stepData.step_5.summary.conversions.net_pay.exchangeRate}</div>
+                          <div className="text-[9px] text-gray-400">
+                            Rate:{" "}
+                            {
+                              stepData.step_5.summary.conversions.net_pay
+                                .exchangeRate
+                            }
+                          </div>
                           <i className="fas fa-arrow-right text-green-400 my-1"></i>
-                          <div className="text-[9px] text-gray-400">{stepData.step_5.summary.conversions.net_pay.baseCurrency} → {stepData.step_5.summary.conversions.net_pay.targetCurrency}</div>
+                          <div className="text-[9px] text-gray-400">
+                            {
+                              stepData.step_5.summary.conversions.net_pay
+                                .baseCurrency
+                            }{" "}
+                            →{" "}
+                            {
+                              stepData.step_5.summary.conversions.net_pay
+                                .targetCurrency
+                            }
+                          </div>
                         </div>
                         <div className="text-right flex-1">
-                          <div className="text-[10px] text-green-500">Converted</div>
+                          <div className="text-[10px] text-green-500">
+                            Converted
+                          </div>
                           <div className="text-base font-bold text-green-600 dark:text-green-400">
-                            {stepData.step_5.summary.conversions.net_pay.targetCurrency} {stepData.step_5.summary.conversions.net_pay.convertedAmount.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
+                            {
+                              stepData.step_5.summary.conversions.net_pay
+                                .targetCurrency
+                            }{" "}
+                            {stepData.step_5.summary.conversions.net_pay.convertedAmount.toLocaleString(
+                              undefined,
+                              {
+                                minimumFractionDigits: 2,
+                                maximumFractionDigits: 2,
+                              },
+                            )}
                           </div>
                         </div>
                       </div>
@@ -1009,12 +1203,16 @@ function PayrollView() {
             </p>
           </div>
           <div className="flex flex-wrap gap-3">
-            <Link
-              to={`${basePath}/send-payslip/${currentPayroll.id}`}
-              className="px-4 py-2 bg-blue-500 text-white rounded-lg hover:bg-blue-600 transition-colors flex items-center gap-2 text-sm"
+            <button
+              onClick={handleSendPayslip}
+              disabled={actionLoading}
+              className="px-4 py-2 bg-blue-500 text-white rounded-lg hover:bg-blue-600 transition-colors flex items-center gap-2 text-sm disabled:opacity-50"
             >
-              <i className="fas fa-envelope"></i> Send Payslip
-            </Link>
+              <i
+                className={`fas ${actionLoading ? "fa-spinner fa-spin" : "fa-paper-plane"}`}
+              ></i>
+              {actionLoading ? "Sending..." : "Send Payslip"}
+            </button>
             <Link
               to={`${basePath}/payroll/edit/${currentPayroll.id}`}
               className="px-4 py-2 bg-green-500 text-white rounded-lg hover:bg-green-600 transition-colors flex items-center gap-2 text-sm"
