@@ -165,6 +165,7 @@ function AddPayroll() {
 
   // Step 5 - Summary with currency conversion
   const [targetCurrency, setTargetCurrency] = useState("INR");
+  const [conversionRatesList, setConversionRatesList] = useState([]);
   const [conversionRates, setConversionRates] = useState({});
   const [localSummaryData, setLocalSummaryData] = useState({
     gross_earnings: 0,
@@ -1520,7 +1521,8 @@ function AddPayroll() {
             </div>
           )}
 
-          {/* Step 3 - Overtime - Updated Input Field */}
+          {/* Step 3 - Overtime */}
+          {/* Step 3 - Overtime */}
           {reduxCurrentStep === 3 && (
             <div>
               <div className="flex items-center gap-2 pb-3 border-b-2 border-green-100 dark:border-green-900/30 mb-4 md:mb-6">
@@ -1608,55 +1610,16 @@ function AddPayroll() {
                             </td>
                             <td className="py-3 px-4 text-center">
                               <input
-                                type="text"
-                                inputMode="decimal"
-                                value={req.overtime_amount || ""}
-                                onChange={(e) => {
-                                  // Only allow numbers, decimal point, and backspace
-                                  const value = e.target.value;
-                                  // Remove any non-numeric characters except decimal point
-                                  const cleaned = value.replace(/[^0-9.]/g, "");
-                                  // Prevent multiple decimal points
-                                  const parts = cleaned.split(".");
-                                  let finalValue = cleaned;
-                                  if (parts.length > 2) {
-                                    finalValue =
-                                      parts[0] + "." + parts.slice(1).join("");
-                                  }
-                                  // Limit to 2 decimal places
-                                  if (finalValue.includes(".")) {
-                                    const [whole, decimal] =
-                                      finalValue.split(".");
-                                    if (decimal && decimal.length > 2) {
-                                      finalValue =
-                                        whole + "." + decimal.slice(0, 2);
-                                    }
-                                  }
+                                type="number"
+                                step="0.01"
+                                value={req.overtime_amount}
+                                onChange={(e) =>
                                   handleOvertimeChange(
                                     req.id,
                                     "overtime_amount",
-                                    finalValue,
-                                  );
-                                }}
-                                onKeyDown={(e) => {
-                                  // Allow: backspace, delete, tab, escape, enter, decimal point
-                                  const allowedKeys = [
-                                    "Backspace",
-                                    "Delete",
-                                    "Tab",
-                                    "Escape",
-                                    "Enter",
-                                    ".",
-                                    "Decimal",
-                                  ];
-                                  if (allowedKeys.includes(e.key)) {
-                                    return;
-                                  }
-                                  // Allow numbers
-                                  if (!/^[0-9]$/.test(e.key)) {
-                                    e.preventDefault();
-                                  }
-                                }}
+                                    parseFloat(e.target.value) || 0,
+                                  )
+                                }
                                 className="w-24 px-2 py-1 text-sm rounded border border-blue-200 dark:border-blue-700 bg-blue-50 dark:bg-blue-900/10 text-gray-700 dark:text-gray-300 focus:outline-none focus:border-blue-500"
                                 placeholder="0.00"
                               />
@@ -1712,8 +1675,7 @@ function AddPayroll() {
                         </li>
                         <li>
                           <strong>Overtime Amount:</strong> Enter the amount to
-                          be paid for overtime (if applicable). Only numbers and
-                          decimal points are allowed.
+                          be paid for overtime (if applicable).
                         </li>
                         <li>
                           <strong>Total Overtime:</strong>{" "}
@@ -1728,17 +1690,6 @@ function AddPayroll() {
                             ).length
                           }{" "}
                           days.
-                        </li>
-                        <li>
-                          <strong>Total Overtime Amount:</strong>{" "}
-                          {overtimeRequests
-                            .reduce(
-                              (sum, req) =>
-                                sum + (parseFloat(req.overtime_amount) || 0),
-                              0,
-                            )
-                            .toFixed(2)}{" "}
-                          {targetCurrency}
                         </li>
                       </ul>
                     </div>
@@ -1855,7 +1806,7 @@ function AddPayroll() {
             </div>
           )}
 
-          {/* Step 5 - Summary - Simplified Currency Conversion */}
+          {/* Step 5 - Summary */}
           {reduxCurrentStep === 5 && (
             <div>
               <div className="flex items-center gap-2 pb-3 border-b-2 border-green-100 dark:border-green-900/30 mb-4 md:mb-6">
@@ -1882,139 +1833,255 @@ function AddPayroll() {
                   Review the payroll details before final submission.
                 </p>
 
-                {/* Simplified Currency Conversion */}
-                <div className="bg-gray-50 dark:bg-gray-700/30 rounded-xl border border-gray-200 dark:border-gray-700 p-4">
-                  <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
-                    {/* From Currency */}
-                    <div>
-                      <label className="block text-xs font-semibold text-gray-700 dark:text-gray-300 mb-1">
-                        <i className="fas fa-arrow-right text-green-500 mr-1"></i>
-                        From Currency
-                      </label>
-                      <select
-                        value={
-                          conversionDetails.fromCurrency ||
-                          countries[0]?.currency ||
-                          "INR"
-                        }
-                        onChange={(e) => {
-                          const fromCurrency = e.target.value;
-                          setConversionDetails((prev) => ({
-                            ...prev,
-                            fromCurrency: fromCurrency,
-                          }));
-                        }}
-                        className="w-full px-3 py-2 text-sm rounded-lg border border-gray-200 dark:border-gray-700 bg-white dark:bg-gray-800 text-gray-800 dark:text-gray-200 focus:outline-none focus:border-green-500 focus:ring-2 focus:ring-green-500/20"
-                      >
-                        {currencies.map((curr) => (
-                          <option key={curr} value={curr}>
-                            {curr}
-                          </option>
-                        ))}
-                      </select>
-                    </div>
-
-                    {/* To Currency */}
-                    <div>
-                      <label className="block text-xs font-semibold text-gray-700 dark:text-gray-300 mb-1">
-                        <i className="fas fa-arrow-left text-green-500 mr-1"></i>
-                        To Currency
-                      </label>
-                      <select
-                        value={conversionDetails.toCurrency || targetCurrency}
-                        onChange={(e) => {
-                          const toCurrency = e.target.value;
-                          setConversionDetails((prev) => ({
-                            ...prev,
-                            toCurrency: toCurrency,
-                          }));
-                          setTargetCurrency(toCurrency);
-                        }}
-                        className="w-full px-3 py-2 text-sm rounded-lg border border-gray-200 dark:border-gray-700 bg-white dark:bg-gray-800 text-gray-800 dark:text-gray-200 focus:outline-none focus:border-green-500 focus:ring-2 focus:ring-green-500/20"
-                      >
-                        {currencies.map((curr) => (
-                          <option key={curr} value={curr}>
-                            {curr}
-                          </option>
-                        ))}
-                      </select>
-                    </div>
-
-                    {/* Conversion Rate */}
-                    <div>
-                      <label className="block text-xs font-semibold text-gray-700 dark:text-gray-300 mb-1">
-                        <i className="fas fa-exchange-alt text-green-500 mr-1"></i>
-                        Conversion Rate
-                      </label>
-                      <input
-                        type="number"
-                        step="0.0001"
-                        min="0"
-                        value={conversionDetails.rate || 1}
-                        onChange={(e) => {
-                          const rate = parseFloat(e.target.value) || 0;
-                          setConversionDetails((prev) => ({
-                            ...prev,
-                            rate: rate,
-                          }));
-                        }}
-                        className="w-full px-3 py-2 text-sm rounded-lg border border-gray-200 dark:border-gray-700 bg-white dark:bg-gray-800 text-gray-800 dark:text-gray-200 focus:outline-none focus:border-green-500 focus:ring-2 focus:ring-green-500/20"
-                        placeholder="1.0000"
-                      />
-                    </div>
-                  </div>
-
-                  <div className="mt-3 flex justify-end">
-                    <button
-                      onClick={() => {
-                        const fromCurr =
-                          conversionDetails.fromCurrency ||
-                          countries[0]?.currency ||
-                          "INR";
-                        const toCurr =
-                          conversionDetails.toCurrency || targetCurrency;
-                        const rate = conversionDetails.rate || 1;
-
-                        const calculateConversion = (amount) => ({
-                          amount: amount,
-                          fromCurrency: fromCurr,
-                          toCurrency: toCurr,
-                          rate: rate,
-                          convertedAmount: amount * rate,
-                        });
-
-                        setConversionDetails((prev) => ({
-                          ...prev,
-                          gross_salary: calculateConversion(
-                            localSummaryData.gross_salary ||
-                              localSummaryData.gross_earnings ||
-                              0,
+                {/* Currency Conversion Section */}
+                <div className="grid grid-cols-1 md:grid-cols-2 gap-4 p-4 bg-gray-50 dark:bg-gray-700/30 rounded-lg border border-gray-200 dark:border-gray-700">
+                  {/* Left Side - Target Currency */}
+                  <div>
+                    <label className="block text-xs font-semibold text-gray-700 dark:text-gray-300 mb-1">
+                      Target Currency
+                    </label>
+                    <select
+                      value={targetCurrency}
+                      onChange={(e) => {
+                        const newTarget = e.target.value;
+                        setTargetCurrency(newTarget);
+                        // Remove any conversion rates that match the new target currency
+                        setConversionRatesList(
+                          conversionRatesList.filter(
+                            (item) => item.currency !== newTarget,
                           ),
-                          overtime_amount: calculateConversion(
-                            localSummaryData.overtime_amount || 0,
-                          ),
-                          deductions: calculateConversion(
-                            localSummaryData.deductions ||
-                              localSummaryData.total_deductions ||
-                              0,
-                          ),
-                          net_pay: calculateConversion(
-                            localSummaryData.net_pay || 0,
-                          ),
-                          fromCurrency: fromCurr,
-                          toCurrency: toCurr,
-                          rate: rate,
-                        }));
-                        setIsConverted(true);
-                        showToast(
-                          `Conversion applied: 1 ${fromCurr} = ${rate} ${toCurr}`,
-                          "success",
                         );
                       }}
-                      className="px-4 py-2 bg-blue-500 text-white text-sm font-semibold rounded-lg hover:bg-blue-600 transition-colors shadow-sm flex items-center gap-2"
+                      className="w-full px-3 py-2 text-sm rounded-lg border border-gray-200 dark:border-gray-700 bg-white dark:bg-gray-800 text-gray-800 dark:text-gray-200 focus:outline-none focus:border-green-500 focus:ring-2 focus:ring-green-500/20"
                     >
-                      <i className="fas fa-calculator"></i> Convert
-                    </button>
+                      {currencies.map((curr) => (
+                        <option key={curr} value={curr}>
+                          {curr}
+                        </option>
+                      ))}
+                    </select>
+                    <p className="text-[10px] text-gray-400 mt-1">
+                      All amounts will be converted to this currency
+                    </p>
+                  </div>
+
+                  {/* Right Side - Dynamic Conversion Rates */}
+                  <div>
+                    <div className="flex items-center justify-between mb-2">
+                      <label className="block text-xs font-semibold text-gray-700 dark:text-gray-300">
+                        Conversion Rates (to {targetCurrency})
+                      </label>
+                      <button
+                        onClick={() => {
+                          // Find a currency not already in the list and not equal to target currency
+                          const existingCurrencies = conversionRatesList.map(
+                            (item) => item.currency,
+                          );
+                          const availableCurrency = currencies.find(
+                            (c) =>
+                              !existingCurrencies.includes(c) &&
+                              c !== targetCurrency,
+                          );
+                          if (availableCurrency) {
+                            setConversionRatesList([
+                              ...conversionRatesList,
+                              {
+                                id: Date.now(),
+                                currency: availableCurrency,
+                                rate: 1,
+                              },
+                            ]);
+                          } else {
+                            showToast("All available currencies added", "info");
+                          }
+                        }}
+                        className="px-2 py-1 text-xs bg-green-500 text-white rounded-lg hover:bg-green-600 transition-colors flex items-center gap-1"
+                      >
+                        <i className="fas fa-plus text-[10px]"></i> Add
+                      </button>
+                    </div>
+
+                    <div className="space-y-2 max-h-48 overflow-y-auto pr-1">
+                      {conversionRatesList.length > 0 ? (
+                        conversionRatesList.map((item) => (
+                          <div
+                            key={item.id}
+                            className="flex items-center gap-2 bg-white dark:bg-gray-800 p-2 rounded-lg border border-gray-200 dark:border-gray-600"
+                          >
+                            <select
+                              value={item.currency}
+                              onChange={(e) => {
+                                const newCurrency = e.target.value;
+                                // Check if currency already exists or is the target currency
+                                const exists = conversionRatesList.some(
+                                  (i) =>
+                                    i.id !== item.id &&
+                                    i.currency === newCurrency,
+                                );
+                                if (exists) {
+                                  showToast(
+                                    "Currency already added",
+                                    "warning",
+                                  );
+                                  return;
+                                }
+                                if (newCurrency === targetCurrency) {
+                                  showToast(
+                                    `Cannot convert ${targetCurrency} to itself`,
+                                    "warning",
+                                  );
+                                  return;
+                                }
+                                setConversionRatesList(
+                                  conversionRatesList.map((i) =>
+                                    i.id === item.id
+                                      ? { ...i, currency: newCurrency }
+                                      : i,
+                                  ),
+                                );
+                              }}
+                              className="flex-1 px-2 py-1 text-sm rounded border border-gray-200 dark:border-gray-600 bg-white dark:bg-gray-800 text-gray-700 dark:text-gray-300 focus:outline-none focus:border-green-500"
+                            >
+                              {currencies
+                                .filter((c) => c !== targetCurrency) // Exclude target currency from dropdown
+                                .map((curr) => (
+                                  <option key={curr} value={curr}>
+                                    {curr}
+                                  </option>
+                                ))}
+                            </select>
+                            <span className="text-xs text-gray-400">→</span>
+                            <span className="text-xs font-semibold text-green-600 dark:text-green-400 w-8">
+                              {targetCurrency}
+                            </span>
+                            <input
+                              type="number"
+                              step="0.0001"
+                              min="0"
+                              value={item.rate}
+                              onChange={(e) => {
+                                const rate = parseFloat(e.target.value) || 0;
+                                setConversionRatesList(
+                                  conversionRatesList.map((i) =>
+                                    i.id === item.id ? { ...i, rate: rate } : i,
+                                  ),
+                                );
+                              }}
+                              className="w-20 px-2 py-1 text-sm rounded border border-gray-200 dark:border-gray-600 bg-white dark:bg-gray-800 text-gray-700 dark:text-gray-300 focus:outline-none focus:border-green-500"
+                              placeholder="1.0000"
+                            />
+                            <button
+                              onClick={() => {
+                                if (conversionRatesList.length <= 1) {
+                                  showToast(
+                                    "At least one conversion rate is required",
+                                    "warning",
+                                  );
+                                  return;
+                                }
+                                setConversionRatesList(
+                                  conversionRatesList.filter(
+                                    (i) => i.id !== item.id,
+                                  ),
+                                );
+                              }}
+                              className="text-red-500 hover:text-red-700 transition-colors"
+                            >
+                              <i className="fas fa-times"></i>
+                            </button>
+                          </div>
+                        ))
+                      ) : (
+                        <div className="text-center py-6 bg-white dark:bg-gray-800 rounded-lg border-2 border-dashed border-gray-300 dark:border-gray-600">
+                          <i className="fas fa-plus-circle text-3xl text-gray-300 dark:text-gray-500 mb-2 block"></i>
+                          <p className="text-sm text-gray-400 dark:text-gray-500">
+                            No conversion rates added
+                          </p>
+                          <p className="text-xs text-gray-400 dark:text-gray-500 mt-1">
+                            Click the{" "}
+                            <span className="font-semibold text-green-500">
+                              "Add"
+                            </span>{" "}
+                            button above to add currencies
+                          </p>
+                        </div>
+                      )}
+                    </div>
+
+                    <div className="mt-3 flex justify-end gap-2">
+                      <button
+                        onClick={() => {
+                          // Reset all rates to 1
+                          setConversionRatesList(
+                            conversionRatesList.map((item) => ({
+                              ...item,
+                              rate: 1,
+                            })),
+                          );
+                          showToast("All rates reset to 1", "info");
+                        }}
+                        className="px-3 py-1 text-xs bg-gray-200 dark:bg-gray-600 text-gray-700 dark:text-gray-300 rounded-lg hover:bg-gray-300 dark:hover:bg-gray-500 transition-colors"
+                      >
+                        <i className="fas fa-undo mr-1"></i> Reset
+                      </button>
+                      <button
+                        onClick={() => {
+                          if (conversionRatesList.length === 0) {
+                            showToast(
+                              "Please add at least one conversion rate",
+                              "warning",
+                            );
+                            return;
+                          }
+
+                          // Build conversion details from the list
+                          const rates = {};
+                          conversionRatesList.forEach((item) => {
+                            rates[item.currency] = item.rate;
+                          });
+
+                          // Use the first rate as the base for calculations
+                          const baseCurrency =
+                            conversionRatesList[0]?.currency || "INR";
+                          const baseRate = conversionRatesList[0]?.rate || 1;
+
+                          const calculateConversion = (amount) => ({
+                            amount: amount,
+                            fromCurrency: baseCurrency,
+                            toCurrency: targetCurrency,
+                            rate: baseRate,
+                            convertedAmount: amount * baseRate,
+                          });
+
+                          setConversionDetails({
+                            gross_salary: calculateConversion(
+                              localSummaryData.gross_salary ||
+                                localSummaryData.gross_earnings ||
+                                0,
+                            ),
+                            overtime_amount: calculateConversion(
+                              localSummaryData.overtime_amount || 0,
+                            ),
+                            deductions: calculateConversion(
+                              localSummaryData.deductions ||
+                                localSummaryData.total_deductions ||
+                                0,
+                            ),
+                            net_pay: calculateConversion(
+                              localSummaryData.net_pay || 0,
+                            ),
+                          });
+                          setIsConverted(true);
+                          showToast(
+                            "Conversion applied successfully!",
+                            "success",
+                          );
+                        }}
+                        className="px-4 py-1 text-xs bg-blue-500 text-white rounded-lg hover:bg-blue-600 transition-colors flex items-center gap-1"
+                      >
+                        <i className="fas fa-calculator"></i> Convert
+                      </button>
+                    </div>
                   </div>
                 </div>
 
@@ -2029,11 +2096,17 @@ function AddPayroll() {
                       <div className="flex justify-between items-center gap-2">
                         <div className="flex-1">
                           <div className="text-[10px] text-gray-500">
-                            Original
+                            Original Amount
                           </div>
                           <div className="text-sm font-bold text-gray-700 dark:text-gray-300">
                             {conversionDetails.gross_salary.fromCurrency}{" "}
-                            {conversionDetails.gross_salary.amount.toFixed(2)}
+                            {conversionDetails.gross_salary.amount.toLocaleString(
+                              undefined,
+                              {
+                                minimumFractionDigits: 2,
+                                maximumFractionDigits: 2,
+                              },
+                            )}
                           </div>
                         </div>
                         <div className="text-center px-1">
@@ -2041,6 +2114,10 @@ function AddPayroll() {
                             Rate: {conversionDetails.gross_salary.rate}
                           </div>
                           <i className="fas fa-arrow-right text-blue-400 my-1"></i>
+                          <div className="text-[9px] text-gray-400">
+                            {conversionDetails.gross_salary.fromCurrency} →{" "}
+                            {conversionDetails.gross_salary.toCurrency}
+                          </div>
                         </div>
                         <div className="text-right flex-1">
                           <div className="text-[10px] text-blue-500">
@@ -2048,8 +2125,12 @@ function AddPayroll() {
                           </div>
                           <div className="text-base font-bold text-blue-600 dark:text-blue-400">
                             {conversionDetails.gross_salary.toCurrency}{" "}
-                            {conversionDetails.gross_salary.convertedAmount.toFixed(
-                              2,
+                            {conversionDetails.gross_salary.convertedAmount.toLocaleString(
+                              undefined,
+                              {
+                                minimumFractionDigits: 2,
+                                maximumFractionDigits: 2,
+                              },
                             )}
                           </div>
                         </div>
@@ -2064,12 +2145,16 @@ function AddPayroll() {
                       <div className="flex justify-between items-center gap-2">
                         <div className="flex-1">
                           <div className="text-[10px] text-gray-500">
-                            Original
+                            Original Amount
                           </div>
                           <div className="text-sm font-bold text-gray-700 dark:text-gray-300">
                             {conversionDetails.overtime_amount.fromCurrency}{" "}
-                            {conversionDetails.overtime_amount.amount.toFixed(
-                              2,
+                            {conversionDetails.overtime_amount.amount.toLocaleString(
+                              undefined,
+                              {
+                                minimumFractionDigits: 2,
+                                maximumFractionDigits: 2,
+                              },
                             )}
                           </div>
                         </div>
@@ -2078,6 +2163,10 @@ function AddPayroll() {
                             Rate: {conversionDetails.overtime_amount.rate}
                           </div>
                           <i className="fas fa-arrow-right text-orange-400 my-1"></i>
+                          <div className="text-[9px] text-gray-400">
+                            {conversionDetails.overtime_amount.fromCurrency} →{" "}
+                            {conversionDetails.overtime_amount.toCurrency}
+                          </div>
                         </div>
                         <div className="text-right flex-1">
                           <div className="text-[10px] text-orange-500">
@@ -2085,8 +2174,12 @@ function AddPayroll() {
                           </div>
                           <div className="text-base font-bold text-orange-600 dark:text-orange-400">
                             {conversionDetails.overtime_amount.toCurrency}{" "}
-                            {conversionDetails.overtime_amount.convertedAmount.toFixed(
-                              2,
+                            {conversionDetails.overtime_amount.convertedAmount.toLocaleString(
+                              undefined,
+                              {
+                                minimumFractionDigits: 2,
+                                maximumFractionDigits: 2,
+                              },
                             )}
                           </div>
                         </div>
@@ -2101,11 +2194,17 @@ function AddPayroll() {
                       <div className="flex justify-between items-center gap-2">
                         <div className="flex-1">
                           <div className="text-[10px] text-gray-500">
-                            Original
+                            Original Amount
                           </div>
                           <div className="text-sm font-bold text-gray-700 dark:text-gray-300">
                             {conversionDetails.deductions.fromCurrency}{" "}
-                            {conversionDetails.deductions.amount.toFixed(2)}
+                            {conversionDetails.deductions.amount.toLocaleString(
+                              undefined,
+                              {
+                                minimumFractionDigits: 2,
+                                maximumFractionDigits: 2,
+                              },
+                            )}
                           </div>
                         </div>
                         <div className="text-center px-1">
@@ -2113,6 +2212,10 @@ function AddPayroll() {
                             Rate: {conversionDetails.deductions.rate}
                           </div>
                           <i className="fas fa-arrow-right text-red-400 my-1"></i>
+                          <div className="text-[9px] text-gray-400">
+                            {conversionDetails.deductions.fromCurrency} →{" "}
+                            {conversionDetails.deductions.toCurrency}
+                          </div>
                         </div>
                         <div className="text-right flex-1">
                           <div className="text-[10px] text-red-500">
@@ -2120,8 +2223,12 @@ function AddPayroll() {
                           </div>
                           <div className="text-base font-bold text-red-500">
                             {conversionDetails.deductions.toCurrency}{" "}
-                            {conversionDetails.deductions.convertedAmount.toFixed(
-                              2,
+                            {conversionDetails.deductions.convertedAmount.toLocaleString(
+                              undefined,
+                              {
+                                minimumFractionDigits: 2,
+                                maximumFractionDigits: 2,
+                              },
                             )}
                           </div>
                         </div>
@@ -2136,11 +2243,17 @@ function AddPayroll() {
                       <div className="flex justify-between items-center gap-2">
                         <div className="flex-1">
                           <div className="text-[10px] text-gray-500">
-                            Original
+                            Original Amount
                           </div>
                           <div className="text-sm font-bold text-gray-700 dark:text-gray-300">
                             {conversionDetails.net_pay.fromCurrency}{" "}
-                            {conversionDetails.net_pay.amount.toFixed(2)}
+                            {conversionDetails.net_pay.amount.toLocaleString(
+                              undefined,
+                              {
+                                minimumFractionDigits: 2,
+                                maximumFractionDigits: 2,
+                              },
+                            )}
                           </div>
                         </div>
                         <div className="text-center px-1">
@@ -2148,6 +2261,10 @@ function AddPayroll() {
                             Rate: {conversionDetails.net_pay.rate}
                           </div>
                           <i className="fas fa-arrow-right text-green-400 my-1"></i>
+                          <div className="text-[9px] text-gray-400">
+                            {conversionDetails.net_pay.fromCurrency} →{" "}
+                            {conversionDetails.net_pay.toCurrency}
+                          </div>
                         </div>
                         <div className="text-right flex-1">
                           <div className="text-[10px] text-green-500">
@@ -2155,8 +2272,12 @@ function AddPayroll() {
                           </div>
                           <div className="text-base font-bold text-green-600 dark:text-green-400">
                             {conversionDetails.net_pay.toCurrency}{" "}
-                            {conversionDetails.net_pay.convertedAmount.toFixed(
-                              2,
+                            {conversionDetails.net_pay.convertedAmount.toLocaleString(
+                              undefined,
+                              {
+                                minimumFractionDigits: 2,
+                                maximumFractionDigits: 2,
+                              },
                             )}
                           </div>
                         </div>
