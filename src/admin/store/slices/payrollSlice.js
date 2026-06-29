@@ -390,7 +390,27 @@ export const fetchPayrollSummary = createAsyncThunk(
   }
 );
 
-// ─── Fetch Employee Salary Packages ──────────────────────────────────
+// ─── Send Payslip via Email ─────────────────────────────────────────────
+export const sendPayslip = createAsyncThunk(
+  "payroll/sendPayslip",
+  async (id, { rejectWithValue }) => {
+    try {
+      const response = await apiClient.post(`/admin/payroll/${id}/send-payslip`);
+      console.log("Send payslip response:", response.data);
+      
+      if (response.data?.success === true) {
+        return response.data;
+      }
+      return rejectWithValue(response.data?.message || "Failed to send payslip");
+    } catch (error) {
+      console.error("Send payslip error:", error);
+      return rejectWithValue(
+        error.response?.data?.message || "Failed to send payslip"
+      );
+    }
+  }
+);
+
 // ─── Fetch Employee Salary Packages ──────────────────────────────────
 export const fetchEmployeeSalaryPackages = createAsyncThunk(
   "payroll/fetchEmployeeSalaryPackages",
