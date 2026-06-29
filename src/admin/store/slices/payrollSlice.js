@@ -76,13 +76,34 @@ export const deletePayroll = createAsyncThunk(
 );
 
 // ─── Generate Payslip ──────────────────────────────────────────────────
+// ─── Generate Payslip ──────────────────────────────────────────────────
 export const generatePayslip = createAsyncThunk(
   "payroll/generatePayslip",
   async (id, { rejectWithValue }) => {
     try {
-      const response = await apiClient.get(`/admin/payrolls/${id}/payslip`);
-      console.log("Generate payslip response:", response.data);
-      return response.data;
+      const response = await apiClient.get(`/admin/payroll/${id}/download`, {
+        responseType: "blob", // Important: Tell axios to return blob
+      });
+      console.log("Generate payslip response:", response);
+
+      // Create a blob from the response data
+      const blob = new Blob([response.data], { type: "application/pdf" });
+
+      // Create a URL for the blob
+      const url = window.URL.createObjectURL(blob);
+
+      // Create a link element and trigger download
+      const link = document.createElement("a");
+      link.href = url;
+      link.download = `Payslip_${id}.pdf`;
+      document.body.appendChild(link);
+      link.click();
+      document.body.removeChild(link);
+
+      // Clean up the URL
+      window.URL.revokeObjectURL(url);
+
+      return { success: true, message: "Payslip downloaded successfully" };
     } catch (error) {
       console.error("Generate payslip error:", error);
       return rejectWithValue(
@@ -92,6 +113,7 @@ export const generatePayslip = createAsyncThunk(
   },
 );
 
+// ─── Fetch Payroll by ID ──────────────────────────────────────────────
 // ─── Fetch Payroll by ID ──────────────────────────────────────────────
 export const fetchPayrollById = createAsyncThunk(
   "payroll/fetchPayrollById",
@@ -752,6 +774,9 @@ const payrollSlice = createSlice({
       state.error = null;
       state.successMessage = null;
     },
+    resetCurrentPayroll: (state) => {
+      state.currentPayroll = null;
+    },
   },
 
   extraReducers: (builder) => {
@@ -801,7 +826,7 @@ const payrollSlice = createSlice({
       })
       .addCase(generatePayslip.fulfilled, (state) => {
         state.actionLoading = false;
-        state.successMessage = "Payslip generated successfully";
+        state.successMessage = "Payslip downloaded successfully";
       })
       .addCase(generatePayslip.rejected, (state, action) => {
         state.actionLoading = false;
@@ -914,9 +939,11 @@ const payrollSlice = createSlice({
       })
 
       // ─── Fetch Payroll by ID ───────────────────────────────────────────
+      // ─── Fetch Payroll by ID ───────────────────────────────────────────
       .addCase(fetchPayrollById.pending, (state) => {
         state.loading = true;
         state.error = null;
+        state.currentPayroll = null; // Clear old data when fetching
       })
       .addCase(fetchPayrollById.fulfilled, (state, action) => {
         state.loading = false;
@@ -925,6 +952,7 @@ const payrollSlice = createSlice({
       .addCase(fetchPayrollById.rejected, (state, action) => {
         state.loading = false;
         state.error = action.payload;
+        state.currentPayroll = null;
       })
 
       // ─── Save Draft ────────────────────────────────────────────────────
@@ -1019,7 +1047,8 @@ export const {
   clearOvertimeData,
   clearSummaryData,
   clearEmployeePackages,
-  clearSubmissionState
+  clearSubmissionState,
+  resetCurrentPayroll,
 } = payrollSlice.actions;
 
 // ─── Export Selectors ────────────────────────────────────────────────

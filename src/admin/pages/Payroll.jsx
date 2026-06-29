@@ -176,26 +176,24 @@ const Payroll = () => {
     }
   };
 
-  const handleGeneratePayslip = async (payrollId) => {
-    try {
-      const result = await dispatch(generatePayslip(payrollId)).unwrap();
-      if (result?.data?.url) {
-        window.open(result.data.url, "_blank");
-      }
-    } catch (error) {
-      // Error is handled by the slice
-    }
-  };
+ const handleGeneratePayslip = async (payrollId) => {
+  try {
+    // The thunk now handles the download directly
+    await dispatch(generatePayslip(payrollId)).unwrap();
+    showToast("Payslip downloaded successfully!", "success");
+  } catch (error) {
+    showToast(error || "Failed to generate payslip", "error");
+  }
+};
 
   const formatCurrency = (amount, currencyCode = "INR") => {
-    if (!amount) return `${currencyCode} 0.00`;
-    return new Intl.NumberFormat("en-IN", {
-      style: "currency",
-      currency: currencyCode,
-      minimumFractionDigits: 2,
-      maximumFractionDigits: 2,
-    }).format(amount);
-  };
+  return new Intl.NumberFormat("en-IN", {
+    style: "currency",
+    currency: currencyCode,
+    minimumFractionDigits: 2,
+    maximumFractionDigits: 2,
+  }).format(amount || 0);
+};
 
   const getStatusBadge = (status) => {
     const statusMap = {
