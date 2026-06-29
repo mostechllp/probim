@@ -606,110 +606,147 @@ function PayrollView() {
         );
 
       case "overtime":
-        const overtimeDetails = stepData.step_3?.overtime_details || [];
-        return (
-          <div>
-            <div className="flex items-center gap-2 pb-3 border-b-2 border-green-100 dark:border-green-900/30 mb-4">
-              <div className="w-8 h-8 bg-green-100 dark:bg-green-900/30 rounded-lg flex items-center justify-center">
-                <i className="fas fa-clock text-green-600 dark:text-green-400 text-sm"></i>
-              </div>
-              <h3 className="text-lg font-bold text-gray-800 dark:text-gray-200">
-                Overtime Details
-              </h3>
-              {stepData.step_3?.total_overtime_amount !== undefined && (
-                <span className="ml-auto text-sm font-semibold text-blue-600 dark:text-blue-400">
-                  Total:{" "}
-                  {formatCurrency(
-                    stepData.step_3.total_overtime_amount || 0,
-                    currentPayroll?.target_currency || "INR",
-                  )}
-                </span>
-              )}
-            </div>
+  // Use step_5 overtime_details for amounts, fallback to step_3
+  const step5Overtime = stepData.step_5?.overtime_details || [];
+  const step3Overtime = stepData.step_3?.overtime_details || [];
+  
+  // Merge: use step_3 for structure but step_5 for amounts
+  let mergedOvertime = [];
+  if (step5Overtime.length > 0) {
+    // Use step_5 data directly (it has the correct amounts)
+    mergedOvertime = step5Overtime.map((ot, index) => ({
+      ...ot,
+      // If there's corresponding step_3 data, use its overtime_hours
+      overtime_hours: step3Overtime.find(s3 => s3.date === ot.date)?.overtime_hours || ot.overtime_hours || 0,
+    }));
+  } else {
+    // Fallback to step_3
+    mergedOvertime = step3Overtime;
+  }
 
-            {overtimeDetails.length > 0 ? (
-              <div className="space-y-3">
-                {overtimeDetails.map((ot, index) => (
-                  <div
-                    key={index}
-                    className="border border-gray-200 dark:border-gray-700 rounded-lg p-4 bg-gray-50 dark:bg-gray-700/30"
-                  >
-                    <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
-                      <div>
-                        <label className="text-xs text-gray-500 dark:text-gray-400 block">
-                          Date
-                        </label>
-                        <div className="text-sm font-semibold text-gray-800 dark:text-gray-200">
-                          {formatDate(ot.date)}
-                        </div>
-                      </div>
-                      <div>
-                        <label className="text-xs text-gray-500 dark:text-gray-400 block">
-                          Overtime Hours
-                        </label>
-                        <div className="text-sm font-semibold text-gray-800 dark:text-gray-200">
-                          {ot.overtime_hours || 0} hrs
-                        </div>
-                      </div>
-                      <div>
-                        <label className="text-xs text-gray-500 dark:text-gray-400 block">
-                          Amount
-                        </label>
-                        <div className="text-sm font-semibold text-green-600 dark:text-green-400">
-                          {formatCurrency(
-                            ot.amount || 0,
-                            ot.currency ||
-                              currentPayroll?.target_currency ||
-                              "INR",
-                          )}
-                        </div>
-                      </div>
-                      <div>
-                        <label className="text-xs text-gray-500 dark:text-gray-400 block">
-                          Status
-                        </label>
-                        <span
-                          className={`inline-block px-2 py-1 rounded-full text-xs font-semibold ${
-                            ot.status === "pending"
-                              ? "bg-yellow-100 text-yellow-700 dark:bg-yellow-900/30 dark:text-yellow-400"
-                              : ot.status === "approved"
-                                ? "bg-green-100 text-green-700 dark:bg-green-900/30 dark:text-green-400"
-                                : "bg-gray-100 text-gray-700 dark:bg-gray-700 dark:text-gray-400"
-                          }`}
-                        >
-                          {ot.status || "pending"}
-                        </span>
-                      </div>
+  // Calculate total overtime amount from step_5
+  const totalOvertimeAmount = step5Overtime.reduce(
+    (sum, ot) => sum + (parseFloat(ot.amount) || 0),
+    0
+  );
+
+  return (
+    <div>
+      <div className="flex items-center gap-2 pb-3 border-b-2 border-green-100 dark:border-green-900/30 mb-4">
+        <div className="w-8 h-8 bg-green-100 dark:bg-green-900/30 rounded-lg flex items-center justify-center">
+          <i className="fas fa-clock text-green-600 dark:text-green-400 text-sm"></i>
+        </div>
+        <h3 className="text-lg font-bold text-gray-800 dark:text-gray-200">
+          Overtime Details
+        </h3>
+        <span className="ml-auto text-sm font-semibold text-blue-600 dark:text-blue-400">
+          Total:{" "}
+          {formatCurrency(
+            totalOvertimeAmount || stepData.step_3?.total_overtime_amount || 0,
+            currentPayroll?.target_currency || "INR",
+          )}
+        </span>
+      </div>
+
+      {mergedOvertime.length > 0 ? (
+        <div className="space-y-3">
+          {mergedOvertime.map((ot, index) => {
+            // Check if this entry has an amount from step_5
+            const hasAmount = parseFloat(ot.amount || 0) > 0;
+            const displayCurrency = ot.currency || currentPayroll?.target_currency || "INR";
+            
+            return (
+              <div
+                key={index}
+                className={`border rounded-lg p-4 ${
+                  hasAmount 
+                    ? 'border-green-200 dark:border-green-700 bg-green-50 dark:bg-green-900/10' 
+                    : 'border-gray-200 dark:border-gray-700 bg-gray-50 dark:bg-gray-700/30'
+                }`}
+              >
+                <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
+                  <div>
+                    <label className="text-xs text-gray-500 dark:text-gray-400 block">
+                      Date
+                    </label>
+                    <div className="text-sm font-semibold text-gray-800 dark:text-gray-200">
+                      {formatDate(ot.date)}
                     </div>
-                    {ot.projects && ot.projects.length > 0 && (
-                      <div className="mt-3 pt-3 border-t border-gray-200 dark:border-gray-700">
-                        <label className="text-xs text-gray-500 dark:text-gray-400 block mb-2">
-                          Projects
-                        </label>
-                        <div className="flex flex-wrap gap-2">
-                          {ot.projects.map((project, idx) => (
-                            <span
-                              key={idx}
-                              className="inline-block px-3 py-1 bg-blue-50 dark:bg-blue-900/20 text-blue-600 dark:text-blue-400 rounded-full text-xs border border-blue-200 dark:border-blue-800"
-                            >
-                              {project.project_name} (
-                              {project.time_taken_hours || 0}h)
-                            </span>
-                          ))}
-                        </div>
-                      </div>
-                    )}
                   </div>
-                ))}
+                  <div>
+                    <label className="text-xs text-gray-500 dark:text-gray-400 block">
+                      Overtime Hours
+                    </label>
+                    <div className="text-sm font-semibold text-gray-800 dark:text-gray-200">
+                      {ot.overtime_hours || 0} hrs
+                    </div>
+                  </div>
+                  <div>
+                    <label className="text-xs text-gray-500 dark:text-gray-400 block">
+                      Amount
+                    </label>
+                    <div className={`text-sm font-semibold ${hasAmount ? 'text-green-600 dark:text-green-400' : 'text-gray-400'}`}>
+                      {hasAmount 
+                        ? formatCurrency(ot.amount, displayCurrency)
+                        : '0.00'
+                      }
+                    </div>
+                  </div>
+                  <div>
+                    <label className="text-xs text-gray-500 dark:text-gray-400 block">
+                      Status
+                    </label>
+                    <span
+                      className={`inline-block px-2 py-1 rounded-full text-xs font-semibold ${
+                        hasAmount
+                          ? "bg-green-100 text-green-700 dark:bg-green-900/30 dark:text-green-400"
+                          : ot.status === "pending"
+                          ? "bg-yellow-100 text-yellow-700 dark:bg-yellow-900/30 dark:text-yellow-400"
+                          : ot.status === "approved"
+                          ? "bg-green-100 text-green-700 dark:bg-green-900/30 dark:text-green-400"
+                          : "bg-gray-100 text-gray-700 dark:bg-gray-700 dark:text-gray-400"
+                      }`}
+                    >
+                      {hasAmount ? "Paid" : ot.status || "pending"}
+                    </span>
+                  </div>
+                </div>
+                {ot.projects && ot.projects.length > 0 && (
+                  <div className="mt-3 pt-3 border-t border-gray-200 dark:border-gray-700">
+                    <label className="text-xs text-gray-500 dark:text-gray-400 block mb-2">
+                      Projects
+                    </label>
+                    <div className="flex flex-wrap gap-2">
+                      {ot.projects.map((project, idx) => (
+                        <span
+                          key={idx}
+                          className="inline-block px-3 py-1 bg-blue-50 dark:bg-blue-900/20 text-blue-600 dark:text-blue-400 rounded-full text-xs border border-blue-200 dark:border-blue-800"
+                        >
+                          {project.project_name} (
+                          {project.time_taken_hours || 0}h)
+                        </span>
+                      ))}
+                    </div>
+                  </div>
+                )}
+                {hasAmount && (
+                  <div className="mt-2 text-xs text-green-600 dark:text-green-400">
+                    <i className="fas fa-check-circle mr-1"></i>
+                    Included in payroll (converted to {currentPayroll?.target_currency || "INR"})
+                  </div>
+                )}
               </div>
-            ) : (
-              <div className="text-center py-8 text-gray-500 dark:text-gray-400">
-                <i className="fas fa-clock text-4xl mb-3 block"></i>
-                No overtime data available
-              </div>
-            )}
-          </div>
-        );
+            );
+          })}
+        </div>
+      ) : (
+        <div className="text-center py-8 text-gray-500 dark:text-gray-400">
+          <i className="fas fa-clock text-4xl mb-3 block"></i>
+          No overtime data available
+        </div>
+      )}
+    </div>
+  );
 
       case "deductions":
         const deductions = stepData.step_4?.deductions || [];
