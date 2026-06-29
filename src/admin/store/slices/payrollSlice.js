@@ -180,6 +180,38 @@ export const submitPayroll = createAsyncThunk(
   }
 );
 
+// ─── Convert Salary (Currency Conversion) ─────────────────────────────
+export const convertSalary = createAsyncThunk(
+  "payroll/convertSalary",
+  async ({ userId, payPeriodMonth, payPeriodYear, targetCurrency, conversionRates }, { rejectWithValue }) => {
+    try {
+      const payload = {
+        user_id: userId,
+        pay_period_month: payPeriodMonth,
+        pay_period_year: payPeriodYear,
+        target_currency: targetCurrency,
+        conversion_rates: conversionRates.map(rate => ({
+          from_currency: rate.currency,
+          rate: rate.rate
+        }))
+      };
+      
+      const response = await apiClient.post("/admin/payroll/convert-salary", payload);
+      console.log("Convert salary response:", response.data);
+      
+      if (response.data?.success) {
+        return response.data.data;
+      }
+      return rejectWithValue(response.data?.message || "Failed to convert salary");
+    } catch (error) {
+      console.error("Convert salary error:", error);
+      return rejectWithValue(
+        error.response?.data?.message || "Failed to convert salary"
+      );
+    }
+  }
+);
+
 // ─── Fetch Payroll History ────────────────────────────────────────────
 export const fetchPayrollHistory = createAsyncThunk(
   "payroll/fetchHistory",
