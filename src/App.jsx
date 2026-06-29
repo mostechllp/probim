@@ -170,6 +170,25 @@ function App() {
     return () => clearTimeout(timer);
   }, []);
 
+  // Check if user has payroll permissions
+  const hasPayrollAccess = () => {
+    const permissions = user?.permissions || {};
+    return permissions?.payroll?.read || false;
+  };
+
+  // Check if user is admin or has payroll edit permission
+  const hasPayrollEdit = () => {
+    const permissions = user?.permissions || {};
+    const isAdmin = user?.type === "admin" || user?.role?.name === "admin" || user?.role?.name === "Admin";
+    return isAdmin || permissions?.payroll?.edit || false;
+  };
+
+  // Get the appropriate base path for payroll
+  const getPayrollBasePath = () => {
+    const isAdmin = user?.type === "admin" || user?.role?.name === "admin" || user?.role?.name === "Admin";
+    return isAdmin ? "/admin" : "/employee";
+  };
+
   // Show only one loader during initial auth check
   if (authLoading && initialLoad) {
     return <Loader fullScreen />;
@@ -457,6 +476,8 @@ function App() {
           <Route path="payroll/edit/:id" element={<EditPayroll />} /> 
         </Route>
 
+        {/* ============ REDIRECT ROUTES ============ */}
+
         {/* Redirect /admin/employees/add-employee to appropriate route */}
         <Route
           path="/admin/employees/add-employee"
@@ -658,6 +679,8 @@ function App() {
             </ProtectedRoute>
           }
         />
+
+        {/* Redirect /admin/project-working-hours to appropriate route */}
         <Route
           path="/admin/project-working-hours"
           element={
@@ -673,12 +696,15 @@ function App() {
           }
         />
 
+        {/* ============ PAYROLL REDIRECT ROUTES ============ */}
+
+        {/* Redirect /admin/payroll to appropriate route based on user type and permissions */}
         <Route
           path="/admin/payroll"
           element={
             <ProtectedRoute>
               <LazyWrapper>
-                {user?.type === "employee" ? (
+                {user?.type === "employee" || user?.role?.name === "HR Manager" ? (
                   <Navigate to="/employee/payroll" replace />
                 ) : (
                   <Navigate to="/admin/payroll" replace />
@@ -694,10 +720,42 @@ function App() {
           element={
             <ProtectedRoute>
               <LazyWrapper>
-                {user?.type === "employee" ? (
+                {user?.type === "employee" || user?.role?.name === "HR Manager" ? (
                   <Navigate to="/employee/payroll/add" replace />
                 ) : (
                   <Navigate to="/admin/payroll/add" replace />
+                )}
+              </LazyWrapper>
+            </ProtectedRoute>
+          }
+        />
+
+        {/* Redirect /admin/payroll/:id to appropriate route */}
+        <Route
+          path="/admin/payroll/:id"
+          element={
+            <ProtectedRoute>
+              <LazyWrapper>
+                {user?.type === "employee" || user?.role?.name === "HR Manager" ? (
+                  <Navigate to={`/employee/payroll/${window.location.pathname.split('/').pop()}`} replace />
+                ) : (
+                  <Navigate to={`/admin/payroll/${window.location.pathname.split('/').pop()}`} replace />
+                )}
+              </LazyWrapper>
+            </ProtectedRoute>
+          }
+        />
+
+        {/* Redirect /admin/payroll/edit/:id to appropriate route */}
+        <Route
+          path="/admin/payroll/edit/:id"
+          element={
+            <ProtectedRoute>
+              <LazyWrapper>
+                {user?.type === "employee" || user?.role?.name === "HR Manager" ? (
+                  <Navigate to={`/employee/payroll/edit/${window.location.pathname.split('/').pop()}`} replace />
+                ) : (
+                  <Navigate to={`/admin/payroll/edit/${window.location.pathname.split('/').pop()}`} replace />
                 )}
               </LazyWrapper>
             </ProtectedRoute>

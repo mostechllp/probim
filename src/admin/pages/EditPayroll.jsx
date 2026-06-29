@@ -1,4 +1,4 @@
-// src/admin/pages/EditPayroll.js - Fixed to properly fetch employee by user_id
+// src/admin/pages/EditPayroll.js - Fixed with dynamic base path
 
 import { useState, useEffect } from "react";
 import { useDispatch, useSelector } from "react-redux";
@@ -75,6 +75,14 @@ function EditPayroll() {
   const dispatch = useDispatch();
   const navigate = useNavigate();
   const { id } = useParams();
+
+  // Get user from Redux to determine base path
+  const { user } = useSelector((state) => state.auth || {});
+  const isAdmin =
+    user?.type === "admin" ||
+    user?.role?.name === "admin" ||
+    user?.role?.name === "Admin";
+  const basePath = isAdmin ? "/admin" : "/employee";
 
   // Redux state
   const reduxCurrentStep = useSelector(selectCurrentStep);
@@ -206,21 +214,19 @@ function EditPayroll() {
   // Find employee record ID from user_id
   useEffect(() => {
     if (currentPayroll?.employee_id && employees && employees.length > 0) {
-      // The employee_id in payroll is actually the user_id
       const userId = parseInt(currentPayroll.employee_id);
-      
-      // Find employee by user_id (which is stored as user_id in the employee list)
+
       const foundEmployee = employees.find(
-        (emp) => emp.user_id === userId || emp.id === userId
+        (emp) => emp.user_id === userId || emp.id === userId,
       );
-      
+
       if (foundEmployee) {
-        // This is the actual employee record ID
         setEmployeeRecordId(foundEmployee.id);
         setSelectedEmployee(foundEmployee.id);
-        setEmployeeName(foundEmployee.name || currentPayroll.employee_name || "");
-        
-        // Fetch full employee details using the employee record ID
+        setEmployeeName(
+          foundEmployee.name || currentPayroll.employee_name || "",
+        );
+
         dispatch(fetchEmployeeById(foundEmployee.id))
           .unwrap()
           .then((data) => {
@@ -232,8 +238,6 @@ function EditPayroll() {
             console.error("Failed to fetch employee details:", err);
           });
       } else {
-        // If not found in the list, try using the payroll's employee_id directly
-        // but this might fail if it's a user_id
         dispatch(fetchEmployeeById(currentPayroll.employee_id))
           .unwrap()
           .then((data) => {
@@ -245,14 +249,15 @@ function EditPayroll() {
           })
           .catch((err) => {
             console.error("Failed to fetch employee details:", err);
-            // Try to find by user_id in the employees list again
             const fallbackEmployee = employees.find(
-              (emp) => emp.user_id === parseInt(currentPayroll.employee_id)
+              (emp) => emp.user_id === parseInt(currentPayroll.employee_id),
             );
             if (fallbackEmployee) {
               setEmployeeRecordId(fallbackEmployee.id);
               setSelectedEmployee(fallbackEmployee.id);
-              setEmployeeName(fallbackEmployee.name || currentPayroll.employee_name || "");
+              setEmployeeName(
+                fallbackEmployee.name || currentPayroll.employee_name || "",
+              );
             }
           });
       }
@@ -264,40 +269,49 @@ function EditPayroll() {
     if (currentPayroll && !isDataLoaded) {
       const stepData = currentPayroll.step_data || {};
 
-      // Set employee name from payroll data if not already set
       if (currentPayroll.employee_name && !employeeName) {
         setEmployeeName(currentPayroll.employee_name);
       }
 
-      // Set pay period
-      const monthName = currentPayroll.month 
+      const monthName = currentPayroll.month
         ? monthNumberToName[currentPayroll.month]
-        : stepData.step_1?.pay_period_month 
+        : stepData.step_1?.pay_period_month
           ? monthNumberToName[stepData.step_1.pay_period_month]
           : "";
       setPayPeriodMonth(monthName);
-      setPayPeriodYear(currentPayroll.year?.toString() || stepData.step_1?.pay_period_year?.toString() || "");
+      setPayPeriodYear(
+        currentPayroll.year?.toString() ||
+          stepData.step_1?.pay_period_year?.toString() ||
+          "",
+      );
       setPeriodStart(stepData.step_1?.period_start || "");
       setPeriodEnd(stepData.step_1?.period_end || "");
-      setPaymentDate(currentPayroll.payment_date || stepData.step_1?.payment_date || "");
+      setPaymentDate(
+        currentPayroll.payment_date || stepData.step_1?.payment_date || "",
+      );
       setPaymentMode(stepData.step_1?.payment_mode || null);
-      setTotalWorkingDays(stepData.step_1?.total_working_days?.toString() || "");
+      setTotalWorkingDays(
+        stepData.step_1?.total_working_days?.toString() || "",
+      );
       setDaysPresent(stepData.step_1?.days_present?.toString() || "");
 
-      // Set countries from step_2
       if (stepData.step_2?.location_breakdown) {
         setCountries(
           stepData.step_2.location_breakdown.map((loc, index) => ({
             id: index + 1,
             name: loc.location_name || loc.package?.name || "",
             currency: loc.currency?.code || loc.package?.currency || "AED",
-            dailyRate: loc.salary_components?.reduce((sum, comp) => sum + comp.amount, 0) / (loc.worked_days || 1) || 0,
+            dailyRate:
+              loc.salary_components?.reduce(
+                (sum, comp) => sum + comp.amount,
+                0,
+              ) / (loc.worked_days || 1) || 0,
             daysWorked: loc.worked_days || 0,
             fxRate: currentPayroll.step_data?.conversion_rate || 1,
             packageId: loc.package?.id || null,
             salary_components: loc.salary_components || [],
             subtotal: loc.subtotal || 0,
-          }))
+          })),
         );
       } else if (stepData.step_2?.countries) {
         setCountries(
@@ -311,10 +325,9 @@ function EditPayroll() {
             packageId: c.package_id || null,
             salary_components: c.salary_components || [],
             subtotal: c.subtotal || 0,
-          }))
+          })),
         );
       } else {
-        // Default if no data
         setCountries([
           {
             id: 1,
@@ -341,12 +354,11 @@ function EditPayroll() {
         ]);
       }
 
-      // Set overtime from step_3
       if (stepData.step_3?.overtime_details) {
         setOvertimeRequests(
           stepData.step_3.overtime_details.map((ot, index) => ({
             id: index + 1,
-            project: ot.projects?.map(p => p.project_name).join(", ") || "",
+            project: ot.projects?.map((p) => p.project_name).join(", ") || "",
             date: ot.date || "",
             hours: ot.overtime_hours || 0,
             overtime_amount: ot.amount || 0,
@@ -354,7 +366,7 @@ function EditPayroll() {
             status: ot.status || "pending",
             reason: "",
             projects: ot.projects || [],
-          }))
+          })),
         );
       } else {
         setOvertimeRequests([
@@ -383,7 +395,6 @@ function EditPayroll() {
         ]);
       }
 
-      // Set deductions from step_4
       if (stepData.step_4?.deductions) {
         setDeductions(
           stepData.step_4.deductions.map((d, index) => ({
@@ -392,7 +403,7 @@ function EditPayroll() {
             currency: d.currency || "INR",
             amount: d.amount?.toString() || "0",
             is_statutory: d.is_statutory || "no",
-          }))
+          })),
         );
       } else {
         setDeductions([
@@ -427,21 +438,22 @@ function EditPayroll() {
         ]);
       }
 
-      // Set summary data
       setTargetCurrency(stepData.currency || "INR");
       setLocalSummaryData({
-        gross_earnings: currentPayroll.net_pay || stepData.step_2?.total_earnings || 0,
+        gross_earnings:
+          currentPayroll.net_pay || stepData.step_2?.total_earnings || 0,
         total_deductions: stepData.step_4?.total_deductions || 0,
-        combined: currentPayroll.net_pay || stepData.step_2?.total_earnings || 0,
+        combined:
+          currentPayroll.net_pay || stepData.step_2?.total_earnings || 0,
         net_pay: currentPayroll.net_pay || 0,
       });
 
-      // Set conversion rates from countries
       const rates = {};
       if (stepData.step_2?.location_breakdown) {
         stepData.step_2.location_breakdown.forEach((loc) => {
           if (loc.currency?.code) {
-            rates[loc.currency.code] = currentPayroll.step_data?.conversion_rate || 1;
+            rates[loc.currency.code] =
+              currentPayroll.step_data?.conversion_rate || 1;
           }
         });
       }
@@ -498,7 +510,6 @@ function EditPayroll() {
 
     setEmploymentType(user.type || user.employment_type || "employee");
 
-    // Fetch salary packages for this employee using user_id
     if (employee.user_id) {
       dispatch(fetchEmployeeSalaryPackages(employee.user_id));
     }
@@ -554,7 +565,7 @@ function EditPayroll() {
           employeeId: selectedUserId,
           userId: selectedUserId,
           month: monthFormatted,
-        })
+        }),
       ).unwrap();
       showToast("Salary split calculated successfully", "success");
     } catch (error) {
@@ -579,7 +590,7 @@ function EditPayroll() {
           employeeId: selectedUserId,
           userId: selectedUserId,
           month: monthFormatted,
-        })
+        }),
       ).unwrap();
       showToast("Overtime data fetched successfully", "success");
     } catch (error) {
@@ -604,7 +615,7 @@ function EditPayroll() {
           userId: selectedUserId,
           payPeriodMonth: monthNumber,
           payPeriodYear: year,
-        })
+        }),
       ).unwrap();
       showToast("Summary fetched successfully", "success");
     } catch (error) {
@@ -651,7 +662,8 @@ function EditPayroll() {
               symbol: c.currency,
             },
             salary_components: c.salary_components || [],
-            subtotal: (parseFloat(c.dailyRate) || 0) * (parseInt(c.daysWorked) || 0),
+            subtotal:
+              (parseFloat(c.dailyRate) || 0) * (parseInt(c.daysWorked) || 0),
           })),
           total_earnings: countries.reduce(
             (sum, c) =>
@@ -659,16 +671,19 @@ function EditPayroll() {
               (parseFloat(c.dailyRate) || 0) *
                 (parseInt(c.daysWorked) || 0) *
                 (parseFloat(c.fxRate) || 1),
-            0
+            0,
           ),
-          total_deductions: deductions.reduce((sum, d) => sum + parseFloat(d.amount || 0), 0),
+          total_deductions: deductions.reduce(
+            (sum, d) => sum + parseFloat(d.amount || 0),
+            0,
+          ),
           gross_salary: countries.reduce(
             (sum, c) =>
               sum +
               (parseFloat(c.dailyRate) || 0) *
                 (parseInt(c.daysWorked) || 0) *
                 (parseFloat(c.fxRate) || 1),
-            0
+            0,
           ),
           net_salary:
             countries.reduce(
@@ -677,7 +692,7 @@ function EditPayroll() {
                 (parseFloat(c.dailyRate) || 0) *
                   (parseInt(c.daysWorked) || 0) *
                   (parseFloat(c.fxRate) || 1),
-              0
+              0,
             ) -
             deductions.reduce((sum, d) => sum + parseFloat(d.amount || 0), 0),
         };
@@ -696,7 +711,7 @@ function EditPayroll() {
           })),
           total_overtime_amount: overtimeRequests.reduce(
             (sum, req) => sum + parseFloat(req.overtime_amount || 0),
-            0
+            0,
           ),
         };
         break;
@@ -710,7 +725,10 @@ function EditPayroll() {
             amount: parseFloat(d.amount) || 0,
             is_statutory: d.is_statutory || "no",
           })),
-          total_deductions: deductions.reduce((sum, d) => sum + parseFloat(d.amount || 0), 0),
+          total_deductions: deductions.reduce(
+            (sum, d) => sum + parseFloat(d.amount || 0),
+            0,
+          ),
         };
         break;
       case 5:
@@ -719,24 +737,33 @@ function EditPayroll() {
           conversionRatesObj[c.currency] = parseFloat(c.fxRate) || 1;
         });
 
-        const baseCurrency = countries.length > 0 ? countries[0].currency : "INR";
-        const exchangeRate = countries.length > 0 ? parseFloat(countries[0].fxRate) || 1 : 1;
-        
+        const baseCurrency =
+          countries.length > 0 ? countries[0].currency : "INR";
+        const exchangeRate =
+          countries.length > 0 ? parseFloat(countries[0].fxRate) || 1 : 1;
+
         const calculateConversion = (amount) => ({
           amount: amount,
           baseCurrency: baseCurrency,
           targetCurrency: targetCurrency,
           exchangeRate: exchangeRate,
-          convertedAmount: amount * exchangeRate
+          convertedAmount: amount * exchangeRate,
         });
 
         const conversionDetails = {
-          gross_salary: calculateConversion(localSummaryData.gross_earnings || 0),
-          overtime_amount: calculateConversion(
-            overtimeRequests.reduce((sum, req) => sum + parseFloat(req.overtime_amount || 0), 0)
+          gross_salary: calculateConversion(
+            localSummaryData.gross_earnings || 0,
           ),
-          deductions: calculateConversion(localSummaryData.total_deductions || 0),
-          net_pay: calculateConversion(localSummaryData.net_pay || 0)
+          overtime_amount: calculateConversion(
+            overtimeRequests.reduce(
+              (sum, req) => sum + parseFloat(req.overtime_amount || 0),
+              0,
+            ),
+          ),
+          deductions: calculateConversion(
+            localSummaryData.total_deductions || 0,
+          ),
+          net_pay: calculateConversion(localSummaryData.net_pay || 0),
         };
 
         data = {
@@ -768,7 +795,8 @@ function EditPayroll() {
     }
 
     try {
-      const monthNumber = monthNames[payPeriodMonth] || new Date().getMonth() + 1;
+      const monthNumber =
+        monthNames[payPeriodMonth] || new Date().getMonth() + 1;
       const year = parseInt(payPeriodYear) || new Date().getFullYear();
 
       const enrichedData = {
@@ -782,7 +810,7 @@ function EditPayroll() {
           userId: selectedUserId,
           step: step,
           stepData: enrichedData,
-        })
+        }),
       ).unwrap();
 
       dispatch(updateStepData({ step, data: enrichedData }));
@@ -792,7 +820,10 @@ function EditPayroll() {
       return true;
     } catch (error) {
       console.error("Failed to save step:", error);
-      showToast(typeof error === "string" ? error : "Failed to save step data", "error");
+      showToast(
+        typeof error === "string" ? error : "Failed to save step data",
+        "error",
+      );
       return false;
     }
   };
@@ -812,7 +843,8 @@ function EditPayroll() {
       if (nextStep <= 5) {
         dispatch(setCurrentStep(nextStep));
 
-        const monthNumber = monthNames[payPeriodMonth] || new Date().getMonth() + 1;
+        const monthNumber =
+          monthNames[payPeriodMonth] || new Date().getMonth() + 1;
         const monthFormatted = `${payPeriodYear}-${String(monthNumber).padStart(2, "0")}`;
         const year = parseInt(payPeriodYear) || new Date().getFullYear();
 
@@ -823,7 +855,7 @@ function EditPayroll() {
                 employeeId: selectedUserId,
                 userId: selectedUserId,
                 month: monthFormatted,
-              })
+              }),
             );
           } catch (error) {
             console.error("Failed to calculate salary split:", error);
@@ -835,7 +867,7 @@ function EditPayroll() {
                 employeeId: selectedUserId,
                 userId: selectedUserId,
                 month: monthFormatted,
-              })
+              }),
             );
           } catch (error) {
             console.error("Failed to fetch overtime:", error);
@@ -847,7 +879,7 @@ function EditPayroll() {
                 userId: selectedUserId,
                 payPeriodMonth: monthNumber,
                 payPeriodYear: year,
-              })
+              }),
             );
           } catch (error) {
             console.error("Failed to fetch summary:", error);
@@ -877,7 +909,8 @@ function EditPayroll() {
     if (saved || reduxCurrentStep === 1) {
       dispatch(setCurrentStep(step));
 
-      const monthNumber = monthNames[payPeriodMonth] || new Date().getMonth() + 1;
+      const monthNumber =
+        monthNames[payPeriodMonth] || new Date().getMonth() + 1;
       const monthFormatted = `${payPeriodYear}-${String(monthNumber).padStart(2, "0")}`;
       const year = parseInt(payPeriodYear) || new Date().getFullYear();
 
@@ -888,7 +921,7 @@ function EditPayroll() {
               employeeId: selectedUserId,
               userId: selectedUserId,
               month: monthFormatted,
-            })
+            }),
           );
         } catch (error) {
           console.error("Failed to calculate salary split:", error);
@@ -900,7 +933,7 @@ function EditPayroll() {
               employeeId: selectedUserId,
               userId: selectedUserId,
               month: monthFormatted,
-            })
+            }),
           );
         } catch (error) {
           console.error("Failed to fetch overtime:", error);
@@ -912,7 +945,7 @@ function EditPayroll() {
               userId: selectedUserId,
               payPeriodMonth: monthNumber,
               payPeriodYear: year,
-            })
+            }),
           );
         } catch (error) {
           console.error("Failed to fetch summary:", error);
@@ -941,7 +974,8 @@ function EditPayroll() {
       const finalData = getCurrentStepData();
       await handleSaveStep(reduxCurrentStep, finalData);
 
-      const monthNumber = monthNames[payPeriodMonth] || new Date().getMonth() + 1;
+      const monthNumber =
+        monthNames[payPeriodMonth] || new Date().getMonth() + 1;
 
       const payload = {
         user_id: selectedUserId,
@@ -959,7 +993,7 @@ function EditPayroll() {
       showToast("Payroll updated successfully!", "success");
 
       setTimeout(() => {
-        navigate(`/admin/payroll/${id}`);
+        navigate(`${basePath}/payroll/${id}`);
       }, 2000);
     } catch (error) {
       showToast(error || "Failed to update payroll", "error");
@@ -968,31 +1002,32 @@ function EditPayroll() {
 
   // Handle cancel
   const handleCancel = () => {
-    navigate(`/admin/payroll/${id}`);
+    navigate(`${basePath}/payroll/${id}`);
   };
 
   // Overtime actions
   const handleOvertimeAction = (id, newStatus) => {
     setOvertimeRequests((prev) =>
-      prev.map((req) => (req.id === id ? { ...req, status: newStatus } : req))
+      prev.map((req) => (req.id === id ? { ...req, status: newStatus } : req)),
     );
   };
 
   const handleOvertimeChange = (id, field, value) => {
     setOvertimeRequests((prev) =>
-      prev.map((req) => (req.id === id ? { ...req, [field]: value } : req))
+      prev.map((req) => (req.id === id ? { ...req, [field]: value } : req)),
     );
   };
 
   // Country actions
   const handleCountryChange = (id, field, value) => {
     setCountries((prev) =>
-      prev.map((c) => (c.id === id ? { ...c, [field]: value } : c))
+      prev.map((c) => (c.id === id ? { ...c, [field]: value } : c)),
     );
   };
 
   const handleAddCountry = () => {
-    const newId = countries.length > 0 ? Math.max(...countries.map((c) => c.id)) + 1 : 1;
+    const newId =
+      countries.length > 0 ? Math.max(...countries.map((c) => c.id)) + 1 : 1;
     setCountries([
       ...countries,
       {
@@ -1020,12 +1055,13 @@ function EditPayroll() {
   // Deduction actions
   const handleDeductionChange = (id, field, value) => {
     setDeductions((prev) =>
-      prev.map((d) => (d.id === id ? { ...d, [field]: value } : d))
+      prev.map((d) => (d.id === id ? { ...d, [field]: value } : d)),
     );
   };
 
   const handleAddDeduction = () => {
-    const newId = deductions.length > 0 ? Math.max(...deductions.map((d) => d.id)) + 1 : 1;
+    const newId =
+      deductions.length > 0 ? Math.max(...deductions.map((d) => d.id)) + 1 : 1;
     setDeductions([
       ...deductions,
       {
@@ -1073,14 +1109,14 @@ function EditPayroll() {
       {/* Breadcrumbs */}
       <div className="flex items-center gap-2 text-xs md:text-sm mb-4 md:mb-6 flex-wrap">
         <Link
-          to="/admin/payroll"
+          to={`${basePath}/payroll`}
           className="text-green-500 hover:text-green-600 font-medium"
         >
           Payroll
         </Link>
         <i className="fas fa-chevron-right text-gray-400 text-[10px] md:text-xs"></i>
         <Link
-          to={`/admin/payroll/${id}`}
+          to={`${basePath}/payroll/${id}`}
           className="text-green-500 hover:text-green-600 font-medium"
         >
           Payroll Details
@@ -1103,27 +1139,30 @@ function EditPayroll() {
       {currentPayroll?.status && (
         <div
           className={`mb-4 p-3 rounded-lg border ${
-            currentPayroll.status === "completed" || currentPayroll.status === "paid"
+            currentPayroll.status === "completed" ||
+            currentPayroll.status === "paid"
               ? "bg-green-50 dark:bg-green-900/20 border-green-200 dark:border-green-800 text-green-700 dark:text-green-300"
               : currentPayroll.status === "pending"
-              ? "bg-yellow-50 dark:bg-yellow-900/20 border-yellow-200 dark:border-yellow-800 text-yellow-700 dark:text-yellow-300"
-              : "bg-gray-50 dark:bg-gray-800 border-gray-200 dark:border-gray-700 text-gray-600 dark:text-gray-400"
+                ? "bg-yellow-50 dark:bg-yellow-900/20 border-yellow-200 dark:border-yellow-800 text-yellow-700 dark:text-yellow-300"
+                : "bg-gray-50 dark:bg-gray-800 border-gray-200 dark:border-gray-700 text-gray-600 dark:text-gray-400"
           }`}
         >
           <div className="flex items-center gap-2">
             <i
               className={`fas ${
-                currentPayroll.status === "completed" || currentPayroll.status === "paid"
+                currentPayroll.status === "completed" ||
+                currentPayroll.status === "paid"
                   ? "fa-check-circle"
                   : currentPayroll.status === "pending"
-                  ? "fa-clock"
-                  : "fa-file"
+                    ? "fa-clock"
+                    : "fa-file"
               }`}
             ></i>
             <span className="font-semibold capitalize">
               Current Status: {currentPayroll.status}
             </span>
-            {(currentPayroll.status === "completed" || currentPayroll.status === "paid") && (
+            {(currentPayroll.status === "completed" ||
+              currentPayroll.status === "paid") && (
               <span className="text-sm text-yellow-600 dark:text-yellow-400">
                 • Some fields may be read-only
               </span>
@@ -1143,8 +1182,8 @@ function EditPayroll() {
               reduxCurrentStep === step.id
                 ? "bg-green-500 text-white shadow-md"
                 : reduxCurrentStep > step.id
-                ? "bg-green-100 dark:bg-green-900/30 text-green-600 dark:text-green-400"
-                : "bg-gray-100 dark:bg-gray-700 text-gray-600 dark:text-gray-400 hover:bg-gray-200 dark:hover:bg-gray-600"
+                  ? "bg-green-100 dark:bg-green-900/30 text-green-600 dark:text-green-400"
+                  : "bg-gray-100 dark:bg-gray-700 text-gray-600 dark:text-gray-400 hover:bg-gray-200 dark:hover:bg-gray-600"
             } ${isLoading || isSubmitting || !selectedUserId ? "opacity-50 cursor-not-allowed" : ""}`}
           >
             {step.id}. {step.label}
@@ -1179,10 +1218,16 @@ function EditPayroll() {
                       className="w-full px-3 md:px-4 py-2 md:py-3 bg-gray-50 dark:bg-gray-800 border border-gray-200 dark:border-gray-700 rounded-lg text-sm md:text-base text-gray-800 dark:text-gray-200 focus:outline-none focus:border-green-500 focus:ring-2 focus:ring-green-500/20"
                       value={selectedEmployee}
                       onChange={(e) => handleEmployeeSelect(e.target.value)}
-                      disabled={employeesLoading || currentPayroll?.status === "completed" || currentPayroll?.status === "paid"}
+                      disabled={
+                        employeesLoading ||
+                        currentPayroll?.status === "completed" ||
+                        currentPayroll?.status === "paid"
+                      }
                     >
                       <option value="">
-                        {employeesLoading ? "Loading employees..." : "Select Employee"}
+                        {employeesLoading
+                          ? "Loading employees..."
+                          : "Select Employee"}
                       </option>
                       {employees.map((emp) => (
                         <option key={emp.id} value={emp.id}>
@@ -1287,7 +1332,11 @@ function EditPayroll() {
                       className="w-full px-3 md:px-4 py-2 md:py-3 bg-gray-50 dark:bg-gray-800 border border-gray-200 dark:border-gray-700 rounded-lg text-sm md:text-base text-gray-800 dark:text-gray-200 focus:outline-none focus:border-green-500 focus:ring-2 focus:ring-green-500/20"
                       value={payPeriodMonth}
                       onChange={(e) => setPayPeriodMonth(e.target.value)}
-                      disabled={!selectedUserId || currentPayroll?.status === "completed" || currentPayroll?.status === "paid"}
+                      disabled={
+                        !selectedUserId ||
+                        currentPayroll?.status === "completed" ||
+                        currentPayroll?.status === "paid"
+                      }
                     >
                       <option value="">Select Month</option>
                       <option value="January">January</option>
@@ -1313,7 +1362,11 @@ function EditPayroll() {
                       className="w-full px-3 md:px-4 py-2 md:py-3 bg-gray-50 dark:bg-gray-800 border border-gray-200 dark:border-gray-700 rounded-lg text-sm md:text-base text-gray-800 dark:text-gray-200 focus:outline-none focus:border-green-500 focus:ring-2 focus:ring-green-500/20"
                       value={payPeriodYear}
                       onChange={(e) => setPayPeriodYear(e.target.value)}
-                      disabled={!selectedUserId || currentPayroll?.status === "completed" || currentPayroll?.status === "paid"}
+                      disabled={
+                        !selectedUserId ||
+                        currentPayroll?.status === "completed" ||
+                        currentPayroll?.status === "paid"
+                      }
                     >
                       <option value="">Select Year</option>
                       <option value="2024">2024</option>
@@ -1332,7 +1385,11 @@ function EditPayroll() {
                       value={periodStart}
                       onChange={(e) => setPeriodStart(e.target.value)}
                       className="w-full px-3 md:px-4 py-2 md:py-3 bg-gray-50 dark:bg-gray-800 border border-gray-200 dark:border-gray-700 rounded-lg text-sm md:text-base text-gray-800 dark:text-gray-200 focus:outline-none focus:border-green-500 focus:ring-2 focus:ring-green-500/20"
-                      disabled={!selectedUserId || currentPayroll?.status === "completed" || currentPayroll?.status === "paid"}
+                      disabled={
+                        !selectedUserId ||
+                        currentPayroll?.status === "completed" ||
+                        currentPayroll?.status === "paid"
+                      }
                     />
                   </div>
                   <div>
@@ -1345,7 +1402,11 @@ function EditPayroll() {
                       value={periodEnd}
                       onChange={(e) => setPeriodEnd(e.target.value)}
                       className="w-full px-3 md:px-4 py-2 md:py-3 bg-gray-50 dark:bg-gray-800 border border-gray-200 dark:border-gray-700 rounded-lg text-sm md:text-base text-gray-800 dark:text-gray-200 focus:outline-none focus:border-green-500 focus:ring-2 focus:ring-green-500/20"
-                      disabled={!selectedUserId || currentPayroll?.status === "completed" || currentPayroll?.status === "paid"}
+                      disabled={
+                        !selectedUserId ||
+                        currentPayroll?.status === "completed" ||
+                        currentPayroll?.status === "paid"
+                      }
                     />
                   </div>
                   <div>
@@ -1358,7 +1419,11 @@ function EditPayroll() {
                       value={paymentDate}
                       onChange={(e) => setPaymentDate(e.target.value)}
                       className="w-full px-3 md:px-4 py-2 md:py-3 bg-gray-50 dark:bg-gray-800 border border-gray-200 dark:border-gray-700 rounded-lg text-sm md:text-base text-gray-800 dark:text-gray-200 focus:outline-none focus:border-green-500 focus:ring-2 focus:ring-green-500/20"
-                      disabled={!selectedUserId || currentPayroll?.status === "completed" || currentPayroll?.status === "paid"}
+                      disabled={
+                        !selectedUserId ||
+                        currentPayroll?.status === "completed" ||
+                        currentPayroll?.status === "paid"
+                      }
                     />
                   </div>
                   <div>
@@ -1370,7 +1435,11 @@ function EditPayroll() {
                       className="w-full px-3 md:px-4 py-2 md:py-3 bg-gray-50 dark:bg-gray-800 border border-gray-200 dark:border-gray-700 rounded-lg text-sm md:text-base text-gray-800 dark:text-gray-200 focus:outline-none focus:border-green-500 focus:ring-2 focus:ring-green-500/20"
                       value={paymentMode || ""}
                       onChange={(e) => setPaymentMode(e.target.value || null)}
-                      disabled={!selectedUserId || currentPayroll?.status === "completed" || currentPayroll?.status === "paid"}
+                      disabled={
+                        !selectedUserId ||
+                        currentPayroll?.status === "completed" ||
+                        currentPayroll?.status === "paid"
+                      }
                     >
                       <option value="">Select Payment Mode</option>
                       <option value="NEFT">Bank Transfer (NEFT)</option>
@@ -1389,7 +1458,11 @@ function EditPayroll() {
                       value={totalWorkingDays}
                       onChange={(e) => setTotalWorkingDays(e.target.value)}
                       className="w-full px-3 md:px-4 py-2 md:py-3 bg-gray-50 dark:bg-gray-800 border border-gray-200 dark:border-gray-700 rounded-lg text-sm md:text-base text-gray-800 dark:text-gray-200 focus:outline-none focus:border-green-500 focus:ring-2 focus:ring-green-500/20"
-                      disabled={!selectedUserId || currentPayroll?.status === "completed" || currentPayroll?.status === "paid"}
+                      disabled={
+                        !selectedUserId ||
+                        currentPayroll?.status === "completed" ||
+                        currentPayroll?.status === "paid"
+                      }
                     />
                   </div>
                   <div>
@@ -1402,7 +1475,11 @@ function EditPayroll() {
                       value={daysPresent}
                       onChange={(e) => setDaysPresent(e.target.value)}
                       className="w-full px-3 md:px-4 py-2 md:py-3 bg-gray-50 dark:bg-gray-800 border border-gray-200 dark:border-gray-700 rounded-lg text-sm md:text-base text-gray-800 dark:text-gray-200 focus:outline-none focus:border-green-500 focus:ring-2 focus:ring-green-500/20"
-                      disabled={!selectedUserId || currentPayroll?.status === "completed" || currentPayroll?.status === "paid"}
+                      disabled={
+                        !selectedUserId ||
+                        currentPayroll?.status === "completed" ||
+                        currentPayroll?.status === "paid"
+                      }
                     />
                   </div>
                 </div>
@@ -1427,10 +1504,16 @@ function EditPayroll() {
                 )}
                 <button
                   onClick={handleCalculateSalarySplit}
-                  disabled={countriesLoading || currentPayroll?.status === "completed" || currentPayroll?.status === "paid"}
+                  disabled={
+                    countriesLoading ||
+                    currentPayroll?.status === "completed" ||
+                    currentPayroll?.status === "paid"
+                  }
                   className="ml-auto px-3 py-1 text-xs bg-blue-500 text-white rounded-lg hover:bg-blue-600 transition-colors disabled:opacity-50"
                 >
-                  <i className={`fas ${countriesLoading ? "fa-spinner fa-spin" : "fa-calculator"} mr-1`}></i>
+                  <i
+                    className={`fas ${countriesLoading ? "fa-spinner fa-spin" : "fa-calculator"} mr-1`}
+                  ></i>
                   {countriesLoading ? "Calculating..." : "Calculate"}
                 </button>
               </div>
@@ -1450,16 +1533,31 @@ function EditPayroll() {
                           value={c.packageId || ""}
                           onChange={(e) => {
                             const selectedPackage = employeePackages.find(
-                              (p) => p.id === parseInt(e.target.value)
+                              (p) => p.id === parseInt(e.target.value),
                             );
-                            handleCountryChange(c.id, "packageId", e.target.value);
+                            handleCountryChange(
+                              c.id,
+                              "packageId",
+                              e.target.value,
+                            );
                             if (selectedPackage) {
-                              handleCountryChange(c.id, "name", selectedPackage.name);
-                              handleCountryChange(c.id, "currency", selectedPackage.currency || "AED");
+                              handleCountryChange(
+                                c.id,
+                                "name",
+                                selectedPackage.name,
+                              );
+                              handleCountryChange(
+                                c.id,
+                                "currency",
+                                selectedPackage.currency || "AED",
+                              );
                             }
                           }}
                           className="w-full px-3 py-2 text-sm rounded-lg border border-gray-200 dark:border-gray-700 bg-white dark:bg-gray-800 text-gray-800 dark:text-gray-200 focus:outline-none focus:border-green-500 focus:ring-2 focus:ring-green-500/20"
-                          disabled={currentPayroll?.status === "completed" || currentPayroll?.status === "paid"}
+                          disabled={
+                            currentPayroll?.status === "completed" ||
+                            currentPayroll?.status === "paid"
+                          }
                         >
                           <option value="">Select Package</option>
                           {employeePackages.map((pkg) => (
@@ -1472,10 +1570,15 @@ function EditPayroll() {
                         <input
                           type="text"
                           value={c.name}
-                          onChange={(e) => handleCountryChange(c.id, "name", e.target.value)}
+                          onChange={(e) =>
+                            handleCountryChange(c.id, "name", e.target.value)
+                          }
                           className="w-full px-3 py-2 text-sm rounded-lg border border-gray-200 dark:border-gray-700 bg-white dark:bg-gray-800 text-gray-800 dark:text-gray-200 focus:outline-none focus:border-green-500 focus:ring-2 focus:ring-green-500/20"
                           placeholder="e.g., UAE Onsite"
-                          disabled={currentPayroll?.status === "completed" || currentPayroll?.status === "paid"}
+                          disabled={
+                            currentPayroll?.status === "completed" ||
+                            currentPayroll?.status === "paid"
+                          }
                         />
                       )}
                     </div>
@@ -1485,9 +1588,14 @@ function EditPayroll() {
                       </label>
                       <select
                         value={c.currency}
-                        onChange={(e) => handleCountryChange(c.id, "currency", e.target.value)}
+                        onChange={(e) =>
+                          handleCountryChange(c.id, "currency", e.target.value)
+                        }
                         className="w-full px-3 py-2 text-sm rounded-lg border border-gray-200 dark:border-gray-700 bg-white dark:bg-gray-800 text-gray-800 dark:text-gray-200 focus:outline-none focus:border-green-500 focus:ring-2 focus:ring-green-500/20"
-                        disabled={currentPayroll?.status === "completed" || currentPayroll?.status === "paid"}
+                        disabled={
+                          currentPayroll?.status === "completed" ||
+                          currentPayroll?.status === "paid"
+                        }
                       >
                         {currencies.map((curr) => (
                           <option key={curr} value={curr}>
@@ -1503,9 +1611,14 @@ function EditPayroll() {
                       <input
                         type="number"
                         value={c.dailyRate}
-                        onChange={(e) => handleCountryChange(c.id, "dailyRate", e.target.value)}
+                        onChange={(e) =>
+                          handleCountryChange(c.id, "dailyRate", e.target.value)
+                        }
                         className="w-full px-3 py-2 text-sm rounded-lg border border-gray-200 dark:border-gray-700 bg-white dark:bg-gray-800 text-gray-800 dark:text-gray-200 focus:outline-none focus:border-green-500 focus:ring-2 focus:ring-green-500/20"
-                        disabled={currentPayroll?.status === "completed" || currentPayroll?.status === "paid"}
+                        disabled={
+                          currentPayroll?.status === "completed" ||
+                          currentPayroll?.status === "paid"
+                        }
                       />
                     </div>
                     <div className="md:col-span-2">
@@ -1515,9 +1628,18 @@ function EditPayroll() {
                       <input
                         type="number"
                         value={c.daysWorked}
-                        onChange={(e) => handleCountryChange(c.id, "daysWorked", e.target.value)}
+                        onChange={(e) =>
+                          handleCountryChange(
+                            c.id,
+                            "daysWorked",
+                            e.target.value,
+                          )
+                        }
                         className="w-full px-3 py-2 text-sm rounded-lg border border-gray-200 dark:border-gray-700 bg-white dark:bg-gray-800 text-gray-800 dark:text-gray-200 focus:outline-none focus:border-green-500 focus:ring-2 focus:ring-green-500/20"
-                        disabled={currentPayroll?.status === "completed" || currentPayroll?.status === "paid"}
+                        disabled={
+                          currentPayroll?.status === "completed" ||
+                          currentPayroll?.status === "paid"
+                        }
                       />
                     </div>
                     <div className="md:col-span-2">
@@ -1528,16 +1650,24 @@ function EditPayroll() {
                         type="number"
                         step="0.01"
                         value={c.fxRate}
-                        onChange={(e) => handleCountryChange(c.id, "fxRate", e.target.value)}
+                        onChange={(e) =>
+                          handleCountryChange(c.id, "fxRate", e.target.value)
+                        }
                         className="w-full px-3 py-2 text-sm rounded-lg border border-blue-200 dark:border-blue-700 bg-blue-50 dark:bg-blue-900/10 text-gray-800 dark:text-gray-200 focus:outline-none focus:border-blue-500 focus:ring-2 focus:ring-blue-500/20"
-                        disabled={currentPayroll?.status === "completed" || currentPayroll?.status === "paid"}
+                        disabled={
+                          currentPayroll?.status === "completed" ||
+                          currentPayroll?.status === "paid"
+                        }
                       />
                     </div>
                     <div className="md:col-span-1 flex justify-end items-end pb-0.5">
                       <button
                         onClick={() => handleRemoveCountry(c.id)}
                         className="w-8 h-8 rounded-lg bg-red-50 text-red-500 hover:bg-red-100 dark:bg-red-900/20 dark:hover:bg-red-900/40 transition-colors flex items-center justify-center"
-                        disabled={currentPayroll?.status === "completed" || currentPayroll?.status === "paid"}
+                        disabled={
+                          currentPayroll?.status === "completed" ||
+                          currentPayroll?.status === "paid"
+                        }
                       >
                         <i className="fas fa-trash-alt text-xs"></i>
                       </button>
@@ -1549,7 +1679,10 @@ function EditPayroll() {
               <button
                 onClick={handleAddCountry}
                 className="mt-3 px-3 py-1.5 bg-green-50 dark:bg-green-900/20 text-green-600 dark:text-green-400 rounded-lg text-xs font-semibold hover:bg-green-100 dark:hover:bg-green-900/40 transition-colors border border-green-100 dark:border-green-800 flex items-center gap-2"
-                disabled={currentPayroll?.status === "completed" || currentPayroll?.status === "paid"}
+                disabled={
+                  currentPayroll?.status === "completed" ||
+                  currentPayroll?.status === "paid"
+                }
               >
                 <i className="fas fa-plus"></i> Add Package Split
               </button>
@@ -1561,11 +1694,15 @@ function EditPayroll() {
                     Dubai Package
                   </div>
                   <div className="text-lg md:text-xl font-bold text-orange-600 dark:text-orange-400">
-                    {countries.find((c) => c.currency === "AED")?.dailyRate || "0"}{" "}
-                    {countries.find((c) => c.currency === "AED")?.currency || "AED"}
+                    {countries.find((c) => c.currency === "AED")?.dailyRate ||
+                      "0"}{" "}
+                    {countries.find((c) => c.currency === "AED")?.currency ||
+                      "AED"}
                   </div>
                   <div className="text-[9px] md:text-[10px] text-gray-500 dark:text-gray-400 mt-0.5">
-                    {countries.find((c) => c.currency === "AED")?.daysWorked || 0} days
+                    {countries.find((c) => c.currency === "AED")?.daysWorked ||
+                      0}{" "}
+                    days
                   </div>
                 </div>
                 <div className="p-3 md:p-4 rounded-xl bg-green-50 dark:bg-green-900/20 border border-green-200 dark:border-green-800">
@@ -1574,11 +1711,15 @@ function EditPayroll() {
                     WFH Package
                   </div>
                   <div className="text-lg md:text-xl font-bold text-green-600 dark:text-green-400">
-                    {countries.find((c) => c.currency === "INR")?.dailyRate || "0"}{" "}
-                    {countries.find((c) => c.currency === "INR")?.currency || "INR"}
+                    {countries.find((c) => c.currency === "INR")?.dailyRate ||
+                      "0"}{" "}
+                    {countries.find((c) => c.currency === "INR")?.currency ||
+                      "INR"}
                   </div>
                   <div className="text-[9px] md:text-[10px] text-gray-500 dark:text-gray-400 mt-0.5">
-                    {countries.find((c) => c.currency === "INR")?.daysWorked || 0} days
+                    {countries.find((c) => c.currency === "INR")?.daysWorked ||
+                      0}{" "}
+                    days
                   </div>
                 </div>
                 <div className="p-3 md:p-4 rounded-xl bg-blue-50 dark:bg-blue-900/20 border border-blue-200 dark:border-blue-800">
@@ -1589,10 +1730,12 @@ function EditPayroll() {
                     {targetCurrency}{" "}
                     {(
                       parseFloat(
-                        countries.find((c) => c.currency === "AED")?.dailyRate || 0
+                        countries.find((c) => c.currency === "AED")
+                          ?.dailyRate || 0,
                       ) *
                       parseFloat(
-                        countries.find((c) => c.currency === "AED")?.fxRate || 0
+                        countries.find((c) => c.currency === "AED")?.fxRate ||
+                          0,
                       )
                     ).toLocaleString()}
                   </div>
@@ -1610,7 +1753,7 @@ function EditPayroll() {
                           parseFloat(c.dailyRate || 0) *
                             parseFloat(c.daysWorked || 0) *
                             parseFloat(c.fxRate || 1),
-                        0
+                        0,
                       )
                       .toLocaleString()}
                   </div>
@@ -1631,10 +1774,16 @@ function EditPayroll() {
                 </h3>
                 <button
                   onClick={handleFetchOvertime}
-                  disabled={overtimeLoading || currentPayroll?.status === "completed" || currentPayroll?.status === "paid"}
+                  disabled={
+                    overtimeLoading ||
+                    currentPayroll?.status === "completed" ||
+                    currentPayroll?.status === "paid"
+                  }
                   className="ml-auto px-3 py-1 text-xs bg-blue-500 text-white rounded-lg hover:bg-blue-600 transition-colors disabled:opacity-50"
                 >
-                  <i className={`fas ${overtimeLoading ? "fa-spinner fa-spin" : "fa-sync"} mr-1`}></i>
+                  <i
+                    className={`fas ${overtimeLoading ? "fa-spinner fa-spin" : "fa-sync"} mr-1`}
+                  ></i>
                   {overtimeLoading ? "Loading..." : "Fetch Overtime"}
                 </button>
               </div>
@@ -1647,11 +1796,19 @@ function EditPayroll() {
                         <th className="py-3 px-4 font-semibold">Project</th>
                         <th className="py-3 px-4 font-semibold">Date</th>
                         <th className="py-3 px-4 font-semibold">Hours</th>
-                        <th className="py-3 px-4 font-semibold">Overtime Amount</th>
+                        <th className="py-3 px-4 font-semibold">
+                          Overtime Amount
+                        </th>
                         <th className="py-3 px-4 font-semibold">Currency</th>
-                        <th className="py-3 px-4 font-semibold w-1/4">Reason</th>
-                        <th className="py-3 px-4 font-semibold text-center">Status</th>
-                        <th className="py-3 px-4 font-semibold text-center">Actions</th>
+                        <th className="py-3 px-4 font-semibold w-1/4">
+                          Reason
+                        </th>
+                        <th className="py-3 px-4 font-semibold text-center">
+                          Status
+                        </th>
+                        <th className="py-3 px-4 font-semibold text-center">
+                          Actions
+                        </th>
                       </tr>
                     </thead>
                     <tbody>
@@ -1664,19 +1821,37 @@ function EditPayroll() {
                             <input
                               type="text"
                               value={req.project}
-                              onChange={(e) => handleOvertimeChange(req.id, "project", e.target.value)}
+                              onChange={(e) =>
+                                handleOvertimeChange(
+                                  req.id,
+                                  "project",
+                                  e.target.value,
+                                )
+                              }
                               className="w-full px-2 py-1 text-sm rounded border border-gray-200 dark:border-gray-600 bg-white dark:bg-gray-800 text-gray-700 dark:text-gray-300 focus:outline-none focus:border-green-500"
                               placeholder="Project name"
-                              disabled={currentPayroll?.status === "completed" || currentPayroll?.status === "paid"}
+                              disabled={
+                                currentPayroll?.status === "completed" ||
+                                currentPayroll?.status === "paid"
+                              }
                             />
                           </td>
                           <td className="py-3 px-4 text-sm text-gray-600 dark:text-gray-400">
                             <input
                               type="date"
                               value={req.date}
-                              onChange={(e) => handleOvertimeChange(req.id, "date", e.target.value)}
+                              onChange={(e) =>
+                                handleOvertimeChange(
+                                  req.id,
+                                  "date",
+                                  e.target.value,
+                                )
+                              }
                               className="w-full px-2 py-1 text-sm rounded border border-gray-200 dark:border-gray-600 bg-white dark:bg-gray-800 text-gray-700 dark:text-gray-300 focus:outline-none focus:border-green-500"
-                              disabled={currentPayroll?.status === "completed" || currentPayroll?.status === "paid"}
+                              disabled={
+                                currentPayroll?.status === "completed" ||
+                                currentPayroll?.status === "paid"
+                              }
                             />
                           </td>
                           <td className="py-3 px-4 text-sm font-semibold text-gray-800 dark:text-gray-200">
@@ -1684,9 +1859,18 @@ function EditPayroll() {
                               type="number"
                               step="0.5"
                               value={req.hours}
-                              onChange={(e) => handleOvertimeChange(req.id, "hours", parseFloat(e.target.value) || 0)}
+                              onChange={(e) =>
+                                handleOvertimeChange(
+                                  req.id,
+                                  "hours",
+                                  parseFloat(e.target.value) || 0,
+                                )
+                              }
                               className="w-16 px-2 py-1 text-sm rounded border border-gray-200 dark:border-gray-600 bg-white dark:bg-gray-800 text-gray-700 dark:text-gray-300 focus:outline-none focus:border-green-500"
-                              disabled={currentPayroll?.status === "completed" || currentPayroll?.status === "paid"}
+                              disabled={
+                                currentPayroll?.status === "completed" ||
+                                currentPayroll?.status === "paid"
+                              }
                             />
                           </td>
                           <td className="py-3 px-4 text-sm">
@@ -1694,34 +1878,61 @@ function EditPayroll() {
                               type="number"
                               step="0.01"
                               value={req.overtime_amount}
-                              onChange={(e) => handleOvertimeChange(req.id, "overtime_amount", parseFloat(e.target.value) || 0)}
+                              onChange={(e) =>
+                                handleOvertimeChange(
+                                  req.id,
+                                  "overtime_amount",
+                                  parseFloat(e.target.value) || 0,
+                                )
+                              }
                               className="w-full px-2 py-1 text-sm rounded border border-blue-200 dark:border-blue-700 bg-blue-50 dark:bg-blue-900/10 text-gray-700 dark:text-gray-300 focus:outline-none focus:border-blue-500"
                               placeholder="0.00"
-                              disabled={currentPayroll?.status === "completed" || currentPayroll?.status === "paid"}
+                              disabled={
+                                currentPayroll?.status === "completed" ||
+                                currentPayroll?.status === "paid"
+                              }
                             />
                           </td>
                           <td className="py-3 px-4 text-sm">
                             <select
-                                value={req.currency || targetCurrency}
-                                onChange={(e) => handleOvertimeChange(req.id, "currency", e.target.value)}
-                                className="w-20 px-2 py-1 text-sm rounded border border-gray-200 dark:border-gray-600 bg-white dark:bg-gray-800 text-gray-700 dark:text-gray-300 focus:outline-none focus:border-green-500"
-                                disabled={currentPayroll?.status === "completed" || currentPayroll?.status === "paid"}
-                              >
-                                {currencies.map((curr) => (
-                                  <option key={curr} value={curr}>
-                                    {curr}
-                                  </option>
-                                ))}
+                              value={req.currency || targetCurrency}
+                              onChange={(e) =>
+                                handleOvertimeChange(
+                                  req.id,
+                                  "currency",
+                                  e.target.value,
+                                )
+                              }
+                              className="w-20 px-2 py-1 text-sm rounded border border-gray-200 dark:border-gray-600 bg-white dark:bg-gray-800 text-gray-700 dark:text-gray-300 focus:outline-none focus:border-green-500"
+                              disabled={
+                                currentPayroll?.status === "completed" ||
+                                currentPayroll?.status === "paid"
+                              }
+                            >
+                              {currencies.map((curr) => (
+                                <option key={curr} value={curr}>
+                                  {curr}
+                                </option>
+                              ))}
                             </select>
                           </td>
                           <td className="py-3 px-4 text-xs text-gray-500 dark:text-gray-400">
                             <input
                               type="text"
                               value={req.reason}
-                              onChange={(e) => handleOvertimeChange(req.id, "reason", e.target.value)}
+                              onChange={(e) =>
+                                handleOvertimeChange(
+                                  req.id,
+                                  "reason",
+                                  e.target.value,
+                                )
+                              }
                               className="w-full px-2 py-1 text-sm rounded border border-gray-200 dark:border-gray-600 bg-white dark:bg-gray-800 text-gray-700 dark:text-gray-300 focus:outline-none focus:border-green-500"
                               placeholder="Reason"
-                              disabled={currentPayroll?.status === "completed" || currentPayroll?.status === "paid"}
+                              disabled={
+                                currentPayroll?.status === "completed" ||
+                                currentPayroll?.status === "paid"
+                              }
                             />
                           </td>
                           <td className="py-3 px-4 text-center">
@@ -1742,16 +1953,28 @@ function EditPayroll() {
                             )}
                           </td>
                           <td className="py-3 px-4">
-                            {req.status === "pending" && (currentPayroll?.status !== "completed" && currentPayroll?.status !== "paid") ? (
+                            {req.status === "pending" &&
+                            currentPayroll?.status !== "completed" &&
+                            currentPayroll?.status !== "paid" ? (
                               <div className="flex flex-col gap-1.5 items-center">
                                 <button
-                                  onClick={() => handleOvertimeAction(req.id, "approved_project")}
+                                  onClick={() =>
+                                    handleOvertimeAction(
+                                      req.id,
+                                      "approved_project",
+                                    )
+                                  }
                                   className="w-full text-[10px] px-2 py-1.5 bg-purple-50 hover:bg-purple-100 text-purple-600 dark:bg-purple-900/20 dark:hover:bg-purple-900/40 border border-purple-200 dark:border-purple-800 rounded font-semibold transition-colors"
                                 >
                                   Project Hours Only
                                 </button>
                                 <button
-                                  onClick={() => handleOvertimeAction(req.id, "approved_payroll")}
+                                  onClick={() =>
+                                    handleOvertimeAction(
+                                      req.id,
+                                      "approved_payroll",
+                                    )
+                                  }
                                   className="w-full text-[10px] px-2 py-1.5 bg-green-50 hover:bg-green-100 text-green-600 dark:bg-green-900/20 dark:hover:bg-green-900/40 border border-green-200 dark:border-green-800 rounded font-semibold transition-colors"
                                 >
                                   + Add to Payroll
@@ -1777,13 +2000,16 @@ function EditPayroll() {
                     <p className="font-semibold mb-1">Approval Rules:</p>
                     <ul className="list-disc list-inside space-y-1 text-xs">
                       <li>
-                        <strong>Project Hours Only:</strong> Added to manhour tracking, but no extra pay.
+                        <strong>Project Hours Only:</strong> Added to manhour
+                        tracking, but no extra pay.
                       </li>
                       <li>
-                        <strong>+ Add to Payroll:</strong> Added to manhour tracking AND included in this payroll cycle.
+                        <strong>+ Add to Payroll:</strong> Added to manhour
+                        tracking AND included in this payroll cycle.
                       </li>
                       <li>
-                        <strong>Overtime Amount:</strong> Enter the overtime amount to be paid for each request.
+                        <strong>Overtime Amount:</strong> Enter the overtime
+                        amount to be paid for each request.
                       </li>
                     </ul>
                   </div>
@@ -1811,23 +2037,41 @@ function EditPayroll() {
                     className="grid grid-cols-1 md:grid-cols-12 gap-3 items-center p-3 bg-gray-50 dark:bg-gray-700/30 rounded-lg"
                   >
                     <div className="md:col-span-4">
-                      <label className="text-[10px] md:text-xs text-gray-500 mb-1 block">Type</label>
+                      <label className="text-[10px] md:text-xs text-gray-500 mb-1 block">
+                        Type
+                      </label>
                       <input
                         type="text"
                         value={d.type}
-                        onChange={(e) => handleDeductionChange(d.id, "type", e.target.value)}
+                        onChange={(e) =>
+                          handleDeductionChange(d.id, "type", e.target.value)
+                        }
                         className="w-full px-3 py-2 text-sm rounded-lg border border-gray-200 dark:border-gray-700 bg-white dark:bg-gray-800 text-gray-800 dark:text-gray-200 focus:outline-none focus:border-green-500 focus:ring-2 focus:ring-green-500/20"
                         placeholder="e.g., PF 12%"
-                        disabled={currentPayroll?.status === "completed" || currentPayroll?.status === "paid"}
+                        disabled={
+                          currentPayroll?.status === "completed" ||
+                          currentPayroll?.status === "paid"
+                        }
                       />
                     </div>
                     <div className="md:col-span-3">
-                      <label className="text-[10px] md:text-xs text-gray-500 mb-1 block">Currency</label>
+                      <label className="text-[10px] md:text-xs text-gray-500 mb-1 block">
+                        Currency
+                      </label>
                       <select
                         value={d.currency}
-                        onChange={(e) => handleDeductionChange(d.id, "currency", e.target.value)}
+                        onChange={(e) =>
+                          handleDeductionChange(
+                            d.id,
+                            "currency",
+                            e.target.value,
+                          )
+                        }
                         className="w-full px-3 py-2 text-sm rounded-lg border border-gray-200 dark:border-gray-700 bg-white dark:bg-gray-800 text-gray-800 dark:text-gray-200 focus:outline-none focus:border-green-500 focus:ring-2 focus:ring-green-500/20"
-                        disabled={currentPayroll?.status === "completed" || currentPayroll?.status === "paid"}
+                        disabled={
+                          currentPayroll?.status === "completed" ||
+                          currentPayroll?.status === "paid"
+                        }
                       >
                         {currencies.map((curr) => (
                           <option key={curr} value={curr}>
@@ -1837,22 +2081,40 @@ function EditPayroll() {
                       </select>
                     </div>
                     <div className="md:col-span-2">
-                      <label className="text-[10px] md:text-xs text-gray-500 mb-1 block">Amount</label>
+                      <label className="text-[10px] md:text-xs text-gray-500 mb-1 block">
+                        Amount
+                      </label>
                       <input
                         type="number"
                         value={d.amount}
-                        onChange={(e) => handleDeductionChange(d.id, "amount", e.target.value)}
+                        onChange={(e) =>
+                          handleDeductionChange(d.id, "amount", e.target.value)
+                        }
                         className="w-full px-3 py-2 text-sm rounded-lg border border-gray-200 dark:border-gray-700 bg-white dark:bg-gray-800 text-gray-800 dark:text-gray-200 focus:outline-none focus:border-green-500 focus:ring-2 focus:ring-green-500/20"
-                        disabled={currentPayroll?.status === "completed" || currentPayroll?.status === "paid"}
+                        disabled={
+                          currentPayroll?.status === "completed" ||
+                          currentPayroll?.status === "paid"
+                        }
                       />
                     </div>
                     <div className="md:col-span-2">
-                      <label className="text-[10px] md:text-xs text-gray-500 mb-1 block">Statutory</label>
+                      <label className="text-[10px] md:text-xs text-gray-500 mb-1 block">
+                        Statutory
+                      </label>
                       <select
                         value={d.is_statutory}
-                        onChange={(e) => handleDeductionChange(d.id, "is_statutory", e.target.value)}
+                        onChange={(e) =>
+                          handleDeductionChange(
+                            d.id,
+                            "is_statutory",
+                            e.target.value,
+                          )
+                        }
                         className="w-full px-3 py-2 text-sm rounded-lg border border-gray-200 dark:border-gray-700 bg-white dark:bg-gray-800 text-gray-800 dark:text-gray-200 focus:outline-none focus:border-green-500 focus:ring-2 focus:ring-green-500/20"
-                        disabled={currentPayroll?.status === "completed" || currentPayroll?.status === "paid"}
+                        disabled={
+                          currentPayroll?.status === "completed" ||
+                          currentPayroll?.status === "paid"
+                        }
                       >
                         <option value="yes">Yes</option>
                         <option value="no">No</option>
@@ -1862,7 +2124,10 @@ function EditPayroll() {
                       <button
                         onClick={() => handleRemoveDeduction(d.id)}
                         className="w-8 h-8 rounded-lg bg-red-50 text-red-500 hover:bg-red-100 dark:bg-red-900/20 dark:hover:bg-red-900/40 transition-colors flex items-center justify-center"
-                        disabled={currentPayroll?.status === "completed" || currentPayroll?.status === "paid"}
+                        disabled={
+                          currentPayroll?.status === "completed" ||
+                          currentPayroll?.status === "paid"
+                        }
                       >
                         <i className="fas fa-trash-alt text-xs"></i>
                       </button>
@@ -1874,12 +2139,13 @@ function EditPayroll() {
               <button
                 onClick={handleAddDeduction}
                 className="mt-3 px-3 py-1.5 bg-green-50 dark:bg-green-900/20 text-green-600 dark:text-green-400 rounded-lg text-xs font-semibold hover:bg-green-100 dark:hover:bg-green-900/40 transition-colors border border-green-100 dark:border-green-800 flex items-center gap-2"
-                disabled={currentPayroll?.status === "completed" || currentPayroll?.status === "paid"}
+                disabled={
+                  currentPayroll?.status === "completed" ||
+                  currentPayroll?.status === "paid"
+                }
               >
                 <i className="fas fa-plus"></i> Add Deduction
               </button>
-
-
             </div>
           )}
 
@@ -1895,10 +2161,16 @@ function EditPayroll() {
                 </h3>
                 <button
                   onClick={handleFetchSummary}
-                  disabled={summaryLoading || currentPayroll?.status === "completed" || currentPayroll?.status === "paid"}
+                  disabled={
+                    summaryLoading ||
+                    currentPayroll?.status === "completed" ||
+                    currentPayroll?.status === "paid"
+                  }
                   className="ml-auto px-3 py-1 text-xs bg-blue-500 text-white rounded-lg hover:bg-blue-600 transition-colors disabled:opacity-50"
                 >
-                  <i className={`fas ${summaryLoading ? "fa-spinner fa-spin" : "fa-sync"} mr-1`}></i>
+                  <i
+                    className={`fas ${summaryLoading ? "fa-spinner fa-spin" : "fa-sync"} mr-1`}
+                  ></i>
                   {summaryLoading ? "Loading..." : "Refresh Summary"}
                 </button>
               </div>
@@ -1918,7 +2190,10 @@ function EditPayroll() {
                       value={targetCurrency}
                       onChange={(e) => setTargetCurrency(e.target.value)}
                       className="w-full px-3 py-2 text-sm rounded-lg border border-gray-200 dark:border-gray-700 bg-white dark:bg-gray-800 text-gray-800 dark:text-gray-200 focus:outline-none focus:border-green-500 focus:ring-2 focus:ring-green-500/20"
-                      disabled={currentPayroll?.status === "completed" || currentPayroll?.status === "paid"}
+                      disabled={
+                        currentPayroll?.status === "completed" ||
+                        currentPayroll?.status === "paid"
+                      }
                     >
                       {currencies.map((curr) => (
                         <option key={curr} value={curr}>
@@ -1934,16 +2209,29 @@ function EditPayroll() {
                     <div className="flex flex-wrap gap-2">
                       {countries.map((c) => (
                         <div key={c.id} className="flex items-center gap-1">
-                          <span className="text-xs text-gray-500">{c.currency}:</span>
+                          <span className="text-xs text-gray-500">
+                            {c.currency}:
+                          </span>
                           <input
                             type="number"
                             step="0.01"
                             value={c.fxRate}
-                            onChange={(e) => handleCountryChange(c.id, "fxRate", e.target.value)}
+                            onChange={(e) =>
+                              handleCountryChange(
+                                c.id,
+                                "fxRate",
+                                e.target.value,
+                              )
+                            }
                             className="w-16 px-2 py-1 text-sm rounded border border-gray-200 dark:border-gray-600 bg-white dark:bg-gray-800 text-gray-700 dark:text-gray-300 focus:outline-none focus:border-green-500"
-                            disabled={currentPayroll?.status === "completed" || currentPayroll?.status === "paid"}
+                            disabled={
+                              currentPayroll?.status === "completed" ||
+                              currentPayroll?.status === "paid"
+                            }
                           />
-                          <span className="text-xs text-gray-500">→ {targetCurrency}</span>
+                          <span className="text-xs text-gray-500">
+                            → {targetCurrency}
+                          </span>
                         </div>
                       ))}
                     </div>
@@ -1952,47 +2240,87 @@ function EditPayroll() {
 
                 <div className="grid grid-cols-1 md:grid-cols-2 gap-4 pt-4 border-t border-gray-200 dark:border-gray-700">
                   {(() => {
-                    const baseCurrency = countries.length > 0 ? countries[0].currency : "INR";
-                    const exchangeRate = countries.length > 0 ? parseFloat(countries[0].fxRate) || 1 : 1;
-                    
+                    const baseCurrency =
+                      countries.length > 0 ? countries[0].currency : "INR";
+                    const exchangeRate =
+                      countries.length > 0
+                        ? parseFloat(countries[0].fxRate) || 1
+                        : 1;
+
                     const calculateConversion = (amount) => ({
                       amount: amount,
                       baseCurrency: baseCurrency,
                       targetCurrency: targetCurrency,
                       exchangeRate: exchangeRate,
-                      convertedAmount: amount * exchangeRate
+                      convertedAmount: amount * exchangeRate,
                     });
 
                     const conversionDetails = {
-                      gross_salary: calculateConversion(localSummaryData.gross_earnings || 0),
-                      overtime_amount: calculateConversion(
-                        overtimeRequests.reduce((sum, req) => sum + parseFloat(req.overtime_amount || 0), 0)
+                      gross_salary: calculateConversion(
+                        localSummaryData.gross_earnings || 0,
                       ),
-                      deductions: calculateConversion(localSummaryData.total_deductions || 0),
-                      net_pay: calculateConversion(localSummaryData.net_pay || 0)
+                      overtime_amount: calculateConversion(
+                        overtimeRequests.reduce(
+                          (sum, req) =>
+                            sum + parseFloat(req.overtime_amount || 0),
+                          0,
+                        ),
+                      ),
+                      deductions: calculateConversion(
+                        localSummaryData.total_deductions || 0,
+                      ),
+                      net_pay: calculateConversion(
+                        localSummaryData.net_pay || 0,
+                      ),
                     };
 
                     return (
                       <>
                         {/* Gross Salary */}
                         <div className="p-4 rounded-xl bg-blue-50 dark:bg-blue-900/20 border border-blue-200 dark:border-blue-800 flex flex-col justify-between">
-                          <div className="text-xs text-gray-500 dark:text-gray-400 font-medium mb-3">Gross Salary</div>
+                          <div className="text-xs text-gray-500 dark:text-gray-400 font-medium mb-3">
+                            Gross Salary
+                          </div>
                           <div className="flex justify-between items-center gap-2">
                             <div className="flex-1">
-                              <div className="text-[10px] text-gray-500">Original Amount</div>
+                              <div className="text-[10px] text-gray-500">
+                                Original Amount
+                              </div>
                               <div className="text-sm font-bold text-gray-700 dark:text-gray-300">
-                                {conversionDetails.gross_salary.baseCurrency} {conversionDetails.gross_salary.amount.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
+                                {conversionDetails.gross_salary.baseCurrency}{" "}
+                                {conversionDetails.gross_salary.amount.toLocaleString(
+                                  undefined,
+                                  {
+                                    minimumFractionDigits: 2,
+                                    maximumFractionDigits: 2,
+                                  },
+                                )}
                               </div>
                             </div>
                             <div className="text-center px-1">
-                              <div className="text-[9px] text-gray-400">Rate: {conversionDetails.gross_salary.exchangeRate}</div>
+                              <div className="text-[9px] text-gray-400">
+                                Rate:{" "}
+                                {conversionDetails.gross_salary.exchangeRate}
+                              </div>
                               <i className="fas fa-arrow-right text-blue-400 my-1"></i>
-                              <div className="text-[9px] text-gray-400">{conversionDetails.gross_salary.baseCurrency} → {conversionDetails.gross_salary.targetCurrency}</div>
+                              <div className="text-[9px] text-gray-400">
+                                {conversionDetails.gross_salary.baseCurrency} →{" "}
+                                {conversionDetails.gross_salary.targetCurrency}
+                              </div>
                             </div>
                             <div className="text-right flex-1">
-                              <div className="text-[10px] text-blue-500">Converted</div>
+                              <div className="text-[10px] text-blue-500">
+                                Converted
+                              </div>
                               <div className="text-base font-bold text-blue-600 dark:text-blue-400">
-                                {conversionDetails.gross_salary.targetCurrency} {conversionDetails.gross_salary.convertedAmount.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
+                                {conversionDetails.gross_salary.targetCurrency}{" "}
+                                {conversionDetails.gross_salary.convertedAmount.toLocaleString(
+                                  undefined,
+                                  {
+                                    minimumFractionDigits: 2,
+                                    maximumFractionDigits: 2,
+                                  },
+                                )}
                               </div>
                             </div>
                           </div>
@@ -2000,23 +2328,56 @@ function EditPayroll() {
 
                         {/* Overtime Amount */}
                         <div className="p-4 rounded-xl bg-orange-50 dark:bg-orange-900/20 border border-orange-200 dark:border-orange-800 flex flex-col justify-between">
-                          <div className="text-xs text-gray-500 dark:text-gray-400 font-medium mb-3">Overtime Amount</div>
+                          <div className="text-xs text-gray-500 dark:text-gray-400 font-medium mb-3">
+                            Overtime Amount
+                          </div>
                           <div className="flex justify-between items-center gap-2">
                             <div className="flex-1">
-                              <div className="text-[10px] text-gray-500">Original Amount</div>
+                              <div className="text-[10px] text-gray-500">
+                                Original Amount
+                              </div>
                               <div className="text-sm font-bold text-gray-700 dark:text-gray-300">
-                                {conversionDetails.overtime_amount.baseCurrency} {conversionDetails.overtime_amount.amount.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
+                                {conversionDetails.overtime_amount.baseCurrency}{" "}
+                                {conversionDetails.overtime_amount.amount.toLocaleString(
+                                  undefined,
+                                  {
+                                    minimumFractionDigits: 2,
+                                    maximumFractionDigits: 2,
+                                  },
+                                )}
                               </div>
                             </div>
                             <div className="text-center px-1">
-                              <div className="text-[9px] text-gray-400">Rate: {conversionDetails.overtime_amount.exchangeRate}</div>
+                              <div className="text-[9px] text-gray-400">
+                                Rate:{" "}
+                                {conversionDetails.overtime_amount.exchangeRate}
+                              </div>
                               <i className="fas fa-arrow-right text-orange-400 my-1"></i>
-                              <div className="text-[9px] text-gray-400">{conversionDetails.overtime_amount.baseCurrency} → {conversionDetails.overtime_amount.targetCurrency}</div>
+                              <div className="text-[9px] text-gray-400">
+                                {conversionDetails.overtime_amount.baseCurrency}{" "}
+                                →{" "}
+                                {
+                                  conversionDetails.overtime_amount
+                                    .targetCurrency
+                                }
+                              </div>
                             </div>
                             <div className="text-right flex-1">
-                              <div className="text-[10px] text-orange-500">Converted</div>
+                              <div className="text-[10px] text-orange-500">
+                                Converted
+                              </div>
                               <div className="text-base font-bold text-orange-600 dark:text-orange-400">
-                                {conversionDetails.overtime_amount.targetCurrency} {conversionDetails.overtime_amount.convertedAmount.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
+                                {
+                                  conversionDetails.overtime_amount
+                                    .targetCurrency
+                                }{" "}
+                                {conversionDetails.overtime_amount.convertedAmount.toLocaleString(
+                                  undefined,
+                                  {
+                                    minimumFractionDigits: 2,
+                                    maximumFractionDigits: 2,
+                                  },
+                                )}
                               </div>
                             </div>
                           </div>
@@ -2024,23 +2385,49 @@ function EditPayroll() {
 
                         {/* Deductions */}
                         <div className="p-4 rounded-xl bg-red-50 dark:bg-red-900/20 border border-red-200 dark:border-red-800 flex flex-col justify-between">
-                          <div className="text-xs text-gray-500 dark:text-gray-400 font-medium mb-3">Deductions</div>
+                          <div className="text-xs text-gray-500 dark:text-gray-400 font-medium mb-3">
+                            Deductions
+                          </div>
                           <div className="flex justify-between items-center gap-2">
                             <div className="flex-1">
-                              <div className="text-[10px] text-gray-500">Original Amount</div>
+                              <div className="text-[10px] text-gray-500">
+                                Original Amount
+                              </div>
                               <div className="text-sm font-bold text-gray-700 dark:text-gray-300">
-                                {conversionDetails.deductions.baseCurrency} {conversionDetails.deductions.amount.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
+                                {conversionDetails.deductions.baseCurrency}{" "}
+                                {conversionDetails.deductions.amount.toLocaleString(
+                                  undefined,
+                                  {
+                                    minimumFractionDigits: 2,
+                                    maximumFractionDigits: 2,
+                                  },
+                                )}
                               </div>
                             </div>
                             <div className="text-center px-1">
-                              <div className="text-[9px] text-gray-400">Rate: {conversionDetails.deductions.exchangeRate}</div>
+                              <div className="text-[9px] text-gray-400">
+                                Rate:{" "}
+                                {conversionDetails.deductions.exchangeRate}
+                              </div>
                               <i className="fas fa-arrow-right text-red-400 my-1"></i>
-                              <div className="text-[9px] text-gray-400">{conversionDetails.deductions.baseCurrency} → {conversionDetails.deductions.targetCurrency}</div>
+                              <div className="text-[9px] text-gray-400">
+                                {conversionDetails.deductions.baseCurrency} →{" "}
+                                {conversionDetails.deductions.targetCurrency}
+                              </div>
                             </div>
                             <div className="text-right flex-1">
-                              <div className="text-[10px] text-red-500">Converted</div>
+                              <div className="text-[10px] text-red-500">
+                                Converted
+                              </div>
                               <div className="text-base font-bold text-red-500">
-                                {conversionDetails.deductions.targetCurrency} {conversionDetails.deductions.convertedAmount.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
+                                {conversionDetails.deductions.targetCurrency}{" "}
+                                {conversionDetails.deductions.convertedAmount.toLocaleString(
+                                  undefined,
+                                  {
+                                    minimumFractionDigits: 2,
+                                    maximumFractionDigits: 2,
+                                  },
+                                )}
                               </div>
                             </div>
                           </div>
@@ -2048,23 +2435,48 @@ function EditPayroll() {
 
                         {/* Net Pay */}
                         <div className="p-4 rounded-xl bg-green-50 dark:bg-green-900/20 border border-green-200 dark:border-green-800 flex flex-col justify-between">
-                          <div className="text-xs text-gray-500 dark:text-gray-400 font-medium mb-3">Net Pay</div>
+                          <div className="text-xs text-gray-500 dark:text-gray-400 font-medium mb-3">
+                            Net Pay
+                          </div>
                           <div className="flex justify-between items-center gap-2">
                             <div className="flex-1">
-                              <div className="text-[10px] text-gray-500">Original Amount</div>
+                              <div className="text-[10px] text-gray-500">
+                                Original Amount
+                              </div>
                               <div className="text-sm font-bold text-gray-700 dark:text-gray-300">
-                                {conversionDetails.net_pay.baseCurrency} {conversionDetails.net_pay.amount.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
+                                {conversionDetails.net_pay.baseCurrency}{" "}
+                                {conversionDetails.net_pay.amount.toLocaleString(
+                                  undefined,
+                                  {
+                                    minimumFractionDigits: 2,
+                                    maximumFractionDigits: 2,
+                                  },
+                                )}
                               </div>
                             </div>
                             <div className="text-center px-1">
-                              <div className="text-[9px] text-gray-400">Rate: {conversionDetails.net_pay.exchangeRate}</div>
+                              <div className="text-[9px] text-gray-400">
+                                Rate: {conversionDetails.net_pay.exchangeRate}
+                              </div>
                               <i className="fas fa-arrow-right text-green-400 my-1"></i>
-                              <div className="text-[9px] text-gray-400">{conversionDetails.net_pay.baseCurrency} → {conversionDetails.net_pay.targetCurrency}</div>
+                              <div className="text-[9px] text-gray-400">
+                                {conversionDetails.net_pay.baseCurrency} →{" "}
+                                {conversionDetails.net_pay.targetCurrency}
+                              </div>
                             </div>
                             <div className="text-right flex-1">
-                              <div className="text-[10px] text-green-500">Converted</div>
+                              <div className="text-[10px] text-green-500">
+                                Converted
+                              </div>
                               <div className="text-base font-bold text-green-600 dark:text-green-400">
-                                {conversionDetails.net_pay.targetCurrency} {conversionDetails.net_pay.convertedAmount.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
+                                {conversionDetails.net_pay.targetCurrency}{" "}
+                                {conversionDetails.net_pay.convertedAmount.toLocaleString(
+                                  undefined,
+                                  {
+                                    minimumFractionDigits: 2,
+                                    maximumFractionDigits: 2,
+                                  },
+                                )}
                               </div>
                             </div>
                           </div>
@@ -2081,7 +2493,8 @@ function EditPayroll() {
                       Payslip Delivery
                     </h4>
                     <p className="text-xs text-blue-600/80 dark:text-blue-400/80 mt-1">
-                      Upon updating, the generated payslip will be automatically sent to the employee via Email.
+                      Upon updating, the generated payslip will be automatically
+                      sent to the employee via Email.
                     </p>
                   </div>
                 </div>
@@ -2124,10 +2537,17 @@ function EditPayroll() {
               ) : (
                 <button
                   onClick={handleUpdatePayroll}
-                  disabled={isSubmitting || !selectedUserId || currentPayroll?.status === "completed" || currentPayroll?.status === "paid"}
+                  disabled={
+                    isSubmitting ||
+                    !selectedUserId ||
+                    currentPayroll?.status === "completed" ||
+                    currentPayroll?.status === "paid"
+                  }
                   className="px-4 md:px-6 py-2 md:py-2.5 rounded-full font-semibold bg-green-500 text-white hover:bg-green-600 transition-all flex items-center justify-center gap-2 text-sm md:text-base disabled:opacity-50 disabled:cursor-not-allowed"
                 >
-                  <i className={`fas ${isSubmitting ? "fa-spinner fa-spin" : "fa-save"} text-xs md:text-sm`}></i>
+                  <i
+                    className={`fas ${isSubmitting ? "fa-spinner fa-spin" : "fa-save"} text-xs md:text-sm`}
+                  ></i>
                   <span>{isSubmitting ? "Updating..." : "Update Payroll"}</span>
                 </button>
               )}

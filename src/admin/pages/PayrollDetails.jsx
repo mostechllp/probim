@@ -1,4 +1,4 @@
-// src/admin/pages/PayrollView.js
+// src/admin/pages/PayrollView.js - Updated with dynamic path
 
 import React, { useEffect, useState } from "react";
 import { useDispatch, useSelector } from "react-redux";
@@ -30,6 +30,11 @@ function PayrollView() {
   const dispatch = useDispatch();
   const navigate = useNavigate();
   const { id } = useParams();
+
+  // Get user from Redux to determine base path
+  const { user } = useSelector((state) => state.auth || {});
+  const isAdmin = user?.type === "admin" || user?.role?.name === "admin" || user?.role?.name === "Admin";
+  const basePath = isAdmin ? "/admin" : "/employee";
 
   // Redux state
   const currentPayroll = useSelector(selectCurrentPayroll);
@@ -962,7 +967,7 @@ function PayrollView() {
             Payroll not found
           </h3>
           <button
-            onClick={() => navigate("/admin/payroll")}
+            onClick={() => navigate(`${basePath}/payroll`)}
             className="mt-4 px-4 py-2 bg-green-500 text-white rounded-lg hover:bg-green-600"
           >
             Back to Payroll
@@ -980,7 +985,7 @@ function PayrollView() {
       {/* Breadcrumbs */}
       <div className="flex items-center gap-2 text-sm mb-4 flex-wrap">
         <Link
-          to="/admin/payroll"
+          to={`${basePath}/payroll`}
           className="text-green-500 hover:text-green-600 font-medium"
         >
           Payroll
@@ -1005,19 +1010,19 @@ function PayrollView() {
           </div>
           <div className="flex flex-wrap gap-3">
             <Link
-              to={`/admin/send-payslip/${currentPayroll.id}`}
+              to={`${basePath}/send-payslip/${currentPayroll.id}`}
               className="px-4 py-2 bg-blue-500 text-white rounded-lg hover:bg-blue-600 transition-colors flex items-center gap-2 text-sm"
             >
               <i className="fas fa-envelope"></i> Send Payslip
             </Link>
             <Link
-              to={`/admin/payroll/edit/${currentPayroll.id}`}
+              to={`${basePath}/payroll/edit/${currentPayroll.id}`}
               className="px-4 py-2 bg-green-500 text-white rounded-lg hover:bg-green-600 transition-colors flex items-center gap-2 text-sm"
             >
               <i className="fas fa-edit"></i> Edit
             </Link>
             <button
-              onClick={() => navigate("/admin/payroll")}
+              onClick={() => navigate(`${basePath}/payroll`)}
               className="px-4 py-2 bg-gray-200 dark:bg-gray-700 text-gray-700 dark:text-gray-300 rounded-lg hover:bg-gray-300 dark:hover:bg-gray-600 transition-colors flex items-center gap-2 text-sm"
             >
               <i className="fas fa-arrow-left"></i> Back
@@ -1055,14 +1060,6 @@ function PayrollView() {
                 currentPayroll.status.slice(1)
               : "Draft"}
           </span>
-          {/* <span className="text-sm opacity-75">
-            {currentPayroll.status === "completed" ||
-            currentPayroll.status === "paid"
-              ? `• Processed on ${formatDate(currentPayroll.updated_at)}`
-              : currentPayroll.status === "pending"
-                ? "• Awaiting finalization"
-                : "• In progress"}
-          </span> */}
         </div>
       </div>
 

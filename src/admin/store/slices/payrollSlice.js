@@ -259,7 +259,7 @@ export const fetchPayrollStats = createAsyncThunk(
   "payroll/fetchStats",
   async (params = {}, { rejectWithValue }) => {
     try {
-      const response = await apiClient.get("/admin/payrolls/stats", { params });
+      const response = await apiClient.get("/admin/payroll/stats", { params });
       console.log("Fetch payroll stats response:", response.data);
       return response.data?.data || response.data;
     } catch (error) {
