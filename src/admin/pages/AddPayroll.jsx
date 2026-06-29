@@ -319,13 +319,66 @@ function AddPayroll() {
         }
       });
 
-      // Calculate net pay by currency (Gross - Deductions)
+      // Calculate net pay by currency (Gross + Overtime - Deductions)
       const originalNetByCurrency = {};
+      // Start with gross amounts
       Object.keys(originalGrossByCurrency).forEach((currency) => {
         originalNetByCurrency[currency] =
-          (originalGrossByCurrency[currency] || 0) -
+          (originalNetByCurrency[currency] || 0) +
+          (originalGrossByCurrency[currency] || 0);
+      });
+      // Add overtime
+      Object.keys(originalOvertimeByCurrency).forEach((currency) => {
+        originalNetByCurrency[currency] =
+          (originalNetByCurrency[currency] || 0) +
+          (originalOvertimeByCurrency[currency] || 0);
+      });
+      // Subtract deductions
+      Object.keys(originalDeductionsByCurrency).forEach((currency) => {
+        originalNetByCurrency[currency] =
+          (originalNetByCurrency[currency] || 0) -
           (originalDeductionsByCurrency[currency] || 0);
       });
+
+      // Build the breakdown string for net pay including overtime
+      let netPayBreakdownParts = [];
+      let grossParts = [];
+      let overtimeParts = [];
+      let deductionParts = [];
+
+      // Build gross parts
+      Object.entries(originalGrossByCurrency).forEach(([currency, amount]) => {
+        if (amount > 0) {
+          grossParts.push(`${currency} ${amount.toFixed(2)}`);
+        }
+      });
+
+      // Build overtime parts
+      Object.entries(originalOvertimeByCurrency).forEach(
+        ([currency, amount]) => {
+          if (amount > 0) {
+            overtimeParts.push(`${currency} ${amount.toFixed(2)}`);
+          }
+        },
+      );
+
+      // Build deduction parts
+      Object.entries(originalDeductionsByCurrency).forEach(
+        ([currency, amount]) => {
+          if (amount > 0) {
+            deductionParts.push(`${currency} ${amount.toFixed(2)}`);
+          }
+        },
+      );
+
+      // Build full net pay breakdown: Gross + Overtime - Deductions
+      const grossStr =
+        grossParts.length > 0 ? `(${grossParts.join(" + ")})` : "0";
+      const overtimeStr =
+        overtimeParts.length > 0 ? ` + (${overtimeParts.join(" + ")})` : "";
+      const deductionStr =
+        deductionParts.length > 0 ? ` - (${deductionParts.join(" + ")})` : "";
+      const netPayBreakdown = `${grossStr}${overtimeStr}${deductionStr}`;
 
       // Determine the base currency for display
       const baseCurrency = conversionRatesList[0]?.currency || "INR";
@@ -334,7 +387,7 @@ function AddPayroll() {
       // Update conversion details with mixed currency data
       setConversionDetails({
         gross_salary: {
-          amount: 0, // Not used for mixed currencies
+          amount: 0,
           fromCurrency: "Mixed",
           toCurrency: targetCurrency,
           rate: "Multiple",
@@ -387,16 +440,17 @@ function AddPayroll() {
           toCurrency: targetCurrency,
           rate: "Multiple",
           convertedAmount: result.converted_net_pay || 0,
-          breakdown: Object.entries(originalNetByCurrency)
-            .filter(([_, amount]) => amount !== 0)
-            .map(([currency, amount]) => `${currency} ${amount.toFixed(2)}`)
-            .join(" + "),
+          breakdown: netPayBreakdown,
           currencyBreakdown: Object.entries(originalNetByCurrency)
             .filter(([_, amount]) => amount !== 0)
             .map(([currency, amount]) => ({
               currency,
               amount,
             })),
+          // Store individual parts for display
+          grossParts: grossParts,
+          overtimeParts: overtimeParts,
+          deductionParts: deductionParts,
         },
       });
 
@@ -835,39 +889,43 @@ function AddPayroll() {
 
       case 5:
         const conversionRatesObj = {};
-        countries.forEach((c) => {
-          conversionRatesObj[c.currency] = parseFloat(c.fxRate) || 1;
+        conversionRatesList.forEach((item) => {
+          conversionRatesObj[item.currency] = parseFloat(item.rate) || 1;
         });
 
-        // Calculate totals
-        const grossSalaryTotal = grossSalary || 0;
-        const overtimeTotal = overtimeRequests.reduce(
-          (sum, req) => sum + (parseFloat(req.overtime_amount) || 0),
-          0,
-        );
-        const deductionsTotal = deductions.reduce(
-          (sum, d) => sum + (parseFloat(d.amount) || 0),
-          0,
-        );
-        const netPayTotal = grossSalaryTotal + overtimeTotal - deductionsTotal;
+        // USE CONVERTED AMOUNTS from conversionDetails
+        const convertedGrossSalary =
+          conversionDetails.gross_salary?.convertedAmount || 0;
+        const convertedOvertime =
+          conversionDetails.overtime_amount?.convertedAmount || 0;
+        const convertedDeductions =
+          conversionDetails.deductions?.convertedAmount || 0;
+        const convertedNetPay = conversionDetails.net_pay?.convertedAmount || 0;
 
         data = {
           pay_period_month: monthNumber,
           pay_period_year: year,
           summary: {
-            gross_salary: grossSalaryTotal,
-            overtime_amount: overtimeTotal,
-            deductions: deductionsTotal,
-            net_pay: netPayTotal,
+            gross_salary: convertedGrossSalary,
+            overtime_amount: convertedOvertime,
+            deductions: convertedDeductions,
+            net_pay: convertedNetPay,
             conversions: conversionDetails,
+            // Store original mixed currency data for reference
+            original_breakdown: {
+              gross_salary: conversionDetails.gross_salary?.breakdown || "",
+              overtime: conversionDetails.overtime_amount?.breakdown || "",
+              deductions: conversionDetails.deductions?.breakdown || "",
+              net_pay: conversionDetails.net_pay?.breakdown || "",
+            },
           },
           target_currency: targetCurrency,
           conversion_rates: conversionRatesObj,
-          // Include all required fields for submission
-          gross_salary: grossSalaryTotal,
-          overtime: overtimeTotal,
-          deductions: deductionsTotal,
-          net_pay: netPayTotal,
+          // Include all required fields for submission with CONVERTED amounts
+          gross_salary: convertedGrossSalary,
+          overtime: convertedOvertime,
+          deductions: convertedDeductions,
+          net_pay: convertedNetPay,
           currency:
             targetCurrency ||
             (countries.length > 0 ? countries[0].currency : "INR"),
@@ -902,7 +960,6 @@ function AddPayroll() {
   };
 
   // Save current step data
-  
 
   // Handle next step
   const handleNextStep = async () => {
@@ -967,108 +1024,150 @@ function AddPayroll() {
     }
   };
 
-  // Handle final submission
-const handleSubmitPayroll = async () => {
-  if (!selectedUserId) {
-    showToast("Please select an employee first", "error");
-    return;
-  }
-
-  try {
-    // First, ensure step 5 is saved
-    const finalData = getCurrentStepData();
-    const saved = await handleSaveStep(5, finalData);
-    
-    if (!saved) {
-      showToast("Failed to save payroll data. Please try again.", "error");
+  // Handle final submission - Using converted amounts
+  const handleSubmitPayroll = async () => {
+    if (!selectedUserId) {
+      showToast("Please select an employee first", "error");
       return;
     }
 
-    // After saving step 5, the current_step should be 6 (ready for submission)
-    // Now prepare the final submission payload
-    const monthNumber = monthNames[payPeriodMonth] || new Date().getMonth() + 1;
-    const year = parseInt(payPeriodYear) || new Date().getFullYear();
+    // Check if conversion has been done
+    if (!isConverted) {
+      showToast(
+        "Please convert the currency first before submitting",
+        "warning",
+      );
+      return;
+    }
 
-    // Calculate totals from the data
-    const grossSalaryValue = grossSalary || 0;
-    
-    const overtimeAmount = overtimeRequests.reduce(
-      (sum, req) => sum + (parseFloat(req.overtime_amount) || 0),
-      0
-    );
-    
-    const totalDeductions = deductions.reduce(
-      (sum, d) => sum + (parseFloat(d.amount) || 0),
-      0
-    );
-    
-    const netPayValue = grossSalaryValue + overtimeAmount - totalDeductions;
+    try {
+      // First, ensure step 5 is saved
+      const finalData = getCurrentStepData();
+      const saved = await handleSaveStep(5, finalData);
 
-    // Determine the primary currency
-    const primaryCurrency = targetCurrency || (countries.length > 0 ? countries[0].currency : 'INR');
+      if (!saved) {
+        showToast("Failed to save payroll data. Please try again.", "error");
+        return;
+      }
 
-    // Build the submission payload with all required fields
-    const payload = {
-      user_id: parseInt(selectedUserId),
-      pay_period_month: parseInt(monthNumber),
-      pay_period_year: parseInt(year),
-      gross_salary: parseFloat(grossSalaryValue),
-      overtime: parseFloat(overtimeAmount),
-      deductions: parseFloat(totalDeductions),
-      net_pay: parseFloat(netPayValue),
-      currency: primaryCurrency,
-      // Additional data for reference
-      target_currency: targetCurrency,
-      conversion_rates: countries.reduce((acc, c) => {
-        acc[c.currency] = parseFloat(c.fxRate) || 1;
-        return acc;
-      }, {}),
-      location_breakdown: countries.map((c) => ({
-        location_name: c.name,
-        currency: c.currency,
-        subtotal: c.subtotal || 0,
-        worked_days: c.daysWorked || 0,
-        salary_components: c.salary_components || [],
-      })),
-      overtime_details: overtimeRequests.map((req) => ({
-        date: req.date,
-        overtime_hours: req.overtime_hours || 0,
-        amount: parseFloat(req.overtime_amount) || 0,
-        currency: req.currency || primaryCurrency,
-        projects: req.projects || [],
-      })),
-      deductions_details: deductions.map((d) => ({
-        type: d.type,
-        amount: parseFloat(d.amount) || 0,
-        currency: d.currency || primaryCurrency,
-        is_statutory: d.is_statutory || 'no',
-      })),
-    };
+      const monthNumber =
+        monthNames[payPeriodMonth] || new Date().getMonth() + 1;
+      const year = parseInt(payPeriodYear) || new Date().getFullYear();
 
-    console.log("Submitting payroll with payload:", payload);
+      // USE CONVERTED AMOUNTS from conversionDetails
+      const convertedGrossSalary =
+        conversionDetails.gross_salary?.convertedAmount || 0;
+      const convertedOvertime =
+        conversionDetails.overtime_amount?.convertedAmount || 0;
+      const convertedDeductions =
+        conversionDetails.deductions?.convertedAmount || 0;
+      // Net Pay = Gross + Overtime - Deductions (all in target currency)
+      const convertedNetPay =
+        convertedGrossSalary + convertedOvertime - convertedDeductions;
 
-    // Submit the payroll
-    const result = await dispatch(submitPayroll(payload)).unwrap();
+      // Determine the primary currency (target currency)
+      const primaryCurrency = targetCurrency || "INR";
 
-    showToast(
-      result.message ||
-        "Payroll submitted successfully! Payslip has been generated!",
-      "success",
-    );
-    
-    // Generate PDF
-    generatePayslipPDF();
+      // Build the submission payload with CONVERTED amounts
+      const payload = {
+        user_id: parseInt(selectedUserId),
+        pay_period_month: parseInt(monthNumber),
+        pay_period_year: parseInt(year),
+        // Use CONVERTED amounts
+        gross_salary: parseFloat(convertedGrossSalary),
+        overtime: parseFloat(convertedOvertime),
+        deductions: parseFloat(convertedDeductions),
+        net_pay: parseFloat(convertedNetPay),
+        currency: primaryCurrency,
+        // Additional data for reference (original mixed currency data)
+        target_currency: targetCurrency,
+        conversion_rates: conversionRatesList.reduce((acc, item) => {
+          acc[item.currency] = parseFloat(item.rate) || 1;
+          return acc;
+        }, {}),
+        location_breakdown: countries.map((c) => ({
+          location_name: c.name,
+          currency: c.currency,
+          subtotal: c.subtotal || 0,
+          worked_days: c.daysWorked || 0,
+          salary_components: c.salary_components || [],
+        })),
+        overtime_details: overtimeRequests.map((req) => ({
+          date: req.date,
+          overtime_hours: req.overtime_hours || 0,
+          amount_original: parseFloat(req.overtime_amount) || 0,
+          currency_original: req.currency || "INR",
+          amount_converted: parseFloat(req.overtime_amount) || 0, // This would need per-entry conversion
+          projects: req.projects || [],
+        })),
+        deductions_details: deductions.map((d) => ({
+          type: d.type,
+          amount_original: parseFloat(d.amount) || 0,
+          currency_original: d.currency || "INR",
+          amount_converted: parseFloat(d.amount) || 0, // This would need per-entry conversion
+          is_statutory: d.is_statutory || "no",
+        })),
+        // Include conversion details for reference with CORRECT net pay breakdown
+        conversion_details: {
+          gross_salary: {
+            original_breakdown: conversionDetails.gross_salary?.breakdown || "",
+            converted_amount: convertedGrossSalary,
+            target_currency: targetCurrency,
+            rates: conversionRatesList,
+          },
+          overtime: {
+            original_breakdown:
+              conversionDetails.overtime_amount?.breakdown || "",
+            converted_amount: convertedOvertime,
+            target_currency: targetCurrency,
+          },
+          deductions: {
+            original_breakdown: conversionDetails.deductions?.breakdown || "",
+            converted_amount: convertedDeductions,
+            target_currency: targetCurrency,
+          },
+          net_pay: {
+            original_breakdown: conversionDetails.net_pay?.breakdown || "",
+            converted_amount: convertedNetPay,
+            target_currency: targetCurrency,
+          },
+        },
+      };
 
-    // Redirect to payroll page after a delay
-    setTimeout(() => {
-      window.location.href = `${basePath}/payroll`;
-    }, 3000);
-    
-  } catch (error) {
-    console.error("Submit payroll error:", error);
-    showToast(typeof error === 'string' ? error : "Failed to submit payroll", "error");
-  }
-};
+      console.log("Submitting payroll with CONVERTED amounts:", {
+        gross_salary: convertedGrossSalary,
+        overtime: convertedOvertime,
+        deductions: convertedDeductions,
+        net_pay: convertedNetPay,
+        currency: primaryCurrency,
+        calculation: `${convertedGrossSalary} + ${convertedOvertime} - ${convertedDeductions} = ${convertedNetPay}`,
+      });
+      console.log("Full payload:", payload);
+
+      // Submit the payroll
+      const result = await dispatch(submitPayroll(payload)).unwrap();
+
+      showToast(
+        result.message ||
+          "Payroll submitted successfully! Payslip has been generated!",
+        "success",
+      );
+
+      // Generate PDF
+      generatePayslipPDF();
+
+      // Redirect to payroll page after a delay
+      setTimeout(() => {
+        window.location.href = `${basePath}/payroll`;
+      }, 3000);
+    } catch (error) {
+      console.error("Submit payroll error:", error);
+      showToast(
+        typeof error === "string" ? error : "Failed to submit payroll",
+        "error",
+      );
+    }
+  };
 
   // Handle step change
   const handleStepChange = async (step) => {
@@ -1270,7 +1369,7 @@ const handleSubmitPayroll = async () => {
     setDeductions(deductions.filter((d) => d.id !== id));
   };
 
-  // Generate payslip PDF
+  // Generate payslip PDF - UPDATED to use converted amounts
   const generatePayslipPDF = () => {
     const doc = new jsPDF();
 
@@ -1288,72 +1387,173 @@ const handleSubmitPayroll = async () => {
       44,
     );
     doc.text(`Generated On: ${new Date().toLocaleDateString()}`, 14, 50);
+    doc.text(`Currency: ${targetCurrency}`, 14, 56);
 
-    autoTable(doc, {
-      startY: 56,
-      head: [["Package / Location", "Days Logged", "Daily Rate", "Amount"]],
-      body: countries.map((c) => [
+    // ---- Country Split Table with CONVERTED amounts ----
+    const countryRows = countries.map((c) => {
+      const subtotal = c.subtotal || 0;
+      // If the country's currency is different from target, convert it
+      let convertedAmount = subtotal;
+      if (c.currency !== targetCurrency) {
+        const rate =
+          conversionRatesList.find((r) => r.currency === c.currency)?.rate || 1;
+        convertedAmount = subtotal * rate;
+      }
+      return [
         c.name || "-",
         c.daysWorked || "0",
-        `${c.currency || ""} ${c.dailyRate || "0"}`,
-        `${(parseFloat(c.dailyRate) * parseFloat(c.daysWorked) * parseFloat(c.fxRate || 1)).toLocaleString()} ${targetCurrency}`,
-      ]),
+        `${c.currency || ""} ${(c.dailyRate || 0).toFixed(2)}`,
+        `${targetCurrency} ${convertedAmount.toFixed(2)}`,
+      ];
+    });
+
+    autoTable(doc, {
+      startY: 62,
+      head: [
+        [
+          "Package / Location",
+          "Days Logged",
+          "Daily Rate",
+          `Amount (${targetCurrency})`,
+        ],
+      ],
+      body: countryRows,
       theme: "grid",
       headStyles: { fillColor: [34, 197, 94] },
     });
 
-    autoTable(doc, {
-      startY: doc.lastAutoTable.finalY + 10,
-      head: [["Overtime Project", "Date", "Hours", "Overtime Amount"]],
-      body: overtimeRequests.map((req) => [
-        req.project,
-        req.date,
-        req.hours.toString(),
-        `${req.overtime_amount} ${targetCurrency}`,
-      ]),
-      theme: "grid",
-      headStyles: { fillColor: [34, 197, 94] },
+    // ---- Overtime Table with CONVERTED amounts ----
+    const overtimeRows = overtimeRequests.map((req) => {
+      const amount = parseFloat(req.overtime_amount) || 0;
+      let convertedAmount = amount;
+      // If the overtime currency is different from target, convert it
+      if (req.currency && req.currency !== targetCurrency) {
+        const rate =
+          conversionRatesList.find((r) => r.currency === req.currency)?.rate ||
+          1;
+        convertedAmount = amount * rate;
+      } else {
+        // If no currency specified, use target currency
+        convertedAmount = amount;
+      }
+      return [
+        req.project || "-",
+        req.date || "-",
+        (req.overtime_hours || req.hours || 0).toString(),
+        `${targetCurrency} ${convertedAmount.toFixed(2)}`,
+      ];
     });
 
     autoTable(doc, {
       startY: doc.lastAutoTable.finalY + 10,
-      head: [["Deduction Type", "Currency", "Amount"]],
-      body: deductions.map((d) => [
-        d.type,
-        d.currency,
-        `${d.amount} ${d.currency}`,
-      ]),
+      head: [
+        [
+          "Overtime Project",
+          "Date",
+          "Hours",
+          `Overtime Amount (${targetCurrency})`,
+        ],
+      ],
+      body: overtimeRows,
+      theme: "grid",
+      headStyles: { fillColor: [34, 197, 94] },
+    });
+
+    // ---- Deductions Table with CONVERTED amounts ----
+    const deductionRows = deductions.map((d) => {
+      const amount = parseFloat(d.amount) || 0;
+      let convertedAmount = amount;
+      // If the deduction currency is different from target, convert it
+      if (d.currency && d.currency !== targetCurrency) {
+        const rate =
+          conversionRatesList.find((r) => r.currency === d.currency)?.rate || 1;
+        convertedAmount = amount * rate;
+      }
+      return [
+        d.type || "-",
+        d.currency || targetCurrency,
+        `${targetCurrency} ${convertedAmount.toFixed(2)}`,
+      ];
+    });
+
+    autoTable(doc, {
+      startY: doc.lastAutoTable.finalY + 10,
+      head: [["Deduction Type", "Currency", `Amount (${targetCurrency})`]],
+      body: deductionRows,
       theme: "grid",
       headStyles: { fillColor: [239, 68, 68] },
     });
 
-    const totalDeductions = deductions.reduce(
-      (sum, d) => sum + parseFloat(d.amount || 0),
-      0,
-    );
-    const grossEarnings = countries.reduce(
-      (sum, c) =>
-        sum +
-        parseFloat(c.dailyRate) *
-          parseFloat(c.daysWorked) *
-          parseFloat(c.fxRate || 1),
-      0,
-    );
-    const netPay = grossEarnings - totalDeductions;
+    // ---- Summary with CONVERTED amounts ----
+    // Calculate totals using converted amounts
+    let totalGrossConverted = 0;
+    countries.forEach((c) => {
+      const subtotal = c.subtotal || 0;
+      if (c.currency !== targetCurrency) {
+        const rate =
+          conversionRatesList.find((r) => r.currency === c.currency)?.rate || 1;
+        totalGrossConverted += subtotal * rate;
+      } else {
+        totalGrossConverted += subtotal;
+      }
+    });
+
+    let totalOvertimeConverted = 0;
+    overtimeRequests.forEach((req) => {
+      const amount = parseFloat(req.overtime_amount) || 0;
+      if (req.currency && req.currency !== targetCurrency) {
+        const rate =
+          conversionRatesList.find((r) => r.currency === req.currency)?.rate ||
+          1;
+        totalOvertimeConverted += amount * rate;
+      } else {
+        totalOvertimeConverted += amount;
+      }
+    });
+
+    let totalDeductionsConverted = 0;
+    deductions.forEach((d) => {
+      const amount = parseFloat(d.amount) || 0;
+      if (d.currency && d.currency !== targetCurrency) {
+        const rate =
+          conversionRatesList.find((r) => r.currency === d.currency)?.rate || 1;
+        totalDeductionsConverted += amount * rate;
+      } else {
+        totalDeductionsConverted += amount;
+      }
+    });
+
+    const totalGrossEarnings = totalGrossConverted;
+    const totalNetPay =
+      totalGrossConverted + totalOvertimeConverted - totalDeductionsConverted;
 
     autoTable(doc, {
       startY: doc.lastAutoTable.finalY + 10,
-      head: [["Gross Earnings", "Total Deductions", "Net Pay"]],
+      head: [["Gross Earnings", "Overtime", "Total Deductions", "Net Pay"]],
       body: [
         [
-          `${grossEarnings.toLocaleString()} ${targetCurrency}`,
-          `${totalDeductions.toLocaleString()} ${targetCurrency}`,
-          `${netPay.toLocaleString()} ${targetCurrency}`,
+          `${targetCurrency} ${totalGrossEarnings.toFixed(2)}`,
+          `${targetCurrency} ${totalOvertimeConverted.toFixed(2)}`,
+          `${targetCurrency} ${totalDeductionsConverted.toFixed(2)}`,
+          `${targetCurrency} ${totalNetPay.toFixed(2)}`,
         ],
       ],
       theme: "grid",
       headStyles: { fillColor: [34, 197, 94] },
     });
+
+    // ---- Conversion Rate Info ----
+    if (conversionRatesList.length > 0) {
+      const rateInfo = conversionRatesList
+        .map((r) => `${r.currency} → ${targetCurrency}: ${r.rate}`)
+        .join(", ");
+      doc.setFontSize(9);
+      doc.text(
+        `Conversion Rates: ${rateInfo}`,
+        14,
+        doc.lastAutoTable.finalY + 10,
+      );
+    }
 
     doc.save(`Payslip_${employeeName.replace(/\s/g, "_")}_${employeeId}.pdf`);
     showToast("Payslip generated successfully!", "success");
@@ -2661,7 +2861,7 @@ const handleSubmitPayroll = async () => {
                       </div>
                     </div>
 
-                    {/* Net Pay - Show calculation with mixed currencies */}
+                    {/* Net Pay - Show calculation with mixed currencies INCLUDING OVERTIME */}
                     <div className="p-4 rounded-xl bg-green-50 dark:bg-green-900/20 border border-green-200 dark:border-green-800">
                       <div className="flex items-center justify-between mb-2">
                         <div className="text-xs text-gray-500 dark:text-gray-400 font-medium">
@@ -2672,7 +2872,7 @@ const handleSubmitPayroll = async () => {
                         </span>
                       </div>
 
-                      {/* Net Pay Calculation - Show formula */}
+                      {/* Net Pay Calculation - Show formula with OVERTIME included */}
                       <div className="mb-3 text-sm">
                         <div className="flex justify-between items-center text-gray-600 dark:text-gray-400">
                           <span>Gross Salary:</span>
@@ -2682,6 +2882,22 @@ const handleSubmitPayroll = async () => {
                               .map(
                                 (c) =>
                                   `${c.currency} ${(c.subtotal || 0).toFixed(2)}`,
+                              )
+                              .join(" + ")}
+                          </span>
+                        </div>
+                        <div className="flex justify-between items-center text-gray-600 dark:text-gray-400">
+                          <span>Overtime:</span>
+                          <span className="text-orange-600 dark:text-orange-400">
+                            +{" "}
+                            {overtimeRequests
+                              .filter(
+                                (req) =>
+                                  parseFloat(req.overtime_amount || 0) > 0,
+                              )
+                              .map(
+                                (req) =>
+                                  `${req.currency || "INR"} ${(parseFloat(req.overtime_amount) || 0).toFixed(2)}`,
                               )
                               .join(" + ")}
                           </span>
@@ -2705,7 +2921,7 @@ const handleSubmitPayroll = async () => {
                           </span>
                           <span className="text-green-600 dark:text-green-400">
                             {(() => {
-                              // Calculate net pay per currency
+                              // Calculate net pay per currency (Gross + Overtime - Deductions)
                               const netPayByCurrency = {};
 
                               // Add gross amounts by currency
@@ -2715,6 +2931,17 @@ const handleSubmitPayroll = async () => {
                                   netPayByCurrency[c.currency] =
                                     (netPayByCurrency[c.currency] || 0) +
                                     subtotal;
+                                }
+                              });
+
+                              // Add overtime by currency
+                              overtimeRequests.forEach((req) => {
+                                const amount =
+                                  parseFloat(req.overtime_amount) || 0;
+                                if (amount > 0) {
+                                  const currency = req.currency || "INR";
+                                  netPayByCurrency[currency] =
+                                    (netPayByCurrency[currency] || 0) + amount;
                                 }
                               });
 
@@ -2739,7 +2966,8 @@ const handleSubmitPayroll = async () => {
                           </span>
                         </div>
                         <div className="text-[10px] text-gray-400 mt-1">
-                          Net pay calculated per currency (Gross - Deductions)
+                          Net pay calculated per currency (Gross + Overtime -
+                          Deductions)
                         </div>
                       </div>
                     </div>
@@ -2937,7 +3165,7 @@ const handleSubmitPayroll = async () => {
                       )}
                     </div>
 
-                    {/* Net Pay - Show mixed currency breakdown */}
+                    {/* Net Pay - Show mixed currency breakdown INCLUDING OVERTIME */}
                     <div className="p-4 rounded-xl bg-green-50 dark:bg-green-900/20 border border-green-200 dark:border-green-800">
                       <div className="text-xs text-gray-500 dark:text-gray-400 font-medium mb-2">
                         Net Pay
@@ -2946,7 +3174,7 @@ const handleSubmitPayroll = async () => {
                       {/* Original Mixed Currency Breakdown */}
                       <div className="mb-2">
                         <div className="text-[10px] text-gray-500 mb-1">
-                          Original :
+                          Original (Gross + Overtime - Deductions):
                         </div>
                         {conversionDetails.net_pay.currencyBreakdown?.map(
                           (item, idx) => (
@@ -2963,6 +3191,22 @@ const handleSubmitPayroll = async () => {
                             </div>
                           ),
                         )}
+                      </div>
+
+                      {/* Calculation Breakdown */}
+                      <div className="mb-2 text-xs text-gray-500">
+                        <div>
+                          Gross:{" "}
+                          {conversionDetails.gross_salary?.breakdown || "0"}
+                        </div>
+                        <div>
+                          + Overtime:{" "}
+                          {conversionDetails.overtime_amount?.breakdown || "0"}
+                        </div>
+                        <div>
+                          - Deductions:{" "}
+                          {conversionDetails.deductions?.breakdown || "0"}
+                        </div>
                       </div>
 
                       {/* Conversion Display */}
@@ -3041,7 +3285,7 @@ const handleSubmitPayroll = async () => {
               ) : (
                 <button
                   onClick={handleSubmitPayroll}
-                  disabled={isSubmitting || !selectedUserId}
+                  disabled={isSubmitting || !selectedUserId || !isConverted}
                   className="px-4 md:px-6 py-2 md:py-2.5 rounded-full font-semibold bg-green-500 text-white hover:bg-green-600 transition-all flex items-center justify-center gap-2 text-sm md:text-base disabled:opacity-50 disabled:cursor-not-allowed"
                 >
                   <i
