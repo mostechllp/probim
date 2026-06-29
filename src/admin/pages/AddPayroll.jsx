@@ -153,15 +153,15 @@ function AddPayroll() {
 
   // Step 4 - Deductions
   // Step 4 - Deductions
-const [deductions, setDeductions] = useState([
-  {
-    id: 1,
-    type: "",
-    currency: "INR",
-    amount: "0",
-    is_statutory: "no",
-  },
-]);
+  const [deductions, setDeductions] = useState([
+    {
+      id: 1,
+      type: "",
+      currency: "INR",
+      amount: "0",
+      is_statutory: "no",
+    },
+  ]);
 
   // Step 5 - Summary with currency conversion
   const [targetCurrency, setTargetCurrency] = useState("INR");
@@ -176,7 +176,7 @@ const [deductions, setDeductions] = useState([
     gross_salary: null,
     overtime_amount: null,
     deductions: null,
-    net_pay: null
+    net_pay: null,
   });
   const [isConverted, setIsConverted] = useState(false);
 
@@ -980,9 +980,9 @@ const [deductions, setDeductions] = useState([
   };
 
   const handleRemoveDeduction = (id) => {
-  // Allow removal even if only one deduction exists
-  setDeductions(deductions.filter((d) => d.id !== id));
-};
+    // Allow removal even if only one deduction exists
+    setDeductions(deductions.filter((d) => d.id !== id));
+  };
 
   // Generate payslip PDF
   const generatePayslipPDF = () => {
@@ -1429,7 +1429,6 @@ const [deductions, setDeductions] = useState([
                       </div>
                     </div>
                     <div className="flex items-center gap-6">
-
                       <div className="text-center">
                         <div className="text-2xl font-bold text-gray-800 dark:text-gray-200">
                           {countries.reduce((sum, c) => sum + c.daysWorked, 0)}
@@ -1510,7 +1509,6 @@ const [deductions, setDeductions] = useState([
                 ))}
               </div>
 
-
               {/* Mixed Currencies Notice */}
               {countries.some((c) => c.currency !== targetCurrency) && (
                 <div className="mt-4 p-3 bg-yellow-50 dark:bg-yellow-900/20 border border-yellow-200 dark:border-yellow-800 rounded-lg text-sm text-yellow-700 dark:text-yellow-300">
@@ -1522,8 +1520,7 @@ const [deductions, setDeductions] = useState([
             </div>
           )}
 
-          {/* Step 3 - Overtime */}
-          {/* Step 3 - Overtime */}
+          {/* Step 3 - Overtime - Updated Input Field */}
           {reduxCurrentStep === 3 && (
             <div>
               <div className="flex items-center gap-2 pb-3 border-b-2 border-green-100 dark:border-green-900/30 mb-4 md:mb-6">
@@ -1611,16 +1608,55 @@ const [deductions, setDeductions] = useState([
                             </td>
                             <td className="py-3 px-4 text-center">
                               <input
-                                type="number"
-                                step="0.01"
-                                value={req.overtime_amount}
-                                onChange={(e) =>
+                                type="text"
+                                inputMode="decimal"
+                                value={req.overtime_amount || ""}
+                                onChange={(e) => {
+                                  // Only allow numbers, decimal point, and backspace
+                                  const value = e.target.value;
+                                  // Remove any non-numeric characters except decimal point
+                                  const cleaned = value.replace(/[^0-9.]/g, "");
+                                  // Prevent multiple decimal points
+                                  const parts = cleaned.split(".");
+                                  let finalValue = cleaned;
+                                  if (parts.length > 2) {
+                                    finalValue =
+                                      parts[0] + "." + parts.slice(1).join("");
+                                  }
+                                  // Limit to 2 decimal places
+                                  if (finalValue.includes(".")) {
+                                    const [whole, decimal] =
+                                      finalValue.split(".");
+                                    if (decimal && decimal.length > 2) {
+                                      finalValue =
+                                        whole + "." + decimal.slice(0, 2);
+                                    }
+                                  }
                                   handleOvertimeChange(
                                     req.id,
                                     "overtime_amount",
-                                    parseFloat(e.target.value) || 0,
-                                  )
-                                }
+                                    finalValue,
+                                  );
+                                }}
+                                onKeyDown={(e) => {
+                                  // Allow: backspace, delete, tab, escape, enter, decimal point
+                                  const allowedKeys = [
+                                    "Backspace",
+                                    "Delete",
+                                    "Tab",
+                                    "Escape",
+                                    "Enter",
+                                    ".",
+                                    "Decimal",
+                                  ];
+                                  if (allowedKeys.includes(e.key)) {
+                                    return;
+                                  }
+                                  // Allow numbers
+                                  if (!/^[0-9]$/.test(e.key)) {
+                                    e.preventDefault();
+                                  }
+                                }}
                                 className="w-24 px-2 py-1 text-sm rounded border border-blue-200 dark:border-blue-700 bg-blue-50 dark:bg-blue-900/10 text-gray-700 dark:text-gray-300 focus:outline-none focus:border-blue-500"
                                 placeholder="0.00"
                               />
@@ -1676,7 +1712,8 @@ const [deductions, setDeductions] = useState([
                         </li>
                         <li>
                           <strong>Overtime Amount:</strong> Enter the amount to
-                          be paid for overtime (if applicable).
+                          be paid for overtime (if applicable). Only numbers and
+                          decimal points are allowed.
                         </li>
                         <li>
                           <strong>Total Overtime:</strong>{" "}
@@ -1691,6 +1728,17 @@ const [deductions, setDeductions] = useState([
                             ).length
                           }{" "}
                           days.
+                        </li>
+                        <li>
+                          <strong>Total Overtime Amount:</strong>{" "}
+                          {overtimeRequests
+                            .reduce(
+                              (sum, req) =>
+                                sum + (parseFloat(req.overtime_amount) || 0),
+                              0,
+                            )
+                            .toFixed(2)}{" "}
+                          {targetCurrency}
                         </li>
                       </ul>
                     </div>
@@ -1804,8 +1852,6 @@ const [deductions, setDeductions] = useState([
               >
                 <i className="fas fa-plus"></i> Add Deduction
               </button>
-
-
             </div>
           )}
 
@@ -1887,22 +1933,40 @@ const [deductions, setDeductions] = useState([
                     <div className="mt-4 flex justify-end">
                       <button
                         onClick={() => {
-                          const baseCurrency = countries.length > 0 ? countries[0].currency : "INR";
-                          const exchangeRate = countries.length > 0 ? parseFloat(countries[0].fxRate) || 1 : 1;
-                          
+                          const baseCurrency =
+                            countries.length > 0
+                              ? countries[0].currency
+                              : "INR";
+                          const exchangeRate =
+                            countries.length > 0
+                              ? parseFloat(countries[0].fxRate) || 1
+                              : 1;
+
                           const calculateConversion = (amount) => ({
                             amount: amount,
                             baseCurrency: baseCurrency,
                             targetCurrency: targetCurrency,
                             exchangeRate: exchangeRate,
-                            convertedAmount: amount * exchangeRate
+                            convertedAmount: amount * exchangeRate,
                           });
 
                           setConversionDetails({
-                            gross_salary: calculateConversion(localSummaryData.gross_salary || localSummaryData.gross_earnings || 0),
-                            overtime_amount: calculateConversion(localSummaryData.overtime_amount || 0),
-                            deductions: calculateConversion(localSummaryData.deductions || localSummaryData.total_deductions || 0),
-                            net_pay: calculateConversion(localSummaryData.net_pay || 0)
+                            gross_salary: calculateConversion(
+                              localSummaryData.gross_salary ||
+                                localSummaryData.gross_earnings ||
+                                0,
+                            ),
+                            overtime_amount: calculateConversion(
+                              localSummaryData.overtime_amount || 0,
+                            ),
+                            deductions: calculateConversion(
+                              localSummaryData.deductions ||
+                                localSummaryData.total_deductions ||
+                                0,
+                            ),
+                            net_pay: calculateConversion(
+                              localSummaryData.net_pay || 0,
+                            ),
                           });
                           setIsConverted(true);
                         }}
@@ -1919,23 +1983,48 @@ const [deductions, setDeductions] = useState([
                   <div className="grid grid-cols-1 md:grid-cols-2 gap-4 pt-4 border-t border-gray-200 dark:border-gray-700">
                     {/* Gross Salary */}
                     <div className="p-4 rounded-xl bg-blue-50 dark:bg-blue-900/20 border border-blue-200 dark:border-blue-800 flex flex-col justify-between">
-                      <div className="text-xs text-gray-500 dark:text-gray-400 font-medium mb-3">Gross Salary</div>
+                      <div className="text-xs text-gray-500 dark:text-gray-400 font-medium mb-3">
+                        Gross Salary
+                      </div>
                       <div className="flex justify-between items-center gap-2">
                         <div className="flex-1">
-                          <div className="text-[10px] text-gray-500">Original Amount</div>
+                          <div className="text-[10px] text-gray-500">
+                            Original Amount
+                          </div>
                           <div className="text-sm font-bold text-gray-700 dark:text-gray-300">
-                            {conversionDetails.gross_salary.baseCurrency} {conversionDetails.gross_salary.amount.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
+                            {conversionDetails.gross_salary.baseCurrency}{" "}
+                            {conversionDetails.gross_salary.amount.toLocaleString(
+                              undefined,
+                              {
+                                minimumFractionDigits: 2,
+                                maximumFractionDigits: 2,
+                              },
+                            )}
                           </div>
                         </div>
                         <div className="text-center px-1">
-                          <div className="text-[9px] text-gray-400">Rate: {conversionDetails.gross_salary.exchangeRate}</div>
+                          <div className="text-[9px] text-gray-400">
+                            Rate: {conversionDetails.gross_salary.exchangeRate}
+                          </div>
                           <i className="fas fa-arrow-right text-blue-400 my-1"></i>
-                          <div className="text-[9px] text-gray-400">{conversionDetails.gross_salary.baseCurrency} → {conversionDetails.gross_salary.targetCurrency}</div>
+                          <div className="text-[9px] text-gray-400">
+                            {conversionDetails.gross_salary.baseCurrency} →{" "}
+                            {conversionDetails.gross_salary.targetCurrency}
+                          </div>
                         </div>
                         <div className="text-right flex-1">
-                          <div className="text-[10px] text-blue-500">Converted</div>
+                          <div className="text-[10px] text-blue-500">
+                            Converted
+                          </div>
                           <div className="text-base font-bold text-blue-600 dark:text-blue-400">
-                            {conversionDetails.gross_salary.targetCurrency} {conversionDetails.gross_salary.convertedAmount.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
+                            {conversionDetails.gross_salary.targetCurrency}{" "}
+                            {conversionDetails.gross_salary.convertedAmount.toLocaleString(
+                              undefined,
+                              {
+                                minimumFractionDigits: 2,
+                                maximumFractionDigits: 2,
+                              },
+                            )}
                           </div>
                         </div>
                       </div>
@@ -1943,23 +2032,49 @@ const [deductions, setDeductions] = useState([
 
                     {/* Overtime Amount */}
                     <div className="p-4 rounded-xl bg-orange-50 dark:bg-orange-900/20 border border-orange-200 dark:border-orange-800 flex flex-col justify-between">
-                      <div className="text-xs text-gray-500 dark:text-gray-400 font-medium mb-3">Overtime Amount</div>
+                      <div className="text-xs text-gray-500 dark:text-gray-400 font-medium mb-3">
+                        Overtime Amount
+                      </div>
                       <div className="flex justify-between items-center gap-2">
                         <div className="flex-1">
-                          <div className="text-[10px] text-gray-500">Original Amount</div>
+                          <div className="text-[10px] text-gray-500">
+                            Original Amount
+                          </div>
                           <div className="text-sm font-bold text-gray-700 dark:text-gray-300">
-                            {conversionDetails.overtime_amount.baseCurrency} {conversionDetails.overtime_amount.amount.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
+                            {conversionDetails.overtime_amount.baseCurrency}{" "}
+                            {conversionDetails.overtime_amount.amount.toLocaleString(
+                              undefined,
+                              {
+                                minimumFractionDigits: 2,
+                                maximumFractionDigits: 2,
+                              },
+                            )}
                           </div>
                         </div>
                         <div className="text-center px-1">
-                          <div className="text-[9px] text-gray-400">Rate: {conversionDetails.overtime_amount.exchangeRate}</div>
+                          <div className="text-[9px] text-gray-400">
+                            Rate:{" "}
+                            {conversionDetails.overtime_amount.exchangeRate}
+                          </div>
                           <i className="fas fa-arrow-right text-orange-400 my-1"></i>
-                          <div className="text-[9px] text-gray-400">{conversionDetails.overtime_amount.baseCurrency} → {conversionDetails.overtime_amount.targetCurrency}</div>
+                          <div className="text-[9px] text-gray-400">
+                            {conversionDetails.overtime_amount.baseCurrency} →{" "}
+                            {conversionDetails.overtime_amount.targetCurrency}
+                          </div>
                         </div>
                         <div className="text-right flex-1">
-                          <div className="text-[10px] text-orange-500">Converted</div>
+                          <div className="text-[10px] text-orange-500">
+                            Converted
+                          </div>
                           <div className="text-base font-bold text-orange-600 dark:text-orange-400">
-                            {conversionDetails.overtime_amount.targetCurrency} {conversionDetails.overtime_amount.convertedAmount.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
+                            {conversionDetails.overtime_amount.targetCurrency}{" "}
+                            {conversionDetails.overtime_amount.convertedAmount.toLocaleString(
+                              undefined,
+                              {
+                                minimumFractionDigits: 2,
+                                maximumFractionDigits: 2,
+                              },
+                            )}
                           </div>
                         </div>
                       </div>
@@ -1967,23 +2082,48 @@ const [deductions, setDeductions] = useState([
 
                     {/* Deductions */}
                     <div className="p-4 rounded-xl bg-red-50 dark:bg-red-900/20 border border-red-200 dark:border-red-800 flex flex-col justify-between">
-                      <div className="text-xs text-gray-500 dark:text-gray-400 font-medium mb-3">Deductions</div>
+                      <div className="text-xs text-gray-500 dark:text-gray-400 font-medium mb-3">
+                        Deductions
+                      </div>
                       <div className="flex justify-between items-center gap-2">
                         <div className="flex-1">
-                          <div className="text-[10px] text-gray-500">Original Amount</div>
+                          <div className="text-[10px] text-gray-500">
+                            Original Amount
+                          </div>
                           <div className="text-sm font-bold text-gray-700 dark:text-gray-300">
-                            {conversionDetails.deductions.baseCurrency} {conversionDetails.deductions.amount.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
+                            {conversionDetails.deductions.baseCurrency}{" "}
+                            {conversionDetails.deductions.amount.toLocaleString(
+                              undefined,
+                              {
+                                minimumFractionDigits: 2,
+                                maximumFractionDigits: 2,
+                              },
+                            )}
                           </div>
                         </div>
                         <div className="text-center px-1">
-                          <div className="text-[9px] text-gray-400">Rate: {conversionDetails.deductions.exchangeRate}</div>
+                          <div className="text-[9px] text-gray-400">
+                            Rate: {conversionDetails.deductions.exchangeRate}
+                          </div>
                           <i className="fas fa-arrow-right text-red-400 my-1"></i>
-                          <div className="text-[9px] text-gray-400">{conversionDetails.deductions.baseCurrency} → {conversionDetails.deductions.targetCurrency}</div>
+                          <div className="text-[9px] text-gray-400">
+                            {conversionDetails.deductions.baseCurrency} →{" "}
+                            {conversionDetails.deductions.targetCurrency}
+                          </div>
                         </div>
                         <div className="text-right flex-1">
-                          <div className="text-[10px] text-red-500">Converted</div>
+                          <div className="text-[10px] text-red-500">
+                            Converted
+                          </div>
                           <div className="text-base font-bold text-red-500">
-                            {conversionDetails.deductions.targetCurrency} {conversionDetails.deductions.convertedAmount.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
+                            {conversionDetails.deductions.targetCurrency}{" "}
+                            {conversionDetails.deductions.convertedAmount.toLocaleString(
+                              undefined,
+                              {
+                                minimumFractionDigits: 2,
+                                maximumFractionDigits: 2,
+                              },
+                            )}
                           </div>
                         </div>
                       </div>
@@ -1991,33 +2131,54 @@ const [deductions, setDeductions] = useState([
 
                     {/* Net Pay */}
                     <div className="p-4 rounded-xl bg-green-50 dark:bg-green-900/20 border border-green-200 dark:border-green-800 flex flex-col justify-between">
-                      <div className="text-xs text-gray-500 dark:text-gray-400 font-medium mb-3">Net Pay</div>
+                      <div className="text-xs text-gray-500 dark:text-gray-400 font-medium mb-3">
+                        Net Pay
+                      </div>
                       <div className="flex justify-between items-center gap-2">
                         <div className="flex-1">
-                          <div className="text-[10px] text-gray-500">Original Amount</div>
+                          <div className="text-[10px] text-gray-500">
+                            Original Amount
+                          </div>
                           <div className="text-sm font-bold text-gray-700 dark:text-gray-300">
-                            {conversionDetails.net_pay.baseCurrency} {conversionDetails.net_pay.amount.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
+                            {conversionDetails.net_pay.baseCurrency}{" "}
+                            {conversionDetails.net_pay.amount.toLocaleString(
+                              undefined,
+                              {
+                                minimumFractionDigits: 2,
+                                maximumFractionDigits: 2,
+                              },
+                            )}
                           </div>
                         </div>
                         <div className="text-center px-1">
-                          <div className="text-[9px] text-gray-400">Rate: {conversionDetails.net_pay.exchangeRate}</div>
+                          <div className="text-[9px] text-gray-400">
+                            Rate: {conversionDetails.net_pay.exchangeRate}
+                          </div>
                           <i className="fas fa-arrow-right text-green-400 my-1"></i>
-                          <div className="text-[9px] text-gray-400">{conversionDetails.net_pay.baseCurrency} → {conversionDetails.net_pay.targetCurrency}</div>
+                          <div className="text-[9px] text-gray-400">
+                            {conversionDetails.net_pay.baseCurrency} →{" "}
+                            {conversionDetails.net_pay.targetCurrency}
+                          </div>
                         </div>
                         <div className="text-right flex-1">
-                          <div className="text-[10px] text-green-500">Converted</div>
+                          <div className="text-[10px] text-green-500">
+                            Converted
+                          </div>
                           <div className="text-base font-bold text-green-600 dark:text-green-400">
-                            {conversionDetails.net_pay.targetCurrency} {conversionDetails.net_pay.convertedAmount.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
+                            {conversionDetails.net_pay.targetCurrency}{" "}
+                            {conversionDetails.net_pay.convertedAmount.toLocaleString(
+                              undefined,
+                              {
+                                minimumFractionDigits: 2,
+                                maximumFractionDigits: 2,
+                              },
+                            )}
                           </div>
                         </div>
                       </div>
                     </div>
                   </div>
                 )}
-
-
-
-
 
                 <div className="mt-4 p-4 bg-blue-50 dark:bg-blue-900/20 rounded-xl border border-blue-200 dark:border-blue-800 flex items-start gap-3">
                   <i className="fas fa-envelope text-blue-500 mt-1"></i>
