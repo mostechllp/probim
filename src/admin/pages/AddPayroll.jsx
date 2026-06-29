@@ -37,6 +37,7 @@ import {
   selectEmployeePackages,
   selectPackagesLoading,
   clearEmployeePackages,
+  convertSalary,
 } from "../store/slices/payrollSlice";
 
 import {
@@ -153,7 +154,6 @@ function AddPayroll() {
   ]);
 
   // Step 4 - Deductions
-  // Step 4 - Deductions
   const [deductions, setDeductions] = useState([
     {
       id: 1,
@@ -167,13 +167,6 @@ function AddPayroll() {
   // Step 5 - Summary with currency conversion
   const [targetCurrency, setTargetCurrency] = useState("INR");
   const [conversionRatesList, setConversionRatesList] = useState([]);
-  const [conversionRates, setConversionRates] = useState({});
-  const [localSummaryData, setLocalSummaryData] = useState({
-    gross_earnings: 0,
-    total_deductions: 0,
-    combined: 0,
-    net_pay: 0,
-  });
   const [conversionDetails, setConversionDetails] = useState({
     gross_salary: null,
     overtime_amount: null,
@@ -181,6 +174,13 @@ function AddPayroll() {
     net_pay: null,
   });
   const [isConverted, setIsConverted] = useState(false);
+  const [isConverting, setIsConverting] = useState(false);
+  const [localSummaryData, setLocalSummaryData] = useState({
+    gross_earnings: 0,
+    total_deductions: 0,
+    combined: 0,
+    net_pay: 0,
+  });
 
   const steps = [
     { id: 1, label: "Basic Info" },
@@ -250,6 +250,89 @@ function AddPayroll() {
       return dateString;
     }
   };
+
+  // ─── STEP 5: Convert Currency ──────────────────────────────────────────
+  // ─── STEP 5: Convert Currency ──────────────────────────────────────────
+const handleConvertCurrency = async () => {
+  if (conversionRatesList.length === 0) {
+    showToast("Please add at least one conversion rate", "warning");
+    return;
+  }
+
+  if (!selectedUserId) {
+    showToast("Please select an employee first", "error");
+    return;
+  }
+
+  const monthNumber = monthNames[payPeriodMonth] || new Date().getMonth() + 1;
+  const year = parseInt(payPeriodYear) || new Date().getFullYear();
+
+  setIsConverting(true);
+  try {
+    const result = await dispatch(
+      convertSalary({
+        userId: selectedUserId,
+        payPeriodMonth: monthNumber,
+        payPeriodYear: year,
+        targetCurrency: targetCurrency,
+        conversionRates: conversionRatesList.map(item => ({
+          currency: item.currency,
+          rate: item.rate
+        }))
+      })
+    ).unwrap();
+
+    // Get the original amounts from localSummaryData
+    const originalGrossSalary = localSummaryData.gross_salary || localSummaryData.gross_earnings || 0;
+    const originalOvertime = localSummaryData.overtime_amount || 0;
+    const originalDeductions = localSummaryData.deductions || localSummaryData.total_deductions || 0;
+    const originalNetPay = localSummaryData.net_pay || 0;
+
+    // Get the base currency (first currency in the conversion list)
+    const baseCurrency = conversionRatesList[0]?.currency || "INR";
+    const baseRate = conversionRatesList[0]?.rate || 1;
+
+    // Update conversion details with both original and converted values
+    setConversionDetails({
+      gross_salary: {
+        amount: originalGrossSalary, // Original amount
+        fromCurrency: baseCurrency,
+        toCurrency: targetCurrency,
+        rate: baseRate,
+        convertedAmount: result.converted_gross_salary || 0, // Converted amount from API
+      },
+      overtime_amount: {
+        amount: originalOvertime, // Original amount
+        fromCurrency: baseCurrency,
+        toCurrency: targetCurrency,
+        rate: baseRate,
+        convertedAmount: result.converted_overtime || 0, // Converted amount from API
+      },
+      deductions: {
+        amount: originalDeductions, // Original amount
+        fromCurrency: baseCurrency,
+        toCurrency: targetCurrency,
+        rate: baseRate,
+        convertedAmount: result.converted_deductions || 0, // Converted amount from API
+      },
+      net_pay: {
+        amount: originalNetPay, // Original amount
+        fromCurrency: baseCurrency,
+        toCurrency: targetCurrency,
+        rate: baseRate,
+        convertedAmount: result.converted_net_pay || 0, // Converted amount from API
+      },
+    });
+    
+    setIsConverted(true);
+    showToast("Currency conversion completed successfully!", "success");
+  } catch (error) {
+    console.error("Conversion error:", error);
+    showToast(error || "Failed to convert currency", "error");
+  } finally {
+    setIsConverting(false);
+  }
+};
 
   // Handle employee selection
   const handleEmployeeSelect = async (employeeId) => {
@@ -1940,6 +2023,7 @@ function AddPayroll() {
           )}
 
           {/* Step 5 - Summary */}
+          {/* Step 5 - Summary */}
           {reduxCurrentStep === 5 && (
             <div>
               <div className="flex items-center gap-2 pb-3 border-b-2 border-green-100 dark:border-green-900/30 mb-4 md:mb-6">
@@ -2006,7 +2090,6 @@ function AddPayroll() {
                       </label>
                       <button
                         onClick={() => {
-                          // Find a currency not already in the list and not equal to target currency
                           const existingCurrencies = conversionRatesList.map(
                             (item) => item.currency,
                           );
@@ -2045,7 +2128,6 @@ function AddPayroll() {
                               value={item.currency}
                               onChange={(e) => {
                                 const newCurrency = e.target.value;
-                                // Check if currency already exists or is the target currency
                                 const exists = conversionRatesList.some(
                                   (i) =>
                                     i.id !== item.id &&
@@ -2076,7 +2158,7 @@ function AddPayroll() {
                               className="flex-1 px-2 py-1 text-sm rounded border border-gray-200 dark:border-gray-600 bg-white dark:bg-gray-800 text-gray-700 dark:text-gray-300 focus:outline-none focus:border-green-500"
                             >
                               {currencies
-                                .filter((c) => c !== targetCurrency) // Exclude target currency from dropdown
+                                .filter((c) => c !== targetCurrency)
                                 .map((curr) => (
                                   <option key={curr} value={curr}>
                                     {curr}
@@ -2144,7 +2226,6 @@ function AddPayroll() {
                     <div className="mt-3 flex justify-end gap-2">
                       <button
                         onClick={() => {
-                          // Reset all rates to 1
                           setConversionRatesList(
                             conversionRatesList.map((item) => ({
                               ...item,
@@ -2158,67 +2239,28 @@ function AddPayroll() {
                         <i className="fas fa-undo mr-1"></i> Reset
                       </button>
                       <button
-                        onClick={() => {
-                          if (conversionRatesList.length === 0) {
-                            showToast(
-                              "Please add at least one conversion rate",
-                              "warning",
-                            );
-                            return;
-                          }
-
-                          // Build conversion details from the list
-                          const rates = {};
-                          conversionRatesList.forEach((item) => {
-                            rates[item.currency] = item.rate;
-                          });
-
-                          // Use the first rate as the base for calculations
-                          const baseCurrency =
-                            conversionRatesList[0]?.currency || "INR";
-                          const baseRate = conversionRatesList[0]?.rate || 1;
-
-                          const calculateConversion = (amount) => ({
-                            amount: amount,
-                            fromCurrency: baseCurrency,
-                            toCurrency: targetCurrency,
-                            rate: baseRate,
-                            convertedAmount: amount * baseRate,
-                          });
-
-                          setConversionDetails({
-                            gross_salary: calculateConversion(
-                              localSummaryData.gross_salary ||
-                                localSummaryData.gross_earnings ||
-                                0,
-                            ),
-                            overtime_amount: calculateConversion(
-                              localSummaryData.overtime_amount || 0,
-                            ),
-                            deductions: calculateConversion(
-                              localSummaryData.deductions ||
-                                localSummaryData.total_deductions ||
-                                0,
-                            ),
-                            net_pay: calculateConversion(
-                              localSummaryData.net_pay || 0,
-                            ),
-                          });
-                          setIsConverted(true);
-                          showToast(
-                            "Conversion applied successfully!",
-                            "success",
-                          );
-                        }}
-                        className="px-4 py-1 text-xs bg-blue-500 text-white rounded-lg hover:bg-blue-600 transition-colors flex items-center gap-1"
+                        onClick={handleConvertCurrency}
+                        disabled={
+                          isConverting || conversionRatesList.length === 0
+                        }
+                        className="px-4 py-1 text-xs bg-blue-500 text-white rounded-lg hover:bg-blue-600 transition-colors flex items-center gap-1 disabled:opacity-50"
                       >
-                        <i className="fas fa-calculator"></i> Convert
+                        {isConverting ? (
+                          <>
+                            <i className="fas fa-spinner fa-spin"></i>{" "}
+                            Converting...
+                          </>
+                        ) : (
+                          <>
+                            <i className="fas fa-calculator"></i> Convert
+                          </>
+                        )}
                       </button>
                     </div>
                   </div>
                 </div>
 
-                {/* Summary Cards */}
+                {/* Summary Cards - Updated to show converted values */}
                 {isConverted && conversionDetails.gross_salary && (
                   <div className="grid grid-cols-1 md:grid-cols-2 gap-4 pt-4 border-t border-gray-200 dark:border-gray-700">
                     {/* Gross Salary */}
@@ -2229,7 +2271,7 @@ function AddPayroll() {
                       <div className="flex justify-between items-center gap-2">
                         <div className="flex-1">
                           <div className="text-[10px] text-gray-500">
-                            Original Amount
+                            Original
                           </div>
                           <div className="text-sm font-bold text-gray-700 dark:text-gray-300">
                             {conversionDetails.gross_salary.fromCurrency}{" "}
@@ -2278,7 +2320,7 @@ function AddPayroll() {
                       <div className="flex justify-between items-center gap-2">
                         <div className="flex-1">
                           <div className="text-[10px] text-gray-500">
-                            Original Amount
+                            Original
                           </div>
                           <div className="text-sm font-bold text-gray-700 dark:text-gray-300">
                             {conversionDetails.overtime_amount.fromCurrency}{" "}
@@ -2327,7 +2369,7 @@ function AddPayroll() {
                       <div className="flex justify-between items-center gap-2">
                         <div className="flex-1">
                           <div className="text-[10px] text-gray-500">
-                            Original Amount
+                            Original
                           </div>
                           <div className="text-sm font-bold text-gray-700 dark:text-gray-300">
                             {conversionDetails.deductions.fromCurrency}{" "}
@@ -2376,7 +2418,7 @@ function AddPayroll() {
                       <div className="flex justify-between items-center gap-2">
                         <div className="flex-1">
                           <div className="text-[10px] text-gray-500">
-                            Original Amount
+                            Original
                           </div>
                           <div className="text-sm font-bold text-gray-700 dark:text-gray-300">
                             {conversionDetails.net_pay.fromCurrency}{" "}
