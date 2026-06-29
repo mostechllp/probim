@@ -1386,203 +1386,225 @@ function AddPayroll() {
           )}
 
           {/* Step 2 - Country Split / Packages - WITH EDITABLE FIELDS */}
-{reduxCurrentStep === 2 && (
-  <div>
-    <div className="flex items-center gap-2 pb-3 border-b-2 border-green-100 dark:border-green-900/30 mb-4 md:mb-6">
-      <div className="w-6 h-6 md:w-8 md:h-8 bg-green-100 dark:bg-green-900/30 rounded-lg flex items-center justify-center">
-        <i className="fas fa-globe text-green-600 dark:text-green-400 text-xs md:text-sm"></i>
-      </div>
-      <h3 className="text-base md:text-lg font-bold text-gray-800 dark:text-gray-200">
-        Salary Packages (Multi-Location)
-      </h3>
-      {packagesLoading && (
-        <span className="ml-2 text-xs text-gray-500">
-          <i className="fas fa-spinner fa-spin mr-1"></i> Loading...
-        </span>
-      )}
-      <button
-        onClick={handleCalculateSalarySplit}
-        disabled={countriesLoading}
-        className="ml-auto px-3 py-1 text-xs bg-blue-500 text-white rounded-lg hover:bg-blue-600 transition-colors disabled:opacity-50"
-      >
-        <i
-          className={`fas ${countriesLoading ? "fa-spinner fa-spin" : "fa-calculator"} mr-1`}
-        ></i>
-        {countriesLoading ? "Calculating..." : "Calculate"}
-      </button>
-    </div>
-
-    {/* Employee Summary Card */}
-    {selectedEmployee && countries.length > 0 && (
-      <div className="bg-gradient-to-r from-green-50 to-emerald-50 dark:from-green-900/20 dark:to-emerald-900/20 rounded-xl p-4 md:p-6 mb-6 border border-green-100 dark:border-green-800">
-        <div className="flex flex-wrap items-center justify-between gap-4">
-          <div className="flex items-center gap-3">
-            <div className="w-12 h-12 bg-green-100 dark:bg-green-900/30 rounded-full flex items-center justify-center text-green-600 dark:text-green-400 font-bold text-lg">
-              {employeeName?.charAt(0) || "E"}
-            </div>
+          {reduxCurrentStep === 2 && (
             <div>
-              <h4 className="font-semibold text-gray-800 dark:text-gray-200">
-                {employeeName || "Employee"}
-              </h4>
-              <p className="text-xs text-gray-500 dark:text-gray-400">
-                Employee #{employeeId || "N/A"} • {payPeriodMonth}{" "}
-                {payPeriodYear}
-              </p>
-            </div>
-          </div>
-          <div className="flex items-center gap-6">
-            <div className="text-center">
-              <div className="text-2xl font-bold text-gray-800 dark:text-gray-200">
-                {countries.reduce((sum, c) => sum + c.daysWorked, 0)}
+              <div className="flex items-center gap-2 pb-3 border-b-2 border-green-100 dark:border-green-900/30 mb-4 md:mb-6">
+                <div className="w-6 h-6 md:w-8 md:h-8 bg-green-100 dark:bg-green-900/30 rounded-lg flex items-center justify-center">
+                  <i className="fas fa-globe text-green-600 dark:text-green-400 text-xs md:text-sm"></i>
+                </div>
+                <h3 className="text-base md:text-lg font-bold text-gray-800 dark:text-gray-200">
+                  Salary Packages (Multi-Location)
+                </h3>
+                {packagesLoading && (
+                  <span className="ml-2 text-xs text-gray-500">
+                    <i className="fas fa-spinner fa-spin mr-1"></i> Loading...
+                  </span>
+                )}
+                <button
+                  onClick={handleCalculateSalarySplit}
+                  disabled={countriesLoading}
+                  className="ml-auto px-3 py-1 text-xs bg-blue-500 text-white rounded-lg hover:bg-blue-600 transition-colors disabled:opacity-50"
+                >
+                  <i
+                    className={`fas ${countriesLoading ? "fa-spinner fa-spin" : "fa-calculator"} mr-1`}
+                  ></i>
+                  {countriesLoading ? "Calculating..." : "Calculate"}
+                </button>
               </div>
-              <div className="text-[10px] text-gray-500 dark:text-gray-400 uppercase tracking-wider">
-                Worked Days
-              </div>
-            </div>
-          </div>
-        </div>
-      </div>
-    )}
 
-    {/* Country Cards with Editable Fields */}
-    <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-      {countries.map((country) => (
-        <div
-          key={country.id}
-          className="bg-white dark:bg-gray-800 border border-gray-200 dark:border-gray-700 rounded-xl overflow-hidden shadow-sm hover:shadow-md transition-shadow"
-        >
-          {/* Header */}
-          <div className="bg-gray-50 dark:bg-gray-700/50 px-4 py-3 border-b border-gray-200 dark:border-gray-700 flex justify-between items-center">
-            <div>
-              <h4 className="font-semibold text-gray-800 dark:text-gray-200">
-                {country.name || "Location"}
-              </h4>
-              <div className="flex items-center gap-2 text-xs text-gray-500 dark:text-gray-400">
-                <span>{country.packageId ? "Saved" : "Unsaved"}</span>
-                <span className="w-1 h-1 rounded-full bg-gray-400"></span>
-                <span>{country.currency}</span>
-              </div>
-            </div>
-            <div className="text-right">
-              <div className="text-sm font-semibold text-gray-800 dark:text-gray-200">
-                {country.daysWorked || 0}
-              </div>
-              <div className="text-[10px] text-gray-500 dark:text-gray-400 uppercase">
-                Worked Days
-              </div>
-            </div>
-          </div>
+              {/* Employee Summary Card */}
+              {selectedEmployee && countries.length > 0 && (
+                <div className="bg-gradient-to-r from-green-50 to-emerald-50 dark:from-green-900/20 dark:to-emerald-900/20 rounded-xl p-4 md:p-6 mb-6 border border-green-100 dark:border-green-800">
+                  <div className="flex flex-wrap items-center justify-between gap-4">
+                    <div className="flex items-center gap-3">
+                      <div className="w-12 h-12 bg-green-100 dark:bg-green-900/30 rounded-full flex items-center justify-center text-green-600 dark:text-green-400 font-bold text-lg">
+                        {employeeName?.charAt(0) || "E"}
+                      </div>
+                      <div>
+                        <h4 className="font-semibold text-gray-800 dark:text-gray-200">
+                          {employeeName || "Employee"}
+                        </h4>
+                        <p className="text-xs text-gray-500 dark:text-gray-400">
+                          Employee #{employeeId || "N/A"} • {payPeriodMonth}{" "}
+                          {payPeriodYear}
+                        </p>
+                      </div>
+                    </div>
+                    <div className="flex items-center gap-6">
+                      <div className="text-center">
+                        <div className="text-2xl font-bold text-gray-800 dark:text-gray-200">
+                          {countries.reduce((sum, c) => sum + c.daysWorked, 0)}
+                        </div>
+                        <div className="text-[10px] text-gray-500 dark:text-gray-400 uppercase tracking-wider">
+                          Worked Days
+                        </div>
+                      </div>
+                    </div>
+                  </div>
+                </div>
+              )}
 
-          {/* Body - Editable Salary Components */}
-          <div className="p-4 space-y-3">
-            {country.salary_components &&
-            country.salary_components.length > 0 ? (
-              <div className="space-y-2">
-                {country.salary_components.map((comp, idx) => (
-                  <div key={idx} className="flex items-center gap-2">
-                    <span className="text-sm text-gray-600 dark:text-gray-400 w-32 flex-shrink-0">
-                      {comp.name}
-                    </span>
-                    <span className="text-xs text-gray-400">{country.currency}</span>
-                    <input
-                      type="number"
-                      step="0.01"
-                      value={comp.amount}
-                      onChange={(e) => {
-                        const newAmount = parseFloat(e.target.value) || 0;
-                        const updatedCountries = countries.map((c) => {
-                          if (c.id === country.id) {
-                            const updatedComponents = c.salary_components.map((c2, i) =>
-                              i === idx ? { ...c2, amount: newAmount } : c2
-                            );
-                            const newSubtotal = updatedComponents.reduce(
-                              (sum, c2) => sum + c2.amount,
-                              0
-                            );
-                            return { ...c, salary_components: updatedComponents, subtotal: newSubtotal };
-                          }
-                          return c;
-                        });
-                        setCountries(updatedCountries);
-                        // Reset saved state when user makes changes
-                        setIsStep2Saved(false);
-                      }}
-                      className="flex-1 px-2 py-1 text-sm rounded border border-gray-200 dark:border-gray-600 bg-white dark:bg-gray-800 text-gray-700 dark:text-gray-300 focus:outline-none focus:border-green-500"
-                    />
+              {/* Country Cards with Editable Fields */}
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                {countries.map((country) => (
+                  <div
+                    key={country.id}
+                    className="bg-white dark:bg-gray-800 border border-gray-200 dark:border-gray-700 rounded-xl overflow-hidden shadow-sm hover:shadow-md transition-shadow"
+                  >
+                    {/* Header */}
+                    <div className="bg-gray-50 dark:bg-gray-700/50 px-4 py-3 border-b border-gray-200 dark:border-gray-700 flex justify-between items-center">
+                      <div>
+                        <h4 className="font-semibold text-gray-800 dark:text-gray-200">
+                          {country.name || "Location"}
+                        </h4>
+                        <div className="flex items-center gap-2 text-xs text-gray-500 dark:text-gray-400">
+                          <span>{country.packageId ? "Saved" : "Unsaved"}</span>
+                          <span className="w-1 h-1 rounded-full bg-gray-400"></span>
+                          <span>{country.currency}</span>
+                        </div>
+                      </div>
+                      <div className="text-right">
+                        <div className="text-sm font-semibold text-gray-800 dark:text-gray-200">
+                          {country.daysWorked || 0}
+                        </div>
+                        <div className="text-[10px] text-gray-500 dark:text-gray-400 uppercase">
+                          Worked Days
+                        </div>
+                      </div>
+                    </div>
+
+                    {/* Body - Editable Salary Components */}
+                    <div className="p-4 space-y-3">
+                      {country.salary_components &&
+                      country.salary_components.length > 0 ? (
+                        <div className="space-y-2">
+                          {country.salary_components.map((comp, idx) => (
+                            <div key={idx} className="flex items-center gap-2">
+                              <span className="text-sm text-gray-600 dark:text-gray-400 w-32 flex-shrink-0">
+                                {comp.name}
+                              </span>
+                              <span className="text-xs text-gray-400">
+                                {country.currency}
+                              </span>
+                              <input
+                                type="number"
+                                step="0.01"
+                                value={comp.amount}
+                                onChange={(e) => {
+                                  const newAmount =
+                                    parseFloat(e.target.value) || 0;
+                                  const updatedCountries = countries.map(
+                                    (c) => {
+                                      if (c.id === country.id) {
+                                        const updatedComponents =
+                                          c.salary_components.map((c2, i) =>
+                                            i === idx
+                                              ? { ...c2, amount: newAmount }
+                                              : c2,
+                                          );
+                                        const newSubtotal =
+                                          updatedComponents.reduce(
+                                            (sum, c2) => sum + c2.amount,
+                                            0,
+                                          );
+                                        return {
+                                          ...c,
+                                          salary_components: updatedComponents,
+                                          subtotal: newSubtotal,
+                                        };
+                                      }
+                                      return c;
+                                    },
+                                  );
+                                  setCountries(updatedCountries);
+                                  // Reset saved state when user makes changes
+                                  setIsStep2Saved(false);
+                                }}
+                                className="flex-1 px-2 py-1 text-sm rounded border border-gray-200 dark:border-gray-600 bg-white dark:bg-gray-800 text-gray-700 dark:text-gray-300 focus:outline-none focus:border-green-500"
+                              />
+                            </div>
+                          ))}
+                          <div className="pt-2 mt-2 border-t border-gray-200 dark:border-gray-700 flex justify-between font-semibold">
+                            <span className="text-gray-800 dark:text-gray-200">
+                              Subtotal
+                            </span>
+                            <span className="text-green-600 dark:text-green-400">
+                              {country.currency} {country.subtotal.toFixed(2)}
+                            </span>
+                          </div>
+                        </div>
+                      ) : (
+                        <div className="text-center py-2 text-gray-400 text-sm">
+                          No salary components
+                        </div>
+                      )}
+                    </div>
                   </div>
                 ))}
-                <div className="pt-2 mt-2 border-t border-gray-200 dark:border-gray-700 flex justify-between font-semibold">
-                  <span className="text-gray-800 dark:text-gray-200">Subtotal</span>
-                  <span className="text-green-600 dark:text-green-400">
-                    {country.currency} {country.subtotal.toFixed(2)}
-                  </span>
+              </div>
+
+              {/* Save Packages Button - Only in Step 2 */}
+              <div className="mt-6 flex justify-end">
+                <button
+                  onClick={async () => {
+                    const monthNumber =
+                      monthNames[payPeriodMonth] || new Date().getMonth() + 1;
+                    const year =
+                      parseInt(payPeriodYear) || new Date().getFullYear();
+
+                    const step2Data = {
+                      pay_period_month: monthNumber,
+                      pay_period_year: year,
+                      location_breakdown: countries.map((c) => ({
+                        location_name: c.name,
+                        package: {
+                          id: c.packageId,
+                          name: c.name,
+                          currency: c.currency,
+                        },
+                        worked_days: parseInt(c.daysWorked) || 0,
+                        currency: {
+                          code: c.currency,
+                          symbol: c.currency,
+                        },
+                        salary_components: c.salary_components || [],
+                        subtotal: c.subtotal || 0,
+                      })),
+                      total_earnings: totalEarnings,
+                      total_deductions: totalDeductions,
+                      gross_salary: grossSalary,
+                      net_salary: netSalary,
+                    };
+
+                    const saved = await handleSaveStep(2, step2Data);
+                    if (saved) {
+                      setIsStep2Saved(true);
+                      dispatch(markStepCompleted(2));
+                      showToast(
+                        "Salary packages saved successfully!",
+                        "success",
+                      );
+                    }
+                  }}
+                  className="px-6 py-2.5 rounded-full font-semibold bg-green-500 text-white hover:bg-green-600 transition-all flex items-center gap-2 text-sm shadow-md hover:shadow-lg"
+                >
+                  <i className="fas fa-save"></i> Save Packages
+                </button>
+              </div>
+
+              {/* Mixed Currencies Notice */}
+              {countries.some((c) => c.currency !== targetCurrency) && (
+                <div className="mt-4 p-3 bg-yellow-50 dark:bg-yellow-900/20 border border-yellow-200 dark:border-yellow-800 rounded-lg text-sm text-yellow-700 dark:text-yellow-300">
+                  <i className="fas fa-exclamation-triangle mr-2"></i>
+                  Mixed currencies detected. Please review conversion rates in
+                  the Summary tab.
                 </div>
-              </div>
-            ) : (
-              <div className="text-center py-2 text-gray-400 text-sm">
-                No salary components
-              </div>
-            )}
-          </div>
-        </div>
-      ))}
-    </div>
-
-    {/* Save Packages Button - Only in Step 2 */}
-    <div className="mt-6 flex justify-end">
-      <button
-        onClick={async () => {
-          const monthNumber = monthNames[payPeriodMonth] || new Date().getMonth() + 1;
-          const year = parseInt(payPeriodYear) || new Date().getFullYear();
-          
-          const step2Data = {
-            pay_period_month: monthNumber,
-            pay_period_year: year,
-            location_breakdown: countries.map((c) => ({
-              location_name: c.name,
-              package: {
-                id: c.packageId,
-                name: c.name,
-                currency: c.currency,
-              },
-              worked_days: parseInt(c.daysWorked) || 0,
-              currency: {
-                code: c.currency,
-                symbol: c.currency,
-              },
-              salary_components: c.salary_components || [],
-              subtotal: c.subtotal || 0,
-            })),
-            total_earnings: totalEarnings,
-            total_deductions: totalDeductions,
-            gross_salary: grossSalary,
-            net_salary: netSalary,
-          };
-
-          const saved = await handleSaveStep(2, step2Data);
-          if (saved) {
-            setIsStep2Saved(true);
-            dispatch(markStepCompleted(2));
-            showToast("Salary packages saved successfully!", "success");
-          }
-        }}
-        className="px-6 py-2.5 rounded-full font-semibold bg-green-500 text-white hover:bg-green-600 transition-all flex items-center gap-2 text-sm shadow-md hover:shadow-lg"
-      >
-        <i className="fas fa-save"></i> Save Packages
-      </button>
-    </div>
-
-    {/* Mixed Currencies Notice */}
-    {countries.some((c) => c.currency !== targetCurrency) && (
-      <div className="mt-4 p-3 bg-yellow-50 dark:bg-yellow-900/20 border border-yellow-200 dark:border-yellow-800 rounded-lg text-sm text-yellow-700 dark:text-yellow-300">
-        <i className="fas fa-exclamation-triangle mr-2"></i>
-        Mixed currencies detected. Please review conversion rates in the Summary tab.
-      </div>
-    )}
-  </div>
-)}
+              )}
+            </div>
+          )}
 
           {/* Step 3 - Overtime */}
+          {/* Step 3 - Overtime - Updated Input Field */}
           {reduxCurrentStep === 3 && (
             <div>
               <div className="flex items-center gap-2 pb-3 border-b-2 border-green-100 dark:border-green-900/30 mb-4 md:mb-6">
@@ -1670,16 +1692,55 @@ function AddPayroll() {
                             </td>
                             <td className="py-3 px-4 text-center">
                               <input
-                                type="number"
-                                step="0.01"
-                                value={req.overtime_amount}
-                                onChange={(e) =>
+                                type="text"
+                                inputMode="decimal"
+                                value={req.overtime_amount || ""}
+                                onChange={(e) => {
+                                  // Only allow numbers, decimal point, and backspace
+                                  const value = e.target.value;
+                                  // Remove any non-numeric characters except decimal point
+                                  const cleaned = value.replace(/[^0-9.]/g, "");
+                                  // Prevent multiple decimal points
+                                  const parts = cleaned.split(".");
+                                  let finalValue = cleaned;
+                                  if (parts.length > 2) {
+                                    finalValue =
+                                      parts[0] + "." + parts.slice(1).join("");
+                                  }
+                                  // Limit to 2 decimal places
+                                  if (finalValue.includes(".")) {
+                                    const [whole, decimal] =
+                                      finalValue.split(".");
+                                    if (decimal && decimal.length > 2) {
+                                      finalValue =
+                                        whole + "." + decimal.slice(0, 2);
+                                    }
+                                  }
                                   handleOvertimeChange(
                                     req.id,
                                     "overtime_amount",
-                                    parseFloat(e.target.value) || 0,
-                                  )
-                                }
+                                    finalValue,
+                                  );
+                                }}
+                                onKeyDown={(e) => {
+                                  // Allow: backspace, delete, tab, escape, enter, decimal point
+                                  const allowedKeys = [
+                                    "Backspace",
+                                    "Delete",
+                                    "Tab",
+                                    "Escape",
+                                    "Enter",
+                                    ".",
+                                    "Decimal",
+                                  ];
+                                  if (allowedKeys.includes(e.key)) {
+                                    return;
+                                  }
+                                  // Allow numbers
+                                  if (!/^[0-9]$/.test(e.key)) {
+                                    e.preventDefault();
+                                  }
+                                }}
                                 className="w-24 px-2 py-1 text-sm rounded border border-blue-200 dark:border-blue-700 bg-blue-50 dark:bg-blue-900/10 text-gray-700 dark:text-gray-300 focus:outline-none focus:border-blue-500"
                                 placeholder="0.00"
                               />
@@ -1735,7 +1796,8 @@ function AddPayroll() {
                         </li>
                         <li>
                           <strong>Overtime Amount:</strong> Enter the amount to
-                          be paid for overtime (if applicable).
+                          be paid for overtime (if applicable). Only numbers and
+                          decimal points are allowed.
                         </li>
                         <li>
                           <strong>Total Overtime:</strong>{" "}
@@ -1750,6 +1812,17 @@ function AddPayroll() {
                             ).length
                           }{" "}
                           days.
+                        </li>
+                        <li>
+                          <strong>Total Overtime Amount:</strong>{" "}
+                          {overtimeRequests
+                            .reduce(
+                              (sum, req) =>
+                                sum + (parseFloat(req.overtime_amount) || 0),
+                              0,
+                            )
+                            .toFixed(2)}{" "}
+                          {targetCurrency}
                         </li>
                       </ul>
                     </div>
@@ -2363,49 +2436,51 @@ function AddPayroll() {
           )}
 
           {/* Action Buttons */}
-<div className="flex flex-col-reverse sm:flex-row justify-end gap-3 pt-4 md:pt-6 border-t border-gray-200 dark:border-gray-700">
-  {reduxCurrentStep > 1 && (
-    <button
-      onClick={handlePreviousStep}
-      disabled={isLoading || isSubmitting}
-      className="px-4 md:px-6 py-2 md:py-2.5 rounded-full font-semibold bg-gray-100 dark:bg-gray-700 text-gray-700 dark:text-gray-300 hover:bg-gray-200 dark:hover:bg-gray-600 transition-all flex items-center justify-center gap-2 text-sm md:text-base disabled:opacity-50 disabled:cursor-not-allowed"
-    >
-      <i className="fas fa-arrow-left text-xs md:text-sm"></i>
-      <span>Previous</span>
-    </button>
-  )}
+          <div className="flex flex-col-reverse sm:flex-row justify-end gap-3 pt-4 md:pt-6 border-t border-gray-200 dark:border-gray-700">
+            {reduxCurrentStep > 1 && (
+              <button
+                onClick={handlePreviousStep}
+                disabled={isLoading || isSubmitting}
+                className="px-4 md:px-6 py-2 md:py-2.5 rounded-full font-semibold bg-gray-100 dark:bg-gray-700 text-gray-700 dark:text-gray-300 hover:bg-gray-200 dark:hover:bg-gray-600 transition-all flex items-center justify-center gap-2 text-sm md:text-base disabled:opacity-50 disabled:cursor-not-allowed"
+              >
+                <i className="fas fa-arrow-left text-xs md:text-sm"></i>
+                <span>Previous</span>
+              </button>
+            )}
 
-  <div className="flex flex-col sm:flex-row gap-3">
-    {reduxCurrentStep < 5 ? (
-      <button
-        onClick={handleNextStep}
-        disabled={
-          isLoading || 
-          isSubmitting || 
-          !selectedUserId || 
-          (reduxCurrentStep === 2 && !isStep2Saved) // Disable Next in Step 2 until saved
-        }
-        className={`px-4 md:px-6 py-2 md:py-2.5 rounded-full font-semibold bg-green-500 text-white hover:bg-green-600 transition-all flex items-center justify-center gap-2 text-sm md:text-base disabled:opacity-50 disabled:cursor-not-allowed`}
-      >
-        <span>Next Step</span>
-        <i className="fas fa-arrow-right text-xs md:text-sm"></i>
-      </button>
-    ) : (
-      <button
-        onClick={handleSubmitPayroll}
-        disabled={isSubmitting || !selectedUserId}
-        className="px-4 md:px-6 py-2 md:py-2.5 rounded-full font-semibold bg-green-500 text-white hover:bg-green-600 transition-all flex items-center justify-center gap-2 text-sm md:text-base disabled:opacity-50 disabled:cursor-not-allowed"
-      >
-        <i
-          className={`fas ${isSubmitting ? "fa-spinner fa-spin" : "fa-paper-plane"} text-xs md:text-sm`}
-        ></i>
-        <span>
-          {isSubmitting ? "Submitting..." : "Generate & Email Payslip"}
-        </span>
-      </button>
-    )}
-  </div>
-</div>
+            <div className="flex flex-col sm:flex-row gap-3">
+              {reduxCurrentStep < 5 ? (
+                <button
+                  onClick={handleNextStep}
+                  disabled={
+                    isLoading ||
+                    isSubmitting ||
+                    !selectedUserId ||
+                    (reduxCurrentStep === 2 && !isStep2Saved) // Disable Next in Step 2 until saved
+                  }
+                  className={`px-4 md:px-6 py-2 md:py-2.5 rounded-full font-semibold bg-green-500 text-white hover:bg-green-600 transition-all flex items-center justify-center gap-2 text-sm md:text-base disabled:opacity-50 disabled:cursor-not-allowed`}
+                >
+                  <span>Next Step</span>
+                  <i className="fas fa-arrow-right text-xs md:text-sm"></i>
+                </button>
+              ) : (
+                <button
+                  onClick={handleSubmitPayroll}
+                  disabled={isSubmitting || !selectedUserId}
+                  className="px-4 md:px-6 py-2 md:py-2.5 rounded-full font-semibold bg-green-500 text-white hover:bg-green-600 transition-all flex items-center justify-center gap-2 text-sm md:text-base disabled:opacity-50 disabled:cursor-not-allowed"
+                >
+                  <i
+                    className={`fas ${isSubmitting ? "fa-spinner fa-spin" : "fa-paper-plane"} text-xs md:text-sm`}
+                  ></i>
+                  <span>
+                    {isSubmitting
+                      ? "Submitting..."
+                      : "Generate & Email Payslip"}
+                  </span>
+                </button>
+              )}
+            </div>
+          </div>
         </div>
       </div>
     </div>
