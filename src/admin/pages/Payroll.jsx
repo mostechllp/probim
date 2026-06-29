@@ -152,13 +152,11 @@ const Payroll = () => {
   const handleMonthFilterChange = (e) => {
     setMonthFilter(e.target.value);
     setCurrentPageState(1);
-    // Stats will auto-update via useEffect
   };
 
   const handleYearFilterChange = (e) => {
     setYearFilter(e.target.value);
     setCurrentPageState(1);
-    // Stats will auto-update via useEffect
   };
 
   const handleDeleteClick = (payroll) => {
@@ -190,14 +188,14 @@ const Payroll = () => {
   };
 
   const formatCurrency = (amount, currencyCode = "INR") => {
-  if (!amount) return `${currencyCode} 0.00`;
-  return new Intl.NumberFormat("en-IN", {
-    style: "currency",
-    currency: currencyCode,
-    minimumFractionDigits: 2,
-    maximumFractionDigits: 2,
-  }).format(amount);
-};
+    if (!amount) return `${currencyCode} 0.00`;
+    return new Intl.NumberFormat("en-IN", {
+      style: "currency",
+      currency: currencyCode,
+      minimumFractionDigits: 2,
+      maximumFractionDigits: 2,
+    }).format(amount);
+  };
 
   const getStatusBadge = (status) => {
     const statusMap = {
@@ -441,7 +439,7 @@ const Payroll = () => {
       ) : (
         <>
           <div className="bg-white dark:bg-gray-800 rounded-xl border border-gray-200 dark:border-gray-700 overflow-x-auto shadow-soft">
-            <div className="min-w-[1000px] md:min-w-0">
+            <div className="min-w-[1200px] md:min-w-0">
               <table className="w-full border-collapse">
                 <thead>
                   <tr className="bg-gray-50 dark:bg-gray-700/50 border-b border-gray-200 dark:border-gray-700">
@@ -455,7 +453,19 @@ const Payroll = () => {
                       Month / Year
                     </th>
                     <th className="px-3 md:px-4 py-2 md:py-3 text-right text-[10px] md:text-xs font-semibold text-gray-500 dark:text-gray-400 uppercase tracking-wider">
+                      Gross Salary
+                    </th>
+                    <th className="px-3 md:px-4 py-2 md:py-3 text-right text-[10px] md:text-xs font-semibold text-gray-500 dark:text-gray-400 uppercase tracking-wider">
+                      Overtime
+                    </th>
+                    <th className="px-3 md:px-4 py-2 md:py-3 text-right text-[10px] md:text-xs font-semibold text-gray-500 dark:text-gray-400 uppercase tracking-wider">
+                      Deductions
+                    </th>
+                    <th className="px-3 md:px-4 py-2 md:py-3 text-right text-[10px] md:text-xs font-semibold text-gray-500 dark:text-gray-400 uppercase tracking-wider">
                       Net Pay
+                    </th>
+                    <th className="px-3 md:px-4 py-2 md:py-3 text-center text-[10px] md:text-xs font-semibold text-gray-500 dark:text-gray-400 uppercase tracking-wider">
+                      Currency
                     </th>
                     <th className="px-3 md:px-4 py-2 md:py-3 text-center text-[10px] md:text-xs font-semibold text-gray-500 dark:text-gray-400 uppercase tracking-wider">
                       Status
@@ -472,7 +482,7 @@ const Payroll = () => {
                   {payrolls.length === 0 ? (
                     <tr>
                       <td
-                        colSpan={7}
+                        colSpan={11}
                         className="px-4 py-8 text-center text-gray-500 dark:text-gray-400"
                       >
                         <i className="fas fa-inbox text-3xl text-gray-300 dark:text-gray-600 mb-2 block"></i>
@@ -498,6 +508,8 @@ const Payroll = () => {
                       // Calculate serial number based on pagination
                       const serialNumber =
                         (currentPageState - 1) * (perPage || 15) + index + 1;
+
+                      const currency = payroll.currency || payroll.target_currency || "INR";
 
                       return (
                         <tr
@@ -537,11 +549,34 @@ const Payroll = () => {
                           <td className="px-3 md:px-4 py-2 md:py-3 text-xs md:text-sm text-gray-600 dark:text-gray-400">
                             {`${monthDisplay} ${yearDisplay}`}
                           </td>
-                          <td className="px-3 md:px-4 py-2 md:py-3 text-right text-xs md:text-sm font-bold text-gray-800 dark:text-gray-200">
+                          <td className="px-3 md:px-4 py-2 md:py-3 text-right text-xs md:text-sm font-semibold text-gray-700 dark:text-gray-300">
+                            {formatCurrency(
+                              payroll.gross_salary || 0,
+                              currency
+                            )}
+                          </td>
+                          <td className="px-3 md:px-4 py-2 md:py-3 text-right text-xs md:text-sm font-semibold text-orange-600 dark:text-orange-400">
+                            {formatCurrency(
+                              payroll.overtime || 0,
+                              currency
+                            )}
+                          </td>
+                          <td className="px-3 md:px-4 py-2 md:py-3 text-right text-xs md:text-sm font-semibold text-red-600 dark:text-red-400">
+                            {formatCurrency(
+                              payroll.deductions || 0,
+                              currency
+                            )}
+                          </td>
+                          <td className="px-3 md:px-4 py-2 md:py-3 text-right text-xs md:text-sm font-bold text-green-600 dark:text-green-400">
                             {formatCurrency(
                               payroll.net_pay || payroll.total_amount || 0,
-                              payroll.target_currency || "INR",
+                              currency
                             )}
+                          </td>
+                          <td className="px-3 md:px-4 py-2 md:py-3 text-center">
+                            <span className="inline-block px-2 py-1 rounded-full text-xs font-semibold bg-blue-50 dark:bg-blue-900/20 text-blue-600 dark:text-blue-400 border border-blue-200 dark:border-blue-800">
+                              {currency}
+                            </span>
                           </td>
                           <td className="px-3 md:px-4 py-2 md:py-3 text-center">
                             <span
