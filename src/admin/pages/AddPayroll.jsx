@@ -1545,7 +1545,7 @@ function AddPayroll() {
     // ---- Conversion Rate Info ----
     if (conversionRatesList.length > 0) {
       const rateInfo = conversionRatesList
-        .map((r) => `${r.currency} → ${targetCurrency}: ${r.rate}`)
+        .map((r) => `${r.currency} to ${targetCurrency}: ${r.rate}`)
         .join(", ");
       doc.setFontSize(9);
       doc.text(
