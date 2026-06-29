@@ -2489,35 +2489,43 @@ function AddPayroll() {
                       </label>
                       <button
                         onClick={() => {
-                          // Auto-add unique currencies from countries list
+                          // Allow adding ANY currency from the currencies list, including the target currency
                           const existingCurrencies = conversionRatesList.map(
                             (item) => item.currency,
                           );
-                          const allCurrencies = countries
-                            .map((c) => c.currency)
-                            .filter(Boolean);
-                          const availableCurrencies = [
-                            ...new Set(allCurrencies),
-                          ].filter(
-                            (c) =>
-                              !existingCurrencies.includes(c) &&
-                              c !== targetCurrency,
+                          const availableCurrencies = currencies.filter(
+                            (c) => !existingCurrencies.includes(c),
                           );
 
                           if (availableCurrencies.length > 0) {
                             setConversionRatesList([
                               ...conversionRatesList,
-                              ...availableCurrencies.map((c) => ({
+                              {
                                 id: Date.now() + Math.random(),
-                                currency: c,
+                                currency: availableCurrencies[0],
                                 rate: 1,
-                              })),
+                              },
                             ]);
+                            showToast(
+                              `Added ${availableCurrencies[0]} conversion rate`,
+                              "success",
+                            );
                           } else {
-                            showToast("All available currencies added", "info");
+                            showToast(
+                              "All available currencies have been added",
+                              "info",
+                            );
                           }
                         }}
                         className="px-2 py-1 text-xs bg-green-500 text-white rounded-lg hover:bg-green-600 transition-colors flex items-center gap-1"
+                        disabled={
+                          // Disable if all currencies are already in the list
+                          currencies.every((c) =>
+                            conversionRatesList.some(
+                              (item) => item.currency === c,
+                            ),
+                          )
+                        }
                       >
                         <i className="fas fa-plus text-[10px]"></i> Add
                       </button>
@@ -2546,13 +2554,11 @@ function AddPayroll() {
                                   );
                                   return;
                                 }
-                                if (newCurrency === targetCurrency) {
-                                  showToast(
-                                    `Cannot convert ${targetCurrency} to itself`,
-                                    "warning",
-                                  );
-                                  return;
-                                }
+                                // Remove this check to allow target currency:
+                                // if (newCurrency === targetCurrency) {
+                                //   showToast(`Cannot convert ${targetCurrency} to itself`, "warning");
+                                //   return;
+                                // }
                                 setConversionRatesList(
                                   conversionRatesList.map((i) =>
                                     i.id === item.id
@@ -2563,13 +2569,11 @@ function AddPayroll() {
                               }}
                               className="flex-1 px-2 py-1 text-sm rounded border border-gray-200 dark:border-gray-600 bg-white dark:bg-gray-800 text-gray-700 dark:text-gray-300 focus:outline-none focus:border-green-500"
                             >
-                              {currencies
-                                .filter((c) => c !== targetCurrency)
-                                .map((curr) => (
-                                  <option key={curr} value={curr}>
-                                    {curr}
-                                  </option>
-                                ))}
+                              {currencies.map((curr) => (
+                                <option key={curr} value={curr}>
+                                  {curr}
+                                </option>
+                              ))}
                             </select>
                             <span className="text-xs text-gray-400">→</span>
                             <span className="text-xs font-semibold text-green-600 dark:text-green-400 w-8">
