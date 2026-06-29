@@ -1,8 +1,8 @@
-// src/admin/pages/AddPayroll.js - Updated Country Split Tab
+// src/admin/pages/EditPayroll.js - Complete rewrite to match AddPayroll style
 
 import { useState, useEffect } from "react";
 import { useDispatch, useSelector } from "react-redux";
-import { Link } from "react-router-dom";
+import { Link, useNavigate, useParams } from "react-router-dom";
 import { jsPDF } from "jspdf";
 import autoTable from "jspdf-autotable";
 import { showToast } from "../components/common/Toast";
@@ -10,7 +10,7 @@ import { showToast } from "../components/common/Toast";
 import {
   savePayrollStep,
   submitPayroll,
-  fetchDraftPayroll,
+  fetchPayrollById,
   setCurrentStep,
   updateStepData,
   markStepCompleted,
@@ -38,7 +38,8 @@ import {
   selectPackagesLoading,
   clearEmployeePackages,
   convertSalary,
-  generatePayslip,
+  selectCurrentPayroll,
+  setCurrentPayroll,
 } from "../store/slices/payrollSlice";
 
 import {
@@ -72,8 +73,10 @@ const getOrganizationName = (employees, organizationId) => {
   return null;
 };
 
-function AddPayroll() {
+function EditPayroll() {
   const dispatch = useDispatch();
+  const navigate = useNavigate();
+  const { id } = useParams();
 
   const { user } = useSelector((state) => state.auth || {});
   const isAdmin =
@@ -90,6 +93,7 @@ function AddPayroll() {
   const isSaving = useSelector(selectPayrollSaving);
   const successMessage = useSelector(selectPayrollSuccess);
   const error = useSelector(selectPayrollError);
+  const currentPayroll = useSelector(selectCurrentPayroll);
 
   // Employee state
   const {
@@ -128,6 +132,7 @@ function AddPayroll() {
   const [paymentMode, setPaymentMode] = useState(null);
   const [totalWorkingDays, setTotalWorkingDays] = useState("");
   const [daysPresent, setDaysPresent] = useState("");
+  const [isDataLoaded, setIsDataLoaded] = useState(false);
 
   // Step 2 - Country Split
   const [countries, setCountries] = useState([]);
@@ -137,40 +142,11 @@ function AddPayroll() {
   const [netSalary, setNetSalary] = useState(0);
   const [isStep2Saved, setIsStep2Saved] = useState(false);
 
-  // Step 3 - Overtime with overtime_amount field
-  const [overtimeRequests, setOvertimeRequests] = useState([
-    {
-      id: 1,
-      project: "Dubai Mall Expansion",
-      date: "2026-05-20",
-      hours: 4,
-      overtime_amount: 0,
-      currency: "INR",
-      status: "pending",
-      reason: "Client requested emergency revisions",
-    },
-    {
-      id: 2,
-      project: "Airport Terminal 3",
-      date: "2026-05-21",
-      hours: 2.5,
-      overtime_amount: 0,
-      currency: "INR",
-      status: "pending",
-      reason: "Project deadline approaching",
-    },
-  ]);
+  // Step 3 - Overtime
+  const [overtimeRequests, setOvertimeRequests] = useState([]);
 
   // Step 4 - Deductions
-  const [deductions, setDeductions] = useState([
-    {
-      id: 1,
-      type: "",
-      currency: "INR",
-      amount: "0",
-      is_statutory: "no",
-    },
-  ]);
+  const [deductions, setDeductions] = useState([]);
 
   // Step 5 - Summary with currency conversion
   const [targetCurrency, setTargetCurrency] = useState("INR");
@@ -214,36 +190,24 @@ function AddPayroll() {
     December: 12,
   };
 
+  // Month number to name mapping
+  const monthNumberToName = {
+    1: "January",
+    2: "February",
+    3: "March",
+    4: "April",
+    5: "May",
+    6: "June",
+    7: "July",
+    8: "August",
+    9: "September",
+    10: "October",
+    11: "November",
+    12: "December",
+  };
+
   // Available currencies
   const currencies = ["AED", "INR", "USD", "EUR", "GBP", "PHP", "LKR"];
-
-  // --- Clear current employee on mount ---
-  useEffect(() => {
-    if (resetCurrentEmployee) {
-      dispatch(resetCurrentEmployee());
-    }
-
-    clearEmployeeFields();
-    setSelectedEmployee("");
-    setSelectedUserId("");
-
-    setPayPeriodMonth("");
-    setPayPeriodYear("");
-    setPeriodStart("");
-    setPeriodEnd("");
-    setPaymentDate("");
-    setPaymentMode(null);
-    setTotalWorkingDays("");
-    setDaysPresent("");
-
-    dispatch(fetchEmployees());
-    dispatch(setCurrentStep(1));
-    dispatch(clearEmployeePackages());
-
-    return () => {
-      // Clean up
-    };
-  }, [dispatch]);
 
   const formatDate = (dateString) => {
     if (!dateString) return "-";
@@ -257,6 +221,345 @@ function AddPayroll() {
     } catch {
       return dateString;
     }
+  };
+
+  // ─── Fetch payroll data on mount ─────────────────────────────────────
+  useEffect(() => {
+    if (id) {
+      dispatch(fetchPayrollById(id));
+    }
+    dispatch(fetchEmployees());
+    dispatch(clearEmployeePackages());
+    dispatch(setCurrentStep(1));
+
+    return () => {
+      dispatch(resetCurrentEmployee());
+      dispatch(clearEmployeePackages());
+    };
+  }, [dispatch, id]);
+
+  // ─── Fetch payroll data on mount ─────────────────────────────────────
+  useEffect(() => {
+    // Reset all local state when ID changes
+    setIsDataLoaded(false);
+    setSelectedEmployee("");
+    setSelectedUserId("");
+    setEmployeeId("");
+    setEmployeeName("");
+    setOrganizationName("");
+    setDepartment("");
+    setDesignation("");
+    setEmploymentType("");
+    setPayPeriodMonth("");
+    setPayPeriodYear("");
+    setPeriodStart("");
+    setPeriodEnd("");
+    setPaymentDate("");
+    setPaymentMode(null);
+    setTotalWorkingDays("");
+    setDaysPresent("");
+    setCountries([]);
+    setOvertimeRequests([]);
+    setDeductions([]);
+    setConversionRatesList([]);
+    setConversionDetails({
+      gross_salary: null,
+      overtime_amount: null,
+      deductions: null,
+      net_pay: null,
+    });
+    setIsConverted(false);
+    setIsStep2Saved(false);
+
+    if (id) {
+      dispatch(fetchPayrollById(id));
+    }
+    dispatch(fetchEmployees());
+    dispatch(clearEmployeePackages());
+    dispatch(setCurrentStep(1));
+
+    return () => {
+      dispatch(resetCurrentEmployee());
+      dispatch(clearEmployeePackages());
+      // Reset current payroll in Redux
+      dispatch(setCurrentPayroll(null));
+    };
+  }, [dispatch, id]);
+
+  // ─── Populate form with payroll data when loaded ────────────────────
+  useEffect(() => {
+    if (currentPayroll && !isDataLoaded) {
+      const stepData = currentPayroll.step_data || {};
+
+      // Set employee info
+      if (currentPayroll.employee_name) {
+        setEmployeeName(currentPayroll.employee_name);
+      }
+
+      // Find employee from employees list
+      if (currentPayroll.employee_id && employees.length > 0) {
+        const userId = parseInt(currentPayroll.employee_id);
+        const foundEmployee = employees.find(
+          (emp) => emp.user_id === userId || emp.id === userId,
+        );
+
+        if (foundEmployee) {
+          setSelectedEmployee(foundEmployee.id);
+          setEmployeeId(foundEmployee.employee_id || "");
+          setEmployeeName(
+            foundEmployee.name || currentPayroll.employee_name || "",
+          );
+
+          // Fetch employee details
+          dispatch(fetchEmployeeById(foundEmployee.id))
+            .unwrap()
+            .then((data) => {
+              if (data) {
+                populateEmployeeFields(data);
+              }
+            })
+            .catch(() => {});
+        }
+      }
+
+      // Set pay period
+      const monthName = currentPayroll.month
+        ? monthNumberToName[currentPayroll.month]
+        : stepData.step_1?.pay_period_month
+          ? monthNumberToName[stepData.step_1.pay_period_month]
+          : "";
+      setPayPeriodMonth(monthName);
+      setPayPeriodYear(
+        currentPayroll.year?.toString() ||
+          stepData.step_1?.pay_period_year?.toString() ||
+          "",
+      );
+      setPeriodStart(stepData.step_1?.period_start || "");
+      setPeriodEnd(stepData.step_1?.period_end || "");
+      setPaymentDate(
+        currentPayroll.payment_date || stepData.step_1?.payment_date || "",
+      );
+      setPaymentMode(stepData.step_1?.payment_mode || null);
+      setTotalWorkingDays(
+        stepData.step_1?.total_working_days?.toString() || "",
+      );
+      setDaysPresent(stepData.step_1?.days_present?.toString() || "");
+
+      // Set countries from step_2
+      if (stepData.step_2?.location_breakdown) {
+        const mappedCountries = stepData.step_2.location_breakdown.map(
+          (loc, index) => ({
+            id: index + 1,
+            name: loc.location_name || loc.package?.name || "",
+            currency: loc.currency?.code || loc.package?.currency || "AED",
+            dailyRate:
+              loc.salary_components?.reduce(
+                (sum, comp) => sum + comp.amount,
+                0,
+              ) / (loc.worked_days || 1) || 0,
+            daysWorked: loc.worked_days || 0,
+            fxRate: 1,
+            packageId: loc.package?.id || null,
+            salary_components: loc.salary_components || [],
+            subtotal: loc.subtotal || 0,
+            is_saved: true,
+          }),
+        );
+        setCountries(mappedCountries);
+        setTotalEarnings(stepData.step_2?.total_earnings || 0);
+        setTotalDeductions(stepData.step_2?.total_deductions || 0);
+        setGrossSalary(stepData.step_2?.gross_salary || 0);
+        setNetSalary(stepData.step_2?.net_salary || 0);
+        setIsStep2Saved(true);
+      }
+
+      // ─── FIX: Set overtime - MERGE data from step_3 and step_5 ───
+      const step5Overtime = stepData.step_5?.overtime_details || [];
+      const step3Overtime = stepData.step_3?.overtime_details || [];
+
+      // Create a map of step_5 overtime by date for quick lookup
+      const step5OvertimeMap = {};
+      step5Overtime.forEach((ot) => {
+        if (ot.date) {
+          step5OvertimeMap[ot.date] = {
+            amount: ot.amount || 0,
+            currency: ot.currency || "INR",
+            projects: ot.projects || [],
+          };
+        }
+      });
+
+      // Use step_3 for structure (overtime_hours, projects, etc.) but step_5 for amounts
+      if (step3Overtime.length > 0) {
+        setOvertimeRequests(
+          step3Overtime.map((ot, index) => {
+            const step5Data = step5OvertimeMap[ot.date] || {};
+            return {
+              id: index + 1,
+              date: ot.date || "",
+              day: ot.day || "",
+              required_working_hours: ot.required_working_hours || 0,
+              total_logged_hours: ot.total_logged_hours || 0,
+              overtime_hours: ot.overtime_hours || 0,
+              projects: ot.projects || [],
+              project: ot.projects?.map((p) => p.project_name).join(", ") || "",
+              hours: ot.overtime_hours || 0,
+              // Use amount from step_5 if available
+              overtime_amount: step5Data.amount || ot.amount || 0,
+              // Use currency from step_5 if available
+              currency: step5Data.currency || ot.currency || "INR",
+              status: ot.status || "pending",
+              reason: "",
+            };
+          }),
+        );
+      } else if (step5Overtime.length > 0) {
+        // Fallback: if no step_3 data, use step_5 directly
+        setOvertimeRequests(
+          step5Overtime.map((ot, index) => ({
+            id: index + 1,
+            date: ot.date || "",
+            day: "",
+            required_working_hours: 0,
+            total_logged_hours: 0,
+            overtime_hours: 0,
+            projects: ot.projects || [],
+            project: ot.projects?.map((p) => p.project_name).join(", ") || "",
+            hours: 0,
+            overtime_amount: ot.amount || 0,
+            currency: ot.currency || "INR",
+            status: "pending",
+            reason: "",
+          })),
+        );
+      }
+
+      // Set deductions from step_4
+      if (stepData.step_4?.deductions) {
+        setDeductions(
+          stepData.step_4.deductions.map((d, index) => ({
+            id: index + 1,
+            type: d.type || "",
+            currency: d.currency || "INR",
+            amount: d.amount?.toString() || "0",
+            is_statutory: d.is_statutory || "no",
+          })),
+        );
+      }
+
+      // Set target currency
+      setTargetCurrency(
+        stepData.step_5?.target_currency || currentPayroll.currency || "INR",
+      );
+
+      // Set conversion rates
+      if (stepData.step_5?.conversion_rates) {
+        const rates = Object.entries(stepData.step_5.conversion_rates).map(
+          ([currency, rate]) => ({
+            id: Date.now() + Math.random(),
+            currency: currency,
+            rate: parseFloat(rate) || 1,
+          }),
+        );
+        setConversionRatesList(rates);
+      }
+
+      // Set local summary data
+      setLocalSummaryData({
+        gross_earnings: stepData.step_2?.gross_salary || 0,
+        total_deductions: stepData.step_4?.total_deductions || 0,
+        combined: stepData.step_2?.gross_salary || 0,
+        net_pay: currentPayroll.net_pay || stepData.step_2?.net_salary || 0,
+      });
+
+      // If summary data exists with conversions, set it
+      if (stepData.step_5?.summary?.conversions) {
+        setConversionDetails(stepData.step_5.summary.conversions);
+        setIsConverted(true);
+      }
+
+      setIsDataLoaded(true);
+    }
+  }, [currentPayroll, employees, isDataLoaded]);
+
+  // ─── Populate employee fields ────────────────────────────────────────
+  const populateEmployeeFields = (employee) => {
+    const user = employee.user || {};
+    const fullName = [employee.first_name, employee.last_name]
+      .filter(Boolean)
+      .join(" ");
+
+    if (employee.user_id) {
+      setSelectedUserId(employee.user_id.toString());
+      dispatch(fetchEmployeeSalaryPackages(employee.user_id));
+    }
+
+    setEmployeeId(employee.employee_id || "");
+    if (fullName) setEmployeeName(fullName);
+
+    let orgId = "";
+    let orgName = "";
+
+    if (user.organization_id) {
+      orgId = user.organization_id.toString();
+    }
+
+    if (user.organization && user.organization.name) {
+      orgName = user.organization.name;
+    } else if (user.company && user.company.name) {
+      orgName = user.company.name;
+    } else if (orgId) {
+      const orgNameFromList = getOrganizationName(employees, orgId);
+      if (orgNameFromList) {
+        orgName = orgNameFromList;
+      } else {
+        orgName = `Organization #${orgId}`;
+      }
+    }
+
+    setOrganizationId(orgId);
+    setOrganizationName(orgName || "N/A");
+
+    const deptName = user.department?.name || "N/A";
+    setDepartment(deptName);
+
+    const desigName = user.designation?.name || "N/A";
+    setDesignation(desigName);
+
+    setEmploymentType(user.type || user.employment_type || "employee");
+  };
+
+  // ─── Handle employee selection ──────────────────────────────────────
+  const handleEmployeeSelect = async (employeeId) => {
+    setSelectedEmployee(employeeId);
+
+    if (employeeId) {
+      try {
+        const result = await dispatch(fetchEmployeeById(employeeId)).unwrap();
+        if (result && result.user_id) {
+          setSelectedUserId(result.user_id.toString());
+          await dispatch(fetchEmployeeSalaryPackages(result.user_id));
+          populateEmployeeFields(result);
+        }
+      } catch (error) {
+        showToast("Failed to fetch employee details", "error");
+      }
+    } else {
+      clearEmployeeFields();
+      setSelectedUserId("");
+      setCountries([]);
+      dispatch(clearEmployeePackages());
+    }
+  };
+
+  const clearEmployeeFields = () => {
+    setEmployeeId("");
+    setEmployeeName("");
+    setOrganizationId("");
+    setOrganizationName("");
+    setDepartment("");
+    setDesignation("");
+    setEmploymentType("");
   };
 
   // ─── STEP 5: Convert Currency ──────────────────────────────────────────
@@ -299,7 +602,6 @@ function AddPayroll() {
         }
       });
 
-      // Calculate overtime by currency
       const originalOvertimeByCurrency = {};
       overtimeRequests.forEach((req) => {
         const amount = parseFloat(req.overtime_amount) || 0;
@@ -310,7 +612,6 @@ function AddPayroll() {
         }
       });
 
-      // Calculate deductions by currency
       const originalDeductionsByCurrency = {};
       deductions.forEach((d) => {
         const amount = parseFloat(d.amount) || 0;
@@ -320,59 +621,43 @@ function AddPayroll() {
         }
       });
 
-      // Calculate net pay by currency (Gross + Overtime - Deductions)
       const originalNetByCurrency = {};
-      // Start with gross amounts
       Object.keys(originalGrossByCurrency).forEach((currency) => {
         originalNetByCurrency[currency] =
           (originalNetByCurrency[currency] || 0) +
           (originalGrossByCurrency[currency] || 0);
       });
-      // Add overtime
       Object.keys(originalOvertimeByCurrency).forEach((currency) => {
         originalNetByCurrency[currency] =
           (originalNetByCurrency[currency] || 0) +
           (originalOvertimeByCurrency[currency] || 0);
       });
-      // Subtract deductions
       Object.keys(originalDeductionsByCurrency).forEach((currency) => {
         originalNetByCurrency[currency] =
           (originalNetByCurrency[currency] || 0) -
           (originalDeductionsByCurrency[currency] || 0);
       });
 
-      // Build the breakdown string for net pay including overtime
-      let netPayBreakdownParts = [];
       let grossParts = [];
       let overtimeParts = [];
       let deductionParts = [];
 
-      // Build gross parts
       Object.entries(originalGrossByCurrency).forEach(([currency, amount]) => {
-        if (amount > 0) {
-          grossParts.push(`${currency} ${amount.toFixed(2)}`);
-        }
+        if (amount > 0) grossParts.push(`${currency} ${amount.toFixed(2)}`);
       });
-
-      // Build overtime parts
       Object.entries(originalOvertimeByCurrency).forEach(
         ([currency, amount]) => {
-          if (amount > 0) {
+          if (amount > 0)
             overtimeParts.push(`${currency} ${amount.toFixed(2)}`);
-          }
         },
       );
-
-      // Build deduction parts
       Object.entries(originalDeductionsByCurrency).forEach(
         ([currency, amount]) => {
-          if (amount > 0) {
+          if (amount > 0)
             deductionParts.push(`${currency} ${amount.toFixed(2)}`);
-          }
         },
       );
 
-      // Build full net pay breakdown: Gross + Overtime - Deductions
       const grossStr =
         grossParts.length > 0 ? `(${grossParts.join(" + ")})` : "0";
       const overtimeStr =
@@ -381,11 +666,6 @@ function AddPayroll() {
         deductionParts.length > 0 ? ` - (${deductionParts.join(" + ")})` : "";
       const netPayBreakdown = `${grossStr}${overtimeStr}${deductionStr}`;
 
-      // Determine the base currency for display
-      const baseCurrency = conversionRatesList[0]?.currency || "INR";
-      const baseRate = conversionRatesList[0]?.rate || 1;
-
-      // Update conversion details with mixed currency data
       setConversionDetails({
         gross_salary: {
           amount: 0,
@@ -397,10 +677,7 @@ function AddPayroll() {
             .map(([currency, amount]) => `${currency} ${amount.toFixed(2)}`)
             .join(" + "),
           currencyBreakdown: Object.entries(originalGrossByCurrency).map(
-            ([currency, amount]) => ({
-              currency,
-              amount,
-            }),
+            ([currency, amount]) => ({ currency, amount }),
           ),
         },
         overtime_amount: {
@@ -413,10 +690,7 @@ function AddPayroll() {
             .map(([currency, amount]) => `${currency} ${amount.toFixed(2)}`)
             .join(" + "),
           currencyBreakdown: Object.entries(originalOvertimeByCurrency).map(
-            ([currency, amount]) => ({
-              currency,
-              amount,
-            }),
+            ([currency, amount]) => ({ currency, amount }),
           ),
         },
         deductions: {
@@ -429,10 +703,7 @@ function AddPayroll() {
             .map(([currency, amount]) => `${currency} ${amount.toFixed(2)}`)
             .join(" + "),
           currencyBreakdown: Object.entries(originalDeductionsByCurrency).map(
-            ([currency, amount]) => ({
-              currency,
-              amount,
-            }),
+            ([currency, amount]) => ({ currency, amount }),
           ),
         },
         net_pay: {
@@ -444,11 +715,7 @@ function AddPayroll() {
           breakdown: netPayBreakdown,
           currencyBreakdown: Object.entries(originalNetByCurrency)
             .filter(([_, amount]) => amount !== 0)
-            .map(([currency, amount]) => ({
-              currency,
-              amount,
-            })),
-          // Store individual parts for display
+            .map(([currency, amount]) => ({ currency, amount })),
           grossParts: grossParts,
           overtimeParts: overtimeParts,
           deductionParts: deductionParts,
@@ -465,268 +732,7 @@ function AddPayroll() {
     }
   };
 
-  // Handle employee selection
-  const handleEmployeeSelect = async (employeeId) => {
-    setSelectedEmployee(employeeId);
-
-    if (employeeId) {
-      try {
-        const result = await dispatch(fetchEmployeeById(employeeId)).unwrap();
-        if (result && result.user_id) {
-          setSelectedUserId(result.user_id.toString());
-          // Fetch salary packages for this employee
-          await dispatch(fetchEmployeeSalaryPackages(result.user_id));
-        }
-      } catch (error) {
-        showToast("Failed to fetch employee details", error);
-      }
-    } else {
-      clearEmployeeFields();
-      setSelectedUserId("");
-      setCountries([]);
-      dispatch(clearEmployeePackages());
-    }
-  };
-
-  // Clear employee fields
-  const clearEmployeeFields = () => {
-    setEmployeeId("");
-    setEmployeeName("");
-    setOrganizationId("");
-    setOrganizationName("");
-    setDepartment("");
-    setDesignation("");
-    setEmploymentType("");
-  };
-
-  // Auto-populate fields when employee data is loaded
-  useEffect(() => {
-    if (currentEmployee && selectedEmployee) {
-      const user = currentEmployee.user || {};
-      const fullName = [currentEmployee.first_name, currentEmployee.last_name]
-        .filter(Boolean)
-        .join(" ");
-
-      if (currentEmployee.user_id) {
-        setSelectedUserId(currentEmployee.user_id.toString());
-        // Fetch salary packages for this employee
-        dispatch(fetchEmployeeSalaryPackages(currentEmployee.user_id));
-      }
-
-      setEmployeeId(currentEmployee.employee_id || "");
-      setEmployeeName(fullName || "");
-
-      let orgId = "";
-      let orgName = "";
-
-      if (user.organization_id) {
-        orgId = user.organization_id.toString();
-      }
-
-      if (user.organization && user.organization.name) {
-        orgName = user.organization.name;
-      } else if (user.company && user.company.name) {
-        orgName = user.company.name;
-      } else if (orgId) {
-        const orgNameFromList = getOrganizationName(employees, orgId);
-        if (orgNameFromList) {
-          orgName = orgNameFromList;
-        } else {
-          orgName = `Organization #${orgId}`;
-        }
-      }
-
-      setOrganizationId(orgId);
-      setOrganizationName(orgName || "N/A");
-
-      const deptName =
-        user.department?.name || user.department_id?.toString() || "N/A";
-      setDepartment(deptName);
-
-      const desigName =
-        user.designation?.name || user.designation_id?.toString() || "N/A";
-      setDesignation(desigName);
-
-      setEmploymentType(user.type || user.employment_type || "employee");
-
-      if (!payPeriodMonth) {
-        const currentMonth = new Date().getMonth() + 1;
-        const currentYear = new Date().getFullYear();
-        const monthNum = String(currentMonth).padStart(2, "0");
-
-        const monthNamesList = [
-          "January",
-          "February",
-          "March",
-          "April",
-          "May",
-          "June",
-          "July",
-          "August",
-          "September",
-          "October",
-          "November",
-          "December",
-        ];
-        setPayPeriodMonth(monthNamesList[currentMonth - 1]);
-        setPayPeriodYear(currentYear.toString());
-
-        setPeriodStart(`${currentYear}-${monthNum}-01`);
-
-        const lastDay = new Date(currentYear, currentMonth, 0).getDate();
-        setPeriodEnd(
-          `${currentYear}-${monthNum}-${String(lastDay).padStart(2, "0")}`,
-        );
-
-        setPaymentDate(`${currentYear}-${monthNum}-25`);
-        setTotalWorkingDays("26");
-        setDaysPresent("30");
-        setPaymentMode(null);
-      }
-    }
-  }, [currentEmployee, employees, payPeriodMonth, selectedEmployee, dispatch]);
-
-  // Update countries when employee packages are loaded
-  useEffect(() => {
-    if (employeePackages && employeePackages.length > 0) {
-      const mappedCountries = employeePackages.map((pkg, index) => ({
-        id: index + 1,
-        name: pkg.name || `Package ${index + 1}`,
-        currency: pkg.currency || "AED",
-        dailyRate: pkg.daily_rate || pkg.rate || 0,
-        daysWorked: pkg.days_worked || pkg.days || 0,
-        fxRate: pkg.fx_rate || pkg.exchange_rate || 1,
-        packageId: pkg.id || null,
-        salary_components: pkg.salary_components || [],
-        subtotal: pkg.subtotal || 0,
-        is_saved: false,
-      }));
-
-      if (mappedCountries.length > 0) {
-        setCountries(mappedCountries);
-
-        // Calculate total gross salary from packages
-        const totalGross = mappedCountries.reduce(
-          (sum, c) => sum + (c.subtotal || 0),
-          0,
-        );
-        setGrossSalary(totalGross);
-        setTotalEarnings(totalGross);
-        setNetSalary(totalGross);
-      }
-    }
-  }, [employeePackages]);
-
-  // Load draft data on mount if editing
-  useEffect(() => {
-    const isEditing = false;
-    if (isEditing && selectedUserId) {
-      dispatch(fetchDraftPayroll(selectedUserId));
-    }
-  }, [dispatch, selectedUserId]);
-
-  // Handle success/error messages from Redux
-  useEffect(() => {
-    if (successMessage) {
-      showToast(successMessage, "success");
-      dispatch(clearPayrollSuccess());
-    }
-    if (error) {
-      showToast(error, "error");
-      dispatch(clearPayrollError());
-    }
-  }, [successMessage, error, dispatch]);
-
-  // Update countries when calculated data arrives
-  useEffect(() => {
-    if (calculatedCountries) {
-      const data = calculatedCountries;
-
-      if (data.location_breakdown) {
-        const updatedCountries = data.location_breakdown.map((loc, index) => ({
-          id: index + 1,
-          name: loc.location_name || "",
-          currency: loc.currency?.code || loc.package?.currency || "AED",
-          dailyRate:
-            loc.salary_components?.length > 0
-              ? loc.salary_components.reduce(
-                  (sum, comp) => sum + comp.amount,
-                  0,
-                ) / (loc.worked_days || 1)
-              : 0,
-          daysWorked: loc.worked_days || 0,
-          fxRate: 1,
-          packageId: loc.package?.id || null,
-          salary_components: loc.salary_components || [],
-          subtotal: loc.subtotal || 0,
-          is_saved: true,
-        }));
-        setCountries(updatedCountries);
-
-        // Set the total earnings and gross salary from the API response
-        const totalGross = data.gross_salary || data.total_earnings || 0;
-        setTotalEarnings(data.total_earnings || 0);
-        setTotalDeductions(data.total_deductions || 0);
-        setGrossSalary(totalGross);
-        setNetSalary(data.net_salary || totalGross);
-      } else {
-        // If no location_breakdown, use the top-level values
-        setTotalEarnings(data.total_earnings || 0);
-        setTotalDeductions(data.total_deductions || 0);
-        setGrossSalary(data.gross_salary || 0);
-        setNetSalary(data.net_salary || 0);
-      }
-    }
-  }, [calculatedCountries]);
-
-  // Update overtime when data arrives
-  useEffect(() => {
-    if (
-      overtimeData &&
-      Array.isArray(overtimeData) &&
-      overtimeData.length > 0
-    ) {
-      // The API returns an array of objects with date, projects, etc.
-      setOvertimeRequests(
-        overtimeData.map((item, index) => ({
-          id: index + 1,
-          date: item.date || "",
-          day: item.day || "",
-          required_working_hours: item.required_working_hours || 0,
-          total_logged_hours: item.total_logged_hours || 0,
-          overtime_hours: item.overtime_hours || 0,
-          projects: item.projects || [],
-          // For backward compatibility with existing UI
-          project: item.projects?.map((p) => p.project_name).join(", ") || "",
-          hours: item.total_logged_hours || 0,
-          overtime_amount: 0, // This will be set by user
-          currency: item.currency || targetCurrency || "INR",
-          status: "pending",
-          reason: "",
-        })),
-      );
-    }
-  }, [overtimeData]);
-
-  // Update summary when data arrives
-  // Update summary when data arrives
-  useEffect(() => {
-    if (summaryData) {
-      // The API returns: { gross_salary, overtime_amount, deductions, net_pay }
-      setLocalSummaryData({
-        gross_salary: summaryData.gross_salary || 0,
-        overtime_amount: summaryData.overtime_amount || 0,
-        deductions: summaryData.deductions || 0,
-        net_pay: summaryData.net_pay || 0,
-        // Keep backward compatibility
-        gross_earnings: summaryData.gross_salary || 0,
-        total_deductions: summaryData.deductions || 0,
-        combined: summaryData.gross_salary || 0,
-      });
-    }
-  }, [summaryData]);
-
-  // ─── STEP 2: Calculate salary split by location ──────────────────────
+  // ─── STEP 2: Calculate salary split ──────────────────────────────────
   const handleCalculateSalarySplit = async () => {
     if (!selectedUserId) {
       showToast("Please select an employee first", "error");
@@ -744,7 +750,6 @@ function AddPayroll() {
           month: monthFormatted,
         }),
       ).unwrap();
-
       showToast("Salary split calculated successfully", "success");
     } catch (error) {
       console.error("Calculate salary split error:", error);
@@ -752,7 +757,7 @@ function AddPayroll() {
     }
   };
 
-  // ─── STEP 3: Fetch Overtime data ──────────────────────────────────────
+  // ─── STEP 3: Fetch Overtime ──────────────────────────────────────────
   const handleFetchOvertime = async () => {
     if (!selectedUserId) {
       showToast("Please select an employee first", "error");
@@ -770,7 +775,6 @@ function AddPayroll() {
           month: monthFormatted,
         }),
       ).unwrap();
-
       showToast("Overtime data fetched successfully", "success");
     } catch (error) {
       console.error("Fetch overtime error:", error);
@@ -796,7 +800,6 @@ function AddPayroll() {
           payPeriodYear: year,
         }),
       ).unwrap();
-
       showToast("Summary fetched successfully", "success");
     } catch (error) {
       console.error("Fetch summary error:", error);
@@ -804,7 +807,7 @@ function AddPayroll() {
     }
   };
 
-  // Get current step data based on form state
+  // ─── Get current step data ────────────────────────────────────────────
   const getCurrentStepData = () => {
     const step = reduxCurrentStep;
     let data = {};
@@ -894,7 +897,6 @@ function AddPayroll() {
           conversionRatesObj[item.currency] = parseFloat(item.rate) || 1;
         });
 
-        // USE CONVERTED AMOUNTS from conversionDetails
         const convertedGrossSalary =
           conversionDetails.gross_salary?.convertedAmount || 0;
         const convertedOvertime =
@@ -912,7 +914,6 @@ function AddPayroll() {
             deductions: convertedDeductions,
             net_pay: convertedNetPay,
             conversions: conversionDetails,
-            // Store original mixed currency data for reference
             original_breakdown: {
               gross_salary: conversionDetails.gross_salary?.breakdown || "",
               overtime: conversionDetails.overtime_amount?.breakdown || "",
@@ -922,7 +923,6 @@ function AddPayroll() {
           },
           target_currency: targetCurrency,
           conversion_rates: conversionRatesObj,
-          // Include all required fields for submission with CONVERTED amounts
           gross_salary: convertedGrossSalary,
           overtime: convertedOvertime,
           deductions: convertedDeductions,
@@ -960,9 +960,55 @@ function AddPayroll() {
     return data;
   };
 
-  // Save current step data
+  // ─── Save current step data ──────────────────────────────────────────
+  const handleSaveStep = async (step, data) => {
+    if (!selectedUserId) {
+      showToast("Please select an employee first", "error");
+      return false;
+    }
 
-  // Handle next step
+    try {
+      const monthNumber =
+        monthNames[payPeriodMonth] || new Date().getMonth() + 1;
+      const year = parseInt(payPeriodYear) || new Date().getFullYear();
+
+      const enrichedData = {
+        ...data,
+        pay_period_month: data.pay_period_month || monthNumber,
+        pay_period_year: data.pay_period_year || year,
+      };
+
+      console.log("Saving step with user_id:", selectedUserId);
+      console.log("Step data:", enrichedData);
+
+      const result = await dispatch(
+        savePayrollStep({
+          userId: selectedUserId,
+          step: step,
+          stepData: enrichedData,
+        }),
+      ).unwrap();
+
+      dispatch(updateStepData({ step, data: enrichedData }));
+      dispatch(markStepCompleted(step));
+
+      if (result.data && result.data.current_step) {
+        console.log("Current step from server:", result.data.current_step);
+      }
+
+      showToast(result.message || "Step data saved successfully", "success");
+      return true;
+    } catch (error) {
+      console.error("Failed to save step:", error);
+      showToast(
+        typeof error === "string" ? error : "Failed to save step data",
+        "error",
+      );
+      return false;
+    }
+  };
+
+  // ─── Handle next step ────────────────────────────────────────────────
   const handleNextStep = async () => {
     if (!selectedUserId) {
       showToast("Please select an employee first", "error");
@@ -1025,163 +1071,7 @@ function AddPayroll() {
     }
   };
 
-  // Handle final submission - Using converted amounts
-  // Handle final submission - Using converted amounts
-const handleSubmitPayroll = async () => {
-  if (!selectedUserId) {
-    showToast("Please select an employee first", "error");
-    return;
-  }
-
-  // Check if conversion has been done
-  if (!isConverted) {
-    showToast(
-      "Please convert the currency first before submitting",
-      "warning",
-    );
-    return;
-  }
-
-  try {
-    // First, ensure step 5 is saved
-    const finalData = getCurrentStepData();
-    const saved = await handleSaveStep(5, finalData);
-
-    if (!saved) {
-      showToast("Failed to save payroll data. Please try again.", "error");
-      return;
-    }
-
-    const monthNumber =
-      monthNames[payPeriodMonth] || new Date().getMonth() + 1;
-    const year = parseInt(payPeriodYear) || new Date().getFullYear();
-
-    // USE CONVERTED AMOUNTS from conversionDetails
-    const convertedGrossSalary =
-      conversionDetails.gross_salary?.convertedAmount || 0;
-    const convertedOvertime =
-      conversionDetails.overtime_amount?.convertedAmount || 0;
-    const convertedDeductions =
-      conversionDetails.deductions?.convertedAmount || 0;
-    // Net Pay = Gross + Overtime - Deductions (all in target currency)
-    const convertedNetPay =
-      convertedGrossSalary + convertedOvertime - convertedDeductions;
-
-    // Determine the primary currency (target currency)
-    const primaryCurrency = targetCurrency || "INR";
-
-    // Build the submission payload with CONVERTED amounts
-    const payload = {
-      user_id: parseInt(selectedUserId),
-      pay_period_month: parseInt(monthNumber),
-      pay_period_year: parseInt(year),
-      // Use CONVERTED amounts
-      gross_salary: parseFloat(convertedGrossSalary),
-      overtime: parseFloat(convertedOvertime),
-      deductions: parseFloat(convertedDeductions),
-      net_pay: parseFloat(convertedNetPay),
-      currency: primaryCurrency,
-      // Additional data for reference (original mixed currency data)
-      target_currency: targetCurrency,
-      conversion_rates: conversionRatesList.reduce((acc, item) => {
-        acc[item.currency] = parseFloat(item.rate) || 1;
-        return acc;
-      }, {}),
-      location_breakdown: countries.map((c) => ({
-        location_name: c.name,
-        currency: c.currency,
-        subtotal: c.subtotal || 0,
-        worked_days: c.daysWorked || 0,
-        salary_components: c.salary_components || [],
-      })),
-      overtime_details: overtimeRequests.map((req) => ({
-        date: req.date,
-        overtime_hours: req.overtime_hours || 0,
-        amount_original: parseFloat(req.overtime_amount) || 0,
-        currency_original: req.currency || "INR",
-        amount_converted: parseFloat(req.overtime_amount) || 0,
-        projects: req.projects || [],
-      })),
-      deductions_details: deductions.map((d) => ({
-        type: d.type,
-        amount_original: parseFloat(d.amount) || 0,
-        currency_original: d.currency || "INR",
-        amount_converted: parseFloat(d.amount) || 0,
-        is_statutory: d.is_statutory || "no",
-      })),
-      // Include conversion details for reference with CORRECT net pay breakdown
-      conversion_details: {
-        gross_salary: {
-          original_breakdown: conversionDetails.gross_salary?.breakdown || "",
-          converted_amount: convertedGrossSalary,
-          target_currency: targetCurrency,
-          rates: conversionRatesList,
-        },
-        overtime: {
-          original_breakdown:
-            conversionDetails.overtime_amount?.breakdown || "",
-          converted_amount: convertedOvertime,
-          target_currency: targetCurrency,
-        },
-        deductions: {
-          original_breakdown: conversionDetails.deductions?.breakdown || "",
-          converted_amount: convertedDeductions,
-          target_currency: targetCurrency,
-        },
-        net_pay: {
-          original_breakdown: conversionDetails.net_pay?.breakdown || "",
-          converted_amount: convertedNetPay,
-          target_currency: targetCurrency,
-        },
-      },
-    };
-
-    console.log("Submitting payroll with CONVERTED amounts:", {
-      gross_salary: convertedGrossSalary,
-      overtime: convertedOvertime,
-      deductions: convertedDeductions,
-      net_pay: convertedNetPay,
-      currency: primaryCurrency,
-      calculation: `${convertedGrossSalary} + ${convertedOvertime} - ${convertedDeductions} = ${convertedNetPay}`,
-    });
-    console.log("Full payload:", payload);
-
-    // Submit the payroll
-    const result = await dispatch(submitPayroll(payload)).unwrap();
-
-    showToast(
-      result.message ||
-        "Payroll submitted successfully! Payslip has been generated!",
-      "success",
-    );
-
-    // Generate payslip using the API endpoint
-    if (result.data?.id) {
-      const payrollId = result.data?.id;
-      if (payrollId) {
-        try {
-          await dispatch(generatePayslip(payrollId)).unwrap();
-        } catch (pdfError) {
-          console.error("Failed to generate payslip:", pdfError);
-          showToast("Payroll submitted but payslip generation failed", "warning");
-        }
-      }
-    }
-
-    // Redirect to payroll page after a delay
-    setTimeout(() => {
-      window.location.href = `${basePath}/payroll`;
-    }, 3000);
-  } catch (error) {
-    console.error("Submit payroll error:", error);
-    showToast(
-      typeof error === "string" ? error : "Failed to submit payroll",
-      "error",
-    );
-  }
-};
-
-  // Handle step change
+  // ─── Handle step change ──────────────────────────────────────────────
   const handleStepChange = async (step) => {
     if (!selectedUserId) {
       showToast("Please select an employee first", "error");
@@ -1246,67 +1136,144 @@ const handleSubmitPayroll = async () => {
     }
   };
 
-  // Handle previous step
+  // ─── Handle previous step ────────────────────────────────────────────
   const handlePreviousStep = () => {
     if (reduxCurrentStep > 1) {
       dispatch(setCurrentStep(reduxCurrentStep - 1));
     }
   };
 
-  // Save current step data
-  const handleSaveStep = async (step, data) => {
+  // ─── Handle update submission ────────────────────────────────────────
+  const handleUpdatePayroll = async () => {
     if (!selectedUserId) {
       showToast("Please select an employee first", "error");
-      return false;
+      return;
+    }
+
+    if (!isConverted) {
+      showToast("Please convert the currency first before updating", "warning");
+      return;
     }
 
     try {
+      const finalData = getCurrentStepData();
+      const saved = await handleSaveStep(5, finalData);
+
+      if (!saved) {
+        showToast("Failed to save payroll data. Please try again.", "error");
+        return;
+      }
+
       const monthNumber =
         monthNames[payPeriodMonth] || new Date().getMonth() + 1;
       const year = parseInt(payPeriodYear) || new Date().getFullYear();
 
-      const enrichedData = {
-        ...data,
-        pay_period_month: data.pay_period_month || monthNumber,
-        pay_period_year: data.pay_period_year || year,
+      const convertedGrossSalary =
+        conversionDetails.gross_salary?.convertedAmount || 0;
+      const convertedOvertime =
+        conversionDetails.overtime_amount?.convertedAmount || 0;
+      const convertedDeductions =
+        conversionDetails.deductions?.convertedAmount || 0;
+      const convertedNetPay =
+        convertedGrossSalary + convertedOvertime - convertedDeductions;
+
+      const primaryCurrency = targetCurrency || "INR";
+
+      const payload = {
+        user_id: parseInt(selectedUserId),
+        pay_period_month: parseInt(monthNumber),
+        pay_period_year: parseInt(year),
+        gross_salary: parseFloat(convertedGrossSalary),
+        overtime: parseFloat(convertedOvertime),
+        deductions: parseFloat(convertedDeductions),
+        net_pay: parseFloat(convertedNetPay),
+        currency: primaryCurrency,
+        target_currency: targetCurrency,
+        conversion_rates: conversionRatesList.reduce((acc, item) => {
+          acc[item.currency] = parseFloat(item.rate) || 1;
+          return acc;
+        }, {}),
+        location_breakdown: countries.map((c) => ({
+          location_name: c.name,
+          currency: c.currency,
+          subtotal: c.subtotal || 0,
+          worked_days: c.daysWorked || 0,
+          salary_components: c.salary_components || [],
+        })),
+        overtime_details: overtimeRequests.map((req) => ({
+          date: req.date,
+          overtime_hours: req.overtime_hours || 0,
+          amount_original: parseFloat(req.overtime_amount) || 0,
+          currency_original: req.currency || "INR",
+          amount_converted: parseFloat(req.overtime_amount) || 0,
+          projects: req.projects || [],
+        })),
+        deductions_details: deductions.map((d) => ({
+          type: d.type,
+          amount_original: parseFloat(d.amount) || 0,
+          currency_original: d.currency || "INR",
+          amount_converted: parseFloat(d.amount) || 0,
+          is_statutory: d.is_statutory || "no",
+        })),
+        conversion_details: {
+          gross_salary: {
+            original_breakdown: conversionDetails.gross_salary?.breakdown || "",
+            converted_amount: convertedGrossSalary,
+            target_currency: targetCurrency,
+            rates: conversionRatesList,
+          },
+          overtime: {
+            original_breakdown:
+              conversionDetails.overtime_amount?.breakdown || "",
+            converted_amount: convertedOvertime,
+            target_currency: targetCurrency,
+          },
+          deductions: {
+            original_breakdown: conversionDetails.deductions?.breakdown || "",
+            converted_amount: convertedDeductions,
+            target_currency: targetCurrency,
+          },
+          net_pay: {
+            original_breakdown: conversionDetails.net_pay?.breakdown || "",
+            converted_amount: convertedNetPay,
+            target_currency: targetCurrency,
+          },
+        },
       };
 
-      console.log("Saving step with user_id:", selectedUserId);
-      console.log("Step data:", enrichedData);
+      console.log("Updating payroll with CONVERTED amounts:", {
+        gross_salary: convertedGrossSalary,
+        overtime: convertedOvertime,
+        deductions: convertedDeductions,
+        net_pay: convertedNetPay,
+        currency: primaryCurrency,
+      });
 
-      const result = await dispatch(
-        savePayrollStep({
-          userId: selectedUserId,
-          step: step,
-          stepData: enrichedData,
-        }),
-      ).unwrap();
+      await dispatch(submitPayroll(payload)).unwrap();
 
-      dispatch(updateStepData({ step, data: enrichedData }));
-      dispatch(markStepCompleted(step));
-
-      // Check if the save was successful and current_step is updated
-      if (result.data && result.data.current_step) {
-        console.log("Current step from server:", result.data.current_step);
-        // If current_step is 6, the payroll is ready for submission
-        if (result.data.current_step === 6) {
-          console.log("Payroll data is complete and ready for submission");
-        }
+      if (saved) {
+        showToast("Payroll updated successfully!", "success");
+        dispatch(setCurrentPayroll(null)); // Clear the current payroll
+        setTimeout(() => {
+          navigate(`${basePath}/payroll/${id}`);
+        }, 2000);
       }
-
-      showToast(result.message || "Step data saved successfully", "success");
-      return true;
     } catch (error) {
-      console.error("Failed to save step:", error);
+      console.error("Update payroll error:", error);
       showToast(
-        typeof error === "string" ? error : "Failed to save step data",
+        typeof error === "string" ? error : "Failed to update payroll",
         "error",
       );
-      return false;
     }
   };
 
-  // Overtime actions
+  // ─── Handle cancel ────────────────────────────────────────────────────
+  const handleCancel = () => {
+    dispatch(setCurrentPayroll(null)); // Clear the current payroll
+    navigate(`${basePath}/payroll`);
+  };
+
+  // ─── Overtime actions ─────────────────────────────────────────────────
   const handleOvertimeAction = (id, newStatus) => {
     setOvertimeRequests((prev) =>
       prev.map((req) => (req.id === id ? { ...req, status: newStatus } : req)),
@@ -1319,7 +1286,7 @@ const handleSubmitPayroll = async () => {
     );
   };
 
-  // Country actions
+  // ─── Country actions ──────────────────────────────────────────────────
   const handleCountryChange = (id, field, value) => {
     setCountries((prev) =>
       prev.map((c) => (c.id === id ? { ...c, [field]: value } : c)),
@@ -1354,7 +1321,7 @@ const handleSubmitPayroll = async () => {
     setCountries(countries.filter((c) => c.id !== id));
   };
 
-  // Deduction actions
+  // ─── Deduction actions ────────────────────────────────────────────────
   const handleDeductionChange = (id, field, value) => {
     setDeductions((prev) =>
       prev.map((d) => (d.id === id ? { ...d, [field]: value } : d)),
@@ -1377,9 +1344,300 @@ const handleSubmitPayroll = async () => {
   };
 
   const handleRemoveDeduction = (id) => {
-    // Allow removal even if only one deduction exists
     setDeductions(deductions.filter((d) => d.id !== id));
   };
+
+  // ─── Generate payslip PDF ─────────────────────────────────────────────
+  const generatePayslipPDF = () => {
+    const doc = new jsPDF();
+
+    doc.setFontSize(18);
+    doc.text("Employee Payslip", 14, 22);
+
+    doc.setFontSize(11);
+    const empName = employeeName || "Employee";
+    const empId = employeeId || "EMP-0000";
+    doc.text(`Employee: ${empName} (${empId})`, 14, 32);
+    doc.text(`Organization: ${organizationName}`, 14, 38);
+    doc.text(
+      `Pay Period: ${payPeriodMonth || "May"} ${payPeriodYear || "2026"}`,
+      14,
+      44,
+    );
+    doc.text(`Generated On: ${new Date().toLocaleDateString()}`, 14, 50);
+    doc.text(`Currency: ${targetCurrency}`, 14, 56);
+
+    // Country Split Table
+    const countryRows = countries.map((c) => {
+      const subtotal = c.subtotal || 0;
+      let convertedAmount = subtotal;
+      if (c.currency !== targetCurrency) {
+        const rate =
+          conversionRatesList.find((r) => r.currency === c.currency)?.rate || 1;
+        convertedAmount = subtotal * rate;
+      }
+      return [
+        c.name || "-",
+        c.daysWorked || "0",
+        `${c.currency || ""} ${(c.dailyRate || 0).toFixed(2)}`,
+        `${targetCurrency} ${convertedAmount.toFixed(2)}`,
+      ];
+    });
+
+    autoTable(doc, {
+      startY: 62,
+      head: [
+        [
+          "Package / Location",
+          "Days Logged",
+          "Daily Rate",
+          `Amount (${targetCurrency})`,
+        ],
+      ],
+      body: countryRows,
+      theme: "grid",
+      headStyles: { fillColor: [34, 197, 94] },
+    });
+
+    // Overtime Table
+    const overtimeRows = overtimeRequests.map((req) => {
+      const amount = parseFloat(req.overtime_amount) || 0;
+      let convertedAmount = amount;
+      if (req.currency && req.currency !== targetCurrency) {
+        const rate =
+          conversionRatesList.find((r) => r.currency === req.currency)?.rate ||
+          1;
+        convertedAmount = amount * rate;
+      }
+      return [
+        req.project || "-",
+        req.date || "-",
+        (req.overtime_hours || req.hours || 0).toString(),
+        `${targetCurrency} ${convertedAmount.toFixed(2)}`,
+      ];
+    });
+
+    autoTable(doc, {
+      startY: doc.lastAutoTable.finalY + 10,
+      head: [
+        [
+          "Overtime Project",
+          "Date",
+          "Hours",
+          `Overtime Amount (${targetCurrency})`,
+        ],
+      ],
+      body: overtimeRows,
+      theme: "grid",
+      headStyles: { fillColor: [34, 197, 94] },
+    });
+
+    // Deductions Table
+    const deductionRows = deductions.map((d) => {
+      const amount = parseFloat(d.amount) || 0;
+      let convertedAmount = amount;
+      if (d.currency && d.currency !== targetCurrency) {
+        const rate =
+          conversionRatesList.find((r) => r.currency === d.currency)?.rate || 1;
+        convertedAmount = amount * rate;
+      }
+      return [
+        d.type || "-",
+        d.currency || targetCurrency,
+        `${targetCurrency} ${convertedAmount.toFixed(2)}`,
+      ];
+    });
+
+    autoTable(doc, {
+      startY: doc.lastAutoTable.finalY + 10,
+      head: [["Deduction Type", "Currency", `Amount (${targetCurrency})`]],
+      body: deductionRows,
+      theme: "grid",
+      headStyles: { fillColor: [239, 68, 68] },
+    });
+
+    // Summary
+    let totalGrossConverted = 0;
+    countries.forEach((c) => {
+      const subtotal = c.subtotal || 0;
+      if (c.currency !== targetCurrency) {
+        const rate =
+          conversionRatesList.find((r) => r.currency === c.currency)?.rate || 1;
+        totalGrossConverted += subtotal * rate;
+      } else {
+        totalGrossConverted += subtotal;
+      }
+    });
+
+    let totalOvertimeConverted = 0;
+    overtimeRequests.forEach((req) => {
+      const amount = parseFloat(req.overtime_amount) || 0;
+      if (req.currency && req.currency !== targetCurrency) {
+        const rate =
+          conversionRatesList.find((r) => r.currency === req.currency)?.rate ||
+          1;
+        totalOvertimeConverted += amount * rate;
+      } else {
+        totalOvertimeConverted += amount;
+      }
+    });
+
+    let totalDeductionsConverted = 0;
+    deductions.forEach((d) => {
+      const amount = parseFloat(d.amount) || 0;
+      if (d.currency && d.currency !== targetCurrency) {
+        const rate =
+          conversionRatesList.find((r) => r.currency === d.currency)?.rate || 1;
+        totalDeductionsConverted += amount * rate;
+      } else {
+        totalDeductionsConverted += amount;
+      }
+    });
+
+    const totalNetPay =
+      totalGrossConverted + totalOvertimeConverted - totalDeductionsConverted;
+
+    autoTable(doc, {
+      startY: doc.lastAutoTable.finalY + 10,
+      head: [["Gross Earnings", "Overtime", "Total Deductions", "Net Pay"]],
+      body: [
+        [
+          `${targetCurrency} ${totalGrossConverted.toFixed(2)}`,
+          `${targetCurrency} ${totalOvertimeConverted.toFixed(2)}`,
+          `${targetCurrency} ${totalDeductionsConverted.toFixed(2)}`,
+          `${targetCurrency} ${totalNetPay.toFixed(2)}`,
+        ],
+      ],
+      theme: "grid",
+      headStyles: { fillColor: [34, 197, 94] },
+    });
+
+    if (conversionRatesList.length > 0) {
+      const rateInfo = conversionRatesList
+        .map((r) => `${r.currency} to ${targetCurrency}: ${r.rate}`)
+        .join(", ");
+      doc.setFontSize(9);
+      doc.text(
+        `Conversion Rates: ${rateInfo}`,
+        14,
+        doc.lastAutoTable.finalY + 10,
+      );
+    }
+
+    doc.save(`Payslip_${employeeName.replace(/\s/g, "_")}_${employeeId}.pdf`);
+    showToast("Payslip generated successfully!", "success");
+  };
+
+  // ─── Handle success/error messages ────────────────────────────────────
+  useEffect(() => {
+    if (successMessage) {
+      showToast(successMessage, "success");
+      dispatch(clearPayrollSuccess());
+    }
+    if (error) {
+      showToast(error, "error");
+      dispatch(clearPayrollError());
+    }
+  }, [successMessage, error, dispatch]);
+
+  // ─── Update countries when calculated data arrives ──────────────────
+  useEffect(() => {
+    if (calculatedCountries) {
+      const data = calculatedCountries;
+      if (data.location_breakdown) {
+        const updatedCountries = data.location_breakdown.map((loc, index) => ({
+          id: index + 1,
+          name: loc.location_name || "",
+          currency: loc.currency?.code || loc.package?.currency || "AED",
+          dailyRate:
+            loc.salary_components?.reduce((sum, comp) => sum + comp.amount, 0) /
+              (loc.worked_days || 1) || 0,
+          daysWorked: loc.worked_days || 0,
+          fxRate: 1,
+          packageId: loc.package?.id || null,
+          salary_components: loc.salary_components || [],
+          subtotal: loc.subtotal || 0,
+          is_saved: true,
+        }));
+        setCountries(updatedCountries);
+        setTotalEarnings(data.total_earnings || 0);
+        setTotalDeductions(data.total_deductions || 0);
+        setGrossSalary(data.gross_salary || 0);
+        setNetSalary(data.net_salary || 0);
+      }
+    }
+  }, [calculatedCountries]);
+
+  // ─── Update overtime when data arrives ──────────────────────────────
+  useEffect(() => {
+    if (
+      overtimeData &&
+      Array.isArray(overtimeData) &&
+      overtimeData.length > 0
+    ) {
+      setOvertimeRequests(
+        overtimeData.map((item, index) => ({
+          id: index + 1,
+          date: item.date || "",
+          day: item.day || "",
+          required_working_hours: item.required_working_hours || 0,
+          total_logged_hours: item.total_logged_hours || 0,
+          overtime_hours: item.overtime_hours || 0,
+          projects: item.projects || [],
+          project: item.projects?.map((p) => p.project_name).join(", ") || "",
+          hours: item.total_logged_hours || 0,
+          overtime_amount: 0,
+          currency: item.currency || targetCurrency || "INR",
+          status: "pending",
+          reason: "",
+        })),
+      );
+    }
+  }, [overtimeData]);
+
+  // ─── Update summary when data arrives ───────────────────────────────
+  useEffect(() => {
+    if (summaryData) {
+      setLocalSummaryData({
+        gross_salary: summaryData.gross_salary || 0,
+        overtime_amount: summaryData.overtime_amount || 0,
+        deductions: summaryData.deductions || 0,
+        net_pay: summaryData.net_pay || 0,
+        gross_earnings: summaryData.gross_salary || 0,
+        total_deductions: summaryData.deductions || 0,
+        combined: summaryData.gross_salary || 0,
+      });
+    }
+  }, [summaryData]);
+
+  if (isLoading && !isDataLoaded) {
+    return (
+      <div className="w-full overflow-x-hidden px-4 md:px-6">
+        <div className="flex justify-center items-center h-96">
+          <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-green-500"></div>
+        </div>
+      </div>
+    );
+  }
+
+  if (!currentPayroll && isDataLoaded) {
+    return (
+      <div className="w-full overflow-x-hidden px-4 md:px-6">
+        <div className="text-center py-12 bg-white dark:bg-gray-800 rounded-xl border border-gray-200 dark:border-gray-700">
+          <i className="fas fa-file-invoice text-6xl text-gray-300 dark:text-gray-600 mb-4 block"></i>
+          <h3 className="text-xl font-semibold text-gray-700 dark:text-gray-300">
+            Payroll not found
+          </h3>
+          <button
+            onClick={() => navigate(`${basePath}/payroll`)}
+            className="mt-4 px-4 py-2 bg-green-500 text-white rounded-lg hover:bg-green-600"
+          >
+            Back to Payroll
+          </button>
+        </div>
+      </div>
+    );
+  }
 
   return (
     <div className="w-full overflow-x-hidden px-4 md:px-6">
@@ -1392,18 +1650,61 @@ const handleSubmitPayroll = async () => {
           Payroll
         </Link>
         <i className="fas fa-chevron-right text-gray-400 text-[10px] md:text-xs"></i>
-        <span className="text-gray-500 dark:text-gray-400">Add Payroll</span>
+        <Link
+          to={`${basePath}/payroll/${id}`}
+          className="text-green-500 hover:text-green-600 font-medium"
+        >
+          Payroll Details
+        </Link>
+        <i className="fas fa-chevron-right text-gray-400 text-[10px] md:text-xs"></i>
+        <span className="text-gray-500 dark:text-gray-400">Edit Payroll</span>
       </div>
 
       {/* Page Header */}
       <div className="mb-4 md:mb-6">
         <h2 className="text-xl md:text-3xl font-bold bg-gradient-to-r from-gray-800 to-green-600 dark:from-gray-200 dark:to-green-400 bg-clip-text text-transparent">
-          <i className="fas fa-plus-circle mr-2"></i> Add New Payroll
+          <i className="fas fa-edit mr-2"></i> Edit Payroll
         </h2>
         <p className="text-xs md:text-sm text-gray-500 dark:text-gray-400 mt-1">
-          Configure employee salary, country-wise work splits, and deductions
+          Update employee salary, country-wise work splits, and deductions
         </p>
       </div>
+
+      {/* Status Banner */}
+      {currentPayroll?.status && (
+        <div
+          className={`mb-4 p-3 rounded-lg border ${
+            currentPayroll.status === "completed" ||
+            currentPayroll.status === "paid"
+              ? "bg-green-50 dark:bg-green-900/20 border-green-200 dark:border-green-800 text-green-700 dark:text-green-300"
+              : currentPayroll.status === "pending"
+                ? "bg-yellow-50 dark:bg-yellow-900/20 border-yellow-200 dark:border-yellow-800 text-yellow-700 dark:text-yellow-300"
+                : "bg-gray-50 dark:bg-gray-800 border-gray-200 dark:border-gray-700 text-gray-600 dark:text-gray-400"
+          }`}
+        >
+          <div className="flex items-center gap-2">
+            <i
+              className={`fas ${
+                currentPayroll.status === "completed" ||
+                currentPayroll.status === "paid"
+                  ? "fa-check-circle"
+                  : currentPayroll.status === "pending"
+                    ? "fa-clock"
+                    : "fa-file"
+              }`}
+            ></i>
+            <span className="font-semibold capitalize">
+              Current Status: {currentPayroll.status}
+            </span>
+            {(currentPayroll.status === "completed" ||
+              currentPayroll.status === "paid") && (
+              <span className="text-sm text-yellow-600 dark:text-yellow-400">
+                • Some fields may be read-only
+              </span>
+            )}
+          </div>
+        </div>
+      )}
 
       {/* Stepper */}
       <div className="flex flex-wrap gap-2 mb-6">
@@ -1452,7 +1753,11 @@ const handleSubmitPayroll = async () => {
                       className="w-full px-3 md:px-4 py-2 md:py-3 bg-gray-50 dark:bg-gray-800 border border-gray-200 dark:border-gray-700 rounded-lg text-sm md:text-base text-gray-800 dark:text-gray-200 focus:outline-none focus:border-green-500 focus:ring-2 focus:ring-green-500/20"
                       value={selectedEmployee}
                       onChange={(e) => handleEmployeeSelect(e.target.value)}
-                      disabled={employeesLoading}
+                      disabled={
+                        employeesLoading ||
+                        currentPayroll?.status === "completed" ||
+                        currentPayroll?.status === "paid"
+                      }
                     >
                       <option value="">
                         {employeesLoading
@@ -1562,7 +1867,11 @@ const handleSubmitPayroll = async () => {
                       className="w-full px-3 md:px-4 py-2 md:py-3 bg-gray-50 dark:bg-gray-800 border border-gray-200 dark:border-gray-700 rounded-lg text-sm md:text-base text-gray-800 dark:text-gray-200 focus:outline-none focus:border-green-500 focus:ring-2 focus:ring-green-500/20"
                       value={payPeriodMonth}
                       onChange={(e) => setPayPeriodMonth(e.target.value)}
-                      disabled={!selectedUserId}
+                      disabled={
+                        !selectedUserId ||
+                        currentPayroll?.status === "completed" ||
+                        currentPayroll?.status === "paid"
+                      }
                     >
                       <option value="">Select Month</option>
                       <option value="January">January</option>
@@ -1588,7 +1897,11 @@ const handleSubmitPayroll = async () => {
                       className="w-full px-3 md:px-4 py-2 md:py-3 bg-gray-50 dark:bg-gray-800 border border-gray-200 dark:border-gray-700 rounded-lg text-sm md:text-base text-gray-800 dark:text-gray-200 focus:outline-none focus:border-green-500 focus:ring-2 focus:ring-green-500/20"
                       value={payPeriodYear}
                       onChange={(e) => setPayPeriodYear(e.target.value)}
-                      disabled={!selectedUserId}
+                      disabled={
+                        !selectedUserId ||
+                        currentPayroll?.status === "completed" ||
+                        currentPayroll?.status === "paid"
+                      }
                     >
                       <option value="">Select Year</option>
                       <option value="2024">2024</option>
@@ -1608,7 +1921,11 @@ const handleSubmitPayroll = async () => {
                         value={periodStart}
                         onChange={(e) => setPeriodStart(e.target.value)}
                         className="w-full px-3 md:px-4 py-2 md:py-3 bg-gray-50 dark:bg-gray-800 border border-gray-200 dark:border-gray-700 rounded-lg text-sm md:text-base text-gray-800 dark:text-gray-200 focus:outline-none focus:border-green-500 focus:ring-2 focus:ring-green-500/20"
-                        disabled={!selectedUserId}
+                        disabled={
+                          !selectedUserId ||
+                          currentPayroll?.status === "completed" ||
+                          currentPayroll?.status === "paid"
+                        }
                       />
                     </div>
                   </div>
@@ -1623,7 +1940,11 @@ const handleSubmitPayroll = async () => {
                         value={periodEnd}
                         onChange={(e) => setPeriodEnd(e.target.value)}
                         className="w-full px-3 md:px-4 py-2 md:py-3 bg-gray-50 dark:bg-gray-800 border border-gray-200 dark:border-gray-700 rounded-lg text-sm md:text-base text-gray-800 dark:text-gray-200 focus:outline-none focus:border-green-500 focus:ring-2 focus:ring-green-500/20"
-                        disabled={!selectedUserId}
+                        disabled={
+                          !selectedUserId ||
+                          currentPayroll?.status === "completed" ||
+                          currentPayroll?.status === "paid"
+                        }
                       />
                     </div>
                   </div>
@@ -1638,7 +1959,11 @@ const handleSubmitPayroll = async () => {
                         value={paymentDate}
                         onChange={(e) => setPaymentDate(e.target.value)}
                         className="w-full px-3 md:px-4 py-2 md:py-3 bg-gray-50 dark:bg-gray-800 border border-gray-200 dark:border-gray-700 rounded-lg text-sm md:text-base text-gray-800 dark:text-gray-200 focus:outline-none focus:border-green-500 focus:ring-2 focus:ring-green-500/20"
-                        disabled={!selectedUserId}
+                        disabled={
+                          !selectedUserId ||
+                          currentPayroll?.status === "completed" ||
+                          currentPayroll?.status === "paid"
+                        }
                       />
                     </div>
                   </div>
@@ -1651,7 +1976,11 @@ const handleSubmitPayroll = async () => {
                       className="w-full px-3 md:px-4 py-2 md:py-3 bg-gray-50 dark:bg-gray-800 border border-gray-200 dark:border-gray-700 rounded-lg text-sm md:text-base text-gray-800 dark:text-gray-200 focus:outline-none focus:border-green-500 focus:ring-2 focus:ring-green-500/20"
                       value={paymentMode || ""}
                       onChange={(e) => setPaymentMode(e.target.value || null)}
-                      disabled={!selectedUserId}
+                      disabled={
+                        !selectedUserId ||
+                        currentPayroll?.status === "completed" ||
+                        currentPayroll?.status === "paid"
+                      }
                     >
                       <option value="">Select Payment Mode</option>
                       <option value="NEFT">Bank Transfer (NEFT)</option>
@@ -1670,7 +1999,11 @@ const handleSubmitPayroll = async () => {
                       value={totalWorkingDays}
                       onChange={(e) => setTotalWorkingDays(e.target.value)}
                       className="w-full px-3 md:px-4 py-2 md:py-3 bg-gray-50 dark:bg-gray-800 border border-gray-200 dark:border-gray-700 rounded-lg text-sm md:text-base text-gray-800 dark:text-gray-200 focus:outline-none focus:border-green-500 focus:ring-2 focus:ring-green-500/20"
-                      disabled={!selectedUserId}
+                      disabled={
+                        !selectedUserId ||
+                        currentPayroll?.status === "completed" ||
+                        currentPayroll?.status === "paid"
+                      }
                     />
                   </div>
                   <div>
@@ -1683,7 +2016,11 @@ const handleSubmitPayroll = async () => {
                       value={daysPresent}
                       onChange={(e) => setDaysPresent(e.target.value)}
                       className="w-full px-3 md:px-4 py-2 md:py-3 bg-gray-50 dark:bg-gray-800 border border-gray-200 dark:border-gray-700 rounded-lg text-sm md:text-base text-gray-800 dark:text-gray-200 focus:outline-none focus:border-green-500 focus:ring-2 focus:ring-green-500/20"
-                      disabled={!selectedUserId}
+                      disabled={
+                        !selectedUserId ||
+                        currentPayroll?.status === "completed" ||
+                        currentPayroll?.status === "paid"
+                      }
                     />
                   </div>
                 </div>
@@ -1691,7 +2028,7 @@ const handleSubmitPayroll = async () => {
             </>
           )}
 
-          {/* Step 2 - Country Split / Packages - WITH EDITABLE FIELDS */}
+          {/* Step 2 - Country Split */}
           {reduxCurrentStep === 2 && (
             <div>
               <div className="flex items-center gap-2 pb-3 border-b-2 border-green-100 dark:border-green-900/30 mb-4 md:mb-6">
@@ -1750,14 +2087,13 @@ const handleSubmitPayroll = async () => {
                 </div>
               )}
 
-              {/* Country Cards with Editable Fields */}
+              {/* Country Cards */}
               <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                 {countries.map((country) => (
                   <div
                     key={country.id}
                     className="bg-white dark:bg-gray-800 border border-gray-200 dark:border-gray-700 rounded-xl overflow-hidden shadow-sm hover:shadow-md transition-shadow"
                   >
-                    {/* Header */}
                     <div className="bg-gray-50 dark:bg-gray-700/50 px-4 py-3 border-b border-gray-200 dark:border-gray-700 flex justify-between items-center">
                       <div>
                         <h4 className="font-semibold text-gray-800 dark:text-gray-200">
@@ -1779,7 +2115,6 @@ const handleSubmitPayroll = async () => {
                       </div>
                     </div>
 
-                    {/* Body - Editable Salary Components */}
                     <div className="p-4 space-y-3">
                       {country.salary_components &&
                       country.salary_components.length > 0 ? (
@@ -1823,10 +2158,13 @@ const handleSubmitPayroll = async () => {
                                     },
                                   );
                                   setCountries(updatedCountries);
-                                  // Reset saved state when user makes changes
                                   setIsStep2Saved(false);
                                 }}
                                 className="flex-1 px-2 py-1 text-sm rounded border border-gray-200 dark:border-gray-600 bg-white dark:bg-gray-800 text-gray-700 dark:text-gray-300 focus:outline-none focus:border-green-500"
+                                disabled={
+                                  currentPayroll?.status === "completed" ||
+                                  currentPayroll?.status === "paid"
+                                }
                               />
                             </div>
                           ))}
@@ -1849,7 +2187,7 @@ const handleSubmitPayroll = async () => {
                 ))}
               </div>
 
-              {/* Save Packages Button - Only in Step 2 */}
+              {/* Save Packages Button */}
               <div className="mt-6 flex justify-end">
                 <button
                   onClick={async () => {
@@ -1893,12 +2231,15 @@ const handleSubmitPayroll = async () => {
                     }
                   }}
                   className="px-6 py-2.5 rounded-full font-semibold bg-green-500 text-white hover:bg-green-600 transition-all flex items-center gap-2 text-sm shadow-md hover:shadow-lg"
+                  disabled={
+                    currentPayroll?.status === "completed" ||
+                    currentPayroll?.status === "paid"
+                  }
                 >
                   <i className="fas fa-save"></i> Save Packages
                 </button>
               </div>
 
-              {/* Mixed Currencies Notice */}
               {countries.some((c) => c.currency !== targetCurrency) && (
                 <div className="mt-4 p-3 bg-yellow-50 dark:bg-yellow-900/20 border border-yellow-200 dark:border-yellow-800 rounded-lg text-sm text-yellow-700 dark:text-yellow-300">
                   <i className="fas fa-exclamation-triangle mr-2"></i>
@@ -1910,7 +2251,6 @@ const handleSubmitPayroll = async () => {
           )}
 
           {/* Step 3 - Overtime */}
-          {/* Step 3 - Overtime - Updated Input Field */}
           {reduxCurrentStep === 3 && (
             <div>
               <div className="flex items-center gap-2 pb-3 border-b-2 border-green-100 dark:border-green-900/30 mb-4 md:mb-6">
@@ -2002,18 +2342,14 @@ const handleSubmitPayroll = async () => {
                                 inputMode="decimal"
                                 value={req.overtime_amount || ""}
                                 onChange={(e) => {
-                                  // Only allow numbers, decimal point, and backspace
                                   const value = e.target.value;
-                                  // Remove any non-numeric characters except decimal point
                                   const cleaned = value.replace(/[^0-9.]/g, "");
-                                  // Prevent multiple decimal points
                                   const parts = cleaned.split(".");
                                   let finalValue = cleaned;
                                   if (parts.length > 2) {
                                     finalValue =
                                       parts[0] + "." + parts.slice(1).join("");
                                   }
-                                  // Limit to 2 decimal places
                                   if (finalValue.includes(".")) {
                                     const [whole, decimal] =
                                       finalValue.split(".");
@@ -2029,7 +2365,6 @@ const handleSubmitPayroll = async () => {
                                   );
                                 }}
                                 onKeyDown={(e) => {
-                                  // Allow: backspace, delete, tab, escape, enter, decimal point
                                   const allowedKeys = [
                                     "Backspace",
                                     "Delete",
@@ -2039,16 +2374,16 @@ const handleSubmitPayroll = async () => {
                                     ".",
                                     "Decimal",
                                   ];
-                                  if (allowedKeys.includes(e.key)) {
-                                    return;
-                                  }
-                                  // Allow numbers
-                                  if (!/^[0-9]$/.test(e.key)) {
+                                  if (allowedKeys.includes(e.key)) return;
+                                  if (!/^[0-9]$/.test(e.key))
                                     e.preventDefault();
-                                  }
                                 }}
                                 className="w-24 px-2 py-1 text-sm rounded border border-blue-200 dark:border-blue-700 bg-blue-50 dark:bg-blue-900/10 text-gray-700 dark:text-gray-300 focus:outline-none focus:border-blue-500"
                                 placeholder="0.00"
+                                disabled={
+                                  currentPayroll?.status === "completed" ||
+                                  currentPayroll?.status === "paid"
+                                }
                               />
                             </td>
                             <td className="py-3 px-4 text-center">
@@ -2062,6 +2397,10 @@ const handleSubmitPayroll = async () => {
                                   )
                                 }
                                 className="w-20 px-2 py-1 text-sm rounded border border-gray-200 dark:border-gray-600 bg-white dark:bg-gray-800 text-gray-700 dark:text-gray-300 focus:outline-none focus:border-green-500"
+                                disabled={
+                                  currentPayroll?.status === "completed" ||
+                                  currentPayroll?.status === "paid"
+                                }
                               >
                                 {currencies.map((curr) => (
                                   <option key={curr} value={curr}>
@@ -2102,8 +2441,7 @@ const handleSubmitPayroll = async () => {
                         </li>
                         <li>
                           <strong>Overtime Amount:</strong> Enter the amount to
-                          be paid for overtime (if applicable). Only numbers and
-                          decimal points are allowed.
+                          be paid for overtime.
                         </li>
                         <li>
                           <strong>Total Overtime:</strong>{" "}
@@ -2111,13 +2449,7 @@ const handleSubmitPayroll = async () => {
                             (sum, req) => sum + (req.overtime_hours || 0),
                             0,
                           )}{" "}
-                          hours across{" "}
-                          {
-                            overtimeRequests.filter(
-                              (r) => (r.overtime_hours || 0) > 0,
-                            ).length
-                          }{" "}
-                          days.
+                          hours
                         </li>
                         <li>
                           <strong>Total Overtime Amount:</strong>{" "}
@@ -2168,6 +2500,10 @@ const handleSubmitPayroll = async () => {
                         }
                         className="w-full px-3 py-2 text-sm rounded-lg border border-gray-200 dark:border-gray-700 bg-white dark:bg-gray-800 text-gray-800 dark:text-gray-200 focus:outline-none focus:border-green-500 focus:ring-2 focus:ring-green-500/20"
                         placeholder="e.g., PF 12%"
+                        disabled={
+                          currentPayroll?.status === "completed" ||
+                          currentPayroll?.status === "paid"
+                        }
                       />
                     </div>
                     <div className="md:col-span-3">
@@ -2184,6 +2520,10 @@ const handleSubmitPayroll = async () => {
                           )
                         }
                         className="w-full px-3 py-2 text-sm rounded-lg border border-gray-200 dark:border-gray-700 bg-white dark:bg-gray-800 text-gray-800 dark:text-gray-200 focus:outline-none focus:border-green-500 focus:ring-2 focus:ring-green-500/20"
+                        disabled={
+                          currentPayroll?.status === "completed" ||
+                          currentPayroll?.status === "paid"
+                        }
                       >
                         {currencies.map((curr) => (
                           <option key={curr} value={curr}>
@@ -2203,6 +2543,10 @@ const handleSubmitPayroll = async () => {
                           handleDeductionChange(d.id, "amount", e.target.value)
                         }
                         className="w-full px-3 py-2 text-sm rounded-lg border border-gray-200 dark:border-gray-700 bg-white dark:bg-gray-800 text-gray-800 dark:text-gray-200 focus:outline-none focus:border-green-500 focus:ring-2 focus:ring-green-500/20"
+                        disabled={
+                          currentPayroll?.status === "completed" ||
+                          currentPayroll?.status === "paid"
+                        }
                       />
                     </div>
                     <div className="md:col-span-2">
@@ -2219,6 +2563,10 @@ const handleSubmitPayroll = async () => {
                           )
                         }
                         className="w-full px-3 py-2 text-sm rounded-lg border border-gray-200 dark:border-gray-700 bg-white dark:bg-gray-800 text-gray-800 dark:text-gray-200 focus:outline-none focus:border-green-500 focus:ring-2 focus:ring-green-500/20"
+                        disabled={
+                          currentPayroll?.status === "completed" ||
+                          currentPayroll?.status === "paid"
+                        }
                       >
                         <option value="yes">Yes</option>
                         <option value="no">No</option>
@@ -2228,6 +2576,10 @@ const handleSubmitPayroll = async () => {
                       <button
                         onClick={() => handleRemoveDeduction(d.id)}
                         className="w-8 h-8 rounded-lg bg-red-50 text-red-500 hover:bg-red-100 dark:bg-red-900/20 dark:hover:bg-red-900/40 transition-colors flex items-center justify-center"
+                        disabled={
+                          currentPayroll?.status === "completed" ||
+                          currentPayroll?.status === "paid"
+                        }
                       >
                         <i className="fas fa-trash-alt text-xs"></i>
                       </button>
@@ -2239,12 +2591,17 @@ const handleSubmitPayroll = async () => {
               <button
                 onClick={handleAddDeduction}
                 className="mt-3 px-3 py-1.5 bg-green-50 dark:bg-green-900/20 text-green-600 dark:text-green-400 rounded-lg text-xs font-semibold hover:bg-green-100 dark:hover:bg-green-900/40 transition-colors border border-green-100 dark:border-green-800 flex items-center gap-2"
+                disabled={
+                  currentPayroll?.status === "completed" ||
+                  currentPayroll?.status === "paid"
+                }
               >
                 <i className="fas fa-plus"></i> Add Deduction
               </button>
             </div>
           )}
 
+          {/* Step 5 - Summary */}
           {reduxCurrentStep === 5 && (
             <div>
               <div className="flex items-center gap-2 pb-3 border-b-2 border-green-100 dark:border-green-900/30 mb-4 md:mb-6">
@@ -2273,7 +2630,6 @@ const handleSubmitPayroll = async () => {
 
                 {/* Currency Conversion Section */}
                 <div className="grid grid-cols-1 md:grid-cols-2 gap-4 p-4 bg-gray-50 dark:bg-gray-700/30 rounded-lg border border-gray-200 dark:border-gray-700">
-                  {/* Left Side - Target Currency */}
                   <div>
                     <label className="block text-xs font-semibold text-gray-700 dark:text-gray-300 mb-1">
                       Target Currency
@@ -2283,7 +2639,6 @@ const handleSubmitPayroll = async () => {
                       onChange={(e) => {
                         const newTarget = e.target.value;
                         setTargetCurrency(newTarget);
-                        // Remove any conversion rates that match the new target currency
                         setConversionRatesList(
                           conversionRatesList.filter(
                             (item) => item.currency !== newTarget,
@@ -2291,6 +2646,10 @@ const handleSubmitPayroll = async () => {
                         );
                       }}
                       className="w-full px-3 py-2 text-sm rounded-lg border border-gray-200 dark:border-gray-700 bg-white dark:bg-gray-800 text-gray-800 dark:text-gray-200 focus:outline-none focus:border-green-500 focus:ring-2 focus:ring-green-500/20"
+                      disabled={
+                        currentPayroll?.status === "completed" ||
+                        currentPayroll?.status === "paid"
+                      }
                     >
                       {currencies.map((curr) => (
                         <option key={curr} value={curr}>
@@ -2303,7 +2662,6 @@ const handleSubmitPayroll = async () => {
                     </p>
                   </div>
 
-                  {/* Right Side - Dynamic Conversion Rates */}
                   <div>
                     <div className="flex items-center justify-between mb-2">
                       <label className="block text-xs font-semibold text-gray-700 dark:text-gray-300">
@@ -2311,42 +2669,37 @@ const handleSubmitPayroll = async () => {
                       </label>
                       <button
                         onClick={() => {
-                          // Allow adding ANY currency from the currencies list, including the target currency
                           const existingCurrencies = conversionRatesList.map(
                             (item) => item.currency,
                           );
-                          const availableCurrencies = currencies.filter(
-                            (c) => !existingCurrencies.includes(c),
+                          const allCurrencies = countries
+                            .map((c) => c.currency)
+                            .filter(Boolean);
+                          const availableCurrencies = [
+                            ...new Set(allCurrencies),
+                          ].filter(
+                            (c) =>
+                              !existingCurrencies.includes(c) &&
+                              c !== targetCurrency,
                           );
 
                           if (availableCurrencies.length > 0) {
                             setConversionRatesList([
                               ...conversionRatesList,
-                              {
+                              ...availableCurrencies.map((c) => ({
                                 id: Date.now() + Math.random(),
-                                currency: availableCurrencies[0],
+                                currency: c,
                                 rate: 1,
-                              },
+                              })),
                             ]);
-                            showToast(
-                              `Added ${availableCurrencies[0]} conversion rate`,
-                              "success",
-                            );
                           } else {
-                            showToast(
-                              "All available currencies have been added",
-                              "info",
-                            );
+                            showToast("All available currencies added", "info");
                           }
                         }}
                         className="px-2 py-1 text-xs bg-green-500 text-white rounded-lg hover:bg-green-600 transition-colors flex items-center gap-1"
                         disabled={
-                          // Disable if all currencies are already in the list
-                          currencies.every((c) =>
-                            conversionRatesList.some(
-                              (item) => item.currency === c,
-                            ),
-                          )
+                          currentPayroll?.status === "completed" ||
+                          currentPayroll?.status === "paid"
                         }
                       >
                         <i className="fas fa-plus text-[10px]"></i> Add
@@ -2376,11 +2729,13 @@ const handleSubmitPayroll = async () => {
                                   );
                                   return;
                                 }
-                                // Remove this check to allow target currency:
-                                // if (newCurrency === targetCurrency) {
-                                //   showToast(`Cannot convert ${targetCurrency} to itself`, "warning");
-                                //   return;
-                                // }
+                                if (newCurrency === targetCurrency) {
+                                  showToast(
+                                    `Cannot convert ${targetCurrency} to itself`,
+                                    "warning",
+                                  );
+                                  return;
+                                }
                                 setConversionRatesList(
                                   conversionRatesList.map((i) =>
                                     i.id === item.id
@@ -2390,12 +2745,18 @@ const handleSubmitPayroll = async () => {
                                 );
                               }}
                               className="flex-1 px-2 py-1 text-sm rounded border border-gray-200 dark:border-gray-600 bg-white dark:bg-gray-800 text-gray-700 dark:text-gray-300 focus:outline-none focus:border-green-500"
+                              disabled={
+                                currentPayroll?.status === "completed" ||
+                                currentPayroll?.status === "paid"
+                              }
                             >
-                              {currencies.map((curr) => (
-                                <option key={curr} value={curr}>
-                                  {curr}
-                                </option>
-                              ))}
+                              {currencies
+                                .filter((c) => c !== targetCurrency)
+                                .map((curr) => (
+                                  <option key={curr} value={curr}>
+                                    {curr}
+                                  </option>
+                                ))}
                             </select>
                             <span className="text-xs text-gray-400">→</span>
                             <span className="text-xs font-semibold text-green-600 dark:text-green-400 w-8">
@@ -2416,6 +2777,10 @@ const handleSubmitPayroll = async () => {
                               }}
                               className="w-20 px-2 py-1 text-sm rounded border border-gray-200 dark:border-gray-600 bg-white dark:bg-gray-800 text-gray-700 dark:text-gray-300 focus:outline-none focus:border-green-500"
                               placeholder="1.0000"
+                              disabled={
+                                currentPayroll?.status === "completed" ||
+                                currentPayroll?.status === "paid"
+                              }
                             />
                             <button
                               onClick={() => {
@@ -2433,6 +2798,10 @@ const handleSubmitPayroll = async () => {
                                 );
                               }}
                               className="text-red-500 hover:text-red-700 transition-colors"
+                              disabled={
+                                currentPayroll?.status === "completed" ||
+                                currentPayroll?.status === "paid"
+                              }
                             >
                               <i className="fas fa-times"></i>
                             </button>
@@ -2449,7 +2818,7 @@ const handleSubmitPayroll = async () => {
                             <span className="font-semibold text-green-500">
                               "Add"
                             </span>{" "}
-                            button above to add currencies
+                            button above
                           </p>
                         </div>
                       )}
@@ -2467,13 +2836,20 @@ const handleSubmitPayroll = async () => {
                           showToast("All rates reset to 1", "info");
                         }}
                         className="px-3 py-1 text-xs bg-gray-200 dark:bg-gray-600 text-gray-700 dark:text-gray-300 rounded-lg hover:bg-gray-300 dark:hover:bg-gray-500 transition-colors"
+                        disabled={
+                          currentPayroll?.status === "completed" ||
+                          currentPayroll?.status === "paid"
+                        }
                       >
                         <i className="fas fa-undo mr-1"></i> Reset
                       </button>
                       <button
                         onClick={handleConvertCurrency}
                         disabled={
-                          isConverting || conversionRatesList.length === 0
+                          isConverting ||
+                          conversionRatesList.length === 0 ||
+                          currentPayroll?.status === "completed" ||
+                          currentPayroll?.status === "paid"
                         }
                         className="px-4 py-1 text-xs bg-blue-500 text-white rounded-lg hover:bg-blue-600 transition-colors flex items-center gap-1 disabled:opacity-50"
                       >
@@ -2494,7 +2870,7 @@ const handleSubmitPayroll = async () => {
 
                 {!isConverted && (
                   <div className="grid grid-cols-1 md:grid-cols-2 gap-4 pt-4 border-t border-gray-200 dark:border-gray-700">
-                    {/* Gross Salary from Step 2 with currency breakdown */}
+                    {/* Gross Salary */}
                     <div className="p-4 rounded-xl bg-blue-50 dark:bg-blue-900/20 border border-blue-200 dark:border-blue-800">
                       <div className="flex items-center justify-between mb-2">
                         <div className="text-xs text-gray-500 dark:text-gray-400 font-medium">
@@ -2505,7 +2881,6 @@ const handleSubmitPayroll = async () => {
                         </span>
                       </div>
 
-                      {/* Currency Breakdown - Show each currency separately */}
                       <div className="mb-3">
                         <div className="text-[10px] text-gray-500 mb-1">
                           Currency Breakdown:
@@ -2530,7 +2905,6 @@ const handleSubmitPayroll = async () => {
                           return null;
                         })}
 
-                        {/* Total - Show as "Mixed" or individual currencies */}
                         <div className="border-t border-blue-200 dark:border-blue-700 mt-1 pt-1 flex justify-between items-center font-semibold">
                           <span className="text-gray-600 dark:text-gray-400">
                             Total :
@@ -2546,19 +2920,9 @@ const handleSubmitPayroll = async () => {
                           </span>
                         </div>
                       </div>
-
-                      <div className="text-xs text-gray-400 mt-1">
-                        Based on{" "}
-                        {countries.filter((c) => (c.subtotal || 0) > 0).length}{" "}
-                        location(s):{" "}
-                        {countries
-                          .filter((c) => (c.subtotal || 0) > 0)
-                          .map((c) => `${c.name} (${c.currency})`)
-                          .join(", ")}
-                      </div>
                     </div>
 
-                    {/* Overtime Amount from Step 3 */}
+                    {/* Overtime Amount */}
                     <div className="p-4 rounded-xl bg-orange-50 dark:bg-orange-900/20 border border-orange-200 dark:border-orange-800">
                       <div className="flex items-center justify-between mb-2">
                         <div className="text-xs text-gray-500 dark:text-gray-400 font-medium">
@@ -2569,7 +2933,6 @@ const handleSubmitPayroll = async () => {
                         </span>
                       </div>
 
-                      {/* Overtime Details - Show each currency separately */}
                       <div className="mb-3">
                         <div className="text-[10px] text-gray-500 mb-1">
                           Overtime Entries:
@@ -2602,7 +2965,6 @@ const handleSubmitPayroll = async () => {
                           </div>
                         )}
 
-                        {/* Overtime Total - Show as Mixed or individual currencies */}
                         {overtimeRequests.filter(
                           (req) => parseFloat(req.overtime_amount || 0) > 0,
                         ).length > 0 && (
@@ -2627,7 +2989,7 @@ const handleSubmitPayroll = async () => {
                       </div>
                     </div>
 
-                    {/* Deductions from Step 4 */}
+                    {/* Deductions */}
                     <div className="p-4 rounded-xl bg-red-50 dark:bg-red-900/20 border border-red-200 dark:border-red-800">
                       <div className="flex items-center justify-between mb-2">
                         <div className="text-xs text-gray-500 dark:text-gray-400 font-medium">
@@ -2638,7 +3000,6 @@ const handleSubmitPayroll = async () => {
                         </span>
                       </div>
 
-                      {/* Deduction Details - Show each currency separately */}
                       <div className="mb-3">
                         <div className="text-[10px] text-gray-500 mb-1">
                           Deduction Entries:
@@ -2666,7 +3027,6 @@ const handleSubmitPayroll = async () => {
                           </div>
                         )}
 
-                        {/* Deductions Total - Show as Mixed or individual currencies */}
                         {deductions.filter((d) => parseFloat(d.amount || 0) > 0)
                           .length > 0 && (
                           <div className="border-t border-red-200 dark:border-red-700 mt-1 pt-1 flex justify-between items-center font-semibold">
@@ -2687,7 +3047,7 @@ const handleSubmitPayroll = async () => {
                       </div>
                     </div>
 
-                    {/* Net Pay - Show calculation with mixed currencies INCLUDING OVERTIME */}
+                    {/* Net Pay */}
                     <div className="p-4 rounded-xl bg-green-50 dark:bg-green-900/20 border border-green-200 dark:border-green-800">
                       <div className="flex items-center justify-between mb-2">
                         <div className="text-xs text-gray-500 dark:text-gray-400 font-medium">
@@ -2698,7 +3058,6 @@ const handleSubmitPayroll = async () => {
                         </span>
                       </div>
 
-                      {/* Net Pay Calculation - Show formula with OVERTIME included */}
                       <div className="mb-3 text-sm">
                         <div className="flex justify-between items-center text-gray-600 dark:text-gray-400">
                           <span>Gross Salary:</span>
@@ -2747,10 +3106,8 @@ const handleSubmitPayroll = async () => {
                           </span>
                           <span className="text-green-600 dark:text-green-400">
                             {(() => {
-                              // Calculate net pay per currency (Gross + Overtime - Deductions)
                               const netPayByCurrency = {};
 
-                              // Add gross amounts by currency
                               countries.forEach((c) => {
                                 const subtotal = c.subtotal || 0;
                                 if (subtotal > 0) {
@@ -2760,7 +3117,6 @@ const handleSubmitPayroll = async () => {
                                 }
                               });
 
-                              // Add overtime by currency
                               overtimeRequests.forEach((req) => {
                                 const amount =
                                   parseFloat(req.overtime_amount) || 0;
@@ -2771,7 +3127,6 @@ const handleSubmitPayroll = async () => {
                                 }
                               });
 
-                              // Subtract deductions by currency
                               deductions.forEach((d) => {
                                 const amount = parseFloat(d.amount) || 0;
                                 if (amount > 0) {
@@ -2802,13 +3157,12 @@ const handleSubmitPayroll = async () => {
 
                 {isConverted && conversionDetails.gross_salary && (
                   <div className="grid grid-cols-1 md:grid-cols-2 gap-4 pt-4 border-t border-gray-200 dark:border-gray-700">
-                    {/* Gross Salary - Show mixed currency breakdown */}
+                    {/* Gross Salary */}
                     <div className="p-4 rounded-xl bg-blue-50 dark:bg-blue-900/20 border border-blue-200 dark:border-blue-800">
                       <div className="text-xs text-gray-500 dark:text-gray-400 font-medium mb-2">
                         Gross Salary
                       </div>
 
-                      {/* Original Mixed Currency Breakdown */}
                       <div className="mb-2">
                         <div className="text-[10px] text-gray-500 mb-1">
                           Original:
@@ -2830,7 +3184,6 @@ const handleSubmitPayroll = async () => {
                         )}
                       </div>
 
-                      {/* Conversion Display */}
                       <div className="flex justify-between items-center gap-2 bg-white/50 dark:bg-gray-800/50 p-2 rounded-lg">
                         <div className="flex-1">
                           <div className="text-[10px] text-gray-500">
@@ -2860,13 +3213,12 @@ const handleSubmitPayroll = async () => {
                       </div>
                     </div>
 
-                    {/* Overtime Amount - Show mixed currency breakdown */}
+                    {/* Overtime Amount */}
                     <div className="p-4 rounded-xl bg-orange-50 dark:bg-orange-900/20 border border-orange-200 dark:border-orange-800">
                       <div className="text-xs text-gray-500 dark:text-gray-400 font-medium mb-2">
                         Overtime Amount
                       </div>
 
-                      {/* Original Mixed Currency Breakdown */}
                       <div className="mb-2">
                         <div className="text-[10px] text-gray-500 mb-1">
                           Original :
@@ -2896,13 +3248,12 @@ const handleSubmitPayroll = async () => {
                         )}
                       </div>
 
-                      {/* Conversion Display */}
                       {conversionDetails.overtime_amount.currencyBreakdown
                         ?.length > 0 && (
                         <div className="flex justify-between items-center gap-2 bg-white/50 dark:bg-gray-800/50 p-2 rounded-lg">
                           <div className="flex-1">
                             <div className="text-[10px] text-gray-500">
-                              Original{" "}
+                              Original
                             </div>
                             <div className="text-xs text-gray-600 dark:text-gray-400">
                               {conversionDetails.overtime_amount.breakdown}
@@ -2926,13 +3277,12 @@ const handleSubmitPayroll = async () => {
                       )}
                     </div>
 
-                    {/* Deductions - Show mixed currency breakdown */}
+                    {/* Deductions */}
                     <div className="p-4 rounded-xl bg-red-50 dark:bg-red-900/20 border border-red-200 dark:border-red-800">
                       <div className="text-xs text-gray-500 dark:text-gray-400 font-medium mb-2">
                         Deductions
                       </div>
 
-                      {/* Original Mixed Currency Breakdown */}
                       <div className="mb-2">
                         <div className="text-[10px] text-gray-500 mb-1">
                           Original :
@@ -2961,13 +3311,12 @@ const handleSubmitPayroll = async () => {
                         )}
                       </div>
 
-                      {/* Conversion Display */}
                       {conversionDetails.deductions.currencyBreakdown?.length >
                         0 && (
                         <div className="flex justify-between items-center gap-2 bg-white/50 dark:bg-gray-800/50 p-2 rounded-lg">
                           <div className="flex-1">
                             <div className="text-[10px] text-gray-500">
-                              Original{" "}
+                              Original
                             </div>
                             <div className="text-xs text-gray-600 dark:text-gray-400">
                               {conversionDetails.deductions.breakdown}
@@ -2991,13 +3340,12 @@ const handleSubmitPayroll = async () => {
                       )}
                     </div>
 
-                    {/* Net Pay - Show mixed currency breakdown INCLUDING OVERTIME */}
+                    {/* Net Pay */}
                     <div className="p-4 rounded-xl bg-green-50 dark:bg-green-900/20 border border-green-200 dark:border-green-800">
                       <div className="text-xs text-gray-500 dark:text-gray-400 font-medium mb-2">
                         Net Pay
                       </div>
 
-                      {/* Original Mixed Currency Breakdown */}
                       <div className="mb-2">
                         <div className="text-[10px] text-gray-500 mb-1">
                           Original (Gross + Overtime - Deductions):
@@ -3019,7 +3367,6 @@ const handleSubmitPayroll = async () => {
                         )}
                       </div>
 
-                      {/* Calculation Breakdown */}
                       <div className="mb-2 text-xs text-gray-500">
                         <div>
                           Gross:{" "}
@@ -3035,11 +3382,10 @@ const handleSubmitPayroll = async () => {
                         </div>
                       </div>
 
-                      {/* Conversion Display */}
                       <div className="flex justify-between items-center gap-2 bg-white/50 dark:bg-gray-800/50 p-2 rounded-lg">
                         <div className="flex-1">
                           <div className="text-[10px] text-gray-500">
-                            Original{" "}
+                            Original
                           </div>
                           <div className="text-xs text-gray-600 dark:text-gray-400">
                             {conversionDetails.net_pay.breakdown}
@@ -3071,8 +3417,8 @@ const handleSubmitPayroll = async () => {
                       Payslip Delivery
                     </h4>
                     <p className="text-xs text-blue-600/80 dark:text-blue-400/80 mt-1">
-                      Upon submission, the generated payslip will be
-                      automatically sent to the employee via Email only.
+                      Upon updating, the generated payslip will be automatically
+                      sent to the employee via Email.
                     </p>
                   </div>
                 </div>
@@ -3081,19 +3427,28 @@ const handleSubmitPayroll = async () => {
           )}
 
           {/* Action Buttons */}
-          <div className="flex flex-col-reverse sm:flex-row justify-end gap-3 pt-4 md:pt-6 border-t border-gray-200 dark:border-gray-700">
-            {reduxCurrentStep > 1 && (
-              <button
-                onClick={handlePreviousStep}
-                disabled={isLoading || isSubmitting}
-                className="px-4 md:px-6 py-2 md:py-2.5 rounded-full font-semibold bg-gray-100 dark:bg-gray-700 text-gray-700 dark:text-gray-300 hover:bg-gray-200 dark:hover:bg-gray-600 transition-all flex items-center justify-center gap-2 text-sm md:text-base disabled:opacity-50 disabled:cursor-not-allowed"
-              >
-                <i className="fas fa-arrow-left text-xs md:text-sm"></i>
-                <span>Previous</span>
-              </button>
-            )}
+          <div className="flex flex-col-reverse sm:flex-row justify-between gap-3 pt-4 md:pt-6 border-t border-gray-200 dark:border-gray-700">
+            <button
+              onClick={handleCancel}
+              disabled={isLoading || isSubmitting}
+              className="px-4 md:px-6 py-2 md:py-2.5 rounded-full font-semibold bg-gray-100 dark:bg-gray-700 text-gray-700 dark:text-gray-300 hover:bg-gray-200 dark:hover:bg-gray-600 transition-all flex items-center justify-center gap-2 text-sm md:text-base disabled:opacity-50 disabled:cursor-not-allowed"
+            >
+              <i className="fas fa-times text-xs md:text-sm"></i>
+              <span>Cancel</span>
+            </button>
 
             <div className="flex flex-col sm:flex-row gap-3">
+              {reduxCurrentStep > 1 && (
+                <button
+                  onClick={handlePreviousStep}
+                  disabled={isLoading || isSubmitting}
+                  className="px-4 md:px-6 py-2 md:py-2.5 rounded-full font-semibold bg-gray-100 dark:bg-gray-700 text-gray-700 dark:text-gray-300 hover:bg-gray-200 dark:hover:bg-gray-600 transition-all flex items-center justify-center gap-2 text-sm md:text-base disabled:opacity-50 disabled:cursor-not-allowed"
+                >
+                  <i className="fas fa-arrow-left text-xs md:text-sm"></i>
+                  <span>Previous</span>
+                </button>
+              )}
+
               {reduxCurrentStep < 5 ? (
                 <button
                   onClick={handleNextStep}
@@ -3101,7 +3456,9 @@ const handleSubmitPayroll = async () => {
                     isLoading ||
                     isSubmitting ||
                     !selectedUserId ||
-                    (reduxCurrentStep === 2 && !isStep2Saved)
+                    (reduxCurrentStep === 2 && !isStep2Saved) ||
+                    currentPayroll?.status === "completed" ||
+                    currentPayroll?.status === "paid"
                   }
                   className={`px-4 md:px-6 py-2 md:py-2.5 rounded-full font-semibold bg-green-500 text-white hover:bg-green-600 transition-all flex items-center justify-center gap-2 text-sm md:text-base disabled:opacity-50 disabled:cursor-not-allowed`}
                 >
@@ -3110,16 +3467,20 @@ const handleSubmitPayroll = async () => {
                 </button>
               ) : (
                 <button
-                  onClick={handleSubmitPayroll}
-                  disabled={isSubmitting || !selectedUserId || !isConverted}
+                  onClick={handleUpdatePayroll}
+                  disabled={
+                    isSubmitting ||
+                    !selectedUserId ||
+                    !isConverted ||
+                    currentPayroll?.status === "completed" ||
+                    currentPayroll?.status === "paid"
+                  }
                   className="px-4 md:px-6 py-2 md:py-2.5 rounded-full font-semibold bg-green-500 text-white hover:bg-green-600 transition-all flex items-center justify-center gap-2 text-sm md:text-base disabled:opacity-50 disabled:cursor-not-allowed"
                 >
                   <i
-                    className={`fas ${isSubmitting ? "fa-spinner fa-spin" : "fa-file-invoice"} text-xs md:text-sm`}
+                    className={`fas ${isSubmitting ? "fa-spinner fa-spin" : "fa-save"} text-xs md:text-sm`}
                   ></i>
-                  <span>
-                    {isSubmitting ? "Submitting..." : "Generate Payslip"}
-                  </span>
+                  <span>{isSubmitting ? "Updating..." : "Update Payroll"}</span>
                 </button>
               )}
             </div>
@@ -3130,4 +3491,4 @@ const handleSubmitPayroll = async () => {
   );
 }
 
-export default AddPayroll;
+export default EditPayroll;

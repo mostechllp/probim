@@ -82,8 +82,51 @@ const RoleManagement = lazy(() => import("./admin/pages/RoleManagement"));
 const Payroll = lazy(() => import("./admin/pages/Payroll"));
 const AddPayroll = lazy(() => import("./admin/pages/AddPayroll"));
 const Onboarding = lazy(() => import("./admin/pages/Onboarding"));
-const ProjectWorkingHours = lazy(() => import("./admin/pages/ProjectWorkingHours"));
-const AdminAttendanceRequests = lazy(() => import("./admin/pages/AttendanceRequests"));
+const ProjectWorkingHours = lazy(
+  () => import("./admin/pages/ProjectWorkingHours"),
+);
+const AdminAttendanceRequests = lazy(
+  () => import("./admin/pages/AttendanceRequests"),
+);
+const PayrollDetails = lazy(
+  () => import("./admin/pages/PayrollDetails"),
+);
+const EditPayroll = lazy(
+  () => import("./admin/pages/EditPayroll"),
+);
+
+const Offboarding = lazy(() => import("./admin/pages/Offboarding"));
+const OffboardingInitiation = lazy(
+  () => import("./admin/components/offboarding/OffboardingInitiation"),
+);
+const OffboardingChecklistManager = lazy(
+  () => import("./admin/components/offboarding/OffboardingChecklistManager"),
+);
+const AssetManagement = lazy(() => import("./admin/pages/AssetManagement"));
+const AssetTypeManagement = lazy(
+  () => import("./admin/pages/AssetTypeManagement"),
+);
+const VisaCancellationAndExit = lazy(
+  () => import("./admin/components/offboarding/VisaCancellationAndExit"),
+);
+const OffboardingChecklist = lazy(
+  () => import("./admin/components/offboarding/OffboardingChecklist"),
+);
+const AssetReturn = lazy(
+  () => import("./admin/components/offboarding/AssetReturn"),
+);
+const ExitInterview = lazy(
+  () => import("./admin/components/offboarding/ExitInterview"),
+);
+const FinalSettlement = lazy(
+  () => import("./admin/components/offboarding/FinalSettlement"),
+);
+const LettersAndClearance = lazy(
+  () => import("./admin/components/offboarding/LettersAndClearance"),
+);
+const ChecklistCategories = lazy(
+  () => import("./admin/pages/ChecklistCategoriesManagement"),
+);
 
 // Lazy load pages - Employee
 const EmployeeDashboard = lazy(() => import("./employee/pages/Dashboard"));
@@ -126,6 +169,25 @@ function App() {
     }, 500);
     return () => clearTimeout(timer);
   }, []);
+
+  // Check if user has payroll permissions
+  const hasPayrollAccess = () => {
+    const permissions = user?.permissions || {};
+    return permissions?.payroll?.read || false;
+  };
+
+  // Check if user is admin or has payroll edit permission
+  const hasPayrollEdit = () => {
+    const permissions = user?.permissions || {};
+    const isAdmin = user?.type === "admin" || user?.role?.name === "admin" || user?.role?.name === "Admin";
+    return isAdmin || permissions?.payroll?.edit || false;
+  };
+
+  // Get the appropriate base path for payroll
+  const getPayrollBasePath = () => {
+    const isAdmin = user?.type === "admin" || user?.role?.name === "admin" || user?.role?.name === "Admin";
+    return isAdmin ? "/admin" : "/employee";
+  };
 
   // Show only one loader during initial auth check
   if (authLoading && initialLoad) {
@@ -239,8 +301,56 @@ function App() {
           <Route path="settings" element={<Settings />} />
           <Route path="roles" element={<RoleManagement />} />
           <Route path="modules" element={<ModuleManagement />} />
-          <Route path="project-working-hours" element={<ProjectWorkingHours />} />
-          <Route path="attendance-requests" element={<AdminAttendanceRequests />} />
+          <Route path="payroll/:id" element={<PayrollDetails />} /> 
+          <Route path="payroll/edit/:id" element={<EditPayroll />} />
+          <Route
+            path="project-working-hours"
+            element={<ProjectWorkingHours />}
+          />
+          <Route
+            path="attendance-requests"
+            element={<AdminAttendanceRequests />}
+          />
+
+          <Route path="employees/offboarding" element={<Offboarding />} />
+          <Route
+            path="employees/offboarding-initiation"
+            element={<OffboardingInitiation />}
+          />
+          <Route
+            path="employees/offboarding-checklist-manager"
+            element={<OffboardingChecklistManager />}
+          />
+          <Route
+            path="employees/checklist-categories"
+            element={<ChecklistCategories />}
+          />
+          <Route
+            path="employees/asset-management"
+            element={<AssetManagement />}
+          />
+          <Route
+            path="employees/assets/types"
+            element={<AssetTypeManagement />}
+          />
+          <Route
+            path="employees/visa-cancellation"
+            element={<VisaCancellationAndExit />}
+          />
+          <Route
+            path="employees/offboarding-checklist"
+            element={<OffboardingChecklist />}
+          />
+          <Route path="employees/asset-return" element={<AssetReturn />} />
+          <Route path="employees/exit-interview" element={<ExitInterview />} />
+          <Route
+            path="employees/final-settlement"
+            element={<FinalSettlement />}
+          />
+          <Route
+            path="employees/letters-and-clearance"
+            element={<LettersAndClearance />}
+          />
         </Route>
 
         {/* Employee Routes - Layout wrapper */}
@@ -356,8 +466,17 @@ function App() {
           <Route path="settings" element={<Settings />} />
           <Route path="roles" element={<RoleManagement />} />
           <Route path="modules" element={<ModuleManagement />} />
-          <Route path="project-working-hours" element={<ProjectWorkingHours />} />
+          <Route
+            path="project-working-hours"
+            element={<ProjectWorkingHours />}
+          />
+          <Route path="payroll" element={<Payroll />} />
+          <Route path="payroll/add" element={<AddPayroll />} />
+          <Route path="payroll/:id" element={<PayrollDetails />} /> 
+          <Route path="payroll/edit/:id" element={<EditPayroll />} /> 
         </Route>
+
+        {/* ============ REDIRECT ROUTES ============ */}
 
         {/* Redirect /admin/employees/add-employee to appropriate route */}
         <Route
@@ -560,6 +679,8 @@ function App() {
             </ProtectedRoute>
           }
         />
+
+        {/* Redirect /admin/project-working-hours to appropriate route */}
         <Route
           path="/admin/project-working-hours"
           element={
@@ -569,6 +690,72 @@ function App() {
                   <Navigate to="/employee/project-working-hours" replace />
                 ) : (
                   <Navigate to="/admin/project-working-hours" replace />
+                )}
+              </LazyWrapper>
+            </ProtectedRoute>
+          }
+        />
+
+        {/* ============ PAYROLL REDIRECT ROUTES ============ */}
+
+        {/* Redirect /admin/payroll to appropriate route based on user type and permissions */}
+        <Route
+          path="/admin/payroll"
+          element={
+            <ProtectedRoute>
+              <LazyWrapper>
+                {user?.type === "employee" || user?.role?.name === "HR Manager" ? (
+                  <Navigate to="/employee/payroll" replace />
+                ) : (
+                  <Navigate to="/admin/payroll" replace />
+                )}
+              </LazyWrapper>
+            </ProtectedRoute>
+          }
+        />
+
+        {/* Redirect /admin/payroll/add to appropriate route */}
+        <Route
+          path="/admin/payroll/add"
+          element={
+            <ProtectedRoute>
+              <LazyWrapper>
+                {user?.type === "employee" || user?.role?.name === "HR Manager" ? (
+                  <Navigate to="/employee/payroll/add" replace />
+                ) : (
+                  <Navigate to="/admin/payroll/add" replace />
+                )}
+              </LazyWrapper>
+            </ProtectedRoute>
+          }
+        />
+
+        {/* Redirect /admin/payroll/:id to appropriate route */}
+        <Route
+          path="/admin/payroll/:id"
+          element={
+            <ProtectedRoute>
+              <LazyWrapper>
+                {user?.type === "employee" || user?.role?.name === "HR Manager" ? (
+                  <Navigate to={`/employee/payroll/${window.location.pathname.split('/').pop()}`} replace />
+                ) : (
+                  <Navigate to={`/admin/payroll/${window.location.pathname.split('/').pop()}`} replace />
+                )}
+              </LazyWrapper>
+            </ProtectedRoute>
+          }
+        />
+
+        {/* Redirect /admin/payroll/edit/:id to appropriate route */}
+        <Route
+          path="/admin/payroll/edit/:id"
+          element={
+            <ProtectedRoute>
+              <LazyWrapper>
+                {user?.type === "employee" || user?.role?.name === "HR Manager" ? (
+                  <Navigate to={`/employee/payroll/edit/${window.location.pathname.split('/').pop()}`} replace />
+                ) : (
+                  <Navigate to={`/admin/payroll/edit/${window.location.pathname.split('/').pop()}`} replace />
                 )}
               </LazyWrapper>
             </ProtectedRoute>

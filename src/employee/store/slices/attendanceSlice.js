@@ -25,7 +25,6 @@ export const fetchDashboardData = createAsyncThunk(
 );
 
 // Punch In with location and timezone
-// attendanceSlice.js - Updated punchIn and punchOut
 export const punchIn = createAsyncThunk(
   "attendance/punchIn",
   async (data, { rejectWithValue }) => {
@@ -37,12 +36,17 @@ export const punchIn = createAsyncThunk(
         payload.punch_in_longitude = data.location.longitude;
         payload.punch_in_address = data.location.address;
         
-        // Option 1: Send PHP-compatible timezone name
+        // Add work_location (country)
+        if (data.location.work_location) {
+          payload.work_location = data.location.work_location;
+        }
+        
+        // Timezone
         if (data.location.timezone) {
           payload.timezone = data.location.timezone;
         }
         
-        // Option 2: Also send offset in minutes (useful for backend)
+        // Timezone offset in minutes
         if (data.location.timezone_offset_minutes) {
           payload.timezone_offset_minutes = data.location.timezone_offset_minutes;
         }
@@ -71,7 +75,6 @@ export const punchIn = createAsyncThunk(
 );
 
 // Punch Out with location and timezone
-// attendanceSlice.js - Updated punchOut
 export const punchOut = createAsyncThunk(
   "attendance/punchOut",
   async (data, { rejectWithValue }) => {
@@ -110,6 +113,11 @@ export const punchOut = createAsyncThunk(
         payload.punch_out_latitude = location.latitude;
         payload.punch_out_longitude = location.longitude;
         payload.punch_out_address = location.address;
+        
+        // Add work_location for punch out as well
+        if (location.work_location) {
+          payload.work_location = location.work_location;
+        }
         
         if (location.timezone) {
           payload.timezone = location.timezone;
