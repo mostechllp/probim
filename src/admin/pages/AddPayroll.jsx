@@ -74,6 +74,13 @@ const getOrganizationName = (employees, organizationId) => {
 function AddPayroll() {
   const dispatch = useDispatch();
 
+  const { user } = useSelector((state) => state.auth || {});
+  const isAdmin =
+    user?.type === "admin" ||
+    user?.role?.name === "admin" ||
+    user?.role?.name === "Admin";
+  const basePath = isAdmin ? "/admin" : "/employee";
+
   // Redux state
   const reduxCurrentStep = useSelector(selectCurrentStep);
   const stepData = useSelector(selectStepData);
@@ -253,86 +260,88 @@ function AddPayroll() {
 
   // ─── STEP 5: Convert Currency ──────────────────────────────────────────
   // ─── STEP 5: Convert Currency ──────────────────────────────────────────
-const handleConvertCurrency = async () => {
-  if (conversionRatesList.length === 0) {
-    showToast("Please add at least one conversion rate", "warning");
-    return;
-  }
+  const handleConvertCurrency = async () => {
+    if (conversionRatesList.length === 0) {
+      showToast("Please add at least one conversion rate", "warning");
+      return;
+    }
 
-  if (!selectedUserId) {
-    showToast("Please select an employee first", "error");
-    return;
-  }
+    if (!selectedUserId) {
+      showToast("Please select an employee first", "error");
+      return;
+    }
 
-  const monthNumber = monthNames[payPeriodMonth] || new Date().getMonth() + 1;
-  const year = parseInt(payPeriodYear) || new Date().getFullYear();
+    const monthNumber = monthNames[payPeriodMonth] || new Date().getMonth() + 1;
+    const year = parseInt(payPeriodYear) || new Date().getFullYear();
 
-  setIsConverting(true);
-  try {
-    const result = await dispatch(
-      convertSalary({
-        userId: selectedUserId,
-        payPeriodMonth: monthNumber,
-        payPeriodYear: year,
-        targetCurrency: targetCurrency,
-        conversionRates: conversionRatesList.map(item => ({
-          currency: item.currency,
-          rate: item.rate
-        }))
-      })
-    ).unwrap();
+    setIsConverting(true);
+    try {
+      const result = await dispatch(
+        convertSalary({
+          userId: selectedUserId,
+          payPeriodMonth: monthNumber,
+          payPeriodYear: year,
+          targetCurrency: targetCurrency,
+          conversionRates: conversionRatesList.map((item) => ({
+            currency: item.currency,
+            rate: item.rate,
+          })),
+        }),
+      ).unwrap();
 
-    // Get the original amounts from localSummaryData
-    const originalGrossSalary = localSummaryData.gross_salary || localSummaryData.gross_earnings || 0;
-    const originalOvertime = localSummaryData.overtime_amount || 0;
-    const originalDeductions = localSummaryData.deductions || localSummaryData.total_deductions || 0;
-    const originalNetPay = localSummaryData.net_pay || 0;
+      // Get the original amounts from localSummaryData
+      const originalGrossSalary =
+        localSummaryData.gross_salary || localSummaryData.gross_earnings || 0;
+      const originalOvertime = localSummaryData.overtime_amount || 0;
+      const originalDeductions =
+        localSummaryData.deductions || localSummaryData.total_deductions || 0;
+      const originalNetPay = localSummaryData.net_pay || 0;
 
-    // Get the base currency (first currency in the conversion list)
-    const baseCurrency = conversionRatesList[0]?.currency || "INR";
-    const baseRate = conversionRatesList[0]?.rate || 1;
+      // Get the base currency (first currency in the conversion list)
+      const baseCurrency = conversionRatesList[0]?.currency || "INR";
+      const baseRate = conversionRatesList[0]?.rate || 1;
 
-    // Update conversion details with both original and converted values
-    setConversionDetails({
-      gross_salary: {
-        amount: originalGrossSalary, // Original amount
-        fromCurrency: baseCurrency,
-        toCurrency: targetCurrency,
-        rate: baseRate,
-        convertedAmount: result.converted_gross_salary || 0, // Converted amount from API
-      },
-      overtime_amount: {
-        amount: originalOvertime, // Original amount
-        fromCurrency: baseCurrency,
-        toCurrency: targetCurrency,
-        rate: baseRate,
-        convertedAmount: result.converted_overtime || 0, // Converted amount from API
-      },
-      deductions: {
-        amount: originalDeductions, // Original amount
-        fromCurrency: baseCurrency,
-        toCurrency: targetCurrency,
-        rate: baseRate,
-        convertedAmount: result.converted_deductions || 0, // Converted amount from API
-      },
-      net_pay: {
-        amount: originalNetPay, // Original amount
-        fromCurrency: baseCurrency,
-        toCurrency: targetCurrency,
-        rate: baseRate,
-        convertedAmount: result.converted_net_pay || 0, // Converted amount from API
-      },
-    });
-    
-    setIsConverted(true);
-    showToast("Currency conversion completed successfully!", "success");
-  } catch (error) {
-    console.error("Conversion error:", error);
-    showToast(error || "Failed to convert currency", "error");
-  } finally {
-    setIsConverting(false);
-  }
-};
+      // Update conversion details with both original and converted values
+      setConversionDetails({
+        gross_salary: {
+          amount: originalGrossSalary, // Original amount
+          fromCurrency: baseCurrency,
+          toCurrency: targetCurrency,
+          rate: baseRate,
+          convertedAmount: result.converted_gross_salary || 0, // Converted amount from API
+        },
+        overtime_amount: {
+          amount: originalOvertime, // Original amount
+          fromCurrency: baseCurrency,
+          toCurrency: targetCurrency,
+          rate: baseRate,
+          convertedAmount: result.converted_overtime || 0, // Converted amount from API
+        },
+        deductions: {
+          amount: originalDeductions, // Original amount
+          fromCurrency: baseCurrency,
+          toCurrency: targetCurrency,
+          rate: baseRate,
+          convertedAmount: result.converted_deductions || 0, // Converted amount from API
+        },
+        net_pay: {
+          amount: originalNetPay, // Original amount
+          fromCurrency: baseCurrency,
+          toCurrency: targetCurrency,
+          rate: baseRate,
+          convertedAmount: result.converted_net_pay || 0, // Converted amount from API
+        },
+      });
+
+      setIsConverted(true);
+      showToast("Currency conversion completed successfully!", "success");
+    } catch (error) {
+      console.error("Conversion error:", error);
+      showToast(error || "Failed to convert currency", "error");
+    } finally {
+      setIsConverting(false);
+    }
+  };
 
   // Handle employee selection
   const handleEmployeeSelect = async (employeeId) => {
@@ -987,7 +996,7 @@ const handleConvertCurrency = async () => {
       generatePayslipPDF();
 
       setTimeout(() => {
-        window.location.href = "/admin/payroll";
+        window.location.href = `${basePath}/payroll`;
       }, 3000);
     } catch (error) {
       showToast(error || "Failed to submit payroll", "error");
@@ -1163,7 +1172,7 @@ const handleConvertCurrency = async () => {
       {/* Breadcrumbs */}
       <div className="flex items-center gap-2 text-xs md:text-sm mb-4 md:mb-6 flex-wrap">
         <Link
-          to="/admin/payroll"
+          to={`${basePath}/payroll`}
           className="text-green-500 hover:text-green-600 font-medium"
         >
           Payroll
