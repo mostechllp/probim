@@ -538,7 +538,13 @@ const EditEmployee = () => {
     { number: 4, title: "Contact", icon: "fas fa-address-card" },
   ];
 
-  const userTypeOptions = ["employee", "admin"];
+  const userTypeOptions = [
+  { value: "employee", label: "Employee" },
+  { value: "admin", label: "Admin" },
+  { value: "hr", label: "HR" },
+  { value: "manager", label: "Manager" },
+  { value: "team-lead", label: "Team Lead" },
+];
   const genderOptions = [
     { value: "male", label: "Male" },
     { value: "female", label: "Female" },
@@ -1597,7 +1603,7 @@ const EditEmployee = () => {
                         >
                           {userTypeOptions.map((type) => (
                             <option key={type} value={type}>
-                              {type.charAt(0).toUpperCase() + type.slice(1)}
+                              {type.label}
                             </option>
                           ))}
                         </select>

@@ -484,7 +484,13 @@ const AddEmployee = () => {
   ];
 
   // Only employee and admin user types
-  const userTypeOptions = ["employee", "admin"];
+  const userTypeOptions = [
+    { value: "employee", label: "Employee" },
+    { value: "admin", label: "Admin" },
+    { value: "hr", label: "HR" },
+    { value: "manager", label: "Manager" },
+    { value: "team-lead", label: "Team Lead" },
+  ];
 
   const genderOptions = [
     { value: "male", label: "Male" },
@@ -1478,10 +1484,10 @@ const AddEmployee = () => {
                             {...field}
                             className={`w-full px-3 md:px-4 py-2 md:py-3 bg-gray-50 border rounded-lg text-sm md:text-base text-gray-800 transition-all focus:outline-none focus:ring-2 ${errors.type ? "border-red-500" : "border-gray-200 focus:border-green-500"}`}
                           >
+                            <option value="">Select User Type</option>
                             {userTypeOptions.map((type) => (
-                              <option key={type} value={type}>
-                                {type.charAt(0).toUpperCase() +
-                                  type.slice(1).replace("_", " ")}
+                              <option key={type.value} value={type.value}>
+                                {type.label}
                               </option>
                             ))}
                           </select>

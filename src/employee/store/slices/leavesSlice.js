@@ -177,8 +177,7 @@ const transformLeaveBalanceData = (data) => {
   return leaveBalances;
 };
 
-// Store New Leave Request
-// Store New Leave Request
+// Store New Leave Request 
 export const addLeaveRequest = createAsyncThunk(
   "leaves/storeLeaveRequest",
   async (formData, { rejectWithValue, dispatch, getState }) => {
@@ -200,20 +199,15 @@ export const addLeaveRequest = createAsyncThunk(
       const endDate = formData.get('end_date');
       const reason = formData.get('reason');
       const claimSalary = formData.get('claim_salary') === '1';
-      const durationDays = formData.get('duration_days');
+      const session = formData.get('session') || 'full_day'; // full_day or half_day
+      const year = formData.get('year') || new Date().getFullYear();
       
       // Check if we have a document
       const document = formData.get('document');
       
-      // Prepare the payload as JSON (not FormData)
-      const payload = {
-        employee_id: parseInt(employeeId),
-        leave_type_id: parseInt(leaveTypeId),
-        start_date: startDate,
-        end_date: endDate,
-        reason: reason,
-        claim_salary: claimSalary,
-      };
+      // Prepare the payload
+      let payload;
+      let headers = {};
       
       // Only add document if it exists
       if (document && document.size > 0) {
@@ -225,37 +219,36 @@ export const addLeaveRequest = createAsyncThunk(
         formDataWithDoc.append('end_date', endDate);
         formDataWithDoc.append('reason', reason);
         formDataWithDoc.append('claim_salary', claimSalary ? '1' : '0');
+        formDataWithDoc.append('session', session);
+        formDataWithDoc.append('year', year);
         formDataWithDoc.append('document', document);
         
-        const response = await apiClient.post("/employee/leaves", formDataWithDoc, {
-          headers: {
-            'Content-Type': 'multipart/form-data',
-          },
-        });
-        
-        console.log("Store leave response (with document):", response.data);
-        
-        if (response.data && response.data.status === "success") {
-          await dispatch(fetchLeaveBalance());
-          return response.data.data;
-        } else {
-          return rejectWithValue(response.data?.message || "Failed to submit leave request");
-        }
+        payload = formDataWithDoc;
+        headers = { 'Content-Type': 'multipart/form-data' };
+      } else {
+        // If no document, send as JSON with ALL fields
+        payload = {
+          employee_id: parseInt(employeeId),
+          leave_type_id: parseInt(leaveTypeId),
+          start_date: startDate,
+          end_date: endDate,
+          reason: reason,
+          claim_salary: claimSalary,
+          session: session, // full_day or half_day
+          year: parseInt(year)
+        };
+        headers = { 'Content-Type': 'application/json' };
       }
       
-      // If no document, send as JSON
       console.log("Submitting leave request with payload:", payload);
       
-      const response = await apiClient.post("/employee/leaves", payload, {
-        headers: {
-          'Content-Type': 'application/json',
-        },
-      });
+      const response = await apiClient.post("/employee/leaves", payload, { headers });
       console.log("Store leave response:", response.data);
       
       if (response.data && response.data.status === "success") {
         // Refresh balance after successful submission
         await dispatch(fetchLeaveBalance());
+        await dispatch(fetchEmployeeLeaves());
         return response.data.data;
       } else {
         return rejectWithValue(response.data?.message || "Failed to submit leave request");
