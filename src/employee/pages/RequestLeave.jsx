@@ -22,37 +22,81 @@ import DateInput from "../../admin/components/common/DateInput";
 // Color mapping for leave types
 const getLeaveTypeColor = (typeName) => {
   const name = typeName?.toLowerCase() || "";
-  
-  if (name.includes("sick")) return { bg: "bg-red-50 dark:bg-red-900/20", border: "border-red-200 dark:border-red-800", text: "text-red-700 dark:text-red-300", icon: "fa-thermometer-half" };
-  if (name.includes("annual") || name.includes("vacation")) return { bg: "bg-green-50 dark:bg-green-900/20", border: "border-green-200 dark:border-green-800", text: "text-green-700 dark:text-green-300", icon: "fa-suitcase" };
-  if (name.includes("casual")) return { bg: "bg-blue-50 dark:bg-blue-900/20", border: "border-blue-200 dark:border-blue-800", text: "text-blue-700 dark:text-blue-300", icon: "fa-umbrella-beach" };
-  if (name.includes("maternity")) return { bg: "bg-pink-50 dark:bg-pink-900/20", border: "border-pink-200 dark:border-pink-800", text: "text-pink-700 dark:text-pink-300", icon: "fa-baby" };
-  if (name.includes("paternity")) return { bg: "bg-purple-50 dark:bg-purple-900/20", border: "border-purple-200 dark:border-purple-800", text: "text-purple-700 dark:text-purple-300", icon: "fa-baby" };
-  if (name.includes("unpaid")) return { bg: "bg-orange-50 dark:bg-orange-900/20", border: "border-orange-200 dark:border-orange-800", text: "text-orange-700 dark:text-orange-300", icon: "fa-clock" };
-  
-  return { bg: "bg-teal-50 dark:bg-teal-900/20", border: "border-teal-200 dark:border-teal-800", text: "text-teal-700 dark:text-teal-300", icon: "fa-calendar-alt" };
+
+  if (name.includes("sick"))
+    return {
+      bg: "bg-red-50 dark:bg-red-900/20",
+      border: "border-red-200 dark:border-red-800",
+      text: "text-red-700 dark:text-red-300",
+      icon: "fa-thermometer-half",
+    };
+  if (name.includes("annual") || name.includes("vacation"))
+    return {
+      bg: "bg-green-50 dark:bg-green-900/20",
+      border: "border-green-200 dark:border-green-800",
+      text: "text-green-700 dark:text-green-300",
+      icon: "fa-suitcase",
+    };
+  if (name.includes("casual"))
+    return {
+      bg: "bg-blue-50 dark:bg-blue-900/20",
+      border: "border-blue-200 dark:border-blue-800",
+      text: "text-blue-700 dark:text-blue-300",
+      icon: "fa-umbrella-beach",
+    };
+  if (name.includes("maternity"))
+    return {
+      bg: "bg-pink-50 dark:bg-pink-900/20",
+      border: "border-pink-200 dark:border-pink-800",
+      text: "text-pink-700 dark:text-pink-300",
+      icon: "fa-baby",
+    };
+  if (name.includes("paternity"))
+    return {
+      bg: "bg-purple-50 dark:bg-purple-900/20",
+      border: "border-purple-200 dark:border-purple-800",
+      text: "text-purple-700 dark:text-purple-300",
+      icon: "fa-baby",
+    };
+  if (name.includes("unpaid"))
+    return {
+      bg: "bg-orange-50 dark:bg-orange-900/20",
+      border: "border-orange-200 dark:border-orange-800",
+      text: "text-orange-700 dark:text-orange-300",
+      icon: "fa-clock",
+    };
+
+  return {
+    bg: "bg-teal-50 dark:bg-teal-900/20",
+    border: "border-teal-200 dark:border-teal-800",
+    text: "text-teal-700 dark:text-teal-300",
+    icon: "fa-calendar-alt",
+  };
 };
 
 const RequestLeave = () => {
   const navigate = useNavigate();
   const dispatch = useDispatch();
-  
+
   const leavesState = useSelector((state) => state.EmpLeaves);
-  const employeeState = useSelector((state) => state.employee || state.employees);
+  const employeeState = useSelector(
+    (state) => state.employee || state.employees,
+  );
   const authState = useSelector((state) => state.auth);
-  
+
   const leaveBalances = leavesState?.leaveBalances || {};
   const leaveTypes = leavesState?.leaveTypes || [];
   const submitting = leavesState?.submitting || false;
   const error = leavesState?.error || null;
   const loadingLeaveTypes = leavesState?.loading || false;
   const loading = leavesState?.loading || false;
-  
+
   // Get employee ID from employee state - with fallback
-  const employeeId = authState?.user?.employee?.id || 
-                     authState?.user?.employee_id || 
-                     employeeState?.currentEmployee?.employee_id ||
-                     null;
+  const employeeId =
+    authState?.user?.employee?.id ||
+    authState?.user?.employee_id ||
+    employeeState?.currentEmployee?.employee_id ||
+    null;
 
   const [formData, setFormData] = useState({
     leave_type_id: "",
@@ -75,7 +119,10 @@ const RequestLeave = () => {
   // Fetch leaves and balance on mount
   useEffect(() => {
     const fetchData = async () => {
-      console.log("Employee ID from auth.user.employee.id:", authState?.user?.employee?.id);
+      console.log(
+        "Employee ID from auth.user.employee.id:",
+        authState?.user?.employee?.id,
+      );
       console.log("Final employeeId:", employeeId);
       // Only fetch balance if we have an employee ID
       if (employeeId || authState?.user?.employee_id) {
@@ -152,7 +199,9 @@ const RequestLeave = () => {
       return false;
     }
     if (totalDays <= 0) {
-      setLocalError("Please select valid dates (end date must be after start date)");
+      setLocalError(
+        "Please select valid dates (end date must be after start date)",
+      );
       return false;
     }
     if (formData.reason.length < 10) {
@@ -163,57 +212,67 @@ const RequestLeave = () => {
   };
 
   const handleSubmit = async (e) => {
-  e.preventDefault();
-  setLocalError("");
+    e.preventDefault();
+    setLocalError("");
 
-  if (!validateForm()) {
-    return;
-  }
-
-  // Check if selected leave type has enough balance
-  const selectedLeaveType = leaveTypes.find(lt => lt.id === parseInt(formData.leave_type_id));
-  if (selectedLeaveType) {
-    const balance = leaveBalances[selectedLeaveType.name] || { remaining: 0 };
-    if (totalDays > balance.remaining && balance.remaining >= 0) {
-      setLocalError(
-        `Requested days (${totalDays}) exceed available ${selectedLeaveType.name} balance (${balance.remaining} days)`
-      );
+    if (!validateForm()) {
       return;
     }
-  }
 
-  // Create FormData for the request
-  const formDataToSend = new FormData();
-  formDataToSend.append("leave_type_id", formData.leave_type_id);
-  formDataToSend.append("start_date", formData.start_date);
-  formDataToSend.append("end_date", formData.end_date);
-  formDataToSend.append("reason", formData.reason);
-  formDataToSend.append("claim_salary", formData.claim_salary);
-  formDataToSend.append("duration_days", totalDays.toString());
+    // Check if selected leave type has enough balance
+    const selectedLeaveType = leaveTypes.find(
+      (lt) => lt.id === parseInt(formData.leave_type_id),
+    );
+    if (selectedLeaveType) {
+      const balance = leaveBalances[selectedLeaveType.name] || { remaining: 0 };
+      if (totalDays > balance.remaining && balance.remaining >= 0) {
+        setLocalError(
+          `Requested days (${totalDays}) exceed available ${selectedLeaveType.name} balance (${balance.remaining} days)`,
+        );
+        return;
+      }
+    }
 
-  if (selectedFile) {
-    formDataToSend.append("document", selectedFile);
-  }
+    // Create FormData for the request
+    const formDataToSend = new FormData();
+    formDataToSend.append("leave_type_id", formData.leave_type_id);
+    formDataToSend.append("start_date", formData.start_date);
+    formDataToSend.append("end_date", formData.end_date);
+    formDataToSend.append("reason", formData.reason);
+    formDataToSend.append("claim_salary", formData.claim_salary);
+    // Send session instead of duration_days
+    formDataToSend.append(
+      "session",
+      leaveDuration === "half" ? "half_day" : "full_day",
+    );
+    formDataToSend.append("year", new Date().getFullYear().toString());
 
-  console.log("Submitting leave request with payload:");
-  for (let pair of formDataToSend.entries()) {
-    console.log(pair[0] + ": " + pair[1]);
-  }
+    if (selectedFile) {
+      formDataToSend.append("document", selectedFile);
+    }
 
-  const result = await dispatch(addLeaveRequest(formDataToSend));
+    console.log("Submitting leave request with payload:");
+    for (let pair of formDataToSend.entries()) {
+      console.log(pair[0] + ": " + pair[1]);
+    }
 
-  if (addLeaveRequest.fulfilled.match(result)) {
-    await dispatch(fetchEmployeeLeaves());
-    await dispatch(fetchLeaveBalance());
-    navigate("/employee/leaves");
-  }
-};
+    const result = await dispatch(addLeaveRequest(formDataToSend));
+
+    if (addLeaveRequest.fulfilled.match(result)) {
+      await dispatch(fetchEmployeeLeaves());
+      await dispatch(fetchLeaveBalance());
+      navigate("/employee/leaves");
+    }
+  };
 
   // Get balance for selected leave type
   const getSelectedLeaveBalance = () => {
-    if (!formData.leave_type_id) return { allocated: 0, used: 0, pending: 0, remaining: 0 };
-    
-    const selectedType = leaveTypes.find(lt => lt.id === parseInt(formData.leave_type_id));
+    if (!formData.leave_type_id)
+      return { allocated: 0, used: 0, pending: 0, remaining: 0 };
+
+    const selectedType = leaveTypes.find(
+      (lt) => lt.id === parseInt(formData.leave_type_id),
+    );
     if (selectedType) {
       const balance = leaveBalances[selectedType.name];
       if (balance) {
@@ -221,7 +280,7 @@ const RequestLeave = () => {
           allocated: balance.allocated || 0,
           used: balance.taken || balance.used || 0,
           pending: balance.pending || 0,
-          remaining: balance.remaining || 0
+          remaining: balance.remaining || 0,
         };
       }
     }
@@ -307,11 +366,14 @@ const RequestLeave = () => {
             {/* Leave Type Selection */}
             <div className="form-field flex flex-col gap-2 pb-5">
               <label className="text-xs font-semibold text-gray-700 dark:text-gray-300 flex items-center gap-1">
-                <FiList className="text-green-500" /> Leave Type <span className="text-red-500 ml-1">*</span>
+                <FiList className="text-green-500" /> Leave Type{" "}
+                <span className="text-red-500 ml-1">*</span>
               </label>
               <select
                 value={formData.leave_type_id}
-                onChange={(e) => setFormData({ ...formData, leave_type_id: e.target.value })}
+                onChange={(e) =>
+                  setFormData({ ...formData, leave_type_id: e.target.value })
+                }
                 className="w-full px-3.5 py-2.5 bg-gray-50 dark:bg-gray-900 border border-gray-200 dark:border-gray-700 rounded-lg text-sm text-gray-800 dark:text-gray-200 focus:outline-none focus:border-green-500 focus:ring-2 focus:ring-green-500/20 transition-all"
                 disabled={loadingLeaveTypes}
               >
@@ -333,7 +395,8 @@ const RequestLeave = () => {
             {/* Leave Duration Type */}
             <div className="form-field flex flex-col gap-2 pb-5">
               <label className="text-xs font-semibold text-gray-700 dark:text-gray-300 flex items-center gap-1">
-                <i className="fas fa-clock text-green-500" /> Leave Duration <span className="text-red-500 ml-1">*</span>
+                <i className="fas fa-clock text-green-500" /> Leave Duration{" "}
+                <span className="text-red-500 ml-1">*</span>
               </label>
               <div className="flex gap-4 mt-1">
                 <label className="flex items-center gap-2 cursor-pointer">
@@ -368,7 +431,8 @@ const RequestLeave = () => {
             <div className="form-grid grid grid-cols-1 md:grid-cols-2 gap-5 mb-6">
               <div className="form-field flex flex-col gap-2">
                 <label className="text-xs font-semibold text-gray-700 dark:text-gray-300 flex items-center gap-1">
-                  <FiCalendar className="text-green-500" /> Start Date <span className="text-red-500 ml-1">*</span>
+                  <FiCalendar className="text-green-500" /> Start Date{" "}
+                  <span className="text-red-500 ml-1">*</span>
                 </label>
                 <DateInput
                   value={formData.start_date}
@@ -382,7 +446,8 @@ const RequestLeave = () => {
 
               <div className="form-field flex flex-col gap-2">
                 <label className="text-xs font-semibold text-gray-700 dark:text-gray-300 flex items-center gap-1">
-                  <FiCalendar className="text-green-500" /> End Date <span className="text-red-500 ml-1">*</span>
+                  <FiCalendar className="text-green-500" /> End Date{" "}
+                  <span className="text-red-500 ml-1">*</span>
                 </label>
                 <DateInput
                   value={formData.end_date}
@@ -416,7 +481,9 @@ const RequestLeave = () => {
               <div className="form-field flex flex-col gap-2">
                 <label className="text-xs font-semibold text-gray-700 dark:text-gray-300 flex items-center gap-1">
                   <FiPaperclip className="text-green-500" /> Supporting Document
-                  <span className="text-gray-400 text-[10px] ml-1">(Optional)</span>
+                  <span className="text-gray-400 text-[10px] ml-1">
+                    (Optional)
+                  </span>
                 </label>
                 <input
                   type="file"
@@ -451,7 +518,8 @@ const RequestLeave = () => {
               {/* Claim Salary */}
               <div className="form-field md:col-span-2 flex flex-col gap-2">
                 <label className="text-xs font-semibold text-gray-700 dark:text-gray-300 flex items-center gap-1">
-                  <i className="fas fa-money-bill-wave text-green-500" /> Claim Salary
+                  <i className="fas fa-money-bill-wave text-green-500" /> Claim
+                  Salary
                 </label>
                 <div className="flex gap-4 mt-1">
                   <label className="flex items-center gap-2 cursor-pointer">
@@ -460,10 +528,14 @@ const RequestLeave = () => {
                       name="claimSalary"
                       value="1"
                       checked={formData.claim_salary === "1"}
-                      onChange={() => setFormData({ ...formData, claim_salary: "1" })}
+                      onChange={() =>
+                        setFormData({ ...formData, claim_salary: "1" })
+                      }
                       className="text-green-500 focus:ring-green-500"
                     />
-                    <span className="text-sm text-gray-700 dark:text-gray-300">Yes</span>
+                    <span className="text-sm text-gray-700 dark:text-gray-300">
+                      Yes
+                    </span>
                   </label>
                   <label className="flex items-center gap-2 cursor-pointer">
                     <input
@@ -471,10 +543,14 @@ const RequestLeave = () => {
                       name="claimSalary"
                       value="0"
                       checked={formData.claim_salary === "0"}
-                      onChange={() => setFormData({ ...formData, claim_salary: "0" })}
+                      onChange={() =>
+                        setFormData({ ...formData, claim_salary: "0" })
+                      }
                       className="text-green-500 focus:ring-green-500"
                     />
-                    <span className="text-sm text-gray-700 dark:text-gray-300">No</span>
+                    <span className="text-sm text-gray-700 dark:text-gray-300">
+                      No
+                    </span>
                   </label>
                 </div>
               </div>
@@ -482,7 +558,8 @@ const RequestLeave = () => {
 
             {exceedsBalance && (
               <div className="warning-message mb-6 p-3 bg-amber-500/10 border border-amber-500 rounded-lg text-amber-600 text-sm">
-                ⚠️ Warning: Requested days ({totalDays}) exceed available balance ({remaining} days)
+                ⚠️ Warning: Requested days ({totalDays}) exceed available
+                balance ({remaining} days)
               </div>
             )}
 
@@ -519,7 +596,10 @@ const RequestLeave = () => {
             <h3 className="text-lg font-bold text-gray-800 dark:text-gray-200">
               {formData.leave_type_id ? (
                 <>
-                  {leaveTypes.find(lt => lt.id === parseInt(formData.leave_type_id))?.name || "Leave"} Balance
+                  {leaveTypes.find(
+                    (lt) => lt.id === parseInt(formData.leave_type_id),
+                  )?.name || "Leave"}{" "}
+                  Balance
                 </>
               ) : (
                 "Leave Balance"

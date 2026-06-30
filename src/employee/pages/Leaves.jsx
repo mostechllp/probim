@@ -1,13 +1,49 @@
 import { useEffect, useMemo } from 'react';
 import { Link } from 'react-router-dom';
-import { useDispatch, useSelector } from 'react-redux'; // Changed from useAppSelector/useAppDispatch
+import { useDispatch, useSelector } from 'react-redux';
 import { setLeaveFilter, setLeavePagination, fetchEmployeeLeaves } from '../store/slices/leavesSlice';
 import { FiSearch, FiPlus, FiFileText, FiChevronLeft, FiChevronRight, FiCalendar, FiClock } from 'react-icons/fi';
 import StatusBadge from '../components/common/StatusBadge';
 
+// Color mapping for leave types
+const getLeaveTypeColor = (typeName) => {
+  const name = typeName?.toLowerCase() || "";
+  
+  if (name.includes("sick")) return "bg-red-100 text-red-700 dark:bg-red-900/30 dark:text-red-400 border-red-200 dark:border-red-800";
+  if (name.includes("annual") || name.includes("vacation")) return "bg-green-100 text-green-700 dark:bg-green-900/30 dark:text-green-400 border-green-200 dark:border-green-800";
+  if (name.includes("casual")) return "bg-blue-100 text-blue-700 dark:bg-blue-900/30 dark:text-blue-400 border-blue-200 dark:border-blue-800";
+  if (name.includes("maternity")) return "bg-pink-100 text-pink-700 dark:bg-pink-900/30 dark:text-pink-400 border-pink-200 dark:border-pink-800";
+  if (name.includes("paternity")) return "bg-purple-100 text-purple-700 dark:bg-purple-900/30 dark:text-purple-400 border-purple-200 dark:border-purple-800";
+  if (name.includes("unpaid")) return "bg-orange-100 text-orange-700 dark:bg-orange-900/30 dark:text-orange-400 border-orange-200 dark:border-orange-800";
+  if (name.includes("comp") || name.includes("off")) return "bg-amber-100 text-amber-700 dark:bg-amber-900/30 dark:text-amber-400 border-amber-200 dark:border-amber-800";
+  if (name.includes("study") || name.includes("exam")) return "bg-indigo-100 text-indigo-700 dark:bg-indigo-900/30 dark:text-indigo-400 border-indigo-200 dark:border-indigo-800";
+  if (name.includes("marriage") || name.includes("wedding")) return "bg-pink-100 text-pink-700 dark:bg-pink-900/30 dark:text-pink-400 border-pink-200 dark:border-pink-800";
+  if (name.includes("bereavement") || name.includes("compassionate")) return "bg-gray-100 text-gray-700 dark:bg-gray-700 dark:text-gray-400 border-gray-200 dark:border-gray-600";
+  
+  // Default color
+  return "bg-teal-100 text-teal-700 dark:bg-teal-900/30 dark:text-teal-400 border-teal-200 dark:border-teal-800";
+};
+
+// Get icon for leave type
+const getLeaveTypeIcon = (typeName) => {
+  const name = typeName?.toLowerCase() || "";
+  
+  if (name.includes("sick")) return "fa-thermometer-half";
+  if (name.includes("annual") || name.includes("vacation")) return "fa-suitcase";
+  if (name.includes("casual")) return "fa-umbrella-beach";
+  if (name.includes("maternity")) return "fa-baby";
+  if (name.includes("paternity")) return "fa-baby";
+  if (name.includes("unpaid")) return "fa-clock";
+  if (name.includes("comp") || name.includes("off")) return "fa-clock";
+  if (name.includes("study") || name.includes("exam")) return "fa-graduation-cap";
+  if (name.includes("marriage") || name.includes("wedding")) return "fa-ring";
+  
+  return "fa-calendar-alt";
+};
+
 const Leaves = () => {
-  const dispatch = useDispatch(); // Changed from useAppDispatch
-  const leavesState = useSelector((state) => state.EmpLeaves); // Changed from useAppSelector
+  const dispatch = useDispatch();
+  const leavesState = useSelector((state) => state.EmpLeaves);
   
   // Add safety defaults
   const leaves = leavesState?.leaves || [];
@@ -15,7 +51,7 @@ const Leaves = () => {
   const pagination = leavesState?.pagination || { currentPage: 1, perPage: 10 };
   const loading = leavesState?.loading || false;
   
-  // Show ALL leave types, not just Annual Leave
+  // Show ALL leave types
   const filteredLeaves = useMemo(() => {
     let filtered = [...leaves];
     
@@ -55,9 +91,9 @@ const Leaves = () => {
   
   // Helper functions
   const getLeaveTypeName = (leaveType) => {
-    if (!leaveType) return 'Annual Leave';
+    if (!leaveType) return 'Leave';
     if (typeof leaveType === 'object') {
-      return leaveType.name || 'Annual Leave';
+      return leaveType.name || 'Leave';
     }
     return leaveType;
   };
@@ -283,13 +319,15 @@ const Leaves = () => {
                 const claimSalary = getClaimSalary(leave.claim_salary);
                 const hasDoc = hasDocument(leave.document);
                 const days = leave.duration_days || calculateDays(leave.start_date, leave.end_date);
+                const colorClass = getLeaveTypeColor(leaveTypeName);
+                const iconClass = getLeaveTypeIcon(leaveTypeName);
                 
                 return (
                   <tr key={leave.id || idx} className="hover:bg-[var(--surface2)] transition-colors">
                     <td className="py-3.5 px-4 border-b border-[var(--border)] text-center">{start + idx + 1}</td>
                     <td className="py-3.5 px-4 border-b border-[var(--border)]">
-                      <span className="inline-flex items-center gap-1.5 px-2 py-1 bg-green-100 text-green-700 dark:bg-green-900/30 dark:text-green-400 rounded-full text-[11px] font-semibold">
-                        <FiCalendar className="text-xs" />
+                      <span className={`inline-flex items-center gap-1.5 px-2 py-1 rounded-full text-[11px] font-semibold border ${colorClass}`}>
+                        <i className={`fas ${iconClass} text-[10px]`}></i>
                         {leaveTypeName}
                       </span>
                     </td>
