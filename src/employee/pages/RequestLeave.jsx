@@ -5,66 +5,96 @@ import {
   addLeaveRequest,
   fetchEmployeeLeaves,
   fetchLeaveBalance,
+  fetchLeaveTypes,
 } from "../store/slices/leavesSlice";
 import {
-  FiChevronRight,
   FiCalendar,
   FiMessageSquare,
   FiPaperclip,
   FiSend,
   FiX,
   FiAlertCircle,
+  FiList,
 } from "react-icons/fi";
 import { MdCalculate } from "react-icons/md";
-import apiClient from "../../utils/apiClient";
 import DateInput from "../../admin/components/common/DateInput";
+
+// Color mapping for leave types
+const getLeaveTypeColor = (typeName) => {
+  const name = typeName?.toLowerCase() || "";
+  
+  if (name.includes("sick")) return { bg: "bg-red-50 dark:bg-red-900/20", border: "border-red-200 dark:border-red-800", text: "text-red-700 dark:text-red-300", icon: "fa-thermometer-half" };
+  if (name.includes("annual") || name.includes("vacation")) return { bg: "bg-green-50 dark:bg-green-900/20", border: "border-green-200 dark:border-green-800", text: "text-green-700 dark:text-green-300", icon: "fa-suitcase" };
+  if (name.includes("casual")) return { bg: "bg-blue-50 dark:bg-blue-900/20", border: "border-blue-200 dark:border-blue-800", text: "text-blue-700 dark:text-blue-300", icon: "fa-umbrella-beach" };
+  if (name.includes("maternity")) return { bg: "bg-pink-50 dark:bg-pink-900/20", border: "border-pink-200 dark:border-pink-800", text: "text-pink-700 dark:text-pink-300", icon: "fa-baby" };
+  if (name.includes("paternity")) return { bg: "bg-purple-50 dark:bg-purple-900/20", border: "border-purple-200 dark:border-purple-800", text: "text-purple-700 dark:text-purple-300", icon: "fa-baby" };
+  if (name.includes("unpaid")) return { bg: "bg-orange-50 dark:bg-orange-900/20", border: "border-orange-200 dark:border-orange-800", text: "text-orange-700 dark:text-orange-300", icon: "fa-clock" };
+  
+  return { bg: "bg-teal-50 dark:bg-teal-900/20", border: "border-teal-200 dark:border-teal-800", text: "text-teal-700 dark:text-teal-300", icon: "fa-calendar-alt" };
+};
 
 const RequestLeave = () => {
   const navigate = useNavigate();
   const dispatch = useDispatch();
+  
   const leavesState = useSelector((state) => state.EmpLeaves);
-
-  // Add safety defaults
+  const employeeState = useSelector((state) => state.employee || state.employees);
+  const authState = useSelector((state) => state.auth);
+  
   const leaveBalances = leavesState?.leaveBalances || {};
+  const leaveTypes = leavesState?.leaveTypes || [];
   const submitting = leavesState?.submitting || false;
   const error = leavesState?.error || null;
+  const loadingLeaveTypes = leavesState?.loading || false;
+  const loading = leavesState?.loading || false;
+  
+  // Get employee ID from employee state - with fallback
+  const employeeId = authState?.user?.employee?.id || 
+                     authState?.user?.employee_id || 
+                     employeeState?.currentEmployee?.employee_id ||
+                     null;
 
   const [formData, setFormData] = useState({
+    leave_type_id: "",
     start_date: "",
     end_date: "",
     reason: "",
+    claim_salary: "0",
   });
   const [totalDays, setTotalDays] = useState(0);
   const [selectedFile, setSelectedFile] = useState(null);
   const [localError, setLocalError] = useState("");
   const [leaveDuration, setLeaveDuration] = useState("full");
+  const [isDataReady, setIsDataReady] = useState(false);
 
-  // Get Annual Leave balance specifically (using leave_type_id: 1)
-  const annualLeaveBalance = leaveBalances["Annual Leave"] ||
-    leaveBalances.total || { allocated: 0, taken: 0, pending: 0, remaining: 0 };
+  // Fetch leave types on mount
+  useEffect(() => {
+    dispatch(fetchLeaveTypes());
+  }, [dispatch]);
 
   // Fetch leaves and balance on mount
   useEffect(() => {
     const fetchData = async () => {
-      await dispatch(fetchEmployeeLeaves());
-      await dispatch(fetchLeaveBalance());
+      console.log("Employee ID from auth.user.employee.id:", authState?.user?.employee?.id);
+      console.log("Final employeeId:", employeeId);
+      // Only fetch balance if we have an employee ID
+      if (employeeId || authState?.user?.employee_id) {
+        const result = await dispatch(fetchLeaveBalance());
+        console.log("Fetch balance result:", result);
+      } else {
+        console.warn("No employee ID available, skipping balance fetch");
+      }
     };
     fetchData();
-  }, [dispatch]);
+  }, [dispatch, employeeId, authState?.user?.employee_id]);
 
-  // Debug function
-  const debugBackendBalance = async () => {
-    try {
-      const response = await apiClient.get("/employee/leave-balance");
-      console.log("Backend leave balance check:", response.data);
-    } catch (error) {
-      console.error("Backend balance check error:", error);
-    }
-  };
-
+  // Check if data is ready
   useEffect(() => {
-    debugBackendBalance();
-  }, []);
+    // Data is ready when we have either employeeId OR we've loaded leave types
+    if (employeeId || leaveTypes.length > 0) {
+      setIsDataReady(true);
+    }
+  }, [employeeId, leaveTypes]);
 
   // Calculate days when dates change
   useEffect(() => {
@@ -77,12 +107,10 @@ const RequestLeave = () => {
       const to = new Date(formData.end_date);
       if (to >= from) {
         let days = Math.ceil((to - from) / (1000 * 60 * 60 * 24)) + 1;
-        // If half day and single day, days = 0.5
         if (leaveDuration === "half") {
           if (days === 1) {
             days = 0.5;
           } else {
-            // For multiple days half-day (e.g., half-day on last day)
             days = days - 0.5;
           }
         }
@@ -111,6 +139,10 @@ const RequestLeave = () => {
   };
 
   const validateForm = () => {
+    if (!formData.leave_type_id) {
+      setLocalError("Please select a leave type");
+      return false;
+    }
     if (!formData.start_date) {
       setLocalError("Please select start date");
       return false;
@@ -120,9 +152,7 @@ const RequestLeave = () => {
       return false;
     }
     if (totalDays <= 0) {
-      setLocalError(
-        "Please select valid dates (end date must be after start date)",
-      );
+      setLocalError("Please select valid dates (end date must be after start date)");
       return false;
     }
     if (formData.reason.length < 10) {
@@ -133,66 +163,77 @@ const RequestLeave = () => {
   };
 
   const handleSubmit = async (e) => {
-    e.preventDefault();
-    setLocalError("");
+  e.preventDefault();
+  setLocalError("");
 
-    if (!validateForm()) {
-      return;
-    }
+  if (!validateForm()) {
+    return;
+  }
 
-    if (
-      totalDays > annualLeaveBalance.remaining &&
-      annualLeaveBalance.remaining >= 0
-    ) {
+  // Check if selected leave type has enough balance
+  const selectedLeaveType = leaveTypes.find(lt => lt.id === parseInt(formData.leave_type_id));
+  if (selectedLeaveType) {
+    const balance = leaveBalances[selectedLeaveType.name] || { remaining: 0 };
+    if (totalDays > balance.remaining && balance.remaining >= 0) {
       setLocalError(
-        `Requested days (${totalDays}) exceed available Annual Leave balance (${annualLeaveBalance.remaining} days)`,
+        `Requested days (${totalDays}) exceed available ${selectedLeaveType.name} balance (${balance.remaining} days)`
       );
       return;
     }
+  }
 
-    const formDataToSend = new FormData();
-    // CHANGE THIS LINE: Use "1" for Annual Leave instead of "2"
-    formDataToSend.append("leave_type_id", "1");  // Changed from "2" to "1"
-    formDataToSend.append("start_date", formData.start_date);
-    formDataToSend.append("end_date", formData.end_date);
-    formDataToSend.append("reason", formData.reason);
-    formDataToSend.append("claim_salary", "0");
+  // Create FormData for the request
+  const formDataToSend = new FormData();
+  formDataToSend.append("leave_type_id", formData.leave_type_id);
+  formDataToSend.append("start_date", formData.start_date);
+  formDataToSend.append("end_date", formData.end_date);
+  formDataToSend.append("reason", formData.reason);
+  formDataToSend.append("claim_salary", formData.claim_salary);
+  formDataToSend.append("duration_days", totalDays.toString());
 
-    // Add half-day information
-    formDataToSend.append("duration_type", leaveDuration); // "full" or "half"
-    formDataToSend.append("duration_days", totalDays.toString());
+  if (selectedFile) {
+    formDataToSend.append("document", selectedFile);
+  }
 
-    const currentYear = new Date().getFullYear();
-    formDataToSend.append("year", currentYear.toString());
+  console.log("Submitting leave request with payload:");
+  for (let pair of formDataToSend.entries()) {
+    console.log(pair[0] + ": " + pair[1]);
+  }
 
-    if (selectedFile) {
-      formDataToSend.append("document", selectedFile);
+  const result = await dispatch(addLeaveRequest(formDataToSend));
+
+  if (addLeaveRequest.fulfilled.match(result)) {
+    await dispatch(fetchEmployeeLeaves());
+    await dispatch(fetchLeaveBalance());
+    navigate("/employee/leaves");
+  }
+};
+
+  // Get balance for selected leave type
+  const getSelectedLeaveBalance = () => {
+    if (!formData.leave_type_id) return { allocated: 0, used: 0, pending: 0, remaining: 0 };
+    
+    const selectedType = leaveTypes.find(lt => lt.id === parseInt(formData.leave_type_id));
+    if (selectedType) {
+      const balance = leaveBalances[selectedType.name];
+      if (balance) {
+        return {
+          allocated: balance.allocated || 0,
+          used: balance.taken || balance.used || 0,
+          pending: balance.pending || 0,
+          remaining: balance.remaining || 0
+        };
+      }
     }
-
-    console.log("Submitting leave request with payload:");
-    for (let pair of formDataToSend.entries()) {
-      console.log(pair[0] + ": " + pair[1]);
-    }
-
-    const result = await dispatch(addLeaveRequest(formDataToSend));
-
-    if (addLeaveRequest.fulfilled.match(result)) {
-      await dispatch(fetchEmployeeLeaves());
-      await dispatch(fetchLeaveBalance());
-      navigate("/employee/leaves");
-    }
+    return { allocated: 0, used: 0, pending: 0, remaining: 0 };
   };
 
-  const remaining = annualLeaveBalance?.remaining ?? 0;
-  const usedLeaves = annualLeaveBalance?.taken ?? 0;
-  const pendingLeaves = annualLeaveBalance?.pending ?? 0;
-  const allocatedLeaves = annualLeaveBalance?.allocated ?? 0;
+  const selectedBalance = getSelectedLeaveBalance();
+  const remaining = selectedBalance?.remaining ?? 0;
+  const usedLeaves = selectedBalance?.taken ?? 0;
+  const pendingLeaves = selectedBalance?.pending ?? 0;
+  const allocatedLeaves = selectedBalance?.allocated ?? 0;
   const exceedsBalance = totalDays > remaining && remaining >= 0;
-
-  useEffect(() => {
-    console.log("Annual Leave Balance:", annualLeaveBalance);
-    console.log("Leave Balances from store:", leaveBalances);
-  }, [leaveBalances, annualLeaveBalance]);
 
   const getMinEndDate = () => {
     if (formData.start_date) {
@@ -205,8 +246,18 @@ const RequestLeave = () => {
     return `${year}-${month}-${day}`;
   };
 
+  // Show loading state only if we're still loading and don't have data
+  if (loading || loadingLeaveTypes) {
+    return (
+      <div className="w-full px-4 md:px-6">
+        <div className="flex justify-center items-center h-64">
+          <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-green-500"></div>
+        </div>
+      </div>
+    );
+  }
+
   return (
-    // Changed from p-4 md:p-6 to w-full px-4 md:px-6 to match EditLeaveAllocation
     <div className="w-full px-4 md:px-6">
       {/* Breadcrumbs */}
       <div className="flex items-center gap-2 text-xs md:text-sm mb-4 md:mb-6 flex-wrap">
@@ -224,18 +275,16 @@ const RequestLeave = () => {
           My Leaves
         </Link>
         <i className="fas fa-chevron-right text-gray-400 text-[10px] md:text-xs"></i>
-        <span className="text-gray-500 dark:text-gray-400">
-          Request Annual Leave
-        </span>
+        <span className="text-gray-500 dark:text-gray-400">Request Leave</span>
       </div>
 
-      {/* Page Header - Updated to match EditLeaveAllocation style */}
+      {/* Page Header */}
       <div className="mb-4 md:mb-6">
         <h2 className="text-lg md:text-2xl font-bold bg-gradient-to-r from-gray-800 to-green-600 dark:from-gray-200 dark:to-green-400 bg-clip-text text-transparent">
-          <i className="fas fa-calendar-alt mr-2"></i> Annual Leave Application
+          <i className="fas fa-calendar-plus mr-2"></i> Leave Application
         </h2>
         <p className="text-xs md:text-sm text-gray-500 dark:text-gray-400 mt-1">
-          Submit a request for annual leave
+          Submit a request for leave
         </p>
       </div>
 
@@ -255,27 +304,36 @@ const RequestLeave = () => {
               <FiCalendar /> Leave Details
             </div>
 
-            {/* Leave Type Display (Fixed) */}
-            <div className="mb-6 p-4 bg-green-50 dark:bg-green-900/20 rounded-lg border border-green-200 dark:border-green-800">
-              <div className="flex items-center gap-3">
-                <div className="w-10 h-10 rounded-full bg-green-500/20 text-green-600 flex items-center justify-center">
-                  <FiCalendar className="text-xl" />
-                </div>
-                <div>
-                  <p className="text-sm font-semibold text-green-700 dark:text-green-400">
-                    Annual Leave
-                  </p>
-                  <p className="text-xs text-green-600 dark:text-green-500">
-                    Only annual leave requests are accepted
-                  </p>
-                </div>
-              </div>
+            {/* Leave Type Selection */}
+            <div className="form-field flex flex-col gap-2 pb-5">
+              <label className="text-xs font-semibold text-gray-700 dark:text-gray-300 flex items-center gap-1">
+                <FiList className="text-green-500" /> Leave Type <span className="text-red-500 ml-1">*</span>
+              </label>
+              <select
+                value={formData.leave_type_id}
+                onChange={(e) => setFormData({ ...formData, leave_type_id: e.target.value })}
+                className="w-full px-3.5 py-2.5 bg-gray-50 dark:bg-gray-900 border border-gray-200 dark:border-gray-700 rounded-lg text-sm text-gray-800 dark:text-gray-200 focus:outline-none focus:border-green-500 focus:ring-2 focus:ring-green-500/20 transition-all"
+                disabled={loadingLeaveTypes}
+              >
+                <option value="">Select Leave Type</option>
+                {leaveTypes.map((type) => {
+                  const balance = leaveBalances[type.name] || { remaining: 0 };
+                  return (
+                    <option key={type.id} value={type.id}>
+                      {type.name} (Available: {balance.remaining} days)
+                    </option>
+                  );
+                })}
+              </select>
+              {loadingLeaveTypes && (
+                <p className="text-xs text-gray-400">Loading leave types...</p>
+              )}
             </div>
 
             {/* Leave Duration Type */}
             <div className="form-field flex flex-col gap-2 pb-5">
               <label className="text-xs font-semibold text-gray-700 dark:text-gray-300 flex items-center gap-1">
-                <i className="fas fa-clock text-green-500" /> Leave Duration
+                <i className="fas fa-clock text-green-500" /> Leave Duration <span className="text-red-500 ml-1">*</span>
               </label>
               <div className="flex gap-4 mt-1">
                 <label className="flex items-center gap-2 cursor-pointer">
@@ -310,8 +368,7 @@ const RequestLeave = () => {
             <div className="form-grid grid grid-cols-1 md:grid-cols-2 gap-5 mb-6">
               <div className="form-field flex flex-col gap-2">
                 <label className="text-xs font-semibold text-gray-700 dark:text-gray-300 flex items-center gap-1">
-                  <FiCalendar className="text-green-500" /> Start Date{" "}
-                  <span className="text-red-500 ml-1">*</span>
+                  <FiCalendar className="text-green-500" /> Start Date <span className="text-red-500 ml-1">*</span>
                 </label>
                 <DateInput
                   value={formData.start_date}
@@ -325,8 +382,7 @@ const RequestLeave = () => {
 
               <div className="form-field flex flex-col gap-2">
                 <label className="text-xs font-semibold text-gray-700 dark:text-gray-300 flex items-center gap-1">
-                  <FiCalendar className="text-green-500" /> End Date{" "}
-                  <span className="text-red-500 ml-1">*</span>
+                  <FiCalendar className="text-green-500" /> End Date <span className="text-red-500 ml-1">*</span>
                 </label>
                 <DateInput
                   value={formData.end_date}
@@ -360,7 +416,7 @@ const RequestLeave = () => {
               <div className="form-field flex flex-col gap-2">
                 <label className="text-xs font-semibold text-gray-700 dark:text-gray-300 flex items-center gap-1">
                   <FiPaperclip className="text-green-500" /> Supporting Document
-                  (Optional)
+                  <span className="text-gray-400 text-[10px] ml-1">(Optional)</span>
                 </label>
                 <input
                   type="file"
@@ -381,7 +437,7 @@ const RequestLeave = () => {
                     setFormData({ ...formData, reason: e.target.value })
                   }
                   rows="4"
-                  placeholder="Please describe your reason for requesting annual leave (min 10 characters)..."
+                  placeholder="Please describe your reason for requesting leave (min 10 characters)..."
                   className="py-3 px-3.5 bg-gray-50 dark:bg-gray-900 border border-gray-200 dark:border-gray-700 rounded-lg text-sm text-gray-800 dark:text-gray-200 focus:outline-none focus:border-green-500 focus:ring-2 focus:ring-green-500/20 transition-all resize-none"
                   required
                 />
@@ -391,12 +447,42 @@ const RequestLeave = () => {
                   {formData.reason.length}/10 characters minimum
                 </small>
               </div>
+
+              {/* Claim Salary */}
+              <div className="form-field md:col-span-2 flex flex-col gap-2">
+                <label className="text-xs font-semibold text-gray-700 dark:text-gray-300 flex items-center gap-1">
+                  <i className="fas fa-money-bill-wave text-green-500" /> Claim Salary
+                </label>
+                <div className="flex gap-4 mt-1">
+                  <label className="flex items-center gap-2 cursor-pointer">
+                    <input
+                      type="radio"
+                      name="claimSalary"
+                      value="1"
+                      checked={formData.claim_salary === "1"}
+                      onChange={() => setFormData({ ...formData, claim_salary: "1" })}
+                      className="text-green-500 focus:ring-green-500"
+                    />
+                    <span className="text-sm text-gray-700 dark:text-gray-300">Yes</span>
+                  </label>
+                  <label className="flex items-center gap-2 cursor-pointer">
+                    <input
+                      type="radio"
+                      name="claimSalary"
+                      value="0"
+                      checked={formData.claim_salary === "0"}
+                      onChange={() => setFormData({ ...formData, claim_salary: "0" })}
+                      className="text-green-500 focus:ring-green-500"
+                    />
+                    <span className="text-sm text-gray-700 dark:text-gray-300">No</span>
+                  </label>
+                </div>
+              </div>
             </div>
 
             {exceedsBalance && (
               <div className="warning-message mb-6 p-3 bg-amber-500/10 border border-amber-500 rounded-lg text-amber-600 text-sm">
-                ⚠️ Warning: Requested days ({totalDays}) exceed available Annual
-                Leave balance ({remaining} days)
+                ⚠️ Warning: Requested days ({totalDays}) exceed available balance ({remaining} days)
               </div>
             )}
 
@@ -427,66 +513,89 @@ const RequestLeave = () => {
           </form>
         </div>
 
-        {/* Balance Card */}
+        {/* Balance Card - Dynamic based on selected leave type */}
         <div className="balance-card bg-white dark:bg-gray-800 border border-gray-200 dark:border-gray-700 rounded-xl p-6 shadow-sm sticky top-24">
           <div className="balance-header text-center pb-5 border-b border-gray-200 dark:border-gray-700 mb-5">
             <h3 className="text-lg font-bold text-gray-800 dark:text-gray-200">
-              Annual Leave Balance
+              {formData.leave_type_id ? (
+                <>
+                  {leaveTypes.find(lt => lt.id === parseInt(formData.leave_type_id))?.name || "Leave"} Balance
+                </>
+              ) : (
+                "Leave Balance"
+              )}
             </h3>
             <p className="text-xs text-gray-500 dark:text-gray-400 mt-1">
-              Current allocation for {new Date().getFullYear()}
+              {formData.leave_type_id ? (
+                <>Current allocation for {new Date().getFullYear()}</>
+              ) : (
+                <>Select a leave type to view balance</>
+              )}
             </p>
           </div>
 
-          <div className="balance-remaining text-center mb-6">
-            <div
-              className={`remaining-number text-4xl md:text-5xl font-extrabold ${remaining < 0 ? "text-red-600" : "text-green-600"}`}
-            >
-              {remaining}
-            </div>
-            <div className="remaining-label text-xs text-gray-500 dark:text-gray-400 mt-2">
-              Days Remaining
-            </div>
-          </div>
+          {formData.leave_type_id ? (
+            <>
+              <div className="balance-remaining text-center mb-6">
+                <div
+                  className={`remaining-number text-4xl md:text-5xl font-extrabold ${remaining < 0 ? "text-red-600" : "text-green-600"}`}
+                >
+                  {remaining}
+                </div>
+                <div className="remaining-label text-xs text-gray-500 dark:text-gray-400 mt-2">
+                  Days Remaining
+                </div>
+              </div>
 
-          <div className="balance-stats flex gap-4 mb-6">
-            <div className="balance-stat flex-1 text-center p-3 bg-gray-50 dark:bg-gray-900 rounded-lg">
-              <div className="stat-value text-xl font-bold text-gray-800 dark:text-gray-200">
-                {allocatedLeaves}
+              <div className="balance-stats flex gap-4 mb-6">
+                <div className="balance-stat flex-1 text-center p-3 bg-gray-50 dark:bg-gray-900 rounded-lg">
+                  <div className="stat-value text-xl font-bold text-gray-800 dark:text-gray-200">
+                    {allocatedLeaves}
+                  </div>
+                  <div className="stat-label text-[10px] text-gray-500 dark:text-gray-400 mt-1">
+                    Allocated
+                  </div>
+                </div>
+                <div className="balance-stat flex-1 text-center p-3 bg-gray-50 dark:bg-gray-900 rounded-lg">
+                  <div className="stat-value text-xl font-bold text-gray-800 dark:text-gray-200">
+                    {usedLeaves}
+                  </div>
+                  <div className="stat-label text-[10px] text-gray-500 dark:text-gray-400 mt-1">
+                    Used
+                  </div>
+                </div>
+                <div className="balance-stat flex-1 text-center p-3 bg-gray-50 dark:bg-gray-900 rounded-lg">
+                  <div className="stat-value text-xl font-bold text-gray-800 dark:text-gray-200">
+                    {remaining}
+                  </div>
+                  <div className="stat-label text-[10px] text-gray-500 dark:text-gray-400 mt-1">
+                    Balance
+                  </div>
+                </div>
               </div>
-              <div className="stat-label text-[10px] text-gray-500 dark:text-gray-400 mt-1">
-                Allocated
-              </div>
-            </div>
-            <div className="balance-stat flex-1 text-center p-3 bg-gray-50 dark:bg-gray-900 rounded-lg">
-              <div className="stat-value text-xl font-bold text-gray-800 dark:text-gray-200">
-                {usedLeaves}
-              </div>
-              <div className="stat-label text-[10px] text-gray-500 dark:text-gray-400 mt-1">
-                Used
-              </div>
-            </div>
-            <div className="balance-stat flex-1 text-center p-3 bg-gray-50 dark:bg-gray-900 rounded-lg">
-              <div className="stat-value text-xl font-bold text-gray-800 dark:text-gray-200">
-                {pendingLeaves}
-              </div>
-              <div className="stat-label text-[10px] text-gray-500 dark:text-gray-400 mt-1">
-                Pending
-              </div>
-            </div>
-          </div>
 
-          <div className="info-note mt-4 p-3 bg-blue-50 dark:bg-blue-900/20 rounded-lg">
-            <p className="text-xs text-blue-600 dark:text-blue-400">
-              <FiAlertCircle className="inline mr-1" />
-              Annual leave requests require approval from HR/Admin
-            </p>
-          </div>
+              <div className="info-note mt-4 p-3 bg-blue-50 dark:bg-blue-900/20 rounded-lg">
+                <p className="text-xs text-blue-600 dark:text-blue-400">
+                  <FiAlertCircle className="inline mr-1" />
+                  Leave requests require approval from HR/Admin
+                </p>
+              </div>
+            </>
+          ) : (
+            <div className="text-center py-8">
+              <div className="text-4xl text-gray-300 dark:text-gray-600 mb-3">
+                <i className="fas fa-calendar-check"></i>
+              </div>
+              <p className="text-sm text-gray-500 dark:text-gray-400">
+                Select a leave type to view your balance
+              </p>
+            </div>
+          )}
 
           <div className="mt-4 p-3 bg-amber-50 dark:bg-amber-900/20 rounded-lg">
             <p className="text-xs text-amber-600 dark:text-amber-400">
               <FiCalendar className="inline mr-1" />
-              Plan your annual leave in advance for better scheduling
+              Plan your leave in advance for better scheduling
             </p>
           </div>
         </div>

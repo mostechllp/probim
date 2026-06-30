@@ -108,12 +108,16 @@ export const fetchLeaveBalances = createAsyncThunk(
   "leaves/fetchBalances",
   async ({ employee_id }, { rejectWithValue }) => {
     try {
-      const response = await apiClient.get(`/admin/leave-allocations/${employee_id}`);
+      const response = await apiClient.get(
+        `/admin/leave-allocations/${employee_id}`,
+      );
       return response.data.data;
     } catch (error) {
-      return rejectWithValue(error.response?.data?.message || "Failed to fetch leave balances");
+      return rejectWithValue(
+        error.response?.data?.message || "Failed to fetch leave balances",
+      );
     }
-  }
+  },
 );
 
 export const fetchLeaveAllocations = createAsyncThunk(
@@ -121,26 +125,41 @@ export const fetchLeaveAllocations = createAsyncThunk(
   async (_, { rejectWithValue }) => {
     try {
       const response = await apiClient.get("/admin/leave-allocations");
+      console.log("Leave allocations response:", response.data);
+
+      // The response has data.employees with allocations
+      if (response.data?.data?.employees) {
+        return response.data.data.employees;
+      }
       return response.data.data || response.data;
     } catch (error) {
-      return rejectWithValue(error.response?.data?.message || "Failed to fetch leave allocations");
+      console.error("Fetch leave allocations error:", error);
+      return rejectWithValue(
+        error.response?.data?.message || "Failed to fetch leave allocations",
+      );
     }
-  }
+  },
 );
 
 export const updateLeaveAllocation = createAsyncThunk(
   "leaves/updateAllocation",
   async ({ employee_id, allocations }, { rejectWithValue }) => {
     try {
-      const response = await apiClient.post("/admin/leave-allocations", {
-        employee_id,
-        allocations
-      });
+      // Pass employee_id as URL parameter: /admin/leave-allocations/{employee_id}
+      const response = await apiClient.post(
+        `/admin/leave-allocations/${employee_id}`,
+        {
+          allocations,
+        },
+      );
       return response.data.data;
     } catch (error) {
-      return rejectWithValue(error.response?.data?.message || "Failed to update allocation");
+      console.error("Update allocation error:", error);
+      return rejectWithValue(
+        error.response?.data?.message || "Failed to update allocation",
+      );
     }
-  }
+  },
 );
 
 // Leave Types
@@ -179,12 +198,11 @@ export const addLeaveType = createAsyncThunk(
       const res = await apiClient.post("/admin/leave-types", data);
       return res.data.data || res.data;
     } catch (err) {
-      
       // Return the full error for debugging
       return rejectWithValue({
         message: err.response?.data?.message || "Failed to add leave type",
         data: err.response?.data,
-        status: err.response?.status
+        status: err.response?.status,
       });
     }
   },
