@@ -17,22 +17,21 @@ const getLeaveTypeColor = (typeName) => {
   if (name.includes("sick")) return "bg-red-50 dark:bg-red-900/20 text-red-700 dark:text-red-300";
   if (name.includes("annual") || name.includes("vacation")) return "bg-green-50 dark:bg-green-900/20 text-green-700 dark:text-green-300";
   if (name.includes("casual")) return "bg-blue-50 dark:bg-blue-900/20 text-blue-700 dark:text-blue-300";
-  if (name.includes("maternity") || name.includes("paternity")) return "bg-pink-50 dark:bg-pink-900/20 text-pink-700 dark:text-pink-300";
+  if (name.includes("maternity")) return "bg-pink-50 dark:bg-pink-900/20 text-pink-700 dark:text-pink-300";
+  if (name.includes("paternity")) return "bg-purple-50 dark:bg-purple-900/20 text-purple-700 dark:text-purple-300";
   if (name.includes("unpaid")) return "bg-orange-50 dark:bg-orange-900/20 text-orange-700 dark:text-orange-300";
   
-  // Default pastel color for other types
   return "bg-teal-50 dark:bg-teal-900/20 text-teal-700 dark:text-teal-300";
 };
 
 const LeaveAllocations = () => {
   const dispatch = useDispatch();
   const { employees = [] } = useSelector((state) => state.employees || {});
-  const { leaveTypes = [] } = useSelector((state) => state.leaves || {});
+  const { leaveTypes = [], leaveAllocations = [] } = useSelector((state) => state.leaves || {});
   const [searchTerm, setSearchTerm] = useState("");
   const [currentPage, setCurrentPage] = useState(1);
   const [perPage, setPerPage] = useState(10);
   const [loading, setLoading] = useState(false);
-  const [leaveBalances, setLeaveBalances] = useState({});
   const { user } = useSelector((state) => state.auth || {});
   const routePrefix = user?.type === "employee" ? "/employee" : "/admin";
   const leavesUrl = user?.type === "employee" ? "/employee/leave-management" : "/admin/leaves";
@@ -42,68 +41,7 @@ const LeaveAllocations = () => {
       setLoading(true);
       await dispatch(fetchEmployees());
       await dispatch(fetchLeaveTypes());
-      try {
-        const result = await dispatch(fetchLeaveAllocations()).unwrap();
-        console.log("Fetched all leave allocations:", result);
-        
-        const balances = {};
-        let allocationsList = [];
-        
-        if (Array.isArray(result)) {
-          allocationsList = result;
-        } else if (result && Array.isArray(result.data)) {
-          allocationsList = result.data;
-        } else if (result && typeof result === "object") {
-          allocationsList = Object.entries(result).map(([employeeId, data]) => ({
-            employee_id: parseInt(employeeId),
-            allocations: data.allocations || data
-          }));
-        }
-
-        allocationsList.forEach(item => {
-          const employeeId = item.employee_id || item.employee?.id;
-          if (employeeId) {
-            let allocs = [];
-            if (item.allocations) {
-              allocs = Array.isArray(item.allocations) 
-                ? item.allocations 
-                : Object.values(item.allocations);
-            } else if (item.balances) {
-              allocs = Array.isArray(item.balances)
-                ? item.balances
-                : Object.values(item.balances);
-            } else if (Array.isArray(item)) {
-              allocs = item;
-            } else {
-              if (!balances[employeeId]) {
-                balances[employeeId] = [];
-              }
-              balances[employeeId].push(item);
-              return;
-            }
-            balances[employeeId] = allocs;
-          }
-        });
-
-        if (Array.isArray(allocationsList) && allocationsList.length > 0 && !allocationsList[0].allocations) {
-          allocationsList.forEach(alloc => {
-            const employeeId = alloc.employee_id || alloc.employee?.id;
-            if (employeeId) {
-              if (!balances[employeeId]) {
-                balances[employeeId] = [];
-              }
-              const exists = balances[employeeId].some(existing => existing.id === alloc.id || existing.leave_type_id === alloc.leave_type_id);
-              if (!exists) {
-                balances[employeeId].push(alloc);
-              }
-            }
-          });
-        }
-
-        setLeaveBalances(balances);
-      } catch (error) {
-        console.error("Failed to fetch leave allocations:", error);
-      }
+      await dispatch(fetchLeaveAllocations());
       setLoading(false);
     };
     fetchData();
@@ -115,7 +53,7 @@ const LeaveAllocations = () => {
       const searchLower = searchTerm.toLowerCase();
       filtered = filtered.filter(
         (emp) =>
-          (emp.name || "").toLowerCase().includes(searchLower)
+          (emp.name || emp.first_name || "").toLowerCase().includes(searchLower)
       );
     }
     return filtered;
@@ -127,23 +65,26 @@ const LeaveAllocations = () => {
   const start = (currentPage - 1) * perPage;
   const pageEmployees = filteredEmployees.slice(start, start + perPage);
 
-  const getLeaveTypeId = (leaveTypeName) => {
-    const leaveType = leaveTypes.find(type => type.name === leaveTypeName);
-    return leaveType?.id;
-  };
-
-  const getAllocationValue = (employeeId, leaveTypeName, field) => {
-    const leaveTypeId = getLeaveTypeId(leaveTypeName);
-    const balances = leaveBalances[employeeId];
+  // Get allocation value for a specific employee and leave type
+  const getAllocationValue = (employeeId, leaveTypeId, field) => {
+    // Find the employee in the leaveAllocations data
+    const employeeAlloc = leaveAllocations.find(
+      emp => emp.employee_id === employeeId
+    );
     
-    if (!balances || !Array.isArray(balances) || !leaveTypeId) return 0;
+    if (!employeeAlloc || !employeeAlloc.allocations) return 0;
     
-    const allocation = balances.find(a => a.leave_type_id === leaveTypeId);
+    // Find the specific leave type allocation
+    const allocation = employeeAlloc.allocations.find(
+      a => a.leave_type_id === leaveTypeId
+    );
     
     if (!allocation) return 0;
     
-    const allocatedDays = parseFloat(allocation.allocated_days) || 0;
-    const usedDays = parseFloat(allocation.used) || 0;
+    const allocatedDays = parseFloat(allocation.allocated_days || 0);
+    // Since there's no 'used' field in the response, we set it to 0
+    // You can modify this if the API provides used days in the future
+    const usedDays = parseFloat(allocation.used || 0);
     
     if (field === "alloc") return allocatedDays;
     if (field === "used") return usedDays;
@@ -293,6 +234,10 @@ const LeaveAllocations = () => {
               {pageEmployees.length > 0 ? (
                 pageEmployees.map((employee, idx) => {
                   const photoUrl = getEmployeePhoto(employee);
+                  const employeeName = employee.name || 
+                    (employee.first_name && employee.last_name 
+                      ? `${employee.first_name} ${employee.last_name}` 
+                      : employee.first_name || employee.last_name || "-");
 
                   return (
                     <tr
@@ -307,7 +252,7 @@ const LeaveAllocations = () => {
                           {photoUrl ? (
                             <img
                               src={photoUrl}
-                              alt={employee.name}
+                              alt={employeeName}
                               className="w-8 h-8 md:w-10 md:h-10 rounded-full object-cover border border-gray-200"
                               onError={(e) => {
                                 e.target.style.display = "none";
@@ -321,10 +266,10 @@ const LeaveAllocations = () => {
                             className="fallback-avatar w-8 h-8 md:w-10 md:h-10 rounded-full bg-gradient-to-br from-green-500 to-green-600 flex items-center justify-center text-white text-sm md:text-base font-semibold"
                             style={{ display: photoUrl ? "none" : "flex" }}
                           >
-                            {employee.name?.charAt(0) || "?"}
+                            {employeeName?.charAt(0) || "?"}
                           </div>
                           <span className="text-xs md:text-sm font-semibold text-gray-800 dark:text-gray-200">
-                            {employee.name}
+                            {employeeName}
                           </span>
                         </div>
                       </td>
@@ -333,12 +278,12 @@ const LeaveAllocations = () => {
                       {leaveTypes.map((type) => {
                         const alloc = getAllocationValue(
                           employee.id,
-                          type.name,
+                          type.id,
                           "alloc",
                         );
                         const used = getAllocationValue(
                           employee.id,
-                          type.name,
+                          type.id,
                           "used",
                         );
                         const bal = alloc - used;
