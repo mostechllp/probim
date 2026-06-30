@@ -79,7 +79,6 @@ const LeaveAllocations = () => {
               if (!balances[employeeId]) {
                 balances[employeeId] = [];
               }
-              // Prevent duplicates if already added
               const exists = balances[employeeId].some(existing => existing.id === alloc.id || existing.leave_type_id === alloc.leave_type_id);
               if (!exists) {
                 balances[employeeId].push(alloc);
@@ -103,9 +102,7 @@ const LeaveAllocations = () => {
       const searchLower = searchTerm.toLowerCase();
       filtered = filtered.filter(
         (emp) =>
-          (emp.name || "").toLowerCase().includes(searchLower) ||
-          (emp.designation?.name || "").toLowerCase().includes(searchLower) ||
-          (emp.company?.company_name || "").toLowerCase().includes(searchLower),
+          (emp.name || "").toLowerCase().includes(searchLower)
       );
     }
     return filtered;
@@ -126,14 +123,12 @@ const LeaveAllocations = () => {
     const leaveTypeId = getLeaveTypeId(leaveTypeName);
     const balances = leaveBalances[employeeId];
     
-    // Check if balances is an array
     if (!balances || !Array.isArray(balances) || !leaveTypeId) return 0;
     
     const allocation = balances.find(a => a.leave_type_id === leaveTypeId);
     
     if (!allocation) return 0;
     
-    // Handle string or number values
     const allocatedDays = parseFloat(allocation.allocated_days) || 0;
     const usedDays = parseFloat(allocation.used) || 0;
     
@@ -145,6 +140,39 @@ const LeaveAllocations = () => {
 
   const formatNumber = (value) => {
     return value || 0;
+  };
+
+  // Helper function to get photo URL
+  const getEmployeePhoto = (employee) => {
+    const photoValue =
+      employee.avatar ||
+      employee.avatar_path ||
+      employee.passport_size_photo ||
+      employee.profile_photo ||
+      employee.photo ||
+      employee.user?.avatar;
+
+    if (!photoValue) return null;
+
+    if (typeof photoValue === "object" && photoValue.path) {
+      const baseUrl = import.meta.env.VITE_API_URL?.replace("/api", "") || "";
+      return `${baseUrl}/storage/${photoValue.path}`;
+    }
+
+    if (typeof photoValue === "string") {
+      if (photoValue.startsWith("/tmp/")) {
+        const baseUrl = import.meta.env.VITE_API_URL?.replace("/api", "") || "";
+        return `${baseUrl}/storage/temp/${photoValue.replace("/tmp/", "")}`;
+      }
+      if (photoValue.startsWith("data:")) return photoValue;
+      if (photoValue.startsWith("http")) return photoValue;
+
+      const baseUrl = import.meta.env.VITE_API_URL?.replace("/api", "") || "";
+      if (photoValue.startsWith("/storage/")) return `${baseUrl}${photoValue}`;
+      return `${baseUrl}/storage/${photoValue}`;
+    }
+
+    return null;
   };
 
   if (loading) {
@@ -199,14 +227,14 @@ const LeaveAllocations = () => {
           <SearchBar
             value={searchTerm}
             onChange={setSearchTerm}
-            placeholder="Search by employee, designation, company..."
+            placeholder="Search by employee name..."
           />
         </div>
       </div>
 
       {/* Leave Allocations Table */}
       <div className="bg-white dark:bg-gray-800 rounded-xl border border-gray-200 dark:border-gray-700 overflow-x-auto shadow-soft">
-        <div className="min-w-[1200px]">
+        <div className="min-w-[800px]">
           <table className="w-full border-collapse">
             <thead>
               <tr className="bg-gray-50 dark:bg-gray-700/50 border-b border-gray-200 dark:border-gray-700">
@@ -216,144 +244,39 @@ const LeaveAllocations = () => {
                 <th className="px-3 md:px-4 py-2 md:py-3 text-left text-[10px] md:text-xs font-semibold text-gray-500 dark:text-gray-400 whitespace-nowrap">
                   Employee
                 </th>
-                <th className="px-3 md:px-4 py-2 md:py-3 text-left text-[10px] md:text-xs font-semibold text-gray-500 dark:text-gray-400 whitespace-nowrap">
-                  Designation
-                </th>
-                <th className="px-3 md:px-4 py-2 md:py-3 text-left text-[10px] md:text-xs font-semibold text-gray-500 dark:text-gray-400 whitespace-nowrap">
-                  Company
-                </th>
-
-                {/* Sick Leave Column */}
-                <th className="px-3 md:px-4 py-2 md:py-3 text-center text-[10px] md:text-xs font-semibold text-gray-500 dark:text-gray-400 whitespace-nowrap bg-green-50 dark:bg-green-900/20">
-                  Sick Leave
-                </th>
-
-                {/* Casual Leave Column */}
-                <th className="px-3 md:px-4 py-2 md:py-3 text-center text-[10px] md:text-xs font-semibold text-gray-500 dark:text-gray-400 whitespace-nowrap bg-blue-50 dark:bg-blue-900/20">
-                  Casual Leave
-                </th>
-
-                {/* Annual Leave Column */}
-                <th className="px-3 md:px-4 py-2 md:py-3 text-center text-[10px] md:text-xs font-semibold text-gray-500 dark:text-gray-400 whitespace-nowrap bg-amber-50 dark:bg-amber-900/20">
-                  Annual Leave
-                </th>
-
+                {/* Dynamic Leave Type Columns */}
+                {leaveTypes.map((type) => (
+                  <th 
+                    key={type.id} 
+                    className="px-3 md:px-4 py-2 md:py-3 text-center text-[10px] md:text-xs font-semibold text-gray-500 dark:text-gray-400 whitespace-nowrap bg-blue-50 dark:bg-blue-900/20"
+                  >
+                    {type.name}
+                  </th>
+                ))}
                 <th className="px-3 md:px-4 py-2 md:py-3 text-left text-[10px] md:text-xs font-semibold text-gray-500 dark:text-gray-400 whitespace-nowrap">
                   Action
                 </th>
               </tr>
               <tr className="bg-gray-50 dark:bg-gray-700/50 border-b border-gray-200 dark:border-gray-700">
-                <th colSpan="4" className="px-3 md:px-4 py-1"></th>
-                <th className="px-3 md:px-4 py-1 text-center text-[10px] font-semibold text-gray-500 dark:text-gray-400">
-                  <div className="flex justify-center gap-2">
-                    <span>Alloc</span>
-                    <span>|</span>
-                    <span>Used</span>
-                    <span>|</span>
-                    <span>Bal</span>
-                  </div>
-                </th>
-                <th className="px-3 md:px-4 py-1 text-center text-[10px] font-semibold text-gray-500 dark:text-gray-400">
-                  <div className="flex justify-center gap-2">
-                    <span>Alloc</span>
-                    <span>|</span>
-                    <span>Used</span>
-                    <span>|</span>
-                    <span>Bal</span>
-                  </div>
-                </th>
-                <th className="px-3 md:px-4 py-1 text-center text-[10px] font-semibold text-gray-500 dark:text-gray-400">
-                  <div className="flex justify-center gap-2">
-                    <span>Alloc</span>
-                    <span>|</span>
-                    <span>Used</span>
-                    <span>|</span>
-                    <span>Bal</span>
-                  </div>
-                </th>
+                <th colSpan="2" className="px-3 md:px-4 py-1"></th>
+                {leaveTypes.map((type) => (
+                  <th key={`sub-${type.id}`} className="px-3 md:px-4 py-1 text-center text-[10px] font-semibold text-gray-500 dark:text-gray-400">
+                    <div className="flex justify-center gap-2">
+                      <span>Alloc</span>
+                      <span>|</span>
+                      <span>Used</span>
+                      <span>|</span>
+                      <span>Bal</span>
+                    </div>
+                  </th>
+                ))}
                 <th className="px-3 md:px-4 py-1"></th>
               </tr>
             </thead>
             <tbody>
               {pageEmployees.length > 0 ? (
                 pageEmployees.map((employee, idx) => {
-                  // Helper function to get photo URL
-                  const getEmployeePhoto = () => {
-                    // Check multiple possible photo fields
-                    const photoValue =
-                      employee.avatar ||
-                      employee.avatar_path ||
-                      employee.passport_size_photo ||
-                      employee.profile_photo ||
-                      employee.photo ||
-                      employee.user?.avatar;
-
-                    if (!photoValue) return null;
-
-                    // Handle object type avatar
-                    if (typeof photoValue === "object" && photoValue.path) {
-                      const baseUrl =
-                        import.meta.env.VITE_API_URL?.replace("/api", "") || "";
-                      return `${baseUrl}/storage/${photoValue.path}`;
-                    }
-
-                    // Handle string paths
-                    if (typeof photoValue === "string") {
-                      if (photoValue.startsWith("/tmp/")) {
-                        const baseUrl =
-                          import.meta.env.VITE_API_URL?.replace("/api", "") ||
-                          "";
-                        return `${baseUrl}/storage/temp/${photoValue.replace("/tmp/", "")}`;
-                      }
-                      if (photoValue.startsWith("data:")) return photoValue;
-                      if (photoValue.startsWith("http")) return photoValue;
-
-                      const baseUrl =
-                        import.meta.env.VITE_API_URL?.replace("/api", "") || "";
-                      if (photoValue.startsWith("/storage/"))
-                        return `${baseUrl}${photoValue}`;
-                      return `${baseUrl}/storage/${photoValue}`;
-                    }
-
-                    return null;
-                  };
-
-                  const photoUrl = getEmployeePhoto();
-                  const sickAlloc = getAllocationValue(
-                    employee.id,
-                    "Sick Leave",
-                    "alloc",
-                  );
-                  const sickUsed = getAllocationValue(
-                    employee.id,
-                    "Sick Leave",
-                    "used",
-                  );
-                  const sickBal = sickAlloc - sickUsed;
-
-                  const casualAlloc = getAllocationValue(
-                    employee.id,
-                    "Casual Leave",
-                    "alloc",
-                  );
-                  const casualUsed = getAllocationValue(
-                    employee.id,
-                    "Casual Leave",
-                    "used",
-                  );
-                  const casualBal = casualAlloc - casualUsed;
-
-                  const annualAlloc = getAllocationValue(
-                    employee.id,
-                    "Annual Leave",
-                    "alloc",
-                  );
-                  const annualUsed = getAllocationValue(
-                    employee.id,
-                    "Annual Leave",
-                    "used",
-                  );
-                  const annualBal = annualAlloc - annualUsed;
+                  const photoUrl = getEmployeePhoto(employee);
 
                   return (
                     <tr
@@ -365,7 +288,6 @@ const LeaveAllocations = () => {
                       </td>
                       <td className="px-3 md:px-4 py-2 md:py-3">
                         <div className="flex items-center gap-2 md:gap-3">
-                          {/* Profile Photo */}
                           {photoUrl ? (
                             <img
                               src={photoUrl}
@@ -390,69 +312,41 @@ const LeaveAllocations = () => {
                           </span>
                         </div>
                       </td>
-                      <td className="px-3 md:px-4 py-2 md:py-3 text-xs md:text-sm text-gray-600 dark:text-gray-400 whitespace-nowrap">
-                        {employee.designation?.name || "-"}
-                      </td>
-                      <td className="px-3 md:px-4 py-2 md:py-3 text-xs md:text-sm text-gray-600 dark:text-gray-400 whitespace-nowrap">
-                        {employee.company?.company_name || "-"}
-                      </td>
 
-                      {/* Sick Leave Values */}
-                      <td className="px-3 md:px-4 py-2 md:py-3">
-                        <div className="flex justify-center items-center gap-2">
-                          <span className="text-xs md:text-sm font-semibold text-green-600 dark:text-green-400 min-w-[30px] text-center">
-                            {formatNumber(sickAlloc)}
-                          </span>
-                          <span className="text-gray-400">|</span>
-                          <span className="text-xs md:text-sm text-gray-600 dark:text-gray-400 min-w-[30px] text-center">
-                            {formatNumber(sickUsed)}
-                          </span>
-                          <span className="text-gray-400">|</span>
-                          <span
-                            className={`text-xs md:text-sm font-semibold min-w-[30px] text-center ${sickBal < 0 ? "text-red-600" : "text-blue-600"}`}
-                          >
-                            {formatNumber(sickBal)}
-                          </span>
-                        </div>
-                      </td>
+                      {/* Dynamic Leave Type Values */}
+                      {leaveTypes.map((type) => {
+                        const alloc = getAllocationValue(
+                          employee.id,
+                          type.name,
+                          "alloc",
+                        );
+                        const used = getAllocationValue(
+                          employee.id,
+                          type.name,
+                          "used",
+                        );
+                        const bal = alloc - used;
 
-                      {/* Casual Leave Values */}
-                      <td className="px-4 py-3">
-                        <div className="flex justify-center items-center gap-2">
-                          <span className="text-xs md:text-sm font-semibold text-green-600 dark:text-green-400 min-w-[30px] text-center">
-                            {formatNumber(casualAlloc)}
-                          </span>
-                          <span className="text-gray-400">|</span>
-                          <span className="text-xs md:text-sm text-gray-600 dark:text-gray-400 min-w-[30px] text-center">
-                            {formatNumber(casualUsed)}
-                          </span>
-                          <span className="text-gray-400">|</span>
-                          <span
-                            className={`text-xs md:text-sm font-semibold min-w-[30px] text-center ${casualBal < 0 ? "text-red-600" : "text-blue-600"}`}
-                          >
-                            {formatNumber(casualBal)}
-                          </span>
-                        </div>
-                      </td>
-
-                      {/* Annual Leave Values */}
-                      <td className="px-4 py-3">
-                        <div className="flex justify-center items-center gap-2">
-                          <span className="text-xs md:text-sm font-semibold text-green-600 dark:text-green-400 min-w-[30px] text-center">
-                            {formatNumber(annualAlloc)}
-                          </span>
-                          <span className="text-gray-400">|</span>
-                          <span className="text-xs md:text-sm text-gray-600 dark:text-gray-400 min-w-[30px] text-center">
-                            {formatNumber(annualUsed)}
-                          </span>
-                          <span className="text-gray-400">|</span>
-                          <span
-                            className={`text-xs md:text-sm font-semibold min-w-[30px] text-center ${annualBal < 0 ? "text-red-600" : "text-blue-600"}`}
-                          >
-                            {formatNumber(annualBal)}
-                          </span>
-                        </div>
-                      </td>
+                        return (
+                          <td key={`${employee.id}-${type.id}`} className="px-3 md:px-4 py-2 md:py-3">
+                            <div className="flex justify-center items-center gap-2">
+                              <span className="text-xs md:text-sm font-semibold text-green-600 dark:text-green-400 min-w-[30px] text-center">
+                                {formatNumber(alloc)}
+                              </span>
+                              <span className="text-gray-400">|</span>
+                              <span className="text-xs md:text-sm text-gray-600 dark:text-gray-400 min-w-[30px] text-center">
+                                {formatNumber(used)}
+                              </span>
+                              <span className="text-gray-400">|</span>
+                              <span
+                                className={`text-xs md:text-sm font-semibold min-w-[30px] text-center ${bal < 0 ? "text-red-600" : "text-blue-600"}`}
+                              >
+                                {formatNumber(bal)}
+                              </span>
+                            </div>
+                          </td>
+                        );
+                      })}
 
                       <td className="px-3 md:px-4 py-2 md:py-3">
                         <Link
@@ -469,7 +363,7 @@ const LeaveAllocations = () => {
               ) : (
                 <tr>
                   <td
-                    colSpan="8"
+                    colSpan={3 + leaveTypes.length}
                     className="px-4 py-8 text-center text-gray-500 dark:text-gray-400"
                   >
                     No employees found
