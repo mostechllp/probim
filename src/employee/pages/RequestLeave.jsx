@@ -15,6 +15,7 @@ import {
   FiX,
   FiAlertCircle,
   FiList,
+  FiClock,
 } from "react-icons/fi";
 import { MdCalculate } from "react-icons/md";
 import DateInput from "../../admin/components/common/DateInput";
@@ -104,11 +105,12 @@ const RequestLeave = () => {
     end_date: "",
     reason: "",
     claim_salary: "0",
+    start_session: "morning", // morning or afternoon
+    end_session: "afternoon", // morning or afternoon
   });
   const [totalDays, setTotalDays] = useState(0);
   const [selectedFile, setSelectedFile] = useState(null);
   const [localError, setLocalError] = useState("");
-  const [leaveDuration, setLeaveDuration] = useState("full");
   const [isDataReady, setIsDataReady] = useState(false);
 
   // Fetch leave types on mount
@@ -146,7 +148,7 @@ const RequestLeave = () => {
   // Calculate days when dates change
   useEffect(() => {
     calculateDays();
-  }, [formData.start_date, formData.end_date, leaveDuration]);
+  }, [formData.start_date, formData.end_date, formData.start_session, formData.end_session]);
 
   const calculateDays = () => {
     if (formData.start_date && formData.end_date) {
@@ -154,13 +156,20 @@ const RequestLeave = () => {
       const to = new Date(formData.end_date);
       if (to >= from) {
         let days = Math.ceil((to - from) / (1000 * 60 * 60 * 24)) + 1;
-        if (leaveDuration === "half") {
-          if (days === 1) {
-            days = 0.5;
-          } else {
-            days = days - 0.5;
-          }
+        
+        // Adjust for sessions
+        if (formData.start_session === "afternoon") {
+          days = days - 0.5;
         }
+        if (formData.end_session === "morning") {
+          days = days - 0.5;
+        }
+        
+        // Ensure minimum is 0.5 if there's any leave
+        if (days < 0.5 && days > 0) {
+          days = 0.5;
+        }
+        
         setTotalDays(days);
       } else {
         setTotalDays(0);
@@ -240,11 +249,9 @@ const RequestLeave = () => {
     formDataToSend.append("end_date", formData.end_date);
     formDataToSend.append("reason", formData.reason);
     formDataToSend.append("claim_salary", formData.claim_salary);
-    // Send session instead of duration_days
-    formDataToSend.append(
-      "session",
-      leaveDuration === "half" ? "half_day" : "full_day",
-    );
+    // Send session1 and session2
+    formDataToSend.append("session1", formData.start_session);
+    formDataToSend.append("session2", formData.end_session);
     formDataToSend.append("year", new Date().getFullYear().toString());
 
     if (selectedFile) {
@@ -363,8 +370,8 @@ const RequestLeave = () => {
               <FiCalendar /> Leave Details
             </div>
 
-            {/* Leave Type Selection */}
-            <div className="form-field flex flex-col gap-2 pb-5">
+            {/* Leave Type - Full Width */}
+            <div className="form-field flex flex-col gap-2 mb-5">
               <label className="text-xs font-semibold text-gray-700 dark:text-gray-300 flex items-center gap-1">
                 <FiList className="text-green-500" /> Leave Type{" "}
                 <span className="text-red-500 ml-1">*</span>
@@ -379,7 +386,9 @@ const RequestLeave = () => {
               >
                 <option value="">Select Leave Type</option>
                 {leaveTypes.map((type) => {
-                  const balance = leaveBalances[type.name] || { remaining: 0 };
+                  const balance = leaveBalances[type.name] || {
+                    remaining: 0,
+                  };
                   return (
                     <option key={type.id} value={type.id}>
                       {type.name} (Available: {balance.remaining} days)
@@ -388,47 +397,15 @@ const RequestLeave = () => {
                 })}
               </select>
               {loadingLeaveTypes && (
-                <p className="text-xs text-gray-400">Loading leave types...</p>
+                <p className="text-xs text-gray-400">
+                  Loading leave types...
+                </p>
               )}
             </div>
 
-            {/* Leave Duration Type */}
-            <div className="form-field flex flex-col gap-2 pb-5">
-              <label className="text-xs font-semibold text-gray-700 dark:text-gray-300 flex items-center gap-1">
-                <i className="fas fa-clock text-green-500" /> Leave Duration{" "}
-                <span className="text-red-500 ml-1">*</span>
-              </label>
-              <div className="flex gap-4 mt-1">
-                <label className="flex items-center gap-2 cursor-pointer">
-                  <input
-                    type="radio"
-                    name="leaveDuration"
-                    value="full"
-                    checked={leaveDuration === "full"}
-                    onChange={() => setLeaveDuration("full")}
-                    className="text-green-500 focus:ring-green-500"
-                  />
-                  <span className="text-sm text-gray-700 dark:text-gray-300">
-                    Full Day
-                  </span>
-                </label>
-                <label className="flex items-center gap-2 cursor-pointer">
-                  <input
-                    type="radio"
-                    name="leaveDuration"
-                    value="half"
-                    checked={leaveDuration === "half"}
-                    onChange={() => setLeaveDuration("half")}
-                    className="text-green-500 focus:ring-green-500"
-                  />
-                  <span className="text-sm text-gray-700 dark:text-gray-300">
-                    Half Day
-                  </span>
-                </label>
-              </div>
-            </div>
-
-            <div className="form-grid grid grid-cols-1 md:grid-cols-2 gap-5 mb-6">
+            {/* Date Inputs with Sessions */}
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-4 md:gap-5 mb-6">
+              {/* Start Date and Session */}
               <div className="form-field flex flex-col gap-2">
                 <label className="text-xs font-semibold text-gray-700 dark:text-gray-300 flex items-center gap-1">
                   <FiCalendar className="text-green-500" /> Start Date{" "}
@@ -446,6 +423,24 @@ const RequestLeave = () => {
 
               <div className="form-field flex flex-col gap-2">
                 <label className="text-xs font-semibold text-gray-700 dark:text-gray-300 flex items-center gap-1">
+                  <FiClock className="text-green-500" /> Start Session{" "}
+                  <span className="text-red-500 ml-1">*</span>
+                </label>
+                <select
+                  value={formData.start_session}
+                  onChange={(e) =>
+                    setFormData({ ...formData, start_session: e.target.value })
+                  }
+                  className="w-full px-3.5 py-2.5 bg-gray-50 dark:bg-gray-900 border border-gray-200 dark:border-gray-700 rounded-lg text-sm text-gray-800 dark:text-gray-200 focus:outline-none focus:border-green-500 focus:ring-2 focus:ring-green-500/20 transition-all"
+                >
+                  <option value="morning">Morning</option>
+                  <option value="afternoon">Afternoon</option>
+                </select>
+              </div>
+
+              {/* End Date and Session */}
+              <div className="form-field flex flex-col gap-2">
+                <label className="text-xs font-semibold text-gray-700 dark:text-gray-300 flex items-center gap-1">
                   <FiCalendar className="text-green-500" /> End Date{" "}
                   <span className="text-red-500 ml-1">*</span>
                 </label>
@@ -461,6 +456,23 @@ const RequestLeave = () => {
 
               <div className="form-field flex flex-col gap-2">
                 <label className="text-xs font-semibold text-gray-700 dark:text-gray-300 flex items-center gap-1">
+                  <FiClock className="text-green-500" /> End Session{" "}
+                  <span className="text-red-500 ml-1">*</span>
+                </label>
+                <select
+                  value={formData.end_session}
+                  onChange={(e) =>
+                    setFormData({ ...formData, end_session: e.target.value })
+                  }
+                  className="w-full px-3.5 py-2.5 bg-gray-50 dark:bg-gray-900 border border-gray-200 dark:border-gray-700 rounded-lg text-sm text-gray-800 dark:text-gray-200 focus:outline-none focus:border-green-500 focus:ring-2 focus:ring-green-500/20 transition-all"
+                >
+                  <option value="morning">Morning</option>
+                  <option value="afternoon">Afternoon</option>
+                </select>
+              </div>
+
+              <div className="form-field flex flex-col gap-2">
+                <label className="text-xs font-semibold text-gray-700 dark:text-gray-300 flex items-center gap-1">
                   <MdCalculate className="text-green-500" /> Total Days
                 </label>
                 <div
@@ -469,10 +481,7 @@ const RequestLeave = () => {
                   <span
                     className={`text-2xl md:text-3xl font-extrabold ${exceedsBalance ? "text-red-600" : "text-green-600"} block`}
                   >
-                    {totalDays}{" "}
-                    {totalDays === 0.5 && (
-                      <span className="text-sm">(Half Day)</span>
-                    )}
+                    {totalDays}
                   </span>
                   <small className="text-[11px] text-gray-500">Days</small>
                 </div>
@@ -489,70 +498,71 @@ const RequestLeave = () => {
                   type="file"
                   onChange={(e) => setSelectedFile(e.target.files[0])}
                   accept=".pdf,.doc,.docx,.jpg,.png"
-                  className="py-2.5 px-3.5 bg-gray-50 dark:bg-gray-900 border border-gray-200 dark:border-gray-700 rounded-lg text-sm text-gray-800 dark:text-gray-200 file:mr-4 file:py-1.5 file:px-3 file:rounded-full file:border-0 file:text-xs file:font-semibold file:bg-green-500 file:text-white file:cursor-pointer hover:file:bg-green-600"
+                  className="py-2.5 px-3.5 bg-gray-50 dark:bg-gray-900 border border-gray-200 dark:border-gray-700 rounded-lg text-sm text-gray-800 dark:text-gray-200 file:mr-4 file:py-1.5 file:px-3 file:rounded-full file:border-0 file:text-xs file:font-semibold file:bg-green-500 file:text-white file:cursor-pointer hover:file:bg-green-600 w-full"
                 />
               </div>
+            </div>
 
-              <div className="form-field md:col-span-2 flex flex-col gap-2">
-                <label className="text-xs font-semibold text-gray-700 dark:text-gray-300 flex items-center gap-1">
-                  <FiMessageSquare className="text-green-500" /> Reason for
-                  Leave <span className="text-red-500 ml-1">*</span>
-                </label>
-                <textarea
-                  value={formData.reason}
-                  onChange={(e) =>
-                    setFormData({ ...formData, reason: e.target.value })
-                  }
-                  rows="4"
-                  placeholder="Please describe your reason for requesting leave (min 10 characters)..."
-                  className="py-3 px-3.5 bg-gray-50 dark:bg-gray-900 border border-gray-200 dark:border-gray-700 rounded-lg text-sm text-gray-800 dark:text-gray-200 focus:outline-none focus:border-green-500 focus:ring-2 focus:ring-green-500/20 transition-all resize-none"
-                  required
-                />
-                <small
-                  className={`text-[11px] ${formData.reason.length >= 10 ? "text-green-500" : "text-red-500"}`}
-                >
-                  {formData.reason.length}/10 characters minimum
-                </small>
-              </div>
+            {/* Reason - Full width */}
+            <div className="form-field flex flex-col gap-2 mb-6">
+              <label className="text-xs font-semibold text-gray-700 dark:text-gray-300 flex items-center gap-1">
+                <FiMessageSquare className="text-green-500" /> Reason for Leave{" "}
+                <span className="text-red-500 ml-1">*</span>
+              </label>
+              <textarea
+                value={formData.reason}
+                onChange={(e) =>
+                  setFormData({ ...formData, reason: e.target.value })
+                }
+                rows="4"
+                placeholder="Please describe your reason for requesting leave (min 10 characters)..."
+                className="w-full py-3 px-3.5 bg-gray-50 dark:bg-gray-900 border border-gray-200 dark:border-gray-700 rounded-lg text-sm text-gray-800 dark:text-gray-200 focus:outline-none focus:border-green-500 focus:ring-2 focus:ring-green-500/20 transition-all resize-none"
+                required
+              />
+              <small
+                className={`text-[11px] ${formData.reason.length >= 10 ? "text-green-500" : "text-red-500"}`}
+              >
+                {formData.reason.length}/10 characters minimum
+              </small>
+            </div>
 
-              {/* Claim Salary */}
-              <div className="form-field md:col-span-2 flex flex-col gap-2">
-                <label className="text-xs font-semibold text-gray-700 dark:text-gray-300 flex items-center gap-1">
-                  <i className="fas fa-money-bill-wave text-green-500" /> Claim
-                  Salary
+            {/* Claim Salary */}
+            <div className="form-field flex flex-row items-center gap-4 mb-6">
+              <label className="text-xs font-semibold text-gray-700 dark:text-gray-300 flex items-center gap-1 whitespace-nowrap">
+                <i className="fas fa-money-bill-wave text-green-500" /> Claim
+                Salary
+              </label>
+              <div className="flex gap-6">
+                <label className="flex items-center gap-2 cursor-pointer">
+                  <input
+                    type="radio"
+                    name="claimSalary"
+                    value="1"
+                    checked={formData.claim_salary === "1"}
+                    onChange={() =>
+                      setFormData({ ...formData, claim_salary: "1" })
+                    }
+                    className="w-4 h-4 text-green-500 focus:ring-green-500"
+                  />
+                  <span className="text-sm text-gray-700 dark:text-gray-300">
+                    Yes
+                  </span>
                 </label>
-                <div className="flex gap-4 mt-1">
-                  <label className="flex items-center gap-2 cursor-pointer">
-                    <input
-                      type="radio"
-                      name="claimSalary"
-                      value="1"
-                      checked={formData.claim_salary === "1"}
-                      onChange={() =>
-                        setFormData({ ...formData, claim_salary: "1" })
-                      }
-                      className="text-green-500 focus:ring-green-500"
-                    />
-                    <span className="text-sm text-gray-700 dark:text-gray-300">
-                      Yes
-                    </span>
-                  </label>
-                  <label className="flex items-center gap-2 cursor-pointer">
-                    <input
-                      type="radio"
-                      name="claimSalary"
-                      value="0"
-                      checked={formData.claim_salary === "0"}
-                      onChange={() =>
-                        setFormData({ ...formData, claim_salary: "0" })
-                      }
-                      className="text-green-500 focus:ring-green-500"
-                    />
-                    <span className="text-sm text-gray-700 dark:text-gray-300">
-                      No
-                    </span>
-                  </label>
-                </div>
+                <label className="flex items-center gap-2 cursor-pointer">
+                  <input
+                    type="radio"
+                    name="claimSalary"
+                    value="0"
+                    checked={formData.claim_salary === "0"}
+                    onChange={() =>
+                      setFormData({ ...formData, claim_salary: "0" })
+                    }
+                    className="w-4 h-4 text-green-500 focus:ring-green-500"
+                  />
+                  <span className="text-sm text-gray-700 dark:text-gray-300">
+                    No
+                  </span>
+                </label>
               </div>
             </div>
 

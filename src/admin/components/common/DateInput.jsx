@@ -538,6 +538,7 @@ const DateInput = forwardRef(
           showMonthDropdown
           dropdownMode="select"
           className="w-full"
+          wrapperClassName="w-full"
           calendarClassName="shadow-soft-lg rounded-lg border border-gray-200 dark:border-gray-700"
           popperClassName="z-50"
           {...props}
