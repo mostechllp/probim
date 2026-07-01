@@ -199,7 +199,8 @@ export const addLeaveRequest = createAsyncThunk(
       const endDate = formData.get('end_date');
       const reason = formData.get('reason');
       const claimSalary = formData.get('claim_salary') === '1';
-      const session = formData.get('session') || 'full_day'; // full_day or half_day
+      const session1 = formData.get('session1') || 'morning'; // morning or afternoon
+      const session2 = formData.get('session2') || 'afternoon'; // morning or afternoon
       const year = formData.get('year') || new Date().getFullYear();
       
       // Check if we have a document
@@ -219,7 +220,8 @@ export const addLeaveRequest = createAsyncThunk(
         formDataWithDoc.append('end_date', endDate);
         formDataWithDoc.append('reason', reason);
         formDataWithDoc.append('claim_salary', claimSalary ? '1' : '0');
-        formDataWithDoc.append('session', session);
+        formDataWithDoc.append('session1', session1);
+        formDataWithDoc.append('session2', session2);
         formDataWithDoc.append('year', year);
         formDataWithDoc.append('document', document);
         
@@ -234,7 +236,8 @@ export const addLeaveRequest = createAsyncThunk(
           end_date: endDate,
           reason: reason,
           claim_salary: claimSalary,
-          session: session, // full_day or half_day
+          session1: session1, // morning or afternoon
+          session2: session2, // morning or afternoon
           year: parseInt(year)
         };
         headers = { 'Content-Type': 'application/json' };
