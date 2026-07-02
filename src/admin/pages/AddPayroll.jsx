@@ -1,4 +1,4 @@
-// src/admin/pages/AddPayroll.js - Updated Country Split Tab
+// src/admin/pages/AddPayroll.js - Updated with DateInput
 
 import { useState, useEffect } from "react";
 import { useDispatch, useSelector } from "react-redux";
@@ -6,6 +6,7 @@ import { Link } from "react-router-dom";
 import { jsPDF } from "jspdf";
 import autoTable from "jspdf-autotable";
 import { showToast } from "../components/common/Toast";
+import DateInput from "../components/common/DateInput";
 
 import {
   savePayrollStep,
@@ -131,6 +132,8 @@ function AddPayroll() {
 
   // Step 2 - Country Split
   const [countries, setCountries] = useState([]);
+  const [selectedPackageIds, setSelectedPackageIds] = useState([]);
+  const [availablePackages, setAvailablePackages] = useState([]);
   const [totalEarnings, setTotalEarnings] = useState(0);
   const [totalDeductions, setTotalDeductions] = useState(0);
   const [grossSalary, setGrossSalary] = useState(0);
@@ -509,7 +512,6 @@ function AddPayroll() {
 
       if (currentEmployee.user_id) {
         setSelectedUserId(currentEmployee.user_id.toString());
-        // Fetch salary packages for this employee
         dispatch(fetchEmployeeSalaryPackages(currentEmployee.user_id));
       }
 
@@ -549,6 +551,7 @@ function AddPayroll() {
 
       setEmploymentType(user.type || user.employment_type || "employee");
 
+      // Set default pay period if not already set
       if (!payPeriodMonth) {
         const currentMonth = new Date().getMonth() + 1;
         const currentYear = new Date().getFullYear();
@@ -571,13 +574,12 @@ function AddPayroll() {
         setPayPeriodMonth(monthNamesList[currentMonth - 1]);
         setPayPeriodYear(currentYear.toString());
 
+        // Set dates in YYYY-MM-DD format for DateInput
         setPeriodStart(`${currentYear}-${monthNum}-01`);
-
         const lastDay = new Date(currentYear, currentMonth, 0).getDate();
         setPeriodEnd(
           `${currentYear}-${monthNum}-${String(lastDay).padStart(2, "0")}`,
         );
-
         setPaymentDate(`${currentYear}-${monthNum}-25`);
         setTotalWorkingDays("26");
         setDaysPresent("30");
@@ -586,10 +588,82 @@ function AddPayroll() {
     }
   }, [currentEmployee, employees, payPeriodMonth, selectedEmployee, dispatch]);
 
-  // Update countries when employee packages are loaded
+  // NEW: Update dates when pay period month or year changes
   useEffect(() => {
-    if (employeePackages && employeePackages.length > 0) {
-      const mappedCountries = employeePackages.map((pkg, index) => ({
+    // Only run if we have a valid pay period month and year
+    if (payPeriodMonth && payPeriodYear) {
+      const monthNamesList = [
+        "January",
+        "February",
+        "March",
+        "April",
+        "May",
+        "June",
+        "July",
+        "August",
+        "September",
+        "October",
+        "November",
+        "December",
+      ];
+
+      const monthIndex = monthNamesList.indexOf(payPeriodMonth);
+      if (monthIndex !== -1) {
+        const monthNumber = monthIndex + 1;
+        const year = parseInt(payPeriodYear);
+        const monthNum = String(monthNumber).padStart(2, "0");
+
+        // Update period start date
+        setPeriodStart(`${year}-${monthNum}-01`);
+
+        // Update period end date (last day of month)
+        const lastDay = new Date(year, monthNumber, 0).getDate();
+        setPeriodEnd(`${year}-${monthNum}-${String(lastDay).padStart(2, "0")}`);
+
+        // Update payment date (25th of the month, but can be customized)
+        setPaymentDate(`${year}-${monthNum}-25`);
+
+        // Update working days based on month
+        // Calculate working days (Mon-Fri) - approximate
+        let workingDays = 0;
+        for (let day = 1; day <= lastDay; day++) {
+          const date = new Date(year, monthNumber - 1, day);
+          const dayOfWeek = date.getDay();
+          // Monday to Friday (1-5)
+          if (dayOfWeek >= 1 && dayOfWeek <= 5) {
+            workingDays++;
+          }
+        }
+        setTotalWorkingDays(String(workingDays));
+
+        // Set days present to same as working days (by default)
+        setDaysPresent(String(workingDays));
+      }
+    }
+  }, [payPeriodMonth, payPeriodYear]);
+
+  // Handle month change with date updates
+  const handleMonthChange = (e) => {
+    const newMonth = e.target.value;
+    setPayPeriodMonth(newMonth);
+    // Dates will be auto-updated by the useEffect above
+  };
+
+  // Handle year change with date updates
+  const handleYearChange = (e) => {
+    const newYear = e.target.value;
+    setPayPeriodYear(newYear);
+    // Dates will be auto-updated by the useEffect above
+  };
+
+  // Update countries based on selected packages
+  useEffect(() => {
+    if (availablePackages.length > 0 && selectedPackageIds.length > 0) {
+      const selectedPackages = availablePackages.filter((pkg) =>
+        selectedPackageIds.includes(pkg.id),
+      );
+
+      const mappedCountries = selectedPackages.map((pkg, index) => ({
         id: index + 1,
         name: pkg.name || `Package ${index + 1}`,
         currency: pkg.currency || "AED",
@@ -602,20 +676,18 @@ function AddPayroll() {
         is_saved: false,
       }));
 
-      if (mappedCountries.length > 0) {
-        setCountries(mappedCountries);
+      setCountries(mappedCountries);
 
-        // Calculate total gross salary from packages
-        const totalGross = mappedCountries.reduce(
-          (sum, c) => sum + (c.subtotal || 0),
-          0,
-        );
-        setGrossSalary(totalGross);
-        setTotalEarnings(totalGross);
-        setNetSalary(totalGross);
-      }
+      // Calculate total gross salary from selected packages
+      const totalGross = mappedCountries.reduce(
+        (sum, c) => sum + (c.subtotal || 0),
+        0,
+      );
+      setGrossSalary(totalGross);
+      setTotalEarnings(totalGross);
+      setNetSalary(totalGross);
     }
-  }, [employeePackages]);
+  }, [availablePackages, selectedPackageIds]);
 
   // Load draft data on mount if editing
   useEffect(() => {
@@ -709,7 +781,6 @@ function AddPayroll() {
   }, [overtimeData]);
 
   // Update summary when data arrives
-  // Update summary when data arrives
   useEffect(() => {
     if (summaryData) {
       // The API returns: { gross_salary, overtime_amount, deductions, net_pay }
@@ -750,6 +821,34 @@ function AddPayroll() {
       console.error("Calculate salary split error:", error);
       showToast(error || "Failed to calculate salary split", "error");
     }
+  };
+
+  // Handle package selection/deselection
+  const handlePackageSelection = (packageId) => {
+    setSelectedPackageIds((prev) => {
+      if (prev.includes(packageId)) {
+        // Remove package
+        return prev.filter((id) => id !== packageId);
+      } else {
+        // Add package
+        return [...prev, packageId];
+      }
+    });
+    // Reset saved state when selection changes
+    setIsStep2Saved(false);
+  };
+
+  // Handle select all packages
+  const handleSelectAllPackages = () => {
+    const allPackageIds = availablePackages.map((pkg) => pkg.id);
+    setSelectedPackageIds(allPackageIds);
+    setIsStep2Saved(false);
+  };
+
+  // Handle deselect all packages
+  const handleDeselectAllPackages = () => {
+    setSelectedPackageIds([]);
+    setIsStep2Saved(false);
   };
 
   // ─── STEP 3: Fetch Overtime data ──────────────────────────────────────
@@ -961,6 +1060,57 @@ function AddPayroll() {
   };
 
   // Save current step data
+  const handleSaveStep = async (step, data) => {
+    if (!selectedUserId) {
+      showToast("Please select an employee first", "error");
+      return false;
+    }
+
+    try {
+      const monthNumber =
+        monthNames[payPeriodMonth] || new Date().getMonth() + 1;
+      const year = parseInt(payPeriodYear) || new Date().getFullYear();
+
+      const enrichedData = {
+        ...data,
+        pay_period_month: data.pay_period_month || monthNumber,
+        pay_period_year: data.pay_period_year || year,
+      };
+
+      console.log("Saving step with user_id:", selectedUserId);
+      console.log("Step data:", enrichedData);
+
+      const result = await dispatch(
+        savePayrollStep({
+          userId: selectedUserId,
+          step: step,
+          stepData: enrichedData,
+        }),
+      ).unwrap();
+
+      dispatch(updateStepData({ step, data: enrichedData }));
+      dispatch(markStepCompleted(step));
+
+      // Check if the save was successful and current_step is updated
+      if (result.data && result.data.current_step) {
+        console.log("Current step from server:", result.data.current_step);
+        // If current_step is 6, the payroll is ready for submission
+        if (result.data.current_step === 6) {
+          console.log("Payroll data is complete and ready for submission");
+        }
+      }
+
+      showToast(result.message || "Step data saved successfully", "success");
+      return true;
+    } catch (error) {
+      console.error("Failed to save step:", error);
+      showToast(
+        typeof error === "string" ? error : "Failed to save step data",
+        "error",
+      );
+      return false;
+    }
+  };
 
   // Handle next step
   const handleNextStep = async () => {
@@ -1026,160 +1176,162 @@ function AddPayroll() {
   };
 
   // Handle final submission - Using converted amounts
-  // Handle final submission - Using converted amounts
-const handleSubmitPayroll = async () => {
-  if (!selectedUserId) {
-    showToast("Please select an employee first", "error");
-    return;
-  }
-
-  // Check if conversion has been done
-  if (!isConverted) {
-    showToast(
-      "Please convert the currency first before submitting",
-      "warning",
-    );
-    return;
-  }
-
-  try {
-    // First, ensure step 5 is saved
-    const finalData = getCurrentStepData();
-    const saved = await handleSaveStep(5, finalData);
-
-    if (!saved) {
-      showToast("Failed to save payroll data. Please try again.", "error");
+  const handleSubmitPayroll = async () => {
+    if (!selectedUserId) {
+      showToast("Please select an employee first", "error");
       return;
     }
 
-    const monthNumber =
-      monthNames[payPeriodMonth] || new Date().getMonth() + 1;
-    const year = parseInt(payPeriodYear) || new Date().getFullYear();
-
-    // USE CONVERTED AMOUNTS from conversionDetails
-    const convertedGrossSalary =
-      conversionDetails.gross_salary?.convertedAmount || 0;
-    const convertedOvertime =
-      conversionDetails.overtime_amount?.convertedAmount || 0;
-    const convertedDeductions =
-      conversionDetails.deductions?.convertedAmount || 0;
-    // Net Pay = Gross + Overtime - Deductions (all in target currency)
-    const convertedNetPay =
-      convertedGrossSalary + convertedOvertime - convertedDeductions;
-
-    // Determine the primary currency (target currency)
-    const primaryCurrency = targetCurrency || "INR";
-
-    // Build the submission payload with CONVERTED amounts
-    const payload = {
-      user_id: parseInt(selectedUserId),
-      pay_period_month: parseInt(monthNumber),
-      pay_period_year: parseInt(year),
-      // Use CONVERTED amounts
-      gross_salary: parseFloat(convertedGrossSalary),
-      overtime: parseFloat(convertedOvertime),
-      deductions: parseFloat(convertedDeductions),
-      net_pay: parseFloat(convertedNetPay),
-      currency: primaryCurrency,
-      // Additional data for reference (original mixed currency data)
-      target_currency: targetCurrency,
-      conversion_rates: conversionRatesList.reduce((acc, item) => {
-        acc[item.currency] = parseFloat(item.rate) || 1;
-        return acc;
-      }, {}),
-      location_breakdown: countries.map((c) => ({
-        location_name: c.name,
-        currency: c.currency,
-        subtotal: c.subtotal || 0,
-        worked_days: c.daysWorked || 0,
-        salary_components: c.salary_components || [],
-      })),
-      overtime_details: overtimeRequests.map((req) => ({
-        date: req.date,
-        overtime_hours: req.overtime_hours || 0,
-        amount_original: parseFloat(req.overtime_amount) || 0,
-        currency_original: req.currency || "INR",
-        amount_converted: parseFloat(req.overtime_amount) || 0,
-        projects: req.projects || [],
-      })),
-      deductions_details: deductions.map((d) => ({
-        type: d.type,
-        amount_original: parseFloat(d.amount) || 0,
-        currency_original: d.currency || "INR",
-        amount_converted: parseFloat(d.amount) || 0,
-        is_statutory: d.is_statutory || "no",
-      })),
-      // Include conversion details for reference with CORRECT net pay breakdown
-      conversion_details: {
-        gross_salary: {
-          original_breakdown: conversionDetails.gross_salary?.breakdown || "",
-          converted_amount: convertedGrossSalary,
-          target_currency: targetCurrency,
-          rates: conversionRatesList,
-        },
-        overtime: {
-          original_breakdown:
-            conversionDetails.overtime_amount?.breakdown || "",
-          converted_amount: convertedOvertime,
-          target_currency: targetCurrency,
-        },
-        deductions: {
-          original_breakdown: conversionDetails.deductions?.breakdown || "",
-          converted_amount: convertedDeductions,
-          target_currency: targetCurrency,
-        },
-        net_pay: {
-          original_breakdown: conversionDetails.net_pay?.breakdown || "",
-          converted_amount: convertedNetPay,
-          target_currency: targetCurrency,
-        },
-      },
-    };
-
-    console.log("Submitting payroll with CONVERTED amounts:", {
-      gross_salary: convertedGrossSalary,
-      overtime: convertedOvertime,
-      deductions: convertedDeductions,
-      net_pay: convertedNetPay,
-      currency: primaryCurrency,
-      calculation: `${convertedGrossSalary} + ${convertedOvertime} - ${convertedDeductions} = ${convertedNetPay}`,
-    });
-    console.log("Full payload:", payload);
-
-    // Submit the payroll
-    const result = await dispatch(submitPayroll(payload)).unwrap();
-
-    showToast(
-      result.message ||
-        "Payroll submitted successfully! Payslip has been generated!",
-      "success",
-    );
-
-    // Generate payslip using the API endpoint
-    if (result.data?.id) {
-      const payrollId = result.data?.id;
-      if (payrollId) {
-        try {
-          await dispatch(generatePayslip(payrollId)).unwrap();
-        } catch (pdfError) {
-          console.error("Failed to generate payslip:", pdfError);
-          showToast("Payroll submitted but payslip generation failed", "warning");
-        }
-      }
+    // Check if conversion has been done
+    if (!isConverted) {
+      showToast(
+        "Please convert the currency first before submitting",
+        "warning",
+      );
+      return;
     }
 
-    // Redirect to payroll page after a delay
-    setTimeout(() => {
-      window.location.href = `${basePath}/payroll`;
-    }, 3000);
-  } catch (error) {
-    console.error("Submit payroll error:", error);
-    showToast(
-      typeof error === "string" ? error : "Failed to submit payroll",
-      "error",
-    );
-  }
-};
+    try {
+      // First, ensure step 5 is saved
+      const finalData = getCurrentStepData();
+      const saved = await handleSaveStep(5, finalData);
+
+      if (!saved) {
+        showToast("Failed to save payroll data. Please try again.", "error");
+        return;
+      }
+
+      const monthNumber =
+        monthNames[payPeriodMonth] || new Date().getMonth() + 1;
+      const year = parseInt(payPeriodYear) || new Date().getFullYear();
+
+      // USE CONVERTED AMOUNTS from conversionDetails
+      const convertedGrossSalary =
+        conversionDetails.gross_salary?.convertedAmount || 0;
+      const convertedOvertime =
+        conversionDetails.overtime_amount?.convertedAmount || 0;
+      const convertedDeductions =
+        conversionDetails.deductions?.convertedAmount || 0;
+      // Net Pay = Gross + Overtime - Deductions (all in target currency)
+      const convertedNetPay =
+        convertedGrossSalary + convertedOvertime - convertedDeductions;
+
+      // Determine the primary currency (target currency)
+      const primaryCurrency = targetCurrency || "INR";
+
+      // Build the submission payload with CONVERTED amounts
+      const payload = {
+        user_id: parseInt(selectedUserId),
+        pay_period_month: parseInt(monthNumber),
+        pay_period_year: parseInt(year),
+        // Use CONVERTED amounts
+        gross_salary: parseFloat(convertedGrossSalary),
+        overtime: parseFloat(convertedOvertime),
+        deductions: parseFloat(convertedDeductions),
+        net_pay: parseFloat(convertedNetPay),
+        currency: primaryCurrency,
+        // Additional data for reference (original mixed currency data)
+        target_currency: targetCurrency,
+        conversion_rates: conversionRatesList.reduce((acc, item) => {
+          acc[item.currency] = parseFloat(item.rate) || 1;
+          return acc;
+        }, {}),
+        location_breakdown: countries.map((c) => ({
+          location_name: c.name,
+          currency: c.currency,
+          subtotal: c.subtotal || 0,
+          worked_days: c.daysWorked || 0,
+          salary_components: c.salary_components || [],
+        })),
+        overtime_details: overtimeRequests.map((req) => ({
+          date: req.date,
+          overtime_hours: req.overtime_hours || 0,
+          amount_original: parseFloat(req.overtime_amount) || 0,
+          currency_original: req.currency || "INR",
+          amount_converted: parseFloat(req.overtime_amount) || 0,
+          projects: req.projects || [],
+        })),
+        deductions_details: deductions.map((d) => ({
+          type: d.type,
+          amount_original: parseFloat(d.amount) || 0,
+          currency_original: d.currency || "INR",
+          amount_converted: parseFloat(d.amount) || 0,
+          is_statutory: d.is_statutory || "no",
+        })),
+        // Include conversion details for reference with CORRECT net pay breakdown
+        conversion_details: {
+          gross_salary: {
+            original_breakdown: conversionDetails.gross_salary?.breakdown || "",
+            converted_amount: convertedGrossSalary,
+            target_currency: targetCurrency,
+            rates: conversionRatesList,
+          },
+          overtime: {
+            original_breakdown:
+              conversionDetails.overtime_amount?.breakdown || "",
+            converted_amount: convertedOvertime,
+            target_currency: targetCurrency,
+          },
+          deductions: {
+            original_breakdown: conversionDetails.deductions?.breakdown || "",
+            converted_amount: convertedDeductions,
+            target_currency: targetCurrency,
+          },
+          net_pay: {
+            original_breakdown: conversionDetails.net_pay?.breakdown || "",
+            converted_amount: convertedNetPay,
+            target_currency: targetCurrency,
+          },
+        },
+      };
+
+      console.log("Submitting payroll with CONVERTED amounts:", {
+        gross_salary: convertedGrossSalary,
+        overtime: convertedOvertime,
+        deductions: convertedDeductions,
+        net_pay: convertedNetPay,
+        currency: primaryCurrency,
+        calculation: `${convertedGrossSalary} + ${convertedOvertime} - ${convertedDeductions} = ${convertedNetPay}`,
+      });
+      console.log("Full payload:", payload);
+
+      // Submit the payroll
+      const result = await dispatch(submitPayroll(payload)).unwrap();
+
+      showToast(
+        result.message ||
+          "Payroll submitted successfully! Payslip has been generated!",
+        "success",
+      );
+
+      // Generate payslip using the API endpoint
+      if (result.data?.id) {
+        const payrollId = result.data?.id;
+        if (payrollId) {
+          try {
+            await dispatch(generatePayslip(payrollId)).unwrap();
+          } catch (pdfError) {
+            console.error("Failed to generate payslip:", pdfError);
+            showToast(
+              "Payroll submitted but payslip generation failed",
+              "warning",
+            );
+          }
+        }
+      }
+
+      // Redirect to payroll page after a delay
+      setTimeout(() => {
+        window.location.href = `${basePath}/payroll`;
+      }, 3000);
+    } catch (error) {
+      console.error("Submit payroll error:", error);
+      showToast(
+        typeof error === "string" ? error : "Failed to submit payroll",
+        "error",
+      );
+    }
+  };
 
   // Handle step change
   const handleStepChange = async (step) => {
@@ -1250,59 +1402,6 @@ const handleSubmitPayroll = async () => {
   const handlePreviousStep = () => {
     if (reduxCurrentStep > 1) {
       dispatch(setCurrentStep(reduxCurrentStep - 1));
-    }
-  };
-
-  // Save current step data
-  const handleSaveStep = async (step, data) => {
-    if (!selectedUserId) {
-      showToast("Please select an employee first", "error");
-      return false;
-    }
-
-    try {
-      const monthNumber =
-        monthNames[payPeriodMonth] || new Date().getMonth() + 1;
-      const year = parseInt(payPeriodYear) || new Date().getFullYear();
-
-      const enrichedData = {
-        ...data,
-        pay_period_month: data.pay_period_month || monthNumber,
-        pay_period_year: data.pay_period_year || year,
-      };
-
-      console.log("Saving step with user_id:", selectedUserId);
-      console.log("Step data:", enrichedData);
-
-      const result = await dispatch(
-        savePayrollStep({
-          userId: selectedUserId,
-          step: step,
-          stepData: enrichedData,
-        }),
-      ).unwrap();
-
-      dispatch(updateStepData({ step, data: enrichedData }));
-      dispatch(markStepCompleted(step));
-
-      // Check if the save was successful and current_step is updated
-      if (result.data && result.data.current_step) {
-        console.log("Current step from server:", result.data.current_step);
-        // If current_step is 6, the payroll is ready for submission
-        if (result.data.current_step === 6) {
-          console.log("Payroll data is complete and ready for submission");
-        }
-      }
-
-      showToast(result.message || "Step data saved successfully", "success");
-      return true;
-    } catch (error) {
-      console.error("Failed to save step:", error);
-      showToast(
-        typeof error === "string" ? error : "Failed to save step data",
-        "error",
-      );
-      return false;
     }
   };
 
@@ -1541,7 +1640,7 @@ const handleSubmitPayroll = async () => {
                 </div>
               </div>
 
-              {/* Pay Period Card */}
+              {/* Pay Period Card with DateInput */}
               <div>
                 <div className="flex items-center gap-2 pb-3 border-b-2 border-green-100 dark:border-green-900/30 mb-4 md:mb-6">
                   <div className="w-6 h-6 md:w-8 md:h-8 bg-green-100 dark:bg-green-900/30 rounded-lg flex items-center justify-center">
@@ -1561,7 +1660,7 @@ const handleSubmitPayroll = async () => {
                     <select
                       className="w-full px-3 md:px-4 py-2 md:py-3 bg-gray-50 dark:bg-gray-800 border border-gray-200 dark:border-gray-700 rounded-lg text-sm md:text-base text-gray-800 dark:text-gray-200 focus:outline-none focus:border-green-500 focus:ring-2 focus:ring-green-500/20"
                       value={payPeriodMonth}
-                      onChange={(e) => setPayPeriodMonth(e.target.value)}
+                      onChange={handleMonthChange} // Changed from setPayPeriodMonth
                       disabled={!selectedUserId}
                     >
                       <option value="">Select Month</option>
@@ -1587,7 +1686,7 @@ const handleSubmitPayroll = async () => {
                     <select
                       className="w-full px-3 md:px-4 py-2 md:py-3 bg-gray-50 dark:bg-gray-800 border border-gray-200 dark:border-gray-700 rounded-lg text-sm md:text-base text-gray-800 dark:text-gray-200 focus:outline-none focus:border-green-500 focus:ring-2 focus:ring-green-500/20"
                       value={payPeriodYear}
-                      onChange={(e) => setPayPeriodYear(e.target.value)}
+                      onChange={handleYearChange} // Changed from setPayPeriodYear
                       disabled={!selectedUserId}
                     >
                       <option value="">Select Year</option>
@@ -1602,45 +1701,36 @@ const handleSubmitPayroll = async () => {
                       <i className="fas fa-calendar-plus text-green-500 mr-1"></i>
                       Period Start Date
                     </label>
-                    <div className="relative">
-                      <input
-                        type="date"
-                        value={periodStart}
-                        onChange={(e) => setPeriodStart(e.target.value)}
-                        className="w-full px-3 md:px-4 py-2 md:py-3 bg-gray-50 dark:bg-gray-800 border border-gray-200 dark:border-gray-700 rounded-lg text-sm md:text-base text-gray-800 dark:text-gray-200 focus:outline-none focus:border-green-500 focus:ring-2 focus:ring-green-500/20"
-                        disabled={!selectedUserId}
-                      />
-                    </div>
+                    <DateInput
+                      value={periodStart}
+                      onChange={(date) => setPeriodStart(date)}
+                      placeholder="dd/mm/yyyy"
+                      disabled={!selectedUserId}
+                    />
                   </div>
                   <div>
                     <label className="block text-xs md:text-sm font-semibold text-gray-700 dark:text-gray-300 mb-1 md:mb-2">
                       <i className="fas fa-calendar-times text-green-500 mr-1"></i>
                       Period End Date
                     </label>
-                    <div className="relative">
-                      <input
-                        type="date"
-                        value={periodEnd}
-                        onChange={(e) => setPeriodEnd(e.target.value)}
-                        className="w-full px-3 md:px-4 py-2 md:py-3 bg-gray-50 dark:bg-gray-800 border border-gray-200 dark:border-gray-700 rounded-lg text-sm md:text-base text-gray-800 dark:text-gray-200 focus:outline-none focus:border-green-500 focus:ring-2 focus:ring-green-500/20"
-                        disabled={!selectedUserId}
-                      />
-                    </div>
+                    <DateInput
+                      value={periodEnd}
+                      onChange={(date) => setPeriodEnd(date)}
+                      placeholder="dd/mm/yyyy"
+                      disabled={!selectedUserId}
+                    />
                   </div>
                   <div>
                     <label className="block text-xs md:text-sm font-semibold text-gray-700 dark:text-gray-300 mb-1 md:mb-2">
                       <i className="fas fa-money-bill-wave text-green-500 mr-1"></i>
                       Payment Date <span className="text-red-500">*</span>
                     </label>
-                    <div className="relative">
-                      <input
-                        type="date"
-                        value={paymentDate}
-                        onChange={(e) => setPaymentDate(e.target.value)}
-                        className="w-full px-3 md:px-4 py-2 md:py-3 bg-gray-50 dark:bg-gray-800 border border-gray-200 dark:border-gray-700 rounded-lg text-sm md:text-base text-gray-800 dark:text-gray-200 focus:outline-none focus:border-green-500 focus:ring-2 focus:ring-green-500/20"
-                        disabled={!selectedUserId}
-                      />
-                    </div>
+                    <DateInput
+                      value={paymentDate}
+                      onChange={(date) => setPaymentDate(date)}
+                      placeholder="dd/mm/yyyy"
+                      disabled={!selectedUserId}
+                    />
                   </div>
                   <div>
                     <label className="block text-xs md:text-sm font-semibold text-gray-700 dark:text-gray-300 mb-1 md:mb-2">
@@ -1654,8 +1744,9 @@ const handleSubmitPayroll = async () => {
                       disabled={!selectedUserId}
                     >
                       <option value="">Select Payment Mode</option>
-                      <option value="NEFT">Bank Transfer (NEFT)</option>
-                      <option value="RTGS">Bank Transfer (RTGS)</option>
+                      <option value="NEFT">WPS</option>
+                      <option value="RTGS">Bank Transfer</option>
+                      <option value="RTGS">INR Transfer</option>
                       <option value="Cheque">Cheque</option>
                       <option value="Cash">Cash</option>
                     </select>
@@ -1691,7 +1782,8 @@ const handleSubmitPayroll = async () => {
             </>
           )}
 
-          {/* Step 2 - Country Split / Packages - WITH EDITABLE FIELDS */}
+          {/* Step 2 - Country Split / Packages */}
+          {/* Step 2 - Country Split / Packages */}
           {reduxCurrentStep === 2 && (
             <div>
               <div className="flex items-center gap-2 pb-3 border-b-2 border-green-100 dark:border-green-900/30 mb-4 md:mb-6">
@@ -1708,7 +1800,7 @@ const handleSubmitPayroll = async () => {
                 )}
                 <button
                   onClick={handleCalculateSalarySplit}
-                  disabled={countriesLoading}
+                  disabled={countriesLoading || selectedPackageIds.length === 0}
                   className="ml-auto px-3 py-1 text-xs bg-blue-500 text-white rounded-lg hover:bg-blue-600 transition-colors disabled:opacity-50"
                 >
                   <i
@@ -1745,122 +1837,232 @@ const handleSubmitPayroll = async () => {
                           Worked Days
                         </div>
                       </div>
+                      <div className="text-center">
+                        <div className="text-2xl font-bold text-green-600 dark:text-green-400">
+                          {selectedPackageIds.length}
+                        </div>
+                        <div className="text-[10px] text-gray-500 dark:text-gray-400 uppercase tracking-wider">
+                          Packages Selected
+                        </div>
+                      </div>
                     </div>
                   </div>
                 </div>
               )}
 
-              {/* Country Cards with Editable Fields */}
-              <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                {countries.map((country) => (
-                  <div
-                    key={country.id}
-                    className="bg-white dark:bg-gray-800 border border-gray-200 dark:border-gray-700 rounded-xl overflow-hidden shadow-sm hover:shadow-md transition-shadow"
-                  >
-                    {/* Header */}
-                    <div className="bg-gray-50 dark:bg-gray-700/50 px-4 py-3 border-b border-gray-200 dark:border-gray-700 flex justify-between items-center">
-                      <div>
-                        <h4 className="font-semibold text-gray-800 dark:text-gray-200">
-                          {country.name || "Location"}
-                        </h4>
-                        <div className="flex items-center gap-2 text-xs text-gray-500 dark:text-gray-400">
-                          <span>{country.packageId ? "Saved" : "Unsaved"}</span>
-                          <span className="w-1 h-1 rounded-full bg-gray-400"></span>
-                          <span>{country.currency}</span>
-                        </div>
-                      </div>
-                      <div className="text-right">
-                        <div className="text-sm font-semibold text-gray-800 dark:text-gray-200">
-                          {country.daysWorked || 0}
-                        </div>
-                        <div className="text-[10px] text-gray-500 dark:text-gray-400 uppercase">
-                          Worked Days
-                        </div>
-                      </div>
-                    </div>
-
-                    {/* Body - Editable Salary Components */}
-                    <div className="p-4 space-y-3">
-                      {country.salary_components &&
-                      country.salary_components.length > 0 ? (
-                        <div className="space-y-2">
-                          {country.salary_components.map((comp, idx) => (
-                            <div key={idx} className="flex items-center gap-2">
-                              <span className="text-sm text-gray-600 dark:text-gray-400 w-32 flex-shrink-0">
-                                {comp.name}
-                              </span>
-                              <span className="text-xs text-gray-400">
-                                {country.currency}
-                              </span>
-                              <input
-                                type="number"
-                                step="0.01"
-                                value={comp.amount}
-                                onChange={(e) => {
-                                  const newAmount =
-                                    parseFloat(e.target.value) || 0;
-                                  const updatedCountries = countries.map(
-                                    (c) => {
-                                      if (c.id === country.id) {
-                                        const updatedComponents =
-                                          c.salary_components.map((c2, i) =>
-                                            i === idx
-                                              ? { ...c2, amount: newAmount }
-                                              : c2,
-                                          );
-                                        const newSubtotal =
-                                          updatedComponents.reduce(
-                                            (sum, c2) => sum + c2.amount,
-                                            0,
-                                          );
-                                        return {
-                                          ...c,
-                                          salary_components: updatedComponents,
-                                          subtotal: newSubtotal,
-                                        };
-                                      }
-                                      return c;
-                                    },
-                                  );
-                                  setCountries(updatedCountries);
-                                  // Reset saved state when user makes changes
-                                  setIsStep2Saved(false);
-                                }}
-                                className="flex-1 px-2 py-1 text-sm rounded border border-gray-200 dark:border-gray-600 bg-white dark:bg-gray-800 text-gray-700 dark:text-gray-300 focus:outline-none focus:border-green-500"
-                              />
-                            </div>
-                          ))}
-                          <div className="pt-2 mt-2 border-t border-gray-200 dark:border-gray-700 flex justify-between font-semibold">
-                            <span className="text-gray-800 dark:text-gray-200">
-                              Subtotal
-                            </span>
-                            <span className="text-green-600 dark:text-green-400">
-                              {country.currency} {country.subtotal.toFixed(2)}
-                            </span>
-                          </div>
-                        </div>
-                      ) : (
-                        <div className="text-center py-2 text-gray-400 text-sm">
-                          No salary components
-                        </div>
-                      )}
+              {/* Package Selection Dropdown */}
+              {availablePackages.length > 0 && (
+                <div className="mb-6 p-4 bg-gray-50 dark:bg-gray-700/30 rounded-xl border border-gray-200 dark:border-gray-700">
+                  <div className="flex items-center justify-between mb-3">
+                    <label className="text-sm font-semibold text-gray-700 dark:text-gray-300">
+                      <i className="fas fa-boxes text-green-500 mr-2"></i>
+                      Select Salary Packages
+                    </label>
+                    <div className="flex gap-2">
+                      <button
+                        onClick={handleSelectAllPackages}
+                        className="px-2 py-1 text-xs bg-green-500 text-white rounded hover:bg-green-600 transition-colors"
+                      >
+                        Select All
+                      </button>
+                      <button
+                        onClick={handleDeselectAllPackages}
+                        className="px-2 py-1 text-xs bg-gray-300 dark:bg-gray-600 text-gray-700 dark:text-gray-300 rounded hover:bg-gray-400 dark:hover:bg-gray-500 transition-colors"
+                      >
+                        Deselect All
+                      </button>
                     </div>
                   </div>
-                ))}
-              </div>
+                  <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 gap-3">
+                    {availablePackages.map((pkg) => (
+                      <label
+                        key={pkg.id}
+                        className={`flex items-start gap-3 p-3 rounded-lg border-2 cursor-pointer transition-all ${
+                          selectedPackageIds.includes(pkg.id)
+                            ? "border-green-500 bg-green-50 dark:bg-green-900/20"
+                            : "border-gray-200 dark:border-gray-600 hover:border-gray-300 dark:hover:border-gray-500"
+                        }`}
+                      >
+                        <input
+                          type="checkbox"
+                          checked={selectedPackageIds.includes(pkg.id)}
+                          onChange={() => handlePackageSelection(pkg.id)}
+                          className="mt-1 w-4 h-4 text-green-500 focus:ring-green-500 rounded"
+                        />
+                        <div className="flex-1">
+                          <p className="text-sm font-semibold text-gray-800 dark:text-gray-200">
+                            {pkg.name || `Package ${pkg.id}`}
+                          </p>
+                          <div className="flex items-center gap-2 text-xs text-gray-500 dark:text-gray-400">
+                            <span>{pkg.currency || "AED"}</span>
+                            <span className="w-1 h-1 rounded-full bg-gray-400"></span>
+                            <span>
+                              {pkg.salary_components?.length || 0} components
+                            </span>
+                          </div>
+                          {pkg.salary_components &&
+                            pkg.salary_components.length > 0 && (
+                              <div className="mt-1 flex flex-wrap gap-1">
+                                {pkg.salary_components
+                                  .slice(0, 3)
+                                  .map((comp, idx) => (
+                                    <span
+                                      key={idx}
+                                      className="text-[10px] bg-gray-100 dark:bg-gray-600 px-1.5 py-0.5 rounded"
+                                    >
+                                      {comp.name}: {comp.amount}
+                                    </span>
+                                  ))}
+                                {pkg.salary_components.length > 3 && (
+                                  <span className="text-[10px] text-gray-400">
+                                    +{pkg.salary_components.length - 3} more
+                                  </span>
+                                )}
+                              </div>
+                            )}
+                        </div>
+                      </label>
+                    ))}
+                  </div>
+                  {selectedPackageIds.length === 0 && (
+                    <p className="mt-2 text-xs text-yellow-600 dark:text-yellow-400">
+                      <i className="fas fa-exclamation-triangle mr-1"></i>
+                      Please select at least one package to calculate salary
+                      split
+                    </p>
+                  )}
+                </div>
+              )}
+
+              {/* Country Cards with Editable Fields - Only for selected packages */}
+              {countries.length > 0 && (
+                <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                  {countries.map((country) => (
+                    <div
+                      key={country.id}
+                      className="bg-white dark:bg-gray-800 border border-gray-200 dark:border-gray-700 rounded-xl overflow-hidden shadow-sm hover:shadow-md transition-shadow"
+                    >
+                      {/* Header */}
+                      <div className="bg-gray-50 dark:bg-gray-700/50 px-4 py-3 border-b border-gray-200 dark:border-gray-700 flex justify-between items-center">
+                        <div>
+                          <h4 className="font-semibold text-gray-800 dark:text-gray-200">
+                            {country.name || "Location"}
+                          </h4>
+                          <div className="flex items-center gap-2 text-xs text-gray-500 dark:text-gray-400">
+                            <span>
+                              {country.packageId ? "Saved" : "Unsaved"}
+                            </span>
+                            <span className="w-1 h-1 rounded-full bg-gray-400"></span>
+                            <span>{country.currency}</span>
+                          </div>
+                        </div>
+                        <div className="text-right">
+                          <div className="text-sm font-semibold text-gray-800 dark:text-gray-200">
+                            {country.daysWorked || 0}
+                          </div>
+                          <div className="text-[10px] text-gray-500 dark:text-gray-400 uppercase">
+                            Worked Days
+                          </div>
+                        </div>
+                      </div>
+
+                      {/* Body - Editable Salary Components */}
+                      <div className="p-4 space-y-3">
+                        {country.salary_components &&
+                        country.salary_components.length > 0 ? (
+                          <div className="space-y-2">
+                            {country.salary_components.map((comp, idx) => (
+                              <div
+                                key={idx}
+                                className="flex items-center gap-2"
+                              >
+                                <span className="text-sm text-gray-600 dark:text-gray-400 w-32 flex-shrink-0">
+                                  {comp.name}
+                                </span>
+                                <span className="text-xs text-gray-400">
+                                  {country.currency}
+                                </span>
+                                <input
+                                  type="number"
+                                  step="0.01"
+                                  value={comp.amount}
+                                  onChange={(e) => {
+                                    const newAmount =
+                                      parseFloat(e.target.value) || 0;
+                                    const updatedCountries = countries.map(
+                                      (c) => {
+                                        if (c.id === country.id) {
+                                          const updatedComponents =
+                                            c.salary_components.map((c2, i) =>
+                                              i === idx
+                                                ? { ...c2, amount: newAmount }
+                                                : c2,
+                                            );
+                                          const newSubtotal =
+                                            updatedComponents.reduce(
+                                              (sum, c2) => sum + c2.amount,
+                                              0,
+                                            );
+                                          return {
+                                            ...c,
+                                            salary_components:
+                                              updatedComponents,
+                                            subtotal: newSubtotal,
+                                          };
+                                        }
+                                        return c;
+                                      },
+                                    );
+                                    setCountries(updatedCountries);
+                                    // Reset saved state when user makes changes
+                                    setIsStep2Saved(false);
+                                  }}
+                                  className="flex-1 px-2 py-1 text-sm rounded border border-gray-200 dark:border-gray-600 bg-white dark:bg-gray-800 text-gray-700 dark:text-gray-300 focus:outline-none focus:border-green-500"
+                                />
+                              </div>
+                            ))}
+                            <div className="pt-2 mt-2 border-t border-gray-200 dark:border-gray-700 flex justify-between font-semibold">
+                              <span className="text-gray-800 dark:text-gray-200">
+                                Subtotal
+                              </span>
+                              <span className="text-green-600 dark:text-green-400">
+                                {country.currency} {country.subtotal.toFixed(2)}
+                              </span>
+                            </div>
+                          </div>
+                        ) : (
+                          <div className="text-center py-2 text-gray-400 text-sm">
+                            No salary components
+                          </div>
+                        )}
+                      </div>
+                    </div>
+                  ))}
+                </div>
+              )}
 
               {/* Save Packages Button - Only in Step 2 */}
               <div className="mt-6 flex justify-end">
                 <button
                   onClick={async () => {
+                    if (selectedPackageIds.length === 0) {
+                      showToast(
+                        "Please select at least one package",
+                        "warning",
+                      );
+                      return;
+                    }
+
                     const monthNumber =
                       monthNames[payPeriodMonth] || new Date().getMonth() + 1;
                     const year =
                       parseInt(payPeriodYear) || new Date().getFullYear();
 
+                    // Only include selected packages in the data
                     const step2Data = {
                       pay_period_month: monthNumber,
                       pay_period_year: year,
+                      package_ids: selectedPackageIds, // Send only selected package IDs
                       location_breakdown: countries.map((c) => ({
                         location_name: c.name,
                         package: {
@@ -1892,7 +2094,8 @@ const handleSubmitPayroll = async () => {
                       );
                     }
                   }}
-                  className="px-6 py-2.5 rounded-full font-semibold bg-green-500 text-white hover:bg-green-600 transition-all flex items-center gap-2 text-sm shadow-md hover:shadow-lg"
+                  className="px-6 py-2.5 rounded-full font-semibold bg-green-500 text-white hover:bg-green-600 transition-all flex items-center gap-2 text-sm shadow-md hover:shadow-lg disabled:opacity-50 disabled:cursor-not-allowed"
+                  disabled={selectedPackageIds.length === 0}
                 >
                   <i className="fas fa-save"></i> Save Packages
                 </button>
@@ -1910,7 +2113,6 @@ const handleSubmitPayroll = async () => {
           )}
 
           {/* Step 3 - Overtime */}
-          {/* Step 3 - Overtime - Updated Input Field */}
           {reduxCurrentStep === 3 && (
             <div>
               <div className="flex items-center gap-2 pb-3 border-b-2 border-green-100 dark:border-green-900/30 mb-4 md:mb-6">
@@ -2245,6 +2447,7 @@ const handleSubmitPayroll = async () => {
             </div>
           )}
 
+          {/* Step 5 - Summary */}
           {reduxCurrentStep === 5 && (
             <div>
               <div className="flex items-center gap-2 pb-3 border-b-2 border-green-100 dark:border-green-900/30 mb-4 md:mb-6">
@@ -2376,11 +2579,6 @@ const handleSubmitPayroll = async () => {
                                   );
                                   return;
                                 }
-                                // Remove this check to allow target currency:
-                                // if (newCurrency === targetCurrency) {
-                                //   showToast(`Cannot convert ${targetCurrency} to itself`, "warning");
-                                //   return;
-                                // }
                                 setConversionRatesList(
                                   conversionRatesList.map((i) =>
                                     i.id === item.id

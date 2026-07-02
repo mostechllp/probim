@@ -268,48 +268,28 @@ const Attendances = () => {
       });
 
   // Stats calculations
-const totalEmployees = stats?.total_active_employees || 
-                       stats?.totalActiveEmployees || 
-                       stats?.total_employees || 
-                       stats?.totalEmployees || 0;
+  const totalEmployees = stats?.total_active_employees || 
+                         stats?.totalActiveEmployees || 
+                         stats?.total_employees || 
+                         stats?.totalEmployees || 0;
 
-const punchedInCount = stats?.present_today || 
-                       stats?.presentToday || 
-                       stats?.punched_in_today || 
-                       stats?.punchedInToday || 0;
+  const punchedInCount = stats?.present_today || 
+                         stats?.presentToday || 
+                         stats?.punched_in_today || 
+                         stats?.punchedInToday || 0;
 
-const lateTodayCount = stats?.punched_late || 
-                       stats?.punchedLate || 
-                       stats?.late_today || 
-                       stats?.lateToday || 0;
+  const lateTodayCount = stats?.punched_late || 
+                         stats?.punchedLate || 
+                         stats?.late_today || 
+                         stats?.lateToday || 0;
 
-const absentTodayCount = stats?.absent_today || 
-                         stats?.absentToday || 
-                         stats?.absent_today_count || 0;
+  const absentTodayCount = stats?.absent_today || 
+                           stats?.absentToday || 
+                           stats?.absent_today_count || 0;
 
-const punchOutCount = stats?.punched_out_today || 
-                      stats?.punchedOutToday || 
-                      stats?.punch_out_today || 0;
-
-  // Month navigation
-  const goToPrevMonth = () => {
-    const newDate = new Date(selectedMonth);
-    newDate.setMonth(newDate.getMonth() - 1);
-    setSelectedMonth(newDate);
-  };
-
-  const goToNextMonth = () => {
-    const newDate = new Date(selectedMonth);
-    newDate.setMonth(newDate.getMonth() + 1);
-    setSelectedMonth(newDate);
-  };
-
-  const goToToday = () => {
-    const today = new Date();
-    setSelectedMonth(today);
-    // Force a re-render to apply today highlight
-    setSelectedDate(today);
-  };
+  const punchOutCount = stats?.punched_out_today || 
+                        stats?.punchedOutToday || 
+                        stats?.punch_out_today || 0;
 
   // Helper to get employee name from record
   const getEmployeeName = (record) => {
@@ -341,6 +321,164 @@ const punchOutCount = stats?.punched_out_today ||
     return 'Absent';
   };
 
+  // Helper function to get employee names for tooltip
+  const getEmployeeNamesForStats = (records, status) => {
+    if (!records || records.length === 0) return [];
+    
+    let filteredRecords = records;
+    
+    if (status === 'present') {
+      filteredRecords = records.filter(r => {
+        const recordStatus = getRecordStatus(r);
+        return recordStatus === 'Present';
+      });
+    } else if (status === 'late') {
+      filteredRecords = records.filter(r => {
+        const recordStatus = getRecordStatus(r);
+        return recordStatus === 'Late';
+      });
+    } else if (status === 'absent') {
+      filteredRecords = records.filter(r => {
+        const recordStatus = getRecordStatus(r);
+        return recordStatus === 'Absent';
+      });
+    }
+    
+    // Get unique employee names
+    const names = [...new Set(filteredRecords.map(r => getEmployeeName(r)))];
+    return names;
+  };
+
+  // Get today's date in DD/MM/YYYY format
+  const todayStr = formatDateToDDMMYYYY(new Date());
+  const todayRecords = records.filter(r => r.log_date === todayStr || r.date === todayStr);
+
+  // Get employee lists for tooltips
+  const presentEmployees = getEmployeeNamesForStats(todayRecords, 'present');
+  const lateEmployees = getEmployeeNamesForStats(todayRecords, 'late');
+  const absentEmployees = getEmployeeNamesForStats(todayRecords, 'absent');
+
+  // Tooltip component
+  const TooltipCard = ({ title, employees, color, icon }) => {
+    if (!employees || employees.length === 0) {
+      return (
+        <div className="mt-2 pt-2 border-t border-gray-200 dark:border-gray-600">
+          <p className="text-xs text-gray-400 dark:text-gray-500 italic">No {title.toLowerCase()} employees</p>
+        </div>
+      );
+    }
+
+    return (
+      <div className="mt-2 pt-2 border-t border-gray-200 dark:border-gray-600 max-h-[150px] overflow-y-auto scrollbar-thin">
+        <p className="text-xs font-semibold text-gray-600 dark:text-gray-400 mb-1">
+          <i className={`fas ${icon} mr-1`} style={{ color: color }}></i>
+          {title} ({employees.length}):
+        </p>
+        <ul className="space-y-0.5">
+          {employees.slice(0, 10).map((name, idx) => (
+            <li key={idx} className="text-xs text-gray-700 dark:text-gray-300 flex items-center gap-1">
+              <span className="w-1 h-1 rounded-full" style={{ backgroundColor: color }}></span>
+              {name}
+            </li>
+          ))}
+          {employees.length > 10 && (
+            <li className="text-xs text-gray-400 dark:text-gray-500 italic">
+              +{employees.length - 10} more...
+            </li>
+          )}
+        </ul>
+      </div>
+    );
+  };
+
+  // Tooltip wrapper component with hover state
+  // Tooltip wrapper component with hover state - Tooltip positioned BELOW
+const StatCardWithTooltip = ({ children, present, late, absent }) => {
+  const [showTooltip, setShowTooltip] = useState(false);
+  const tooltipRef = useRef(null);
+  let timeoutId = useRef(null);
+
+  const handleMouseEnter = () => {
+    clearTimeout(timeoutId.current);
+    setShowTooltip(true);
+  };
+
+  const handleMouseLeave = () => {
+    timeoutId.current = setTimeout(() => {
+      setShowTooltip(false);
+    }, 300);
+  };
+
+  useEffect(() => {
+    return () => {
+      if (timeoutId.current) {
+        clearTimeout(timeoutId.current);
+      }
+    };
+  }, []);
+
+  return (
+    <div 
+      className="relative"
+      onMouseEnter={handleMouseEnter}
+      onMouseLeave={handleMouseLeave}
+    >
+      {children}
+      
+      {showTooltip && (
+        <div 
+          ref={tooltipRef}
+          className="absolute top-full left-1/2 transform -translate-x-1/2 mt-2 z-50 w-64 bg-white dark:bg-gray-800 rounded-xl shadow-2xl border border-gray-200 dark:border-gray-700 p-3"
+        >
+          {/* Triangle arrow pointing UP (since tooltip is below) */}
+          <div className="absolute -top-1.5 left-1/2 transform -translate-x-1/2 rotate-45 w-3 h-3 bg-white dark:bg-gray-800 border-t border-l border-gray-200 dark:border-gray-700"></div>
+          
+          <div className="space-y-2 max-h-[300px] overflow-y-auto scrollbar-thin">
+            <TooltipCard 
+              title="Present" 
+              employees={present} 
+              color="#22c55e" 
+              icon="fa-check-circle" 
+            />
+            <TooltipCard 
+              title="Late" 
+              employees={late} 
+              color="#eab308" 
+              icon="fa-clock" 
+            />
+            <TooltipCard 
+              title="Absent" 
+              employees={absent} 
+              color="#ef4444" 
+              icon="fa-user-slash" 
+            />
+          </div>
+        </div>
+      )}
+    </div>
+  );
+};
+
+  // Month navigation
+  const goToPrevMonth = () => {
+    const newDate = new Date(selectedMonth);
+    newDate.setMonth(newDate.getMonth() - 1);
+    setSelectedMonth(newDate);
+  };
+
+  const goToNextMonth = () => {
+    const newDate = new Date(selectedMonth);
+    newDate.setMonth(newDate.getMonth() + 1);
+    setSelectedMonth(newDate);
+  };
+
+  const goToToday = () => {
+    const today = new Date();
+    setSelectedMonth(today);
+    // Force a re-render to apply today highlight
+    setSelectedDate(today);
+  };
+
   return (
     <div className="w-full overflow-x-hidden px-4 py-4 md:px-6 md:py-6">
       {/* Header */}
@@ -361,8 +499,9 @@ const punchOutCount = stats?.punched_out_today ||
         </div>
       </div>
 
-      {/* Stats Cards */}
+      {/* Stats Cards with Tooltips */}
       <div className="stats-grid grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-5 gap-3 md:gap-4 mb-6">
+        {/* Total Employees */}
         <div className="bg-white dark:bg-gray-800 rounded-xl p-3 md:p-4 border border-gray-200 dark:border-gray-700 transition-all hover:-translate-y-0.5 hover:shadow-soft">
           <div className="w-8 h-8 md:w-10 md:h-10 bg-green-100 dark:bg-green-900/30 rounded-xl flex items-center justify-center mb-1 md:mb-2">
             <i className="fas fa-users text-green-600 dark:text-green-400 text-sm md:text-lg"></i>
@@ -371,30 +510,61 @@ const punchOutCount = stats?.punched_out_today ||
           <div className="text-[10px] md:text-xs text-gray-500 dark:text-gray-400 font-medium">Total Employees</div>
         </div>
 
-        <div className="bg-white dark:bg-gray-800 rounded-xl p-3 md:p-4 border border-gray-200 dark:border-gray-700 transition-all hover:-translate-y-0.5 hover:shadow-soft">
-          <div className="w-8 h-8 md:w-10 md:h-10 bg-blue-100 dark:bg-blue-900/30 rounded-xl flex items-center justify-center mb-1 md:mb-2">
-            <i className="fas fa-fingerprint text-blue-600 dark:text-blue-400 text-sm md:text-lg"></i>
+        {/* Punched In Today - With Tooltip */}
+        <StatCardWithTooltip 
+          present={presentEmployees} 
+          late={lateEmployees} 
+          absent={absentEmployees}
+        >
+          <div className="bg-white dark:bg-gray-800 rounded-xl p-3 md:p-4 border border-gray-200 dark:border-gray-700 transition-all hover:-translate-y-0.5 hover:shadow-soft cursor-pointer">
+            <div className="w-8 h-8 md:w-10 md:h-10 bg-blue-100 dark:bg-blue-900/30 rounded-xl flex items-center justify-center mb-1 md:mb-2">
+              <i className="fas fa-fingerprint text-blue-600 dark:text-blue-400 text-sm md:text-lg"></i>
+            </div>
+            <div className="text-xl md:text-2xl font-bold text-blue-600 dark:text-blue-400">{punchedInCount}</div>
+            <div className="text-[10px] md:text-xs text-gray-500 dark:text-gray-400 font-medium">Punched In Today</div>
+            <div className="text-[8px] text-gray-400 dark:text-gray-500 mt-0.5">
+              <i className="fas fa-info-circle mr-0.5"></i> Hover for details
+            </div>
           </div>
-          <div className="text-xl md:text-2xl font-bold text-blue-600 dark:text-blue-400">{punchedInCount}</div>
-          <div className="text-[10px] md:text-xs text-gray-500 dark:text-gray-400 font-medium">Punched In Today</div>
-        </div>
+        </StatCardWithTooltip>
 
-        <div className="bg-white dark:bg-gray-800 rounded-xl p-3 md:p-4 border border-gray-200 dark:border-gray-700 transition-all hover:-translate-y-0.5 hover:shadow-soft">
-          <div className="w-8 h-8 md:w-10 md:h-10 bg-amber-100 dark:bg-amber-900/30 rounded-xl flex items-center justify-center mb-1 md:mb-2">
-            <i className="fas fa-clock text-amber-600 dark:text-amber-400 text-sm md:text-lg"></i>
+        {/* Late Today - With Tooltip */}
+        <StatCardWithTooltip 
+          present={presentEmployees} 
+          late={lateEmployees} 
+          absent={absentEmployees}
+        >
+          <div className="bg-white dark:bg-gray-800 rounded-xl p-3 md:p-4 border border-gray-200 dark:border-gray-700 transition-all hover:-translate-y-0.5 hover:shadow-soft cursor-pointer">
+            <div className="w-8 h-8 md:w-10 md:h-10 bg-amber-100 dark:bg-amber-900/30 rounded-xl flex items-center justify-center mb-1 md:mb-2">
+              <i className="fas fa-clock text-amber-600 dark:text-amber-400 text-sm md:text-lg"></i>
+            </div>
+            <div className="text-xl md:text-2xl font-bold text-amber-600 dark:text-amber-400">{lateTodayCount}</div>
+            <div className="text-[10px] md:text-xs text-gray-500 dark:text-gray-400 font-medium">Late Today</div>
+            <div className="text-[8px] text-gray-400 dark:text-gray-500 mt-0.5">
+              <i className="fas fa-info-circle mr-0.5"></i> Hover for details
+            </div>
           </div>
-          <div className="text-xl md:text-2xl font-bold text-amber-600 dark:text-amber-400">{lateTodayCount}</div>
-          <div className="text-[10px] md:text-xs text-gray-500 dark:text-gray-400 font-medium">Late Today</div>
-        </div>
+        </StatCardWithTooltip>
 
-        <div className="bg-white dark:bg-gray-800 rounded-xl p-3 md:p-4 border border-gray-200 dark:border-gray-700 transition-all hover:-translate-y-0.5 hover:shadow-soft">
-          <div className="w-8 h-8 md:w-10 md:h-10 bg-red-100 dark:bg-red-900/30 rounded-xl flex items-center justify-center mb-1 md:mb-2">
-            <i className="fas fa-user-slash text-red-600 dark:text-red-400 text-sm md:text-lg"></i>
+        {/* Absent Today - With Tooltip */}
+        <StatCardWithTooltip 
+          present={presentEmployees} 
+          late={lateEmployees} 
+          absent={absentEmployees}
+        >
+          <div className="bg-white dark:bg-gray-800 rounded-xl p-3 md:p-4 border border-gray-200 dark:border-gray-700 transition-all hover:-translate-y-0.5 hover:shadow-soft cursor-pointer">
+            <div className="w-8 h-8 md:w-10 md:h-10 bg-red-100 dark:bg-red-900/30 rounded-xl flex items-center justify-center mb-1 md:mb-2">
+              <i className="fas fa-user-slash text-red-600 dark:text-red-400 text-sm md:text-lg"></i>
+            </div>
+            <div className="text-xl md:text-2xl font-bold text-red-600 dark:text-red-400">{absentTodayCount}</div>
+            <div className="text-[10px] md:text-xs text-gray-500 dark:text-gray-400 font-medium">Absent Today</div>
+            <div className="text-[8px] text-gray-400 dark:text-gray-500 mt-0.5">
+              <i className="fas fa-info-circle mr-0.5"></i> Hover for details
+            </div>
           </div>
-          <div className="text-xl md:text-2xl font-bold text-red-600 dark:text-red-400">{absentTodayCount}</div>
-          <div className="text-[10px] md:text-xs text-gray-500 dark:text-gray-400 font-medium">Absent Today</div>
-        </div>
+        </StatCardWithTooltip>
 
+        {/* Punch Out Today */}
         <div className="bg-white dark:bg-gray-800 rounded-xl p-3 md:p-4 border border-gray-200 dark:border-gray-700 transition-all hover:-translate-y-0.5 hover:shadow-soft">
           <div className="w-8 h-8 md:w-10 md:h-10 bg-purple-100 dark:bg-purple-900/30 rounded-xl flex items-center justify-center mb-1 md:mb-2">
             <i className="fas fa-sign-out-alt text-purple-600 dark:text-purple-400 text-sm md:text-lg"></i>
@@ -404,6 +574,7 @@ const punchOutCount = stats?.punched_out_today ||
         </div>
       </div>
 
+      {/* Rest of your component remains the same... */}
       {/* Calendar Navigation */}
       <div className="flex flex-wrap items-center justify-between gap-3 mb-4 bg-white dark:bg-gray-800 rounded-xl border border-gray-200 dark:border-gray-700 p-3 md:p-4">
         <div className="flex items-center gap-2">
@@ -554,6 +725,21 @@ const punchOutCount = stats?.punched_out_today ||
               .dark .today-highlight abbr {
                 color: #1a1a1a !important;
               }
+
+              /* Scrollbar styling for tooltip */
+              .scrollbar-thin::-webkit-scrollbar {
+                width: 3px;
+              }
+              .scrollbar-thin::-webkit-scrollbar-track {
+                background: transparent;
+              }
+              .scrollbar-thin::-webkit-scrollbar-thumb {
+                background: #d1d5db;
+                border-radius: 10px;
+              }
+              .dark .scrollbar-thin::-webkit-scrollbar-thumb {
+                background: #4b5563;
+              }
             `}
           </style>
           <Calendar
@@ -614,6 +800,7 @@ const punchOutCount = stats?.punched_out_today ||
             <i className="fas fa-info-circle text-blue-500 mr-2"></i> Quick Tips
           </h4>
           <ul className="text-xs text-gray-600 dark:text-gray-400 space-y-1.5">
+            <li>• <span className="font-semibold">Hover over stats cards</span> to see employee names</li>
             <li>• <span className="font-semibold">Click on a day</span> to view attendance details for that day</li>
             <li>• <span className="font-semibold">Click "View Month"</span> to see all records for this month</li>
             <li>• Colored dots indicate daily attendance status</li>
