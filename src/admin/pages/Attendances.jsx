@@ -1,348 +1,367 @@
 /* eslint-disable react-hooks/exhaustive-deps */
 import { useEffect, useRef, useState, useCallback } from "react";
 import { useDispatch, useSelector } from "react-redux";
-import SearchBar from "../components/common/SearchBar";
-import EntriesSelector from "../components/common/EntriesSelector";
-import UploadAttendanceModal from "../components/attendance/UploadAttendanceModal";
+import Calendar from "react-calendar";
+import "react-calendar/dist/Calendar.css";
 import { showToast } from "../../components/common/Toast";
-import Pagination from "../components/common/Paginations";
 import {
   fetchAttendanceRecords,
-  uploadAttendanceFile,
-  fetchUploadStatus,
   fetchPunchInToday,
   fetchPunchInYesterday,
   fetchPunchOutToday,
   fetchLateComers,
   fetchAbsentees,
-  clearUploadStatus,
 } from "../store/slices/attendanceSlice";
+
+// Helper function to get status color
+const getStatusColor = (status) => {
+  if (!status) return "bg-gray-200 dark:bg-gray-600";
+  
+  const statusLower = status.toLowerCase();
+  if (statusLower === "present") return "bg-green-500";
+  if (statusLower === "absent" || statusLower === "absentee") return "bg-red-500";
+  if (statusLower === "late") return "bg-yellow-500";
+  if (statusLower === "half day") return "bg-blue-500";
+  if (statusLower === "leave") return "bg-purple-500";
+  if (statusLower === "holiday") return "bg-pink-500";
+  return "bg-gray-400";
+};
+
+// Helper to parse date from DD/MM/YYYY to Date object
+const parseDateFromString = (dateStr) => {
+  if (!dateStr) return null;
+  
+  // If it's already in DD/MM/YYYY format
+  if (dateStr.includes('/')) {
+    const parts = dateStr.split('/');
+    if (parts.length === 3) {
+      // DD/MM/YYYY
+      const day = parseInt(parts[0]);
+      const month = parseInt(parts[1]) - 1;
+      const year = parseInt(parts[2]);
+      return new Date(year, month, day);
+    }
+  }
+  
+  // Try standard date parsing
+  const date = new Date(dateStr);
+  if (!isNaN(date.getTime())) return date;
+  
+  return null;
+};
+
+// Helper to format date to DD/MM/YYYY for comparison
+const formatDateToDDMMYYYY = (date) => {
+  if (!date) return '';
+  const d = date instanceof Date ? date : new Date(date);
+  if (isNaN(d.getTime())) return '';
+  const day = String(d.getDate()).padStart(2, '0');
+  const month = String(d.getMonth() + 1).padStart(2, '0');
+  const year = d.getFullYear();
+  return `${day}/${month}/${year}`;
+};
 
 const Attendances = () => {
   const dispatch = useDispatch();
   const {
     records,
-    uploadStatus,
-    uploadStatusId,
-    uploadLoading,
     punchInToday,
     lateComers,
     absentees,
     loading,
     stats,
-    totalCount,
-    lastPage,
-    currentPage: reduxCurrentPage,
-    perPage: reduxPerPage,
   } = useSelector((state) => state.attendance);
 
-  const [showUploadModal, setShowUploadModal] = useState(false);
-  const [companyFilter, setCompanyFilter] = useState("all");
-  const [nameFilter, setNameFilter] = useState("");
-  const [searchTerm, setSearchTerm] = useState("");
+  const [selectedDate, setSelectedDate] = useState(new Date());
+  const [selectedMonth, setSelectedMonth] = useState(new Date());
+  const [showDayModal, setShowDayModal] = useState(false);
+  const [showMonthModal, setShowMonthModal] = useState(false);
+  const [dayData, setDayData] = useState([]);
+  const [monthData, setMonthData] = useState([]);
+  const [employeeFilter, setEmployeeFilter] = useState("all");
   const [refreshLoading, setRefreshLoading] = useState(false);
+  const calendarRef = useRef(null);
 
-  const pollingRef = useRef(null);
-  // Always holds latest filter values — no stale closure issues
-  const filtersRef = useRef({ 
-    currentPage: reduxCurrentPage || 1, 
-    perPage: reduxPerPage || 15, 
-    companyFilter, 
-    searchTerm, 
-    nameFilter 
-  });
-  
+  // Get unique employees for filter
+  const uniqueEmployees = [
+    ...new Set(
+      records
+        .map((record) => {
+          // Get employee name from nested structure
+          let name = record.employeeName || record.name || record.employee_name;
+          if (!name && record.user) {
+            if (record.user.employee) {
+              name = `${record.user.employee.first_name || ''} ${record.user.employee.last_name || ''}`.trim() || record.user.employee.employee_id;
+            }
+            if (!name && record.user.username) {
+              name = record.user.username;
+            }
+          }
+          return {
+            id: record.userid || record.user_id || record.employee_id || record.id || record.user?.id,
+            name: name || `Employee #${record.userid || record.id}`,
+          };
+        })
+        .filter((emp) => emp.id && emp.name)
+    ),
+  ];
+
+  // Fetch attendance data on mount and when month changes
   useEffect(() => {
-    filtersRef.current = { 
-      currentPage: reduxCurrentPage || 1, 
-      perPage: reduxPerPage || 15, 
-      companyFilter, 
-      searchTerm, 
-      nameFilter 
-    };
-  }, [reduxCurrentPage, reduxPerPage, companyFilter, searchTerm, nameFilter]);
+    const year = selectedMonth.getFullYear();
+    const month = selectedMonth.getMonth() + 1;
+    
+    dispatch(fetchAttendanceRecords({
+      page: 1,
+      per_page: 1000,
+      month: month,
+      year: year,
+    }));
+    
+    // Fetch stats
+    dispatch(fetchPunchInToday());
+    dispatch(fetchPunchInYesterday());
+    dispatch(fetchPunchOutToday());
+    dispatch(fetchLateComers());
+    dispatch(fetchAbsentees());
+  }, [dispatch, selectedMonth]);
 
-  // ─── Core fetch function — always reads live filters from ref ─────────────
-  const fetchAll = useCallback(() => {
-    const f = filtersRef.current;
-    return Promise.all([
-      dispatch(fetchAttendanceRecords({
-        page: f.currentPage,
-        per_page: f.perPage,
-        company: f.companyFilter !== "all" ? f.companyFilter : undefined,
-        search: f.searchTerm || undefined,
-        name: f.nameFilter || undefined,
-      })),
-      dispatch(fetchPunchInToday()),
-      dispatch(fetchPunchInYesterday()),
-      dispatch(fetchPunchOutToday()),
-      dispatch(fetchLateComers()),
-      dispatch(fetchAbsentees()),
-    ]);
-  }, [dispatch]);
-
-  // ─── Load data on filter / page change ───────────────────────────────────
-  useEffect(() => {
-    fetchAll();
-  }, [reduxCurrentPage, reduxPerPage, companyFilter, searchTerm, nameFilter]);
-
-  // ─── Stop polling helper ──────────────────────────────────────────────────
-  const stopPolling = useCallback(() => {
-    if (pollingRef.current) {
-      clearInterval(pollingRef.current);
-      pollingRef.current = null;
+  // Process records for calendar
+  const getDayStatus = (date) => {
+    const dateStr = formatDateToDDMMYYYY(date);
+    const dayRecords = records.filter(r => r.log_date === dateStr || r.date === dateStr);
+    
+    if (dayRecords.length === 0) {
+      return { status: 'no-data', count: 0, records: [] };
     }
-  }, []);
-
-  // ─── Start polling when upload is processing ──────────────────────────────
-  useEffect(() => {
-    if (uploadStatusId && uploadStatus === "processing") {
-      stopPolling();
-      pollingRef.current = setInterval(() => {
-        dispatch(fetchUploadStatus(uploadStatusId));
-      }, 5000);
-    }
-    return stopPolling;
-  }, [uploadStatusId, uploadStatus]);
-
-  // ─── React to upload status changes — use ref to avoid stale closure ─────
-  const handledUploadRef = useRef(null);
-
-  // ─── React to upload status changes ─────────────────────────────────────────
-  useEffect(() => {
-    if (!uploadStatusId) return;
-    if (handledUploadRef.current === uploadStatusId) return;
-
-    if (uploadStatus === "completed") {
-      handledUploadRef.current = uploadStatusId;
-      stopPolling();
-      showToast("Attendance file processed successfully!", "success");
-      // Re-fetch data
-      fetchAll();
-      dispatch(clearUploadStatus());
-    } else if (uploadStatus === "failed") {
-      handledUploadRef.current = uploadStatusId;
-      stopPolling();
-      showToast("Failed to process attendance file. Please try again.", "error");
-      dispatch(clearUploadStatus());
-    }
-  }, [uploadStatus, uploadStatusId]);
-
-  // ─── Manual refresh ───────────────────────────────────────────────────────
-  const refreshAllData = async () => {
-    setRefreshLoading(true);
-    try {
-      await fetchAll();
-      showToast("Data refreshed successfully!", "success");
-    } catch {
-      showToast("Some data failed to load", "error");
-    } finally {
-      setRefreshLoading(false);
-    }
-  };
-
-  // ─── Upload submit ────────────────────────────────────────────────────────
-  const handleUploadComplete = async ({ file }) => {
-    try {
-      const result = await dispatch(uploadAttendanceFile({ file })).unwrap();
-      setShowUploadModal(false);
-
-      if (result.status === "completed") {
-        showToast("Attendance file uploaded successfully!", "success");
-        // Reset to page 1
-        handlePageChange(1);
-      } else {
-        showToast("File uploaded! Processing in background…", "info");
+    
+    // Determine overall status for the day
+    const statuses = dayRecords.map(r => {
+      // Check if punch_in exists - if yes, consider them present
+      if (r.punch_in && r.punch_in !== '--') {
+        // Check if they were late (based on punch_in time or late flag)
+        if (r.lateBy && r.lateBy > 0) return 'late';
+        return 'present';
       }
-    } catch (error) {
-      showToast(typeof error === "string" ? error : error?.message || "Upload failed", "error");
-    }
+      return 'absent';
+    });
+    
+    const hasAbsent = statuses.some(s => s === 'absent');
+    const hasLate = statuses.some(s => s === 'late');
+    const allPresent = statuses.every(s => s === 'present');
+    
+    let status = 'mixed';
+    if (allPresent) status = 'present';
+    else if (hasAbsent) status = 'absent';
+    else if (hasLate) status = 'late';
+    
+    return { status, count: dayRecords.length, records: dayRecords };
   };
 
-  // ─── Filter / pagination handlers ────────────────────────────────────────
-  const handlePageChange = (page) => {
-    // We need to re-fetch with the new page
-    dispatch(fetchAttendanceRecords({
-      page: page,
-      per_page: reduxPerPage || 15,
-      company: companyFilter !== "all" ? companyFilter : undefined,
-      search: searchTerm || undefined,
-      name: nameFilter || undefined,
-    }));
-    window.scrollTo({ top: 0, behavior: "smooth" });
+  // Check if a date is today
+  const isToday = (date) => {
+    const today = new Date();
+    return date.getDate() === today.getDate() &&
+           date.getMonth() === today.getMonth() &&
+           date.getFullYear() === today.getFullYear();
   };
 
-  const handlePerPageChange = (value) => {
-    // Reset to page 1 when changing items per page
-    dispatch(fetchAttendanceRecords({
-      page: 1,
-      per_page: value,
-      company: companyFilter !== "all" ? companyFilter : undefined,
-      search: searchTerm || undefined,
-      name: nameFilter || undefined,
-    }));
-  };
-
-  const handleCompanyFilterChange = (e) => {
-    const value = e.target.value;
-    setCompanyFilter(value);
-    // Fetch with new filter, reset to page 1
-    dispatch(fetchAttendanceRecords({
-      page: 1,
-      per_page: reduxPerPage || 15,
-      company: value !== "all" ? value : undefined,
-      search: searchTerm || undefined,
-      name: nameFilter || undefined,
-    }));
-  };
-
-  const handleNameFilterChange = (e) => {
-    const value = e.target.value;
-    setNameFilter(value);
-    // Fetch with new filter, reset to page 1
-    dispatch(fetchAttendanceRecords({
-      page: 1,
-      per_page: reduxPerPage || 15,
-      company: companyFilter !== "all" ? companyFilter : undefined,
-      search: searchTerm || undefined,
-      name: value || undefined,
-    }));
-  };
-
-  const handleSearchChange = (value) => {
-    setSearchTerm(value);
-    // Fetch with new search, reset to page 1
-    dispatch(fetchAttendanceRecords({
-      page: 1,
-      per_page: reduxPerPage || 15,
-      company: companyFilter !== "all" ? companyFilter : undefined,
-      search: value || undefined,
-      name: nameFilter || undefined,
-    }));
-  };
-
-  // ─── Derived display values ───────────────────────────────────────────────
-  const totalFiltered = totalCount || records.length;
-  const totalPages = lastPage || Math.ceil(totalFiltered / (reduxPerPage || 15));
-  const start = ((reduxCurrentPage || 1) - 1) * (reduxPerPage || 15);
-  const isUploading = uploadLoading || uploadStatus === "processing";
-
-  const totalEmployees = stats?.totalActiveEmployees || 0;
-  const punchedInCount = stats?.presentToday || 0;
-  const lateTodayCount = stats?.punchedLate || 0;
-  const absentTodayCount = stats?.absentToday || 0;
-  const punchOutCount = stats?.punchedOutToday || 0;
-
-  const getSafeArray = (data) => {
-  if (!data) return [];
-  if (Array.isArray(data)) return data;
-  
-  // Handle case where data might be an object with a data property
-  if (data.data && Array.isArray(data.data)) return data.data;
-  
-  // Handle case where data might be an object with an employees property
-  if (data.employees && Array.isArray(data.employees)) return data.employees;
-  
-  // Handle case where data might be an object with a users property
-  if (data.users && Array.isArray(data.users)) return data.users;
-  
-  // Handle case where data might have a list property
-  if (data.list && Array.isArray(data.list)) return data.list;
-  
-  // If data is an object but not an array, try to find any array property
-  if (typeof data === 'object') {
-    for (const key in data) {
-      if (Array.isArray(data[key]) && data[key].length > 0) {
-        return data[key];
-      }
-    }
-  }
-  
-  return [];
-};
-
-const renderEmployeeList = (employees, title) => {
-  const arr = getSafeArray(employees);
-  if (!arr.length) return null;
-  
-  // Helper to get employee name from various data structures
-  const getEmployeeDisplayName = (emp) => {
-    if (!emp) return "Unknown";
+  // Tile content renderer for calendar
+  const tileContent = ({ date, view }) => {
+    if (view !== 'month') return null;
     
-    // If it's a string, return it
-    if (typeof emp === "string") return emp;
+    const dayInfo = getDayStatus(date);
+    if (dayInfo.status === 'no-data') return null;
     
-    // Check for direct first_name/last_name
-    if (emp.first_name || emp.last_name) {
-      return `${emp.first_name || ''} ${emp.last_name || ''}`.trim() || emp.name || "Unknown";
-    }
-    
-    // Check for name fields
-    if (emp.name) return emp.name;
-    if (emp.employeeName) return emp.employeeName;
-    if (emp.employee_name) return emp.employee_name;
-    if (emp.full_name) return emp.full_name;
-    if (emp.display_name) return emp.display_name;
-    
-    // Check for user.employee structure
-    if (emp.user?.employee?.first_name) {
-      return `${emp.user.employee.first_name} ${emp.user.employee.last_name || ''}`.trim();
-    }
-    if (emp.user?.employee?.name) return emp.user.employee.name;
-    if (emp.user?.employee?.full_name) return emp.user.employee.full_name;
-    
-    // Check for user structure
-    if (emp.user?.first_name) {
-      return `${emp.user.first_name} ${emp.user.last_name || ''}`.trim();
-    }
-    if (emp.user?.name) return emp.user.name;
-    if (emp.user?.full_name) return emp.user.full_name;
-    if (emp.user?.username) return emp.user.username;
-    
-    // Check for employee structure
-    if (emp.employee?.first_name) {
-      return `${emp.employee.first_name} ${emp.employee.last_name || ''}`.trim();
-    }
-    if (emp.employee?.name) return emp.employee.name;
-    if (emp.employee?.full_name) return emp.employee.full_name;
-    
-    // Check for raw data
-    if (emp.raw?.employee?.first_name) {
-      return `${emp.raw.employee.first_name} ${emp.raw.employee.last_name || ''}`.trim();
-    }
-    if (emp.raw?.user?.first_name) {
-      return `${emp.raw.user.first_name} ${emp.raw.user.last_name || ''}`.trim();
-    }
-    
-    // Check for employee_id or user_id
-    if (emp.employee_id) return `Employee #${emp.employee_id}`;
-    if (emp.user_id) return `Employee #${emp.user_id}`;
-    if (emp.id) return `Employee #${emp.id}`;
-    
-    return "Unknown";
-  };
-
-  return (
-    <div className="absolute hidden group-hover:block z-20 mt-2 p-3 bg-gray-900 dark:bg-gray-800 text-white text-xs rounded-lg shadow-xl min-w-[200px] top-full left-0">
-      <p className="font-semibold mb-2 text-gray-300 border-b border-gray-700 pb-1">{title}:</p>
-      <div className="flex flex-wrap gap-1.5 max-h-48 overflow-y-auto">
-        {arr.slice(0, 10).map((emp, idx) => (
-          <span key={idx} className="text-xs bg-gray-700 px-2 py-1 rounded-full">
-            {getEmployeeDisplayName(emp)}
+    return (
+      <div className="flex flex-col items-center mt-1">
+        <div className={`w-1.5 h-1.5 rounded-full ${getStatusColor(dayInfo.status)}`}></div>
+        {dayInfo.count > 1 && (
+          <span className="text-[8px] text-gray-500 dark:text-gray-400 font-semibold">
+            {dayInfo.count}
           </span>
-        ))}
-        {arr.length > 10 && (
-          <span className="text-xs text-gray-400 mt-1 block">+{arr.length - 10} more</span>
         )}
       </div>
-    </div>
-  );
-};
+    );
+  };
+
+  // Tile className for styling
+  const tileClassName = ({ date, view }) => {
+    if (view !== 'month') return '';
+    
+    const dayInfo = getDayStatus(date);
+    const today = isToday(date);
+    
+    // Base classes
+    let classes = 'transition-colors';
+    
+    // Today's date - always green background with white text
+    if (today) {
+      classes += ' today-highlight bg-green-500 text-white hover:bg-green-600';
+      return classes;
+    }
+    
+    // Status-based styling for other days
+    if (dayInfo.status !== 'no-data') {
+      classes += ' hover:bg-gray-100 dark:hover:bg-gray-700';
+      if (dayInfo.status === 'present') classes += ' bg-green-50 dark:bg-green-900/20';
+      else if (dayInfo.status === 'absent') classes += ' bg-red-50 dark:bg-red-900/20';
+      else if (dayInfo.status === 'late') classes += ' bg-yellow-50 dark:bg-yellow-900/20';
+      else if (dayInfo.status === 'mixed') classes += ' bg-blue-50 dark:bg-blue-900/20';
+    }
+    
+    return classes;
+  };
+
+  // Handle day click
+  const handleDayClick = (date) => {
+    const dateStr = formatDateToDDMMYYYY(date);
+    const dayRecords = records.filter(r => r.log_date === dateStr || r.date === dateStr);
+    
+    if (dayRecords.length === 0) {
+      showToast("No attendance records for this day", "info");
+      return;
+    }
+    
+    setDayData(dayRecords);
+    setSelectedDate(date);
+    setShowDayModal(true);
+  };
+
+  // Handle month click
+  const handleMonthClick = () => {
+    const year = selectedMonth.getFullYear();
+    const month = String(selectedMonth.getMonth() + 1).padStart(2, '0');
+    const monthRecords = records.filter(r => {
+      const dateStr = r.log_date || r.date;
+      if (!dateStr) return false;
+      
+      // Check if date is in DD/MM/YYYY format
+      if (dateStr.includes('/')) {
+        const parts = dateStr.split('/');
+        if (parts.length === 3) {
+          const recordMonth = parts[1];
+          const recordYear = parts[2];
+          return recordMonth === month && recordYear === String(year);
+        }
+      }
+      
+      // Try parsing as Date
+      const date = new Date(dateStr);
+      if (!isNaN(date.getTime())) {
+        return date.getMonth() + 1 === parseInt(month) && date.getFullYear() === year;
+      }
+      
+      return false;
+    });
+    
+    setMonthData(monthRecords);
+    setShowMonthModal(true);
+  };
+
+  // Filter employees in month modal
+  const filteredMonthData = employeeFilter === "all" 
+    ? monthData 
+    : monthData.filter(r => {
+        const empId = r.userid || r.user_id || r.employee_id || r.id || r.user?.id;
+        return empId == employeeFilter;
+      });
+
+  // Stats calculations
+const totalEmployees = stats?.total_active_employees || 
+                       stats?.totalActiveEmployees || 
+                       stats?.total_employees || 
+                       stats?.totalEmployees || 0;
+
+const punchedInCount = stats?.present_today || 
+                       stats?.presentToday || 
+                       stats?.punched_in_today || 
+                       stats?.punchedInToday || 0;
+
+const lateTodayCount = stats?.punched_late || 
+                       stats?.punchedLate || 
+                       stats?.late_today || 
+                       stats?.lateToday || 0;
+
+const absentTodayCount = stats?.absent_today || 
+                         stats?.absentToday || 
+                         stats?.absent_today_count || 0;
+
+const punchOutCount = stats?.punched_out_today || 
+                      stats?.punchedOutToday || 
+                      stats?.punch_out_today || 0;
+
+  // Month navigation
+  const goToPrevMonth = () => {
+    const newDate = new Date(selectedMonth);
+    newDate.setMonth(newDate.getMonth() - 1);
+    setSelectedMonth(newDate);
+  };
+
+  const goToNextMonth = () => {
+    const newDate = new Date(selectedMonth);
+    newDate.setMonth(newDate.getMonth() + 1);
+    setSelectedMonth(newDate);
+  };
+
+  const goToToday = () => {
+    const today = new Date();
+    setSelectedMonth(today);
+    // Force a re-render to apply today highlight
+    setSelectedDate(today);
+  };
+
+  // Helper to get employee name from record
+  const getEmployeeName = (record) => {
+    let name = record.employeeName || record.name || record.employee_name;
+    if (!name && record.user) {
+      if (record.user.employee) {
+        name = `${record.user.employee.first_name || ''} ${record.user.employee.last_name || ''}`.trim() || record.user.employee.employee_id;
+      }
+      if (!name && record.user.username) {
+        name = record.user.username;
+      }
+    }
+    return name || `Employee #${record.userid || record.id}`;
+  };
+
+  // Helper to get department from record
+  const getDepartment = (record) => {
+    if (record.department) return record.department;
+    if (record.user?.department?.name) return record.user.department.name;
+    return '-';
+  };
+
+  // Helper to get status from record
+  const getRecordStatus = (record) => {
+    if (record.punch_in && record.punch_in !== '--') {
+      if (record.lateBy && record.lateBy > 0) return 'Late';
+      return 'Present';
+    }
+    return 'Absent';
+  };
 
   return (
-    <div className="w-full overflow-x-hidden">
+    <div className="w-full overflow-x-hidden px-4 py-4 md:px-6 md:py-6">
+      {/* Header */}
+      <div className="flex flex-wrap justify-between items-center mb-4 md:mb-6">
+        <h2 className="text-lg md:text-2xl font-bold bg-gradient-to-r from-gray-800 to-green-600 dark:from-gray-200 dark:to-green-400 bg-clip-text text-transparent flex flex-wrap items-center gap-2">
+          <i className="fas fa-calendar-alt text-green-500"></i> Attendance Calendar
+          <span className="text-[10px] md:text-sm bg-green-100 dark:bg-green-900/30 text-green-600 dark:text-green-400 px-2 md:px-3 py-0.5 md:py-1 rounded-full">
+            {selectedMonth.toLocaleString('default', { month: 'long', year: 'numeric' })}
+          </span>
+        </h2>
+        <div className="flex gap-2">
+          <button
+            onClick={goToToday}
+            className="px-3 py-1.5 md:px-4 md:py-2 bg-blue-500 hover:bg-blue-600 text-white rounded-lg text-xs md:text-sm font-semibold transition-all shadow-md hover:shadow-lg"
+          >
+            <i className="fas fa-calendar-day mr-1"></i> Today
+          </button>
+        </div>
+      </div>
 
-      {/* ── Stats Cards ─────────────────────────────────────────────────────── */}
+      {/* Stats Cards */}
       <div className="stats-grid grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-5 gap-3 md:gap-4 mb-6">
         <div className="bg-white dark:bg-gray-800 rounded-xl p-3 md:p-4 border border-gray-200 dark:border-gray-700 transition-all hover:-translate-y-0.5 hover:shadow-soft">
           <div className="w-8 h-8 md:w-10 md:h-10 bg-green-100 dark:bg-green-900/30 rounded-xl flex items-center justify-center mb-1 md:mb-2">
@@ -352,16 +371,15 @@ const renderEmployeeList = (employees, title) => {
           <div className="text-[10px] md:text-xs text-gray-500 dark:text-gray-400 font-medium">Total Employees</div>
         </div>
 
-        <div className="group relative bg-white dark:bg-gray-800 rounded-xl p-3 md:p-4 border border-gray-200 dark:border-gray-700 transition-all hover:-translate-y-0.5 hover:shadow-soft">
+        <div className="bg-white dark:bg-gray-800 rounded-xl p-3 md:p-4 border border-gray-200 dark:border-gray-700 transition-all hover:-translate-y-0.5 hover:shadow-soft">
           <div className="w-8 h-8 md:w-10 md:h-10 bg-blue-100 dark:bg-blue-900/30 rounded-xl flex items-center justify-center mb-1 md:mb-2">
             <i className="fas fa-fingerprint text-blue-600 dark:text-blue-400 text-sm md:text-lg"></i>
           </div>
           <div className="text-xl md:text-2xl font-bold text-blue-600 dark:text-blue-400">{punchedInCount}</div>
           <div className="text-[10px] md:text-xs text-gray-500 dark:text-gray-400 font-medium">Punched In Today</div>
-          {renderEmployeeList(punchInToday, "Punched In")}
         </div>
 
-        <div className="group relative bg-white dark:bg-gray-800 rounded-xl p-3 md:p-4 border border-gray-200 dark:border-gray-700 transition-all hover:-translate-y-0.5 hover:shadow-soft">
+        <div className="bg-white dark:bg-gray-800 rounded-xl p-3 md:p-4 border border-gray-200 dark:border-gray-700 transition-all hover:-translate-y-0.5 hover:shadow-soft">
           <div className="w-8 h-8 md:w-10 md:h-10 bg-amber-100 dark:bg-amber-900/30 rounded-xl flex items-center justify-center mb-1 md:mb-2">
             <i className="fas fa-clock text-amber-600 dark:text-amber-400 text-sm md:text-lg"></i>
           </div>
@@ -369,7 +387,7 @@ const renderEmployeeList = (employees, title) => {
           <div className="text-[10px] md:text-xs text-gray-500 dark:text-gray-400 font-medium">Late Today</div>
         </div>
 
-        <div className="group relative bg-white dark:bg-gray-800 rounded-xl p-3 md:p-4 border border-gray-200 dark:border-gray-700 transition-all hover:-translate-y-0.5 hover:shadow-soft">
+        <div className="bg-white dark:bg-gray-800 rounded-xl p-3 md:p-4 border border-gray-200 dark:border-gray-700 transition-all hover:-translate-y-0.5 hover:shadow-soft">
           <div className="w-8 h-8 md:w-10 md:h-10 bg-red-100 dark:bg-red-900/30 rounded-xl flex items-center justify-center mb-1 md:mb-2">
             <i className="fas fa-user-slash text-red-600 dark:text-red-400 text-sm md:text-lg"></i>
           </div>
@@ -377,7 +395,7 @@ const renderEmployeeList = (employees, title) => {
           <div className="text-[10px] md:text-xs text-gray-500 dark:text-gray-400 font-medium">Absent Today</div>
         </div>
 
-        <div className="col-span-2 sm:col-span-3 lg:col-span-1 bg-white dark:bg-gray-800 rounded-xl p-3 md:p-4 border border-gray-200 dark:border-gray-700 transition-all hover:-translate-y-0.5 hover:shadow-soft">
+        <div className="bg-white dark:bg-gray-800 rounded-xl p-3 md:p-4 border border-gray-200 dark:border-gray-700 transition-all hover:-translate-y-0.5 hover:shadow-soft">
           <div className="w-8 h-8 md:w-10 md:h-10 bg-purple-100 dark:bg-purple-900/30 rounded-xl flex items-center justify-center mb-1 md:mb-2">
             <i className="fas fa-sign-out-alt text-purple-600 dark:text-purple-400 text-sm md:text-lg"></i>
           </div>
@@ -386,143 +404,407 @@ const renderEmployeeList = (employees, title) => {
         </div>
       </div>
 
-      {/* ── Upload processing banner ─────────────────────────────────────────── */}
-      {uploadStatus === "processing" && (
-        <div className="mb-4 bg-blue-50 dark:bg-blue-900/20 border border-blue-200 dark:border-blue-800 rounded-lg p-3 flex items-center gap-3">
-          <i className="fas fa-spinner fa-spin text-blue-500"></i>
-          <div className="flex-1">
-            <span className="text-sm text-blue-700 dark:text-blue-300 font-medium">
-              Processing attendance file…
-            </span>
-            <p className="text-xs text-blue-500 dark:text-blue-400 mt-0.5">
-              The table will refresh automatically when complete.
-            </p>
-          </div>
-        </div>
-      )}
-
-      {/* ── Header ──────────────────────────────────────────────────────────── */}
-      <div className="flex flex-wrap justify-between items-center mb-4 md:mb-6">
-        <h2 className="text-lg md:text-2xl font-bold gradient-heading bg-clip-text text-transparent flex flex-wrap items-center gap-2">
-          Attendance Records
-          <span className="text-[10px] md:text-sm bg-green-100 dark:bg-green-900/30 text-green-600 dark:text-green-400 px-2 md:px-3 py-0.5 md:py-1 rounded-full">
-            <i className="fas fa-calendar-check mr-1"></i> Daily Log
+      {/* Calendar Navigation */}
+      <div className="flex flex-wrap items-center justify-between gap-3 mb-4 bg-white dark:bg-gray-800 rounded-xl border border-gray-200 dark:border-gray-700 p-3 md:p-4">
+        <div className="flex items-center gap-2">
+          <button
+            onClick={goToPrevMonth}
+            className="p-2 hover:bg-gray-100 dark:hover:bg-gray-700 rounded-lg transition-colors"
+          >
+            <i className="fas fa-chevron-left text-gray-600 dark:text-gray-400"></i>
+          </button>
+          <span className="text-lg font-semibold text-gray-800 dark:text-gray-200 min-w-[140px] text-center">
+            {selectedMonth.toLocaleString('default', { month: 'long', year: 'numeric' })}
           </span>
-        </h2>
-      </div>
-
-      {/* ── Actions bar ─────────────────────────────────────────────────────── */}
-      <div className="flex flex-col sm:flex-row justify-between items-stretch sm:items-center gap-4 mb-5">
-        <EntriesSelector 
-          value={reduxPerPage || 15} 
-          onChange={handlePerPageChange} 
-        />
-        <div className="flex flex-col sm:flex-row gap-3 w-full sm:w-auto">
-          <SearchBar 
-            value={searchTerm} 
-            onChange={handleSearchChange} 
-            placeholder="Search records..." 
-          />
+          <button
+            onClick={goToNextMonth}
+            className="p-2 hover:bg-gray-100 dark:hover:bg-gray-700 rounded-lg transition-colors"
+          >
+            <i className="fas fa-chevron-right text-gray-600 dark:text-gray-400"></i>
+          </button>
+        </div>
+        <div className="flex flex-wrap items-center gap-3">
+          <div className="flex items-center gap-2 text-xs">
+            <span className="flex items-center gap-1">
+              <span className="w-3 h-3 rounded-full bg-green-500"></span>
+              Present
+            </span>
+            <span className="flex items-center gap-1">
+              <span className="w-3 h-3 rounded-full bg-red-500"></span>
+              Absent
+            </span>
+            <span className="flex items-center gap-1">
+              <span className="w-3 h-3 rounded-full bg-yellow-500"></span>
+              Late
+            </span>
+            <span className="flex items-center gap-1">
+              <span className="w-3 h-3 rounded-full bg-blue-500"></span>
+              Mixed
+            </span>
+          </div>
+          <button
+            onClick={handleMonthClick}
+            className="px-3 py-1.5 bg-green-500 hover:bg-green-600 text-white rounded-lg text-xs font-semibold transition-all shadow-md hover:shadow-lg"
+          >
+            <i className="fas fa-list mr-1"></i> View Month
+          </button>
         </div>
       </div>
 
-      {/* ── Table ───────────────────────────────────────────────────────────── */}
+      {/* Calendar */}
       {loading && records.length === 0 ? (
         <div className="bg-white dark:bg-gray-800 rounded-xl border border-gray-200 dark:border-gray-700 p-8 text-center">
           <i className="fas fa-spinner fa-spin text-3xl text-green-500 mb-3"></i>
-          <p className="text-gray-500 dark:text-gray-400">Loading attendance records…</p>
+          <p className="text-gray-500 dark:text-gray-400">Loading attendance records...</p>
         </div>
       ) : (
-        <>
-          <div className="bg-white dark:bg-gray-800 rounded-xl border border-gray-200 dark:border-gray-700 overflow-x-auto shadow-soft">
-            <div className="min-w-[1000px] md:min-w-0">
-              <table className="w-full border-collapse">
-                <thead>
-                  <tr className="bg-gray-50 dark:bg-gray-700/50 border-b border-gray-200 dark:border-gray-700">
-                    {["Sl.No.", "Department", "Employee Name", "Date", "Punch In", "Punch Out", "Working Hours", "Status"].map((h) => (
-                      <th key={h} className="px-3 md:px-4 py-2 md:py-3 text-left text-[10px] md:text-xs font-semibold text-gray-500 dark:text-gray-400">
-                        {h}
-                      </th>
-                    ))}
-                  </tr>
-                </thead>
-                <tbody>
-                  {records.map((record, idx) => (
-                    <tr
-                      key={`${record.employee_id}-${record.date}-${idx}`}
-                      className="border-b border-gray-200 dark:border-gray-700 hover:bg-gray-50 dark:hover:bg-gray-700/50 transition-colors"
-                    >
-                      <td className="px-3 md:px-4 py-2 md:py-3 text-xs md:text-sm text-gray-600 dark:text-gray-400 text-center">
-                        {start + idx + 1}
-                      </td>
-                      <td className="px-3 md:px-4 py-2 md:py-3">
-                        <span className="inline-flex items-center gap-1 bg-gray-100 dark:bg-gray-700 px-2 md:px-3 py-0.5 md:py-1 rounded-full text-[10px] md:text-xs whitespace-nowrap">
-                          <i className="fas fa-building text-gray-500 text-[8px] md:text-xs"></i>
-                          {record.department || "-"}
-                        </span>
-                      </td>
-                      <td className="px-3 md:px-4 py-2 md:py-3 text-xs md:text-sm font-semibold text-gray-800 dark:text-gray-200">
-                        {record.employeeName || "-"}
-                      </td>
-                      <td className="px-3 md:px-4 py-2 md:py-3 text-xs md:text-sm text-gray-600 dark:text-gray-400 whitespace-nowrap">
-                        {record.date || "-"}
-                      </td>
-                      <td className="px-3 md:px-4 py-2 md:py-3 text-xs md:text-sm font-semibold text-gray-800 dark:text-gray-200">
-                        {record.punchIn}
-                      </td>
-                      <td className="px-3 md:px-4 py-2 md:py-3 text-xs md:text-sm">
-                        {record.hasPunchOut ? (
-                          <span className="font-semibold text-gray-800 dark:text-gray-200">{record.punchOut}</span>
-                        ) : (
-                          <span className="inline-block bg-red-100 dark:bg-red-900/30 text-red-600 dark:text-red-400 text-[9px] md:text-xs px-1.5 md:px-2 py-0.5 rounded-full whitespace-nowrap">
-                            Not Punched Out
-                          </span>
-                        )}
-                      </td>
-                      <td className="px-3 md:px-4 py-2 md:py-3 text-xs md:text-sm font-medium text-gray-800 dark:text-gray-200">
-                        {record.workingHours || "--"}
-                      </td>
-                      <td className="px-3 md:px-4 py-2 md:py-3 text-xs md:text-sm">
-                        <span className={`inline-block px-2 py-0.5 rounded-full text-[9px] md:text-xs font-medium ${
-                          record.status === "Present"
-                            ? "bg-green-100 dark:bg-green-900/30 text-green-600 dark:text-green-400"
-                            : "bg-red-100 dark:bg-red-900/30 text-red-600 dark:text-red-400"
-                        }`}>
-                          {record.status}
-                        </span>
-                      </td>
-                    </tr>
-                  ))}
-                  {records.length === 0 && (
-                    <tr>
-                      <td colSpan="8" className="px-4 py-8 text-center text-gray-500 dark:text-gray-400">
-                        No attendance records found
-                      </td>
-                    </tr>
-                  )}
-                </tbody>
-              </table>
-            </div>
-          </div>
-
-          {/* Pagination - Only show if there are items */}
-          {totalFiltered > 0 && (
-            <Pagination
-              currentPage={reduxCurrentPage || 1}
-              totalPages={totalPages}
-              onPageChange={handlePageChange}
-              totalItems={totalFiltered}
-              itemsPerPage={reduxPerPage || 15}
-            />
-          )}
-        </>
+        <div className="bg-white dark:bg-gray-800 rounded-xl border border-gray-200 dark:border-gray-700 p-4 shadow-soft">
+          <style>
+            {`
+              .react-calendar {
+                width: 100% !important;
+                border: none !important;
+                background: transparent !important;
+                font-family: inherit !important;
+              }
+              .react-calendar__navigation {
+                display: none !important;
+              }
+              .react-calendar__month-view__weekdays {
+                color: #6b7280 !important;
+                font-weight: 600 !important;
+                font-size: 0.75rem !important;
+                text-transform: uppercase !important;
+              }
+              .react-calendar__month-view__weekdays__weekday {
+                padding: 0.75rem 0 !important;
+              }
+              .react-calendar__month-view__weekdays abbr {
+                text-decoration: none !important;
+                cursor: default !important;
+              }
+              .react-calendar__tile {
+                padding: 0.75rem 0.5rem !important;
+                border-radius: 8px !important;
+                transition: all 0.2s ease !important;
+                position: relative !important;
+                aspect-ratio: 1 !important;
+                display: flex !important;
+                flex-direction: column !important;
+                align-items: center !important;
+                justify-content: center !important;
+                background: transparent !important;
+                color: inherit !important;
+              }
+              .react-calendar__tile:hover {
+                transform: scale(1.02) !important;
+                z-index: 1 !important;
+                background: #f3f4f6 !important;
+              }
+              .dark .react-calendar__tile:hover {
+                background: #374151 !important;
+              }
+              .react-calendar__tile--active {
+                background: #2ecc71 !important;
+                color: white !important;
+              }
+              .react-calendar__tile--active:hover {
+                background: #27ae60 !important;
+              }
+              /* Remove default react-calendar now styles - we'll use custom */
+              .react-calendar__tile--now {
+                background: transparent !important;
+                border: none !important;
+                color: inherit !important;
+              }
+              .react-calendar__tile abbr {
+                font-size: 0.875rem !important;
+                font-weight: 500 !important;
+              }
+              .react-calendar__month-view__days__day--weekend {
+                color: #ef4444 !important;
+              }
+              .dark .react-calendar__month-view__days__day--weekend {
+                color: #f87171 !important;
+              }
+              .react-calendar__month-view__days__day--neighboringMonth {
+                color: #9ca3af !important;
+              }
+              /* Custom today highlight - green background with white text */
+              .today-highlight {
+                background: #22c55e !important;
+                color: white !important;
+                border-radius: 8px !important;
+                font-weight: 700 !important;
+              }
+              .today-highlight:hover {
+                background: #16a34a !important;
+                color: white !important;
+              }
+              .today-highlight abbr {
+                color: white !important;
+              }
+              .dark .today-highlight {
+                background: #34d399 !important;
+                color: #1a1a1a !important;
+              }
+              .dark .today-highlight:hover {
+                background: #2dd4bf !important;
+              }
+              .dark .today-highlight abbr {
+                color: #1a1a1a !important;
+              }
+            `}
+          </style>
+          <Calendar
+            ref={calendarRef}
+            value={null}
+            activeStartDate={selectedMonth}
+            onActiveStartDateChange={({ activeStartDate }) => {
+              setSelectedMonth(activeStartDate);
+            }}
+            tileContent={tileContent}
+            tileClassName={tileClassName}
+            onClickDay={handleDayClick}
+            maxDetail="month"
+            minDetail="month"
+            formatDay={(locale, date) => date.getDate()}
+          />
+        </div>
       )}
 
-      <UploadAttendanceModal
-        isOpen={showUploadModal}
-        onClose={() => setShowUploadModal(false)}
-        onUpload={handleUploadComplete}
-      />
+      {/* Legend and Summary */}
+      <div className="mt-4 grid grid-cols-1 md:grid-cols-2 gap-3">
+        <div className="bg-white dark:bg-gray-800 rounded-xl border border-gray-200 dark:border-gray-700 p-4">
+          <h4 className="text-sm font-semibold text-gray-700 dark:text-gray-300 mb-2">
+            <i className="fas fa-chart-pie text-green-500 mr-2"></i> Month Summary
+          </h4>
+          <div className="grid grid-cols-3 gap-2">
+            <div className="text-center p-2 bg-green-50 dark:bg-green-900/20 rounded-lg">
+              <div className="text-lg font-bold text-green-600 dark:text-green-400">
+                {records.filter(r => {
+                  const status = getRecordStatus(r);
+                  return status === 'Present';
+                }).length}
+              </div>
+              <div className="text-[10px] text-gray-500">Present</div>
+            </div>
+            <div className="text-center p-2 bg-red-50 dark:bg-red-900/20 rounded-lg">
+              <div className="text-lg font-bold text-red-600 dark:text-red-400">
+                {records.filter(r => {
+                  const status = getRecordStatus(r);
+                  return status === 'Absent';
+                }).length}
+              </div>
+              <div className="text-[10px] text-gray-500">Absent</div>
+            </div>
+            <div className="text-center p-2 bg-yellow-50 dark:bg-yellow-900/20 rounded-lg">
+              <div className="text-lg font-bold text-yellow-600 dark:text-yellow-400">
+                {records.filter(r => {
+                  const status = getRecordStatus(r);
+                  return status === 'Late';
+                }).length}
+              </div>
+              <div className="text-[10px] text-gray-500">Late</div>
+            </div>
+          </div>
+        </div>
+        <div className="bg-white dark:bg-gray-800 rounded-xl border border-gray-200 dark:border-gray-700 p-4">
+          <h4 className="text-sm font-semibold text-gray-700 dark:text-gray-300 mb-2">
+            <i className="fas fa-info-circle text-blue-500 mr-2"></i> Quick Tips
+          </h4>
+          <ul className="text-xs text-gray-600 dark:text-gray-400 space-y-1.5">
+            <li>• <span className="font-semibold">Click on a day</span> to view attendance details for that day</li>
+            <li>• <span className="font-semibold">Click "View Month"</span> to see all records for this month</li>
+            <li>• Colored dots indicate daily attendance status</li>
+            <li>• <span className="text-green-500">Green</span> = All Present, <span className="text-red-500">Red</span> = Absent, <span className="text-yellow-500">Yellow</span> = Late, <span className="text-blue-500">Blue</span> = Mixed</li>
+            <li>• <span className="text-green-600 font-semibold">Green highlighted</span> = Today's date</li>
+          </ul>
+        </div>
+      </div>
+
+      {/* Day Modal */}
+      {showDayModal && (
+        <div className="fixed inset-0 bg-black/50 backdrop-blur-sm z-50 flex items-center justify-center p-4" onClick={() => setShowDayModal(false)}>
+          <div className="bg-white dark:bg-gray-800 rounded-xl max-w-3xl w-full max-h-[90vh] overflow-hidden shadow-2xl" onClick={e => e.stopPropagation()}>
+            <div className="flex justify-between items-center p-4 border-b border-gray-200 dark:border-gray-700">
+              <h3 className="text-lg font-bold text-gray-800 dark:text-gray-200">
+                <i className="fas fa-calendar-day text-green-500 mr-2"></i>
+                Attendance - {selectedDate.toLocaleDateString('en-US', { weekday: 'long', day: 'numeric', month: 'long', year: 'numeric' })}
+              </h3>
+              <button
+                onClick={() => setShowDayModal(false)}
+                className="p-2 hover:bg-gray-100 dark:hover:bg-gray-700 rounded-lg transition-colors"
+              >
+                <i className="fas fa-times text-gray-500"></i>
+              </button>
+            </div>
+            <div className="p-4 overflow-y-auto max-h-[70vh]">
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
+                {dayData.map((record, idx) => {
+                  const status = getRecordStatus(record);
+                  const statusColor = status === 'Present' 
+                    ? "bg-green-100 dark:bg-green-900/30 text-green-600 dark:text-green-400"
+                    : status === 'Late'
+                    ? "bg-yellow-100 dark:bg-yellow-900/30 text-yellow-600 dark:text-yellow-400"
+                    : "bg-red-100 dark:bg-red-900/30 text-red-600 dark:text-red-400";
+                  
+                  return (
+                    <div key={idx} className="bg-gray-50 dark:bg-gray-700/50 rounded-lg p-3 border border-gray-200 dark:border-gray-600">
+                      <div className="flex justify-between items-start">
+                        <div>
+                          <p className="font-semibold text-gray-800 dark:text-gray-200">
+                            {getEmployeeName(record)}
+                          </p>
+                          <p className="text-xs text-gray-500 dark:text-gray-400">
+                            {getDepartment(record)}
+                          </p>
+                        </div>
+                        <span className={`px-2 py-0.5 rounded-full text-xs font-medium ${statusColor}`}>
+                          {status}
+                        </span>
+                      </div>
+                      <div className="grid grid-cols-3 gap-2 mt-2 text-xs">
+                        <div>
+                          <span className="text-gray-500 dark:text-gray-400">Punch In</span>
+                          <p className="font-semibold text-gray-700 dark:text-gray-300">{record.punch_in || record.punchIn || "--"}</p>
+                        </div>
+                        <div>
+                          <span className="text-gray-500 dark:text-gray-400">Punch Out</span>
+                          <p className="font-semibold text-gray-700 dark:text-gray-300">{record.punch_out || record.punchOut || "--"}</p>
+                        </div>
+                        <div>
+                          <span className="text-gray-500 dark:text-gray-400">Hours</span>
+                          <p className="font-semibold text-gray-700 dark:text-gray-300">{record.working_hours || record.workingHours || "--"}</p>
+                        </div>
+                      </div>
+                    </div>
+                  );
+                })}
+              </div>
+              <div className="mt-3 text-center text-xs text-gray-500 dark:text-gray-400">
+                Total: {dayData.length} employees
+              </div>
+            </div>
+            <div className="p-4 border-t border-gray-200 dark:border-gray-700 flex justify-end">
+              <button
+                onClick={() => setShowDayModal(false)}
+                className="px-4 py-2 bg-gray-100 dark:bg-gray-700 text-gray-700 dark:text-gray-300 rounded-lg hover:bg-gray-200 dark:hover:bg-gray-600 transition-colors"
+              >
+                Close
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Month Modal */}
+      {showMonthModal && (
+        <div className="fixed inset-0 bg-black/50 backdrop-blur-sm z-50 flex items-center justify-center p-4" onClick={() => setShowMonthModal(false)}>
+          <div className="bg-white dark:bg-gray-800 rounded-xl max-w-5xl w-full max-h-[90vh] overflow-hidden shadow-2xl" onClick={e => e.stopPropagation()}>
+            <div className="flex justify-between items-center p-4 border-b border-gray-200 dark:border-gray-700">
+              <h3 className="text-lg font-bold text-gray-800 dark:text-gray-200">
+                <i className="fas fa-calendar-alt text-green-500 mr-2"></i>
+                {selectedMonth.toLocaleString('default', { month: 'long', year: 'numeric' })} - Attendance Records
+              </h3>
+              <button
+                onClick={() => setShowMonthModal(false)}
+                className="p-2 hover:bg-gray-100 dark:hover:bg-gray-700 rounded-lg transition-colors"
+              >
+                <i className="fas fa-times text-gray-500"></i>
+              </button>
+            </div>
+            <div className="p-4 overflow-y-auto max-h-[70vh]">
+              {/* Filters */}
+              <div className="mb-4 flex flex-wrap items-center gap-3">
+                <label className="text-sm font-medium text-gray-700 dark:text-gray-300">
+                  <i className="fas fa-filter text-green-500 mr-1"></i> Filter:
+                </label>
+                <select
+                  value={employeeFilter}
+                  onChange={(e) => setEmployeeFilter(e.target.value)}
+                  className="px-3 py-1.5 bg-gray-50 dark:bg-gray-700 border border-gray-200 dark:border-gray-600 rounded-lg text-sm text-gray-700 dark:text-gray-300 focus:outline-none focus:border-green-500"
+                >
+                  <option value="all">All Employees</option>
+                  {uniqueEmployees.map(emp => (
+                    <option key={emp.id} value={emp.id}>{emp.name}</option>
+                  ))}
+                </select>
+                <span className="text-sm text-gray-500 dark:text-gray-400">
+                  {filteredMonthData.length} records found
+                </span>
+              </div>
+
+              {/* Table */}
+              <div className="overflow-x-auto">
+                <table className="w-full border-collapse">
+                  <thead>
+                    <tr className="bg-gray-50 dark:bg-gray-700/50 border-b border-gray-200 dark:border-gray-700">
+                      <th className="px-3 py-2 text-left text-xs font-semibold text-gray-500 dark:text-gray-400">#</th>
+                      <th className="px-3 py-2 text-left text-xs font-semibold text-gray-500 dark:text-gray-400">Date</th>
+                      <th className="px-3 py-2 text-left text-xs font-semibold text-gray-500 dark:text-gray-400">Employee</th>
+                      <th className="px-3 py-2 text-left text-xs font-semibold text-gray-500 dark:text-gray-400">Department</th>
+                      <th className="px-3 py-2 text-left text-xs font-semibold text-gray-500 dark:text-gray-400">Punch In</th>
+                      <th className="px-3 py-2 text-left text-xs font-semibold text-gray-500 dark:text-gray-400">Punch Out</th>
+                      <th className="px-3 py-2 text-left text-xs font-semibold text-gray-500 dark:text-gray-400">Hours</th>
+                      <th className="px-3 py-2 text-left text-xs font-semibold text-gray-500 dark:text-gray-400">Status</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {filteredMonthData.length > 0 ? (
+                      filteredMonthData.map((record, idx) => {
+                        const status = getRecordStatus(record);
+                        const statusColor = status === 'Present' 
+                          ? "bg-green-100 dark:bg-green-900/30 text-green-600 dark:text-green-400"
+                          : status === 'Late'
+                          ? "bg-yellow-100 dark:bg-yellow-900/30 text-yellow-600 dark:text-yellow-400"
+                          : "bg-red-100 dark:bg-red-900/30 text-red-600 dark:text-red-400";
+                        
+                        return (
+                          <tr key={idx} className="border-b border-gray-200 dark:border-gray-700 hover:bg-gray-50 dark:hover:bg-gray-700/50 transition-colors">
+                            <td className="px-3 py-2 text-xs text-gray-600 dark:text-gray-400">{idx + 1}</td>
+                            <td className="px-3 py-2 text-xs text-gray-600 dark:text-gray-400">{record.log_date || record.date}</td>
+                            <td className="px-3 py-2 text-xs font-semibold text-gray-800 dark:text-gray-200">
+                              {getEmployeeName(record)}
+                            </td>
+                            <td className="px-3 py-2 text-xs text-gray-600 dark:text-gray-400">{getDepartment(record)}</td>
+                            <td className="px-3 py-2 text-xs font-medium text-gray-700 dark:text-gray-300">{record.punch_in || record.punchIn || "--"}</td>
+                            <td className="px-3 py-2 text-xs font-medium text-gray-700 dark:text-gray-300">{record.punch_out || record.punchOut || "--"}</td>
+                            <td className="px-3 py-2 text-xs text-gray-600 dark:text-gray-400">{record.working_hours || record.workingHours || "--"}</td>
+                            <td className="px-3 py-2">
+                              <span className={`px-2 py-0.5 rounded-full text-xs font-medium ${statusColor}`}>
+                                {status}
+                              </span>
+                            </td>
+                          </tr>
+                        );
+                      })
+                    ) : (
+                      <tr>
+                        <td colSpan="8" className="px-4 py-8 text-center text-gray-500 dark:text-gray-400">
+                          No records found for this month
+                        </td>
+                      </tr>
+                    )}
+                  </tbody>
+                </table>
+              </div>
+            </div>
+            <div className="p-4 border-t border-gray-200 dark:border-gray-700 flex justify-between">
+              <div className="text-sm text-gray-500 dark:text-gray-400">
+                <i className="fas fa-info-circle mr-1"></i>
+                {filteredMonthData.length} records • {new Set(filteredMonthData.map(r => r.userid || r.user_id || r.id)).size} employees
+              </div>
+              <button
+                onClick={() => setShowMonthModal(false)}
+                className="px-4 py-2 bg-gray-100 dark:bg-gray-700 text-gray-700 dark:text-gray-300 rounded-lg hover:bg-gray-200 dark:hover:bg-gray-600 transition-colors"
+              >
+                Close
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   );
 };
