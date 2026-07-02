@@ -1,3 +1,5 @@
+// src/admin/store/slices/attendanceSlice.js
+
 import { createSlice, createAsyncThunk } from "@reduxjs/toolkit";
 import apiClient from "../../../utils/apiClient";
 
@@ -11,102 +13,233 @@ const handleApiError = (error) => {
 
 const isValidPunch = (value) => value && value !== "-" && value.trim() !== "";
 
+// FIXED: Improved extractData function
+const extractData = (response) => {
+  try {
+    console.log("Extracting data from response:", response);
+    
+    // Check for nested structure: response.data.data.data (for paginated responses)
+    if (response?.data?.data?.data && Array.isArray(response.data.data.data)) {
+      return response.data.data.data;
+    }
+    
+    // Check for: response.data.data (direct array in data)
+    if (response?.data?.data && Array.isArray(response.data.data)) {
+      return response.data.data;
+    }
+    
+    // Check for: response.data (array)
+    if (response?.data && Array.isArray(response.data)) {
+      return response.data;
+    }
+    
+    // Check if response itself is an array
+    if (Array.isArray(response)) {
+      return response;
+    }
+    
+    console.warn("No array data found in response, returning empty array");
+    return [];
+  } catch (error) {
+    console.error("Error extracting data:", error);
+    return [];
+  }
+};
+
+// FIXED: Improved extractAttendanceRecords function
 const extractAttendanceRecords = (response) => {
   try {
-    const attendance = response.data?.data?.attendance;
-
-    if (attendance?.data && Array.isArray(attendance.data)) {
-      const records = attendance.data.map((record, idx) => {
-        const hasPunchOut = isValidPunch(record.punch_out);
-        const punchIn = isValidPunch(record.punch_in) ? record.punch_in : "-";
-        const punchOut = hasPunchOut ? record.punch_out : null;
-
-        // Derive present/absent from punch_in
-        const isPresent = isValidPunch(record.punch_in);
-
-        // ✅ FIX: Get employee name from the correct nested path
-        const employeeName = record.user?.employee
-          ? `${record.user.employee.first_name || ""} ${record.user.employee.last_name || ""}`.trim()
-          : record.user?.username || `Employee ${record.userid}`;
-
-        // ✅ FIX: Get department from the correct path
-        const department = record.user?.department?.name || "-";
-
-        // Get working hours from the API response
-        const workingHours = record.working_hours || "--";
-
-        return {
-          id: record.userid || idx,
-          employee_id: record.userid,
-          employeeName: employeeName || `Employee ${record.userid}`,
-          company: record.company?.company_name || "N/A",
-          company_id: record.company_id || null,
-          department: department,
-          date: record.log_date || "-",
-          punchIn,
-          punchOut: hasPunchOut ? record.punch_out : null,
-          punch_in_raw: record.punch_in,
-          punch_out_raw: record.punch_out,
-          workingHours: workingHours,
-          status: isPresent ? "Present" : "Absent",
-          isLate: false,
-          hasPunchOut,
-          // Keep raw data for debugging
-          raw: record,
-        };
-      });
-
-      const meta = {
-        total: attendance.total,
-        current_page: attendance.current_page,
-        last_page: attendance.last_page,
-        per_page: attendance.per_page,
-      };
-
-      // ✅ FIX: Use stats from API response
-      const apiStats = response.data?.data?.stats || {};
-      
-      const stats = {
-        totalActiveEmployees: apiStats.total_active_employees || meta.total || records.length,
-        presentToday: apiStats.present_today || records.filter((r) => r.status === "Present").length,
-        absentToday: apiStats.absent_today || records.filter((r) => r.status === "Absent").length,
-        punchedInOnTime: apiStats.punched_in_on_time || 0,
-        punchedLate: apiStats.punched_late || 0,
-        punchedOutToday: apiStats.punched_out_today || 0,
-      };
-
-      return {
-        records,
-        total: meta.total || records.length,
-        currentPage: meta.current_page || 1,
-        lastPage: meta.last_page || 1,
-        perPage: meta.per_page || 15,
-        stats,
-      };
+    console.log("Extracting attendance records from response:", response);
+    
+    let attendanceData = [];
+    let meta = {};
+    let apiStats = {};
+    
+    // Handle different response structures
+    if (response?.data?.data?.data && Array.isArray(response.data.data.data)) {
+      attendanceData = response.data.data.data;
+      meta = response.data.data.meta || {};
+      apiStats = response.data.data.stats || response.data.data.statistics || {};
+    } else if (response?.data?.data && Array.isArray(response.data.data)) {
+      attendanceData = response.data.data;
+      meta = response.data.meta || {};
+      apiStats = response.data.stats || response.data.statistics || {};
+    } else if (response?.data && Array.isArray(response.data)) {
+      attendanceData = response.data;
+      apiStats = response.stats || response.statistics || {};
+    } else if (Array.isArray(response)) {
+      attendanceData = response;
+    } else {
+      attendanceData = [];
     }
 
-    return { records: [], total: 0, stats: {} };
+    console.log("Attendance data extracted:", attendanceData);
+    console.log("Meta:", meta);
+    console.log("Stats from API:", apiStats);
+
+    // Map the records
+    const records = attendanceData.map((record, idx) => {
+      const employeeName = record.name || 
+                          record.employee_name || 
+                          record.employeeName || 
+                          record.user?.username || 
+                          `Employee ${record.userid || record.employee_id || record.id || idx}`;
+      
+      const department = record.department || 
+                        record.user?.department?.name || 
+                        record.user?.department_id || 
+                        "-";
+      
+      const designation = record.designation || 
+                         record.user?.designation?.name || 
+                         "-";
+      
+      const company = record.company || 
+                     record.user?.company?.name || 
+                     "N/A";
+      
+      const punchIn = record.punch_in && record.punch_in !== "-" ? record.punch_in : "--";
+      const punchOut = record.punch_out && record.punch_out !== "-" ? record.punch_out : "--";
+      
+      // Determine status based on available data
+      let status = record.status || record.attendance_status || "Absent";
+      
+      // If status is 'present' or 'ontime', set to 'Present'
+      if (status.toLowerCase() === 'present' || 
+          status.toLowerCase() === 'ontime' || 
+          status.toLowerCase() === 'on time') {
+        status = "Present";
+      } else if (status.toLowerCase() === 'absent' || status.toLowerCase() === 'absentee') {
+        status = "Absent";
+      } else if (status.toLowerCase() === 'late') {
+        status = "Late";
+      }
+      
+      // If no status but has punch_in, consider present
+      if ((!status || status === "Absent") && 
+          punchIn && punchIn !== "--" && punchIn !== "-") {
+        // Check if late
+        if (record.lateBy && record.lateBy > 0) {
+          status = "Late";
+        } else {
+          status = "Present";
+        }
+      }
+      
+      const workedHours = record.worked_hours !== undefined ? record.worked_hours : 0;
+      const standardHours = record.standard_hours || 9;
+      const overtime = record.overtime || "-";
+      
+      let date = record.date || record.log_date || record.attendance_date || "-";
+      if (date && date.includes('-') && date !== "-") {
+        const parts = date.split('-');
+        if (parts.length === 3) {
+          date = `${parts[2]}/${parts[1]}/${parts[0]}`;
+        }
+      }
+
+      return {
+        id: record.employee_id || record.userid || record.id || idx,
+        employee_id: record.employee_id || record.userid || record.id || idx,
+        user_id: record.userid || record.user_id || record.user?.id || null,
+        employeeName: employeeName,
+        name: employeeName,
+        employee_name: employeeName,
+        department: department,
+        designation: designation,
+        company: company,
+        date: date,
+        log_date: date,
+        attendance_date: date,
+        punch_in: punchIn,
+        punch_out: punchOut,
+        punchIn: punchIn,
+        punchOut: punchOut,
+        worked_hours: workedHours,
+        working_hours: workedHours,
+        workingHours: workedHours,
+        standard_hours: standardHours,
+        overtime: overtime,
+        status: status,
+        isLate: status === "Late" || status === "late",
+        hasPunchOut: punchOut !== "--",
+        raw: record,
+      };
+    });
+
+    // Calculate stats
+    const stats = {
+      total_active_employees: apiStats.total_active_employees || 
+                              apiStats.totalActiveEmployees || 
+                              records.length,
+      totalActiveEmployees: apiStats.totalActiveEmployees || 
+                           apiStats.total_active_employees || 
+                           records.length,
+      present_today: apiStats.present_today || 
+                     apiStats.presentToday || 
+                     records.filter((r) => r.status === "Present").length,
+      presentToday: apiStats.presentToday || 
+                   apiStats.present_today || 
+                   records.filter((r) => r.status === "Present").length,
+      absent_today: apiStats.absent_today || 
+                    apiStats.absentToday || 
+                    records.filter((r) => r.status === "Absent").length,
+      absentToday: apiStats.absentToday || 
+                  apiStats.absent_today || 
+                  records.filter((r) => r.status === "Absent").length,
+      punched_late: apiStats.punched_late || 
+                   apiStats.punchedLate || 
+                   records.filter((r) => r.isLate).length,
+      punchedLate: apiStats.punchedLate || 
+                  apiStats.punched_late || 
+                  records.filter((r) => r.isLate).length,
+      punched_out_today: apiStats.punched_out_today || 
+                        apiStats.punchedOutToday || 
+                        records.filter((r) => r.hasPunchOut).length,
+      punchedOutToday: apiStats.punchedOutToday || 
+                      apiStats.punched_out_today || 
+                      records.filter((r) => r.hasPunchOut).length,
+      punched_in_on_time: apiStats.punched_in_on_time || 
+                         apiStats.punchedInOnTime || 
+                         records.filter((r) => r.status === "Present" && !r.isLate).length,
+      punchedInOnTime: apiStats.punchedInOnTime || 
+                      apiStats.punched_in_on_time || 
+                      records.filter((r) => r.status === "Present" && !r.isLate).length,
+    };
+
+    const total = meta.total || records.length;
+    const currentPage = meta.current_page || 1;
+    const lastPage = meta.last_page || 1;
+    const perPage = meta.per_page || 1000;
+
+    console.log("Calculated stats:", stats);
+
+    return {
+      records,
+      total,
+      currentPage,
+      lastPage,
+      perPage,
+      stats,
+    };
   } catch (error) {
     console.error("Error extracting attendance records:", error);
     return { records: [], total: 0, stats: {} };
   }
 };
 
-const extractData = (response) => {
-  if (response.data?.data?.data && Array.isArray(response.data.data.data)) return response.data.data.data;
-  if (response.data?.data && Array.isArray(response.data.data)) return response.data.data;
-  if (Array.isArray(response.data)) return response.data;
-  return [];
-};
-
+// Async thunks
 export const fetchAttendanceRecords = createAsyncThunk(
   "attendance/fetchAll",
   async (params = {}, { rejectWithValue }) => {
     try {
       const response = await apiClient.get(`/admin/attendance`, { params });
-      console.log("Result: ", response)
-      return extractAttendanceRecords(response);
+      console.log("Fetch attendance response:", response.data);
+      const result = extractAttendanceRecords(response);
+      console.log("Extracted attendance result:", result);
+      return result;
     } catch (error) {
+      console.error("Fetch attendance error:", error);
       return rejectWithValue(handleApiError(error));
     }
   }
@@ -173,6 +306,7 @@ export const fetchUploadStatus = createAsyncThunk(
   }
 );
 
+// These thunks now use the fixed extractData function
 export const fetchPunchInToday = createAsyncThunk("attendance/fetchPunchInToday", async () => {
   try { return extractData(await apiClient.get(`/admin/attendance/punch-in-today`)); }
   catch { return []; }
@@ -189,13 +323,27 @@ export const fetchPunchOutToday = createAsyncThunk("attendance/fetchPunchOutToda
 });
 
 export const fetchLateComers = createAsyncThunk("attendance/fetchLateComers", async () => {
-  try { return extractData(await apiClient.get(`/admin/attendance/late-comers`)); }
-  catch { return []; }
+  try { 
+    const response = await apiClient.get(`/admin/attendance/late-comers`);
+    console.log("Late comers response:", response.data);
+    return extractData(response);
+  } 
+  catch (error) {
+    console.error("Error fetching late comers:", error);
+    return [];
+  }
 });
 
 export const fetchAbsentees = createAsyncThunk("attendance/fetchAbsentees", async () => {
-  try { return extractData(await apiClient.get(`/admin/attendance/absentees`)); }
-  catch { return []; }
+  try { 
+    const response = await apiClient.get(`/admin/attendance/absentees`);
+    console.log("Absentees response:", response.data);
+    return extractData(response);
+  } 
+  catch (error) {
+    console.error("Error fetching absentees:", error);
+    return [];
+  }
 });
 
 const attendanceSlice = createSlice({
@@ -297,9 +445,15 @@ const attendanceSlice = createSlice({
       .addCase(fetchPunchInYesterday.rejected, (state) => { state.punchInYesterday = []; })
       .addCase(fetchPunchOutToday.fulfilled, (state, action) => { state.punchOutToday = action.payload; })
       .addCase(fetchPunchOutToday.rejected, (state) => { state.punchOutToday = []; })
-      .addCase(fetchLateComers.fulfilled, (state, action) => { state.lateComers = action.payload; })
+      .addCase(fetchLateComers.fulfilled, (state, action) => { 
+        console.log("Late comers data set:", action.payload);
+        state.lateComers = action.payload; 
+      })
       .addCase(fetchLateComers.rejected, (state) => { state.lateComers = []; })
-      .addCase(fetchAbsentees.fulfilled, (state, action) => { state.absentees = action.payload; })
+      .addCase(fetchAbsentees.fulfilled, (state, action) => { 
+        console.log("Absentees data set:", action.payload);
+        state.absentees = action.payload; 
+      })
       .addCase(fetchAbsentees.rejected, (state) => { state.absentees = []; });
   },
 });

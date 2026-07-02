@@ -132,8 +132,8 @@ const ProjectAllocationChart = ({ data }) => {
   const truncatedData = data.map((item) => ({
     ...item,
     displayName:
-      item.name && item.name.length > 15
-        ? item.name.substring(0, 15) + "..."
+      item.name && item.name.length > 12
+        ? item.name.substring(0, 12) + "..."
         : item.name || "Unknown",
     fullName: item.name || "Unknown",
   }));
@@ -149,7 +149,7 @@ const ProjectAllocationChart = ({ data }) => {
       <ResponsiveContainer width="100%" height={220}>
         <BarChart
           data={truncatedData}
-          margin={{ top: 5, right: 10, left: 0, bottom: 60 }}
+          margin={{ top: 5, right: 10, left: 0, bottom: 30 }}
         >
           <CartesianGrid
             strokeDasharray="3 3"
@@ -162,8 +162,9 @@ const ProjectAllocationChart = ({ data }) => {
             axisLine={false}
             angle={-45}
             textAnchor="end"
-            height={60}
+            height={40}
             interval={0}
+            dy={5}
           />
           <YAxis
             tick={{ fontSize: 11, fill: "#898781" }}
@@ -197,7 +198,7 @@ const ProjectAllocationChart = ({ data }) => {
   );
 };
 
-// 2. Project Hours Chart (Horizontal bar) - Clickable with onBarClick - FIXED
+// 2. Project Hours Chart (Horizontal bar) - Clickable with onBarClick
 const ProjectHoursChart = ({ data, onBarClick }) => {
   if (!data || data.length === 0) {
     return (
@@ -219,11 +220,8 @@ const ProjectHoursChart = ({ data, onBarClick }) => {
     originalData: item,
   }));
 
-  // Handle click on individual bar - pass data to parent handler
   const handleBarClick = (entry, index) => {
-    console.log("Bar clicked in ProjectHoursChart:", entry, index);
     if (entry && onBarClick) {
-      // Create the payload structure expected by the parent
       const payload = {
         activePayload: [
           {
@@ -313,7 +311,7 @@ const ProjectHoursChart = ({ data, onBarClick }) => {
 const WeeklyAttendanceChart = ({ data }) => {
   if (!data || !data.labels || data.labels.length === 0) {
     return (
-      <div className="bg-white dark:bg-gray-800 rounded-xl border border-gray-200 dark:border-gray-700 p-5 h-[200px] flex items-center justify-center">
+      <div className="bg-white dark:bg-gray-800 rounded-xl border border-gray-200 dark:border-gray-700 p-5 h-[220px] flex items-center justify-center">
         <p className="text-gray-500 dark:text-gray-400">
           No attendance data available
         </p>
@@ -328,14 +326,14 @@ const WeeklyAttendanceChart = ({ data }) => {
   }));
 
   return (
-    <div className="bg-white dark:bg-gray-800 rounded-xl border border-gray-200 dark:border-gray-700 p-5">
-      <div className="flex items-center gap-2 mb-4">
+    <div className="bg-white dark:bg-gray-800 rounded-xl border border-gray-200 dark:border-gray-700 p-5 h-[220px] flex flex-col">
+      <div className="flex items-center gap-2 mb-4 flex-shrink-0">
         <i className="fas fa-chart-line text-gray-500 dark:text-gray-400"></i>
         <h3 className="text-sm font-medium text-gray-600 dark:text-gray-400">
           Weekly attendance trend
         </h3>
       </div>
-      <ResponsiveContainer width="100%" height={160}>
+      <ResponsiveContainer width="100%" height="100%">
         <ComposedChart
           data={chartData}
           margin={{ top: 5, right: 5, left: 0, bottom: 5 }}
@@ -381,7 +379,7 @@ const WeeklyAttendanceChart = ({ data }) => {
 const TodayStatusChart = ({ data }) => {
   if (!data || Object.keys(data).length === 0) {
     return (
-      <div className="bg-white dark:bg-gray-800 rounded-xl border border-gray-200 dark:border-gray-700 p-5 h-[200px] flex items-center justify-center">
+      <div className="bg-white dark:bg-gray-800 rounded-xl border border-gray-200 dark:border-gray-700 p-5 h-[220px] flex items-center justify-center">
         <p className="text-gray-500 dark:text-gray-400">
           No status data available
         </p>
@@ -395,7 +393,7 @@ const TodayStatusChart = ({ data }) => {
 
   if (chartData.length === 0) {
     return (
-      <div className="bg-white dark:bg-gray-800 rounded-xl border border-gray-200 dark:border-gray-700 p-5 h-[200px] flex items-center justify-center">
+      <div className="bg-white dark:bg-gray-800 rounded-xl border border-gray-200 dark:border-gray-700 p-5 h-[220px] flex items-center justify-center">
         <p className="text-gray-500 dark:text-gray-400">
           No status data available
         </p>
@@ -404,14 +402,14 @@ const TodayStatusChart = ({ data }) => {
   }
 
   return (
-    <div className="bg-white dark:bg-gray-800 rounded-xl border border-gray-200 dark:border-gray-700 p-5">
-      <div className="flex items-center gap-2 mb-4">
+    <div className="bg-white dark:bg-gray-800 rounded-xl border border-gray-200 dark:border-gray-700 p-5 h-[220px] flex flex-col">
+      <div className="flex items-center gap-2 mb-4 flex-shrink-0">
         <i className="fas fa-chart-donut text-gray-500 dark:text-gray-400"></i>
         <h3 className="text-sm font-medium text-gray-600 dark:text-gray-400">
           Today's status
         </h3>
       </div>
-      <div className="flex items-center gap-4">
+      <div className="flex-1 flex items-center justify-center gap-4">
         <ResponsiveContainer width={140} height={140}>
           <PieChart>
             <Pie
@@ -461,7 +459,7 @@ const TodayStatusChart = ({ data }) => {
 const AvgPunchTimeCard = ({ data }) => {
   if (!data) {
     return (
-      <div className="bg-white dark:bg-gray-800 rounded-xl border border-gray-200 dark:border-gray-700 p-5 h-[200px] flex items-center justify-center">
+      <div className="bg-white dark:bg-gray-800 rounded-xl border border-gray-200 dark:border-gray-700 p-5 h-[220px] flex items-center justify-center">
         <p className="text-gray-500 dark:text-gray-400">
           No punch time data available
         </p>
@@ -472,52 +470,54 @@ const AvgPunchTimeCard = ({ data }) => {
   const dailyData = Array.isArray(data.daily) ? data.daily : [];
 
   return (
-    <div className="bg-white dark:bg-gray-800 rounded-xl border border-gray-200 dark:border-gray-700 p-5">
-      <div className="flex items-center gap-2 mb-4">
+    <div className="bg-white dark:bg-gray-800 rounded-xl border border-gray-200 dark:border-gray-700 p-5 h-[220px] flex flex-col">
+      <div className="flex items-center gap-2 mb-4 flex-shrink-0">
         <i className="fas fa-clock-hour-4 text-gray-500 dark:text-gray-400"></i>
         <h3 className="text-sm font-medium text-gray-600 dark:text-gray-400">
           Avg punch-in time
         </h3>
       </div>
-      <div>
-        <div className="text-xs text-gray-500 dark:text-gray-400 mb-1">
-          This week avg
+      <div className="flex-1 flex flex-col justify-center">
+        <div>
+          <div className="text-xs text-gray-500 dark:text-gray-400 mb-1">
+            This week avg
+          </div>
+          <div className="text-2xl font-bold text-gray-800 dark:text-gray-200">
+            {data.thisWeekAvg || "09:14"}
+          </div>
+          <div className="text-xs text-green-500 mt-1">
+            {data.trend || "No trend data"}
+          </div>
         </div>
-        <div className="text-2xl font-bold text-gray-800 dark:text-gray-200">
-          {data.thisWeekAvg || "09:14"}
+        <div className="border-t border-gray-200 dark:border-gray-700 mt-3 pt-3">
+          <div className="text-xs text-gray-500 dark:text-gray-400 mb-2">
+            Daily avg this week
+          </div>
+          <ResponsiveContainer width="100%" height={50}>
+            <LineChart
+              data={dailyData}
+              margin={{ top: 0, right: 0, left: 0, bottom: 0 }}
+            >
+              <Line
+                type="monotone"
+                dataKey="value"
+                stroke={COLORS.blue}
+                strokeWidth={1.5}
+                dot={{ r: 2, fill: COLORS.blue }}
+              />
+              <Tooltip
+                formatter={(value) => {
+                  if (typeof value !== "number") return value;
+                  const h = Math.floor(value);
+                  const m = Math.round((value - h) * 60)
+                    .toString()
+                    .padStart(2, "0");
+                  return `${h}:${m}`;
+                }}
+              />
+            </LineChart>
+          </ResponsiveContainer>
         </div>
-        <div className="text-xs text-green-500 mt-1">
-          {data.trend || "No trend data"}
-        </div>
-      </div>
-      <div className="border-t border-gray-200 dark:border-gray-700 mt-3 pt-3">
-        <div className="text-xs text-gray-500 dark:text-gray-400 mb-2">
-          Daily avg this week
-        </div>
-        <ResponsiveContainer width="100%" height={50}>
-          <LineChart
-            data={dailyData}
-            margin={{ top: 0, right: 0, left: 0, bottom: 0 }}
-          >
-            <Line
-              type="monotone"
-              dataKey="value"
-              stroke={COLORS.blue}
-              strokeWidth={1.5}
-              dot={{ r: 2, fill: COLORS.blue }}
-            />
-            <Tooltip
-              formatter={(value) => {
-                if (typeof value !== "number") return value;
-                const h = Math.floor(value);
-                const m = Math.round((value - h) * 60)
-                  .toString()
-                  .padStart(2, "0");
-                return `${h}:${m}`;
-              }}
-            />
-          </LineChart>
-        </ResponsiveContainer>
       </div>
     </div>
   );
@@ -653,7 +653,6 @@ const PunchDistributionChart = ({ data }) => {
 };
 
 // ─── PROJECT HOURS DETAIL MODAL ────────────────────────────────────────
-// ─── PROJECT HOURS DETAIL MODAL ────────────────────────────────────────
 const ProjectHoursModal = ({
   isOpen,
   onClose,
@@ -675,7 +674,6 @@ const ProjectHoursModal = ({
 
   useEffect(() => {
     if (isOpen && project) {
-      // Fetch monthly hours for this project - only projectId
       dispatch(
         fetchMonthlyHoursByProject({
           projectId: project.id || project.projectId,
@@ -684,16 +682,13 @@ const ProjectHoursModal = ({
     }
   }, [isOpen, project, dispatch]);
 
-  // Get the employees array from the response
   const employeesData = monthlyData?.employees || [];
 
-  // Get unique employees from the data
   const uniqueEmployees = employeesData.map((item) => ({
     id: item.user_id || item.id,
     name: item.name || `Employee #${item.user_id || item.id}`,
   }));
 
-  // Filter data by employee
   const filteredData =
     employeeFilter === "all"
       ? employeesData
@@ -703,7 +698,6 @@ const ProjectHoursModal = ({
             String(item.id) === String(employeeFilter),
         );
 
-  // Calculate totals
   const totalHours = filteredData.reduce(
     (sum, item) => sum + (parseFloat(item.total_hours) || 0),
     0,
@@ -712,21 +706,14 @@ const ProjectHoursModal = ({
 
   const handleEmployeeClick = async (employeeId) => {
     try {
-      console.log("Employee ID from monthly data:", employeeId);
-
-      // Find the employee by user_id from the employees list
       const matchedEmployee = employees.find(
         (e) =>
           String(e.user_id) === String(employeeId) ||
           String(e.id) === String(employeeId),
       );
 
-      console.log("Matched employee:", matchedEmployee);
-
-      // Use the employee record ID if found
       const employeeRecordId = matchedEmployee?.id || employeeId;
 
-      // Fetch employee details if not already cached
       if (!employeeDetails[employeeRecordId]) {
         await dispatch(fetchEmployeeDetails(employeeRecordId)).unwrap();
       }
@@ -738,7 +725,6 @@ const ProjectHoursModal = ({
     }
   };
 
-  // Get period info from response
   const periodInfo =
     monthlyData?.period ||
     (month && year
@@ -788,7 +774,6 @@ const ProjectHoursModal = ({
             </div>
           ) : (
             <>
-              {/* Summary Stats */}
               <div className="grid grid-cols-3 gap-4 mb-4">
                 <div className="bg-indigo-50 dark:bg-indigo-900/20 rounded-lg p-3 text-center">
                   <div className="text-xl font-bold text-indigo-600 dark:text-indigo-400">
@@ -816,7 +801,6 @@ const ProjectHoursModal = ({
                 </div>
               </div>
 
-              {/* Filter */}
               <div className="mb-4 flex flex-wrap items-center gap-3">
                 <label className="text-sm font-medium text-gray-700 dark:text-gray-300">
                   <i className="fas fa-filter text-indigo-500 mr-1"></i> Filter:
@@ -846,7 +830,6 @@ const ProjectHoursModal = ({
                 )}
               </div>
 
-              {/* Table */}
               <div className="overflow-x-auto border border-gray-200 dark:border-gray-700 rounded-lg">
                 <table className="w-full border-collapse">
                   <thead>
@@ -917,7 +900,6 @@ const ProjectHoursModal = ({
           )}
         </div>
 
-        {/* Footer */}
         <div className="p-4 border-t border-gray-200 dark:border-gray-700 flex justify-between">
           <div className="text-sm text-gray-500 dark:text-gray-400">
             <i className="fas fa-info-circle mr-1"></i>
@@ -1066,13 +1048,11 @@ const Dashboard = () => {
     (state) => state.projectAssignments || { assignments: [], loading: false },
   );
 
-  // State for modal
   const [showProjectHoursModal, setShowProjectHoursModal] = useState(false);
   const [selectedProject, setSelectedProject] = useState(null);
   const [modalMonth, setModalMonth] = useState(new Date().getMonth() + 1);
   const [modalYear, setModalYear] = useState(new Date().getFullYear());
 
-  // Get user type for navigation
   const userType = user?.type || "admin";
   const basePath = userType === "admin" ? "/admin" : "/employee";
 
@@ -1083,7 +1063,6 @@ const Dashboard = () => {
     dispatch(fetchEmployees());
   }, [dispatch]);
 
-  // ─── STATS ──────────────────────────────────────────────────────────────
   const totalEmployees = employees?.length || 0;
   const activeProjects = projects.filter((p) => p.status === "Active").length;
   const totalAssignments = assignments.length;
@@ -1092,7 +1071,6 @@ const Dashboard = () => {
     0,
   );
 
-  // Use data from dashboard API for attendance stats
   const todayStatus = charts?.today_status || {};
   const punchedInToday =
     Object.values(todayStatus).reduce((a, b) => a + b, 0) ||
@@ -1101,7 +1079,6 @@ const Dashboard = () => {
   const lateArrivals = todayStatus.Late || stats?.today?.late || 0;
   const absentToday = todayStatus.Absent || stats?.today?.absent || 0;
 
-  // Project stats from API
   const projectStats = charts?.project_stats || {};
   const totalProjects = projectStats.total_projects || projects.length;
   const activeProjectsCount = projectStats.active_projects || activeProjects;
@@ -1110,34 +1087,21 @@ const Dashboard = () => {
   const employeesAssigned =
     projectStats.employees_assigned || totalTaggedEmployees;
 
-  // ─── USE API DATA DIRECTLY ────────────────────────────────────────────
   const allocationData = charts?.project_allocation || [];
   const hoursData = charts?.project_hours || [];
 
-  // ─── NAVIGATION HANDLERS ──────────────────────────────────────────────
   const handleNavigate = (route) => {
     navigate(`${basePath}${route}`);
   };
 
-  // ─── BAR CLICK HANDLER ────────────────────────────────────────────────
-  // ─── BAR CLICK HANDLER ────────────────────────────────────────────────
   const handleBarClick = (data) => {
-    console.log("BAR CLICK HANDLER CALLED in Dashboard:", data);
-
     if (data && data.activePayload && data.activePayload.length > 0) {
       const projectData = data.activePayload[0].payload;
-      console.log("Project data from payload:", projectData);
-
-      // Find the project by name from the projects list to get the ID
       const projectName =
         projectData.fullName || projectData.name || projectData.displayName;
       const matchedProject = projects.find((p) => p.name === projectName);
-
       const projectId =
         matchedProject?.id || projectData.id || projectData.projectId;
-
-      console.log("Matched project:", matchedProject);
-      console.log("Project ID:", projectId);
 
       if (projectId) {
         setSelectedProject({
@@ -1148,33 +1112,8 @@ const Dashboard = () => {
         setModalMonth(new Date().getMonth() + 1);
         setModalYear(new Date().getFullYear());
         setShowProjectHoursModal(true);
-        console.log("Modal should now be open");
       } else {
-        console.log("No project ID found, cannot open modal");
         showToast("Project ID not found", "error");
-      }
-    } else {
-      console.log("No active payload found in click data");
-      // Try alternative data structure
-      if (data && data.payload) {
-        console.log("Trying alternative payload structure:", data.payload);
-        const projectData = data.payload;
-        const projectName =
-          projectData.fullName || projectData.name || projectData.displayName;
-        const matchedProject = projects.find((p) => p.name === projectName);
-        const projectId =
-          matchedProject?.id || projectData.id || projectData.projectId;
-
-        if (projectId) {
-          setSelectedProject({
-            id: projectId,
-            name: projectName,
-            projectId: projectId,
-          });
-          setModalMonth(new Date().getMonth() + 1);
-          setModalYear(new Date().getFullYear());
-          setShowProjectHoursModal(true);
-        }
       }
     }
   };
@@ -1186,11 +1125,11 @@ const Dashboard = () => {
         user={user}
       />
 
-      {/* ─── ROW 1: Workforce Overview ────────────────────────────────── */}
+      {/* ─── ROW 1: Overview (8 cards in a single row) ────────────────────── */}
       <div className="section-label text-xs font-medium uppercase tracking-wider text-gray-400 dark:text-gray-500 mt-4 mb-2">
-        Workforce Overview
+        Overview
       </div>
-      <div className="stats-grid grid grid-cols-2 md:grid-cols-4 gap-3 md:gap-4 mb-6">
+      <div className="stats-grid grid grid-cols-2 sm:grid-cols-4 lg:grid-cols-8 gap-3 md:gap-4 mb-6">
         <StatsCard
           title="Total Employees"
           value={totalEmployees}
@@ -1223,13 +1162,6 @@ const Dashboard = () => {
           route="/attendances"
           onClick={() => handleNavigate("/attendances")}
         />
-      </div>
-
-      {/* ─── ROW 2: Projects Overview ──────────────────────────────────── */}
-      <div className="section-label text-xs font-medium uppercase tracking-wider text-gray-400 dark:text-gray-500 mt-4 mb-2">
-        Projects
-      </div>
-      <div className="stats-grid grid grid-cols-2 md:grid-cols-4 gap-3 md:gap-4 mb-6">
         <StatsCard
           title="Total Projects"
           value={totalProjects}
@@ -1273,18 +1205,18 @@ const Dashboard = () => {
         <ProjectHoursChart data={hoursData} onBarClick={handleBarClick} />
       </div>
 
-      {/* ─── ROW 4: Attendance Analytics ────────────────────────────────── */}
+      {/* ─── ROW 4: Attendance Analytics (3 equal height cards) ────────── */}
       <div className="section-label text-xs font-medium uppercase tracking-wider text-gray-400 dark:text-gray-500 mt-4 mb-2">
         Attendance Analytics
       </div>
       <div className="grid grid-cols-1 lg:grid-cols-3 gap-4 mb-6">
-        <div className="lg:col-span-1">
+        <div className="h-[220px]">
           <WeeklyAttendanceChart data={charts?.weekly_attendance} />
         </div>
-        <div className="lg:col-span-1">
+        <div className="h-[220px]">
           <TodayStatusChart data={charts?.today_status} />
         </div>
-        <div className="lg:col-span-1">
+        <div className="h-[220px]">
           <AvgPunchTimeCard data={charts?.avg_punch_time} />
         </div>
       </div>
