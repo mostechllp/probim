@@ -13,6 +13,7 @@ const EmployeeProjectsModal = ({
   isOpen,
   onClose,
   employeeName,
+  employeeCode = "",
   designation = "-",
   department = "-",
   avatar = null,
@@ -151,7 +152,6 @@ const EmployeeProjectsModal = ({
       return null;
     }
 
-    // Log what we're searching for
     console.log("Looking for projectId:", projectId);
     console.log("Available workingTimeData:", workingTimeData);
 
@@ -185,7 +185,7 @@ const EmployeeProjectsModal = ({
 
     if (hours === 0) return `${minutes} mins`;
     if (minutes === 0) return `${hours} hours`;
-    return `${hours} hours ${mins} mins`;
+    return `${hours} hours ${minutes} mins`;
   };
 
   const handleViewWorkingTime = (project) => {
@@ -234,7 +234,7 @@ const EmployeeProjectsModal = ({
                   {employeeName}
                 </h3>
                 <p className="text-[10.5px] text-gray-400 dark:text-gray-500 font-semibold mt-1.5 leading-none">
-                  {designation} &bull; {department}
+                  {employeeCode} &bull; {designation} &bull; {department}
                 </p>
               </div>
             </div>
@@ -381,7 +381,6 @@ const EmployeeProjectsModal = ({
                       </div>
 
                       {/* View Details Button */}
-                      {/* View Details Button */}
                       <div className="mt-4 pt-3 border-t border-gray-50 dark:border-gray-700/50 flex justify-end">
                         <Link
                           to={`${basePath}/project-working-hours`}
@@ -422,13 +421,13 @@ const EmployeeProjectsModal = ({
 
 /* ─── Main Table Component ─── */
 const AssignmentTable = ({
-  assignments = [], // Default to empty array
-  employees = [], // Default to empty array
-  projects = [], // Default to empty array
-  loading = false, // Default to false
-  onEdit, // Edit trigger callback
-  onDelete, // Delete trigger callback
-  onAddNew, // Trigger drawer for new assignments
+  assignments = [],
+  employees = [],
+  projects = [],
+  loading = false,
+  onEdit,
+  onDelete,
+  onAddNew,
 }) => {
   const [searchTerm, setSearchTerm] = useState("");
   const [sortField, setSortField] = useState("employeeName");
@@ -441,50 +440,62 @@ const AssignmentTable = ({
   const [drawerEmployee, setDrawerEmployee] = useState(null);
 
   // Map assignments to include employee information for quick searches and sorts
-  const fullAssignments = useMemo(() => {
-    // Safety check: ensure assignments is an array
-    if (!assignments || !Array.isArray(assignments)) {
-      return [];
+  // Map assignments to include employee information for quick searches and sorts
+const fullAssignments = useMemo(() => {
+  if (!assignments || !Array.isArray(assignments)) {
+    return [];
+  }
+
+  return assignments.map((assign) => {
+    // Try to find the employee for additional info (name, avatar, etc.)
+    const emp =
+      employees && Array.isArray(employees)
+        ? employees.find((e) => {
+            const empId = Number(e.id);
+            const userId = Number(e.user_id);
+            const assignId = Number(assign.employeeId);
+            // Also check by employee_id string
+            return empId === assignId || userId === assignId || e.employee_id === assign.employeeCode;
+          })
+        : undefined;
+    
+    let employeeName = emp?.name || "";
+    if (!employeeName && (assign.firstName || assign.lastName)) {
+      employeeName = [assign.firstName, assign.lastName]
+        .filter(Boolean)
+        .join(" ");
     }
+    if (!employeeName && emp) {
+      employeeName = [emp.first_name, emp.last_name]
+        .filter(Boolean)
+        .join(" ");
+    }
+    if (!employeeName && emp) {
+      employeeName = emp.user?.username || `Employee #${emp.id}`;
+    }
+    if (!employeeName) employeeName = `Employee #${assign.employeeId}`;
 
-    return assignments.map((assign) => {
-      const emp =
-        employees && Array.isArray(employees)
-          ? employees.find((e) => Number(e.id) === Number(assign.employeeId))
-          : undefined;
-      let employeeName = emp?.name || "";
-      if (!employeeName && (assign.firstName || assign.lastName)) {
-        employeeName = [assign.firstName, assign.lastName]
-          .filter(Boolean)
-          .join(" ");
-      }
-      if (!employeeName && emp) {
-        employeeName = [emp.first_name, emp.last_name]
-          .filter(Boolean)
-          .join(" ");
-      }
-      if (!employeeName && emp) {
-        employeeName = emp.user?.username || `Employee #${emp.id}`;
-      }
-      if (!employeeName) employeeName = `Employee #${assign.employeeId}`;
+    // IMPORTANT: Use the employeeCode from the assignment data directly
+    // This is the actual employee_id from the API like "EMP-MCS2HX"
+    // Only fallback to emp?.employee_id if assign.employeeCode is not available
+    const employeeCode = assign.employeeCode || emp?.employee_id || `EMP-${assign.employeeId}`;
 
-      return {
-        ...assign,
-        employeeName,
-        userId: assign.userId || emp?.user_id || emp?.user?.id || null, // Store userId
-        designation: emp?.designation || emp?.user?.designation?.name || "-",
-        department: emp?.department || emp?.user?.department?.name || "-",
-        avatar: getPhotoUrl(emp?.avatar) || null,
-        projectCount: assign.projectIds?.length || 0,
-      };
-    });
-  }, [assignments, employees]);
-
+    return {
+      ...assign,
+      employeeName,
+      employeeCode, // Use the employeeCode from the assignment
+      userId: assign.userId || emp?.user_id || emp?.user?.id || null,
+      designation: emp?.designation || emp?.user?.designation?.name || "-",
+      department: emp?.department || emp?.user?.department?.name || "-",
+      avatar: getPhotoUrl(emp?.avatar) || null,
+      projectCount: assign.projectIds?.length || 0,
+    };
+  });
+}, [assignments, employees]);
   // Build projects with manager/team lead data from assignments
   const projectsWithDetails = useMemo(() => {
     if (!assignments || !Array.isArray(assignments)) return [];
 
-    // Collect all unique projects from all assignments with their manager/team lead data
     const projectMap = {};
     assignments.forEach((assign) => {
       if (
@@ -496,7 +507,6 @@ const AssignmentTable = ({
           if (proj && proj.id) {
             projectMap[proj.id] = {
               ...proj,
-              // Ensure manager and team lead data is preserved
               project_manager: proj.project_manager || null,
               team_lead: proj.team_lead || null,
             };
@@ -519,13 +529,15 @@ const AssignmentTable = ({
 
   // Client side search filtering
   const filteredAssignments = useMemo(() => {
-    // Safety check: ensure fullAssignments is an array
     if (!fullAssignments || !Array.isArray(fullAssignments)) {
       return [];
     }
 
     return fullAssignments.filter((assign) => {
       const matchName = assign.employeeName
+        .toLowerCase()
+        .includes(searchTerm.toLowerCase());
+      const matchCode = assign.employeeCode
         .toLowerCase()
         .includes(searchTerm.toLowerCase());
       const matchRole = assign.designation
@@ -536,7 +548,6 @@ const AssignmentTable = ({
         .includes(searchTerm.toLowerCase());
       const matchEmpId = String(assign.employeeId).includes(searchTerm);
 
-      // Also match assigned projects names
       const matchProjects = assign.projectIds.some((projId) => {
         const proj =
           projects && Array.isArray(projects)
@@ -545,13 +556,12 @@ const AssignmentTable = ({
         return proj?.name.toLowerCase().includes(searchTerm.toLowerCase());
       });
 
-      return matchName || matchRole || matchDept || matchProjects || matchEmpId;
+      return matchName || matchCode || matchRole || matchDept || matchProjects || matchEmpId;
     });
   }, [fullAssignments, searchTerm, projects]);
 
   // Client side sorting
   const sortedAssignments = useMemo(() => {
-    // Safety check: ensure filteredAssignments is an array
     if (!filteredAssignments || !Array.isArray(filteredAssignments)) {
       return [];
     }
@@ -577,7 +587,6 @@ const AssignmentTable = ({
   const totalPages = Math.ceil(totalItems / itemsPerPage) || 1;
 
   const paginatedAssignments = useMemo(() => {
-    // Safety check: ensure sortedAssignments is an array
     if (!sortedAssignments || !Array.isArray(sortedAssignments)) {
       return [];
     }
@@ -660,7 +669,7 @@ const AssignmentTable = ({
                 onClick={() => handleSort("employeeName")}
                 className="px-6 py-4 text-xs font-bold text-gray-500 dark:text-gray-400 uppercase tracking-wider cursor-pointer hover:bg-gray-100/50 dark:hover:bg-gray-700/30 select-none whitespace-nowrap transition-colors"
               >
-                Employee Name{" "}
+                Employee{" "}
                 {sortField === "employeeName" && (
                   <i
                     className={`fas fa-sort-amount-${sortDirection === "asc" ? "up" : "down"} text-green-500 ml-1.5`}
@@ -668,11 +677,11 @@ const AssignmentTable = ({
                 )}
               </th>
               <th
-                onClick={() => handleSort("employeeId")}
-                className="px-6 py-4 text-xs font-bold text-gray-500 dark:text-gray-400 uppercase tracking-wider cursor-pointer hover:bg-gray-100/50 dark:hover:bg-gray-700/30 select-none text-center whitespace-nowrap transition-colors"
+                onClick={() => handleSort("employeeCode")}
+                className="px-6 py-4 text-xs font-bold text-gray-500 dark:text-gray-400 uppercase tracking-wider cursor-pointer hover:bg-gray-100/50 dark:hover:bg-gray-700/30 select-none whitespace-nowrap transition-colors"
               >
-                Employee ID{" "}
-                {sortField === "employeeId" && (
+                Employee Id{" "}
+                {sortField === "employeeCode" && (
                   <i
                     className={`fas fa-sort-amount-${sortDirection === "asc" ? "up" : "down"} text-green-500 ml-1.5`}
                   ></i>
@@ -701,7 +710,7 @@ const AssignmentTable = ({
                     </div>
                   </td>
                   <td className="px-6 py-4">
-                    <div className="h-4 bg-gray-200 dark:bg-gray-700 rounded w-12 mx-auto"></div>
+                    <div className="h-4 bg-gray-200 dark:bg-gray-700 rounded w-24"></div>
                   </td>
                   <td className="px-6 py-4">
                     <div className="flex gap-2">
@@ -783,9 +792,11 @@ const AssignmentTable = ({
                     </div>
                   </td>
 
-                  {/* Employee ID Column */}
-                  <td className="px-6 py-4 whitespace-nowrap text-center text-xs font-bold text-gray-500 dark:text-gray-400">
-                    #{assign.employeeId}
+                  {/* Employee Code Column - Now showing employee_id */}
+                  <td className="px-6 py-4 whitespace-nowrap">
+                    <span className="text-xs font-mono bg-gray-100 dark:bg-gray-700/50 px-2.5 py-1 rounded-md text-gray-600 dark:text-gray-300 font-semibold">
+                      {assign.employeeCode}
+                    </span>
                   </td>
 
                   {/* Assigned Tags List */}
@@ -898,6 +909,7 @@ const AssignmentTable = ({
           setDrawerEmployee(null);
         }}
         employeeName={drawerEmployee?.employeeName || ""}
+        employeeCode={drawerEmployee?.employeeCode || ""}
         designation={drawerEmployee?.designation || ""}
         department={drawerEmployee?.department || ""}
         avatar={drawerEmployee?.avatar || null}

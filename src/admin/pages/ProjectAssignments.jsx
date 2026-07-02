@@ -7,7 +7,7 @@ import { showToast } from "../../components/common/Toast";
 import {
   fetchAssignments,
   saveAssignment,
-  deleteAllEmployeeProjects, // Use this instead
+  deleteAllEmployeeProjects,
   clearAssignmentError
 } from "../store/slices/projectAssignmentSlice";
 import { fetchEmployees } from "../store/slices/employeeSlice";
@@ -18,6 +18,20 @@ import AssignmentTable from "../components/project-assignments/AssignmentTable";
 import AssignmentModal from "../components/project-assignments/AssignmentModal";
 import ConfirmModal from "../components/common/ConfirmModal";
 
+// Helper function to get employee by ID - updated to handle both id and user_id
+const getEmployeeById = (employees, employeeId) => {
+  if (!employees || !Array.isArray(employees)) return undefined;
+  
+  // Convert to number for comparison
+  const searchId = Number(employeeId);
+  
+  return employees.find(emp => {
+    const empId = Number(emp.id);
+    const empUserId = Number(emp.user_id);
+    // Check if the search ID matches either the employee id or user_id
+    return empId === searchId || empUserId === searchId;
+  });
+};
 const ProjectAssignments = () => {
   const dispatch = useDispatch();
 
@@ -91,6 +105,28 @@ const ProjectAssignments = () => {
     }
   };
 
+ // Enrich assignments with employee data (including employee_id)
+const enrichedAssignments = assignments.map(assign => {
+  const employee = getEmployeeById(employees, assign.employeeId);
+  
+  // Log for debugging
+  console.log('Assignment:', assign);
+  console.log('Found employee:', employee);
+  
+  return {
+    ...assign,
+    // Use employee_id from the employee object, fallback to assign.employeeCode or generate one
+    employeeCode: employee?.employee_id || assign.employeeCode || `EMP-${assign.employeeId}`,
+    employeeName: employee ? 
+      (employee.name || `${employee.first_name || ''} ${employee.last_name || ''}`.trim() || `Employee #${employee.id}`) :
+      `Employee #${assign.employeeId}`,
+    department: employee?.department?.name || employee?.user?.department?.name || '-',
+    designation: employee?.designation?.name || employee?.user?.designation?.name || '-',
+    avatar: employee?.avatar || null,
+    userId: employee?.user_id || assign.userId || null,
+  };
+});
+
   return (
     <div className="p-4 md:p-6 space-y-6 max-w-[1600px] mx-auto animate-fadeIn">
 
@@ -116,7 +152,7 @@ const ProjectAssignments = () => {
 
       {/* Main assignments listing table */}
       <AssignmentTable
-        assignments={assignments}
+        assignments={enrichedAssignments}
         employees={employees}
         projects={projects}
         loading={loading}

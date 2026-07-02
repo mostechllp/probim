@@ -4,6 +4,7 @@ import projectService from "../../services/projectService";
 
 // src/admin/store/slices/projectAssignmentSlice.js
 
+// Update the mapAssignmentFromApi function in projectAssignmentSlice.js
 const mapAssignmentFromApi = (
   apiAssign,
   fallbackEmployeeId = null,
@@ -11,17 +12,29 @@ const mapAssignmentFromApi = (
 ) => {
   if (!apiAssign) return null;
 
-  // Try to find a NUMERIC employee ID from various fields
-  const candidates = [
+  // Try to find employee ID - but now also handle if the employee ID is the same as user_id
+  // For employee assignments, the employeeId might be the employee record ID, not the user_id
+  let employeeId = null;
+  let userId = null;
+  
+  // First try to get user_id
+  if (apiAssign.user_id) {
+    userId = Number(apiAssign.user_id);
+  } else if (apiAssign.user?.id) {
+    userId = Number(apiAssign.user.id);
+  }
+  
+  // Get employee ID from various sources
+  const idCandidates = [
+    apiAssign.employee_id, // This is the employee ID from the API
     apiAssign.id,
-    apiAssign.employee_id,
     apiAssign.employeeId,
     apiAssign.employee?.id,
+    userId, // Fallback to user_id if no employee_id found
     fallbackEmployeeId,
   ];
 
-  let employeeId = null;
-  for (const candidate of candidates) {
+  for (const candidate of idCandidates) {
     if (
       candidate !== null &&
       candidate !== undefined &&
@@ -37,19 +50,7 @@ const mapAssignmentFromApi = (
     return null;
   }
 
-  // Get user_id from the API response
-  let userId = null;
-  if (apiAssign.user_id) {
-    userId = Number(apiAssign.user_id);
-  } else if (apiAssign.user?.id) {
-    userId = Number(apiAssign.user.id);
-  } else if (apiAssign.employee?.user_id) {
-    userId = Number(apiAssign.employee.user_id);
-  } else if (apiAssign.employee?.user?.id) {
-    userId = Number(apiAssign.employee.user.id);
-  }
-
-  // Calculate project IDs array from projects relation
+  // Get project IDs
   let projectIds = [];
   if (apiAssign.project_ids) {
     projectIds = apiAssign.project_ids;
@@ -65,9 +66,9 @@ const mapAssignmentFromApi = (
   }
 
   return {
-    employeeId,
-    userId, // Store the user_id for API calls
-    employeeCode: apiAssign.employee_id || null,
+    employeeId, // This should be the employee record ID
+    userId: userId || null,
+    employeeCode: apiAssign.employee_id || `EMP-${employeeId}`, // Store the employee_id from API
     firstName: apiAssign.first_name || null,
     lastName: apiAssign.last_name || null,
     projectIds: projectIds.map(String),
