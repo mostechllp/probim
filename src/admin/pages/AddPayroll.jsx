@@ -469,6 +469,7 @@ function AddPayroll() {
   };
 
   // Handle employee selection
+  // Handle employee selection - make sure packages are fetched
   const handleEmployeeSelect = async (employeeId) => {
     setSelectedEmployee(employeeId);
 
@@ -478,15 +479,22 @@ function AddPayroll() {
         if (result && result.user_id) {
           setSelectedUserId(result.user_id.toString());
           // Fetch salary packages for this employee
-          await dispatch(fetchEmployeeSalaryPackages(result.user_id));
+          console.log("Fetching salary packages for user_id:", result.user_id);
+          const packagesResult = await dispatch(
+            fetchEmployeeSalaryPackages(result.user_id),
+          ).unwrap();
+          console.log("Packages result:", packagesResult);
         }
       } catch (error) {
-        showToast("Failed to fetch employee details", error);
+        console.error("Failed to fetch employee details:", error);
+        showToast("Failed to fetch employee details", "error");
       }
     } else {
       clearEmployeeFields();
       setSelectedUserId("");
       setCountries([]);
+      setAvailablePackages([]);
+      setSelectedPackageIds([]);
       dispatch(clearEmployeePackages());
     }
   };
@@ -657,37 +665,27 @@ function AddPayroll() {
   };
 
   // Update countries based on selected packages
+  // Update this useEffect to properly set availablePackages
   useEffect(() => {
-    if (availablePackages.length > 0 && selectedPackageIds.length > 0) {
-      const selectedPackages = availablePackages.filter((pkg) =>
-        selectedPackageIds.includes(pkg.id),
-      );
+    console.log("Employee packages received:", employeePackages);
 
-      const mappedCountries = selectedPackages.map((pkg, index) => ({
-        id: index + 1,
-        name: pkg.name || `Package ${index + 1}`,
-        currency: pkg.currency || "AED",
-        dailyRate: pkg.daily_rate || pkg.rate || 0,
-        daysWorked: pkg.days_worked || pkg.days || 0,
-        fxRate: pkg.fx_rate || pkg.exchange_rate || 1,
-        packageId: pkg.id || null,
-        salary_components: pkg.salary_components || [],
-        subtotal: pkg.subtotal || 0,
-        is_saved: false,
-      }));
+    if (employeePackages && employeePackages.length > 0) {
+      // Set available packages for the dropdown
+      setAvailablePackages(employeePackages);
 
-      setCountries(mappedCountries);
-
-      // Calculate total gross salary from selected packages
-      const totalGross = mappedCountries.reduce(
-        (sum, c) => sum + (c.subtotal || 0),
-        0,
-      );
-      setGrossSalary(totalGross);
-      setTotalEarnings(totalGross);
-      setNetSalary(totalGross);
+      // If no packages selected yet, select all by default
+      if (selectedPackageIds.length === 0) {
+        const allPackageIds = employeePackages.map((pkg) => pkg.id);
+        setSelectedPackageIds(allPackageIds);
+        console.log("Selected all packages:", allPackageIds);
+      }
+    } else {
+      // If no packages, clear the selection
+      setAvailablePackages([]);
+      setSelectedPackageIds([]);
+      setCountries([]);
     }
-  }, [availablePackages, selectedPackageIds]);
+  }, [employeePackages]);
 
   // Load draft data on mount if editing
   useEffect(() => {
@@ -709,11 +707,47 @@ function AddPayroll() {
     }
   }, [successMessage, error, dispatch]);
 
-  // Update countries when calculated data arrives
+  // Update countries when calculated data arrives - ALSO extract packages from here
   useEffect(() => {
     if (calculatedCountries) {
       const data = calculatedCountries;
 
+      // ─── EXTRACT PACKAGES FROM CALCULATE RESPONSE ──────────────────────
+      if (data.location_breakdown && data.location_breakdown.length > 0) {
+        // Extract packages from the location breakdown
+        const extractedPackages = data.location_breakdown.map((loc, index) => ({
+          id: loc.package?.id || index + 1,
+          name:
+            loc.package?.name || loc.location_name || `Package ${index + 1}`,
+          currency: loc.currency?.code || loc.package?.currency || "INR",
+          salary_components: loc.salary_components || [],
+          subtotal: loc.subtotal || 0,
+          days_worked: loc.worked_days || 0,
+          daily_rate: loc.dailyRate || 0,
+          package: loc.package || {},
+        }));
+
+        console.log(
+          "Extracted packages from calculate response:",
+          extractedPackages,
+        );
+
+        // Set available packages from calculate response
+        if (extractedPackages.length > 0) {
+          setAvailablePackages(extractedPackages);
+          // If no packages selected yet, select all by default
+          if (selectedPackageIds.length === 0) {
+            const allPackageIds = extractedPackages.map((pkg) => pkg.id);
+            setSelectedPackageIds(allPackageIds);
+            console.log(
+              "Selected all packages from calculate response:",
+              allPackageIds,
+            );
+          }
+        }
+      }
+
+      // ─── UPDATE COUNTRIES ──────────────────────────────────────────────
       if (data.location_breakdown) {
         const updatedCountries = data.location_breakdown.map((loc, index) => ({
           id: index + 1,
@@ -798,11 +832,17 @@ function AddPayroll() {
   }, [summaryData]);
 
   // ─── STEP 2: Calculate salary split by location ──────────────────────
+  // ─── STEP 2: Calculate salary split by location ──────────────────────
   const handleCalculateSalarySplit = async () => {
     if (!selectedUserId) {
       showToast("Please select an employee first", "error");
       return;
     }
+
+    // Clear existing packages before calculating
+    setAvailablePackages([]);
+    setSelectedPackageIds([]);
+    setCountries([]);
 
     const monthNumber = monthNames[payPeriodMonth] || new Date().getMonth() + 1;
     const monthFormatted = `${payPeriodYear}-${String(monthNumber).padStart(2, "0")}`;
@@ -904,160 +944,204 @@ function AddPayroll() {
   };
 
   // Get current step data based on form state
-  const getCurrentStepData = () => {
-    const step = reduxCurrentStep;
-    let data = {};
+ // Get current step data based on form state
+const getCurrentStepData = () => {
+  const step = reduxCurrentStep;
+  let data = {};
 
-    const monthNumber = monthNames[payPeriodMonth] || new Date().getMonth() + 1;
-    const year = parseInt(payPeriodYear) || new Date().getFullYear();
+  const monthNumber = monthNames[payPeriodMonth] || new Date().getMonth() + 1;
+  const year = parseInt(payPeriodYear) || new Date().getFullYear();
 
-    switch (step) {
-      case 1:
-        data = {
-          pay_period_month: monthNumber,
-          pay_period_year: year,
-          period_start: periodStart,
-          period_end: periodEnd,
-          payment_date: paymentDate,
-          payment_mode: paymentMode,
-          total_working_days: parseInt(totalWorkingDays) || 0,
-          days_present: parseInt(daysPresent) || 0,
-        };
-        break;
+  switch (step) {
+    case 1:
+      data = {
+        pay_period_month: monthNumber,
+        pay_period_year: year,
+        period_start: periodStart,
+        period_end: periodEnd,
+        payment_date: paymentDate,
+        payment_mode: paymentMode,
+        total_working_days: parseInt(totalWorkingDays) || 0,
+        days_present: parseInt(daysPresent) || 0,
+      };
+      break;
 
-      case 2:
-        data = {
-          pay_period_month: monthNumber,
-          pay_period_year: year,
-          location_breakdown: countries.map((c) => ({
-            location_name: c.name,
-            package: {
-              id: c.packageId,
-              name: c.name,
-              currency: c.currency,
-            },
-            worked_days: parseInt(c.daysWorked) || 0,
-            currency: {
-              code: c.currency,
-              symbol: c.currency,
-            },
-            salary_components: c.salary_components || [],
-            subtotal: c.subtotal || 0,
-          })),
-          total_earnings: totalEarnings,
-          total_deductions: totalDeductions,
-          gross_salary: grossSalary,
-          net_salary: netSalary,
-        };
-        break;
+    case 2:
+      // Filter countries to only include selected packages
+      const selectedCountriesForStep = countries.filter((c) =>
+        selectedPackageIds.includes(c.packageId),
+      );
 
-      case 3:
-        data = {
-          pay_period_month: monthNumber,
-          pay_period_year: year,
-          overtime_details: overtimeRequests.map((req) => ({
-            date: req.date,
-            overtime_hours: parseFloat(req.hours) || 0,
-            amount: parseFloat(req.overtime_amount) || 0,
-            currency: req.currency || targetCurrency || "INR",
-            status: req.status || "pending",
-            projects: req.projects || [],
-          })),
-          total_overtime_amount: overtimeRequests.reduce(
-            (sum, req) => sum + parseFloat(req.overtime_amount || 0),
-            0,
-          ),
-        };
-        break;
+      const step2TotalEarnings = selectedCountriesForStep.reduce(
+        (sum, c) => sum + (c.subtotal || 0),
+        0,
+      );
 
-      case 4:
-        data = {
-          pay_period_month: monthNumber,
-          pay_period_year: year,
-          deductions: deductions.map((d) => ({
-            type: d.type,
-            currency: d.currency,
-            amount: parseFloat(d.amount) || 0,
-            is_statutory: d.is_statutory || "no",
-          })),
-          total_deductions: deductions.reduce(
-            (sum, d) => sum + parseFloat(d.amount || 0),
-            0,
-          ),
-        };
-        break;
-
-      case 5:
-        const conversionRatesObj = {};
-        conversionRatesList.forEach((item) => {
-          conversionRatesObj[item.currency] = parseFloat(item.rate) || 1;
-        });
-
-        // USE CONVERTED AMOUNTS from conversionDetails
-        const convertedGrossSalary =
-          conversionDetails.gross_salary?.convertedAmount || 0;
-        const convertedOvertime =
-          conversionDetails.overtime_amount?.convertedAmount || 0;
-        const convertedDeductions =
-          conversionDetails.deductions?.convertedAmount || 0;
-        const convertedNetPay = conversionDetails.net_pay?.convertedAmount || 0;
-
-        data = {
-          pay_period_month: monthNumber,
-          pay_period_year: year,
-          summary: {
-            gross_salary: convertedGrossSalary,
-            overtime_amount: convertedOvertime,
-            deductions: convertedDeductions,
-            net_pay: convertedNetPay,
-            conversions: conversionDetails,
-            // Store original mixed currency data for reference
-            original_breakdown: {
-              gross_salary: conversionDetails.gross_salary?.breakdown || "",
-              overtime: conversionDetails.overtime_amount?.breakdown || "",
-              deductions: conversionDetails.deductions?.breakdown || "",
-              net_pay: conversionDetails.net_pay?.breakdown || "",
-            },
-          },
-          target_currency: targetCurrency,
-          conversion_rates: conversionRatesObj,
-          // Include all required fields for submission with CONVERTED amounts
-          gross_salary: convertedGrossSalary,
-          overtime: convertedOvertime,
-          deductions: convertedDeductions,
-          net_pay: convertedNetPay,
-          currency:
-            targetCurrency ||
-            (countries.length > 0 ? countries[0].currency : "INR"),
-          location_breakdown: countries.map((c) => ({
-            location_name: c.name,
+      data = {
+        pay_period_month: monthNumber,
+        pay_period_year: year,
+        package_ids: selectedPackageIds,
+        location_breakdown: selectedCountriesForStep.map((c) => ({
+          location_name: c.name,
+          package: {
+            id: c.packageId,
+            name: c.name,
             currency: c.currency,
-            subtotal: c.subtotal || 0,
-            worked_days: c.daysWorked || 0,
-            salary_components: c.salary_components || [],
-          })),
-          overtime_details: overtimeRequests.map((req) => ({
-            date: req.date,
-            overtime_hours: req.overtime_hours || 0,
-            amount: parseFloat(req.overtime_amount) || 0,
-            currency: req.currency || targetCurrency || "INR",
-            projects: req.projects || [],
-          })),
-          deductions_details: deductions.map((d) => ({
-            type: d.type,
-            amount: parseFloat(d.amount) || 0,
-            currency: d.currency || targetCurrency || "INR",
-            is_statutory: d.is_statutory || "no",
-          })),
-        };
-        break;
+          },
+          worked_days: parseInt(c.daysWorked) || 0,
+          currency: {
+            code: c.currency,
+            symbol: c.currency,
+          },
+          salary_components: c.salary_components || [],
+          subtotal: c.subtotal || 0,
+        })),
+        total_earnings: step2TotalEarnings,
+        total_deductions: totalDeductions,
+        gross_salary: step2TotalEarnings,
+        net_salary: step2TotalEarnings,
+      };
+      break;
 
-      default:
-        data = {};
-    }
+    case 3:
+      data = {
+        pay_period_month: monthNumber,
+        pay_period_year: year,
+        overtime_details: overtimeRequests.map((req) => ({
+          date: req.date,
+          overtime_hours: parseFloat(req.hours) || 0,
+          amount: parseFloat(req.overtime_amount) || 0,
+          currency: req.currency || targetCurrency || "INR",
+          status: req.status || "pending",
+          projects: req.projects || [],
+        })),
+        total_overtime_amount: overtimeRequests.reduce(
+          (sum, req) => sum + parseFloat(req.overtime_amount || 0),
+          0,
+        ),
+      };
+      break;
 
-    return data;
-  };
+    case 4:
+      data = {
+        pay_period_month: monthNumber,
+        pay_period_year: year,
+        deductions: deductions.map((d) => ({
+          type: d.type,
+          currency: d.currency,
+          amount: parseFloat(d.amount) || 0,
+          is_statutory: d.is_statutory || "no",
+        })),
+        total_deductions: deductions.reduce(
+          (sum, d) => sum + parseFloat(d.amount || 0),
+          0,
+        ),
+      };
+      break;
+
+    case 5:
+      // Get step 2 data from Redux store (use the stepData from the component)
+      const step2Data = stepData[2] || {};
+      const step2LocationBreakdown = step2Data.location_breakdown || [];
+      
+      // Get step 3 data from Redux store
+      const step3Data = stepData[3] || {};
+      const step3OvertimeDetails = step3Data.overtime_details || [];
+
+      // Get step 4 data from Redux store
+      const step4Data = stepData[4] || {};
+      const step4Deductions = step4Data.deductions || [];
+
+      // Build location breakdown from saved step 2 data
+      const locationBreakdown = step2LocationBreakdown.map((loc) => ({
+        location_name: loc.location_name || loc.name || "",
+        currency: loc.currency?.code || loc.package?.currency || "INR",
+        subtotal: loc.subtotal || 0,
+        worked_days: loc.worked_days || 0,
+        salary_components: loc.salary_components || [],
+        package: loc.package || {},
+      }));
+
+      // Calculate totals from saved step 2 data
+      const totalEarnings = locationBreakdown.reduce(
+        (sum, loc) => sum + (loc.subtotal || 0),
+        0,
+      );
+
+      // Get totals from saved step 3 data
+      const totalOvertime = step3OvertimeDetails.reduce(
+        (sum, item) => sum + (parseFloat(item.amount) || 0),
+        0,
+      );
+
+      // Get totals from saved step 4 data
+      const totalDeductionsFromSaved = step4Deductions.reduce(
+        (sum, item) => sum + (parseFloat(item.amount) || 0),
+        0,
+      );
+
+      // Get conversion rates from saved step 5 data if exists
+      const savedConversionRates = stepData[5]?.conversion_rates || {};
+      const savedTargetCurrency = stepData[5]?.target_currency || "INR";
+
+      // Use existing conversion details or create from saved data
+      const existingConversionDetails = stepData[5]?.conversions || conversionDetails;
+
+      data = {
+        pay_period_month: monthNumber,
+        pay_period_year: year,
+        summary: {
+          gross_salary: totalEarnings,
+          overtime_amount: totalOvertime,
+          deductions: totalDeductionsFromSaved,
+          net_pay: totalEarnings + totalOvertime - totalDeductionsFromSaved,
+          conversions: existingConversionDetails,
+          original_breakdown: {
+            gross_salary:
+              locationBreakdown
+                .map((loc) => `${loc.currency} ${loc.subtotal.toFixed(2)}`)
+                .join(" + ") || "",
+            overtime:
+              step3OvertimeDetails
+                .map(
+                  (item) =>
+                    `${item.currency} ${parseFloat(item.amount).toFixed(2)}`,
+                )
+                .join(" + ") || "",
+            deductions:
+              step4Deductions
+                .map(
+                  (item) =>
+                    `${item.currency} ${parseFloat(item.amount).toFixed(2)}`,
+                )
+                .join(" + ") || "",
+            net_pay: `${totalEarnings + totalOvertime - totalDeductionsFromSaved}`,
+          },
+        },
+        target_currency: savedTargetCurrency,
+        conversion_rates: savedConversionRates,
+        // Include all required fields for submission
+        gross_salary: totalEarnings,
+        overtime: totalOvertime,
+        deductions: totalDeductionsFromSaved,
+        net_pay: totalEarnings + totalOvertime - totalDeductionsFromSaved,
+        currency:
+          savedTargetCurrency ||
+          (locationBreakdown.length > 0
+            ? locationBreakdown[0].currency
+            : "INR"),
+        location_breakdown: locationBreakdown,
+        overtime_details: step3OvertimeDetails,
+        deductions_details: step4Deductions,
+      };
+      break;
+
+    default:
+      data = {};
+  }
+
+  return data;
+};
 
   // Save current step data
   const handleSaveStep = async (step, data) => {
@@ -1783,7 +1867,6 @@ function AddPayroll() {
           )}
 
           {/* Step 2 - Country Split / Packages */}
-          {/* Step 2 - Country Split / Packages */}
           {reduxCurrentStep === 2 && (
             <div>
               <div className="flex items-center gap-2 pb-3 border-b-2 border-green-100 dark:border-green-900/30 mb-4 md:mb-6">
@@ -1800,7 +1883,7 @@ function AddPayroll() {
                 )}
                 <button
                   onClick={handleCalculateSalarySplit}
-                  disabled={countriesLoading || selectedPackageIds.length === 0}
+                  disabled={countriesLoading || !selectedUserId}
                   className="ml-auto px-3 py-1 text-xs bg-blue-500 text-white rounded-lg hover:bg-blue-600 transition-colors disabled:opacity-50"
                 >
                   <i
@@ -1850,14 +1933,15 @@ function AddPayroll() {
                 </div>
               )}
 
-              {/* Package Selection Dropdown */}
-              {availablePackages.length > 0 && (
-                <div className="mb-6 p-4 bg-gray-50 dark:bg-gray-700/30 rounded-xl border border-gray-200 dark:border-gray-700">
-                  <div className="flex items-center justify-between mb-3">
-                    <label className="text-sm font-semibold text-gray-700 dark:text-gray-300">
-                      <i className="fas fa-boxes text-green-500 mr-2"></i>
-                      Select Salary Packages
-                    </label>
+              {/* Country Cards with Selection - Combined */}
+              {/* Country Cards with Selection - Combined */}
+              {countries.length > 0 && (
+                <>
+                  <div className="mb-3 flex items-center justify-between">
+                    <p className="text-sm text-gray-500 dark:text-gray-400">
+                      <i className="fas fa-info-circle mr-1"></i>
+                      Click on a package card to select/deselect it
+                    </p>
                     <div className="flex gap-2">
                       <button
                         onClick={handleSelectAllPackages}
@@ -1873,175 +1957,172 @@ function AddPayroll() {
                       </button>
                     </div>
                   </div>
-                  <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 gap-3">
-                    {availablePackages.map((pkg) => (
-                      <label
-                        key={pkg.id}
-                        className={`flex items-start gap-3 p-3 rounded-lg border-2 cursor-pointer transition-all ${
-                          selectedPackageIds.includes(pkg.id)
-                            ? "border-green-500 bg-green-50 dark:bg-green-900/20"
-                            : "border-gray-200 dark:border-gray-600 hover:border-gray-300 dark:hover:border-gray-500"
-                        }`}
-                      >
-                        <input
-                          type="checkbox"
-                          checked={selectedPackageIds.includes(pkg.id)}
-                          onChange={() => handlePackageSelection(pkg.id)}
-                          className="mt-1 w-4 h-4 text-green-500 focus:ring-green-500 rounded"
-                        />
-                        <div className="flex-1">
-                          <p className="text-sm font-semibold text-gray-800 dark:text-gray-200">
-                            {pkg.name || `Package ${pkg.id}`}
-                          </p>
-                          <div className="flex items-center gap-2 text-xs text-gray-500 dark:text-gray-400">
-                            <span>{pkg.currency || "AED"}</span>
-                            <span className="w-1 h-1 rounded-full bg-gray-400"></span>
-                            <span>
-                              {pkg.salary_components?.length || 0} components
-                            </span>
-                          </div>
-                          {pkg.salary_components &&
-                            pkg.salary_components.length > 0 && (
-                              <div className="mt-1 flex flex-wrap gap-1">
-                                {pkg.salary_components
-                                  .slice(0, 3)
-                                  .map((comp, idx) => (
-                                    <span
-                                      key={idx}
-                                      className="text-[10px] bg-gray-100 dark:bg-gray-600 px-1.5 py-0.5 rounded"
-                                    >
-                                      {comp.name}: {comp.amount}
-                                    </span>
-                                  ))}
-                                {pkg.salary_components.length > 3 && (
-                                  <span className="text-[10px] text-gray-400">
-                                    +{pkg.salary_components.length - 3} more
+
+                  <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                    {countries.map((country) => {
+                      const isSelected = selectedPackageIds.includes(
+                        country.packageId,
+                      );
+
+                      return (
+                        <div
+                          key={country.id}
+                          onClick={() =>
+                            handlePackageSelection(country.packageId)
+                          }
+                          className={`bg-white dark:bg-gray-800 border-2 rounded-xl overflow-hidden shadow-sm hover:shadow-md transition-all cursor-pointer ${
+                            isSelected
+                              ? "border-green-500 ring-2 ring-green-500/20"
+                              : "border-gray-200 dark:border-gray-700 hover:border-gray-300 dark:hover:border-gray-600"
+                          }`}
+                        >
+                          {/* Header */}
+                          <div
+                            className={`px-4 py-3 border-b flex justify-between items-center ${
+                              isSelected
+                                ? "bg-green-50 dark:bg-green-900/20 border-green-200 dark:border-green-800"
+                                : "bg-gray-50 dark:bg-gray-700/50 border-gray-200 dark:border-gray-700"
+                            }`}
+                          >
+                            <div className="flex items-center gap-3">
+                              <input
+                                type="checkbox"
+                                checked={isSelected}
+                                onChange={() =>
+                                  handlePackageSelection(country.packageId)
+                                }
+                                className="w-5 h-5 text-green-500 focus:ring-green-500 rounded border-gray-300 dark:border-gray-600 cursor-pointer"
+                              />
+                              <div>
+                                <h4 className="font-semibold text-gray-800 dark:text-gray-200">
+                                  {country.name || "Location"}
+                                </h4>
+                                <div className="flex items-center gap-2 text-xs text-gray-500 dark:text-gray-400">
+                                  <span>
+                                    {country.packageId ? "Saved" : "Unsaved"}
                                   </span>
-                                )}
+                                  <span className="w-1 h-1 rounded-full bg-gray-400"></span>
+                                  <span>{country.currency}</span>
+                                  {isSelected && (
+                                    <span className="text-green-600 dark:text-green-400">
+                                      <i className="fas fa-check-circle"></i>{" "}
+                                      Selected
+                                    </span>
+                                  )}
+                                </div>
                               </div>
-                            )}
-                        </div>
-                      </label>
-                    ))}
-                  </div>
-                  {selectedPackageIds.length === 0 && (
-                    <p className="mt-2 text-xs text-yellow-600 dark:text-yellow-400">
-                      <i className="fas fa-exclamation-triangle mr-1"></i>
-                      Please select at least one package to calculate salary
-                      split
-                    </p>
-                  )}
-                </div>
-              )}
-
-              {/* Country Cards with Editable Fields - Only for selected packages */}
-              {countries.length > 0 && (
-                <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                  {countries.map((country) => (
-                    <div
-                      key={country.id}
-                      className="bg-white dark:bg-gray-800 border border-gray-200 dark:border-gray-700 rounded-xl overflow-hidden shadow-sm hover:shadow-md transition-shadow"
-                    >
-                      {/* Header */}
-                      <div className="bg-gray-50 dark:bg-gray-700/50 px-4 py-3 border-b border-gray-200 dark:border-gray-700 flex justify-between items-center">
-                        <div>
-                          <h4 className="font-semibold text-gray-800 dark:text-gray-200">
-                            {country.name || "Location"}
-                          </h4>
-                          <div className="flex items-center gap-2 text-xs text-gray-500 dark:text-gray-400">
-                            <span>
-                              {country.packageId ? "Saved" : "Unsaved"}
-                            </span>
-                            <span className="w-1 h-1 rounded-full bg-gray-400"></span>
-                            <span>{country.currency}</span>
-                          </div>
-                        </div>
-                        <div className="text-right">
-                          <div className="text-sm font-semibold text-gray-800 dark:text-gray-200">
-                            {country.daysWorked || 0}
-                          </div>
-                          <div className="text-[10px] text-gray-500 dark:text-gray-400 uppercase">
-                            Worked Days
-                          </div>
-                        </div>
-                      </div>
-
-                      {/* Body - Editable Salary Components */}
-                      <div className="p-4 space-y-3">
-                        {country.salary_components &&
-                        country.salary_components.length > 0 ? (
-                          <div className="space-y-2">
-                            {country.salary_components.map((comp, idx) => (
-                              <div
-                                key={idx}
-                                className="flex items-center gap-2"
-                              >
-                                <span className="text-sm text-gray-600 dark:text-gray-400 w-32 flex-shrink-0">
-                                  {comp.name}
-                                </span>
-                                <span className="text-xs text-gray-400">
-                                  {country.currency}
-                                </span>
-                                <input
-                                  type="number"
-                                  step="0.01"
-                                  value={comp.amount}
-                                  onChange={(e) => {
-                                    const newAmount =
-                                      parseFloat(e.target.value) || 0;
-                                    const updatedCountries = countries.map(
-                                      (c) => {
-                                        if (c.id === country.id) {
-                                          const updatedComponents =
-                                            c.salary_components.map((c2, i) =>
-                                              i === idx
-                                                ? { ...c2, amount: newAmount }
-                                                : c2,
-                                            );
-                                          const newSubtotal =
-                                            updatedComponents.reduce(
-                                              (sum, c2) => sum + c2.amount,
-                                              0,
-                                            );
-                                          return {
-                                            ...c,
-                                            salary_components:
-                                              updatedComponents,
-                                            subtotal: newSubtotal,
-                                          };
-                                        }
-                                        return c;
-                                      },
-                                    );
-                                    setCountries(updatedCountries);
-                                    // Reset saved state when user makes changes
-                                    setIsStep2Saved(false);
-                                  }}
-                                  className="flex-1 px-2 py-1 text-sm rounded border border-gray-200 dark:border-gray-600 bg-white dark:bg-gray-800 text-gray-700 dark:text-gray-300 focus:outline-none focus:border-green-500"
-                                />
+                            </div>
+                            <div className="text-right">
+                              <div className="text-sm font-semibold text-gray-800 dark:text-gray-200">
+                                {country.daysWorked || 0}
                               </div>
-                            ))}
-                            <div className="pt-2 mt-2 border-t border-gray-200 dark:border-gray-700 flex justify-between font-semibold">
-                              <span className="text-gray-800 dark:text-gray-200">
-                                Subtotal
-                              </span>
-                              <span className="text-green-600 dark:text-green-400">
-                                {country.currency} {country.subtotal.toFixed(2)}
-                              </span>
+                              <div className="text-[10px] text-gray-500 dark:text-gray-400 uppercase">
+                                Worked Days
+                              </div>
                             </div>
                           </div>
-                        ) : (
-                          <div className="text-center py-2 text-gray-400 text-sm">
-                            No salary components
-                          </div>
-                        )}
-                      </div>
-                    </div>
-                  ))}
-                </div>
-              )}
 
-              {/* Save Packages Button - Only in Step 2 */}
+                          {/* Body - Editable Salary Components */}
+                          <div className="p-4 space-y-3">
+                            {country.salary_components &&
+                            country.salary_components.length > 0 ? (
+                              <div className="space-y-2">
+                                {country.salary_components.map((comp, idx) => (
+                                  <div
+                                    key={idx}
+                                    className="flex items-center gap-2"
+                                  >
+                                    <span className="text-sm text-gray-600 dark:text-gray-400 w-32 flex-shrink-0">
+                                      {comp.name}
+                                    </span>
+                                    <span className="text-xs text-gray-400">
+                                      {country.currency}
+                                    </span>
+                                    <input
+                                      type="number"
+                                      step="0.01"
+                                      value={comp.amount}
+                                      onChange={(e) => {
+                                        const newAmount =
+                                          parseFloat(e.target.value) || 0;
+                                        const updatedCountries = countries.map(
+                                          (c) => {
+                                            if (c.id === country.id) {
+                                              const updatedComponents =
+                                                c.salary_components.map(
+                                                  (c2, i) =>
+                                                    i === idx
+                                                      ? {
+                                                          ...c2,
+                                                          amount: newAmount,
+                                                        }
+                                                      : c2,
+                                                );
+                                              const newSubtotal =
+                                                updatedComponents.reduce(
+                                                  (sum, c2) => sum + c2.amount,
+                                                  0,
+                                                );
+                                              return {
+                                                ...c,
+                                                salary_components:
+                                                  updatedComponents,
+                                                subtotal: newSubtotal,
+                                              };
+                                            }
+                                            return c;
+                                          },
+                                        );
+                                        setCountries(updatedCountries);
+                                        setIsStep2Saved(false);
+                                      }}
+                                      onClick={(e) => e.stopPropagation()}
+                                      className="flex-1 px-2 py-1 text-sm rounded border border-gray-200 dark:border-gray-600 bg-white dark:bg-gray-800 text-gray-700 dark:text-gray-300 focus:outline-none focus:border-green-500"
+                                    />
+                                  </div>
+                                ))}
+                                <div className="pt-2 mt-2 border-t border-gray-200 dark:border-gray-700 flex justify-between font-semibold">
+                                  <span className="text-gray-800 dark:text-gray-200">
+                                    Subtotal
+                                  </span>
+                                  <span className="text-green-600 dark:text-green-400">
+                                    {country.currency}{" "}
+                                    {country.subtotal.toFixed(2)}
+                                  </span>
+                                </div>
+                              </div>
+                            ) : (
+                              <div className="text-center py-2 text-gray-400 text-sm">
+                                No salary components
+                              </div>
+                            )}
+                          </div>
+                        </div>
+                      );
+                    })}
+                  </div>
+
+                  {/* Selected Packages Summary */}
+                  {selectedPackageIds.length > 0 && (
+                    <div className="mt-4 p-3 bg-green-50 dark:bg-green-900/20 rounded-lg border border-green-200 dark:border-green-800">
+                      <p className="text-sm font-medium text-green-700 dark:text-green-300">
+                        <i className="fas fa-check-circle mr-1"></i>
+                        {selectedPackageIds.length} package
+                        {selectedPackageIds.length > 1 ? "s" : ""} selected
+                      </p>
+                    </div>
+                  )}
+
+                  {selectedPackageIds.length === 0 && countries.length > 0 && (
+                    <p className="mt-2 text-xs text-yellow-600 dark:text-yellow-400">
+                      <i className="fas fa-exclamation-triangle mr-1"></i>
+                      Please select at least one package to save
+                    </p>
+                  )}
+                </>
+              )}
+              {/* Save Packages Button */}
+              {/* Save Packages Button */}
               <div className="mt-6 flex justify-end">
                 <button
                   onClick={async () => {
@@ -2058,12 +2139,24 @@ function AddPayroll() {
                     const year =
                       parseInt(payPeriodYear) || new Date().getFullYear();
 
-                    // Only include selected packages in the data
+                    // Filter location_breakdown to only include selected packages
+                    const selectedCountries = countries.filter((c) =>
+                      selectedPackageIds.includes(c.packageId),
+                    );
+
+                    // Calculate totals for selected packages only
+                    const selectedTotalEarnings = selectedCountries.reduce(
+                      (sum, c) => sum + (c.subtotal || 0),
+                      0,
+                    );
+                    const selectedGrossSalary = selectedTotalEarnings;
+                    const selectedNetSalary = selectedTotalEarnings;
+
                     const step2Data = {
                       pay_period_month: monthNumber,
                       pay_period_year: year,
-                      package_ids: selectedPackageIds, // Send only selected package IDs
-                      location_breakdown: countries.map((c) => ({
+                      package_ids: selectedPackageIds,
+                      location_breakdown: selectedCountries.map((c) => ({
                         location_name: c.name,
                         package: {
                           id: c.packageId,
@@ -2078,11 +2171,13 @@ function AddPayroll() {
                         salary_components: c.salary_components || [],
                         subtotal: c.subtotal || 0,
                       })),
-                      total_earnings: totalEarnings,
+                      total_earnings: selectedTotalEarnings,
                       total_deductions: totalDeductions,
-                      gross_salary: grossSalary,
-                      net_salary: netSalary,
+                      gross_salary: selectedGrossSalary,
+                      net_salary: selectedNetSalary,
                     };
+
+                    console.log("Saving only selected packages:", step2Data);
 
                     const saved = await handleSaveStep(2, step2Data);
                     if (saved) {
@@ -2097,7 +2192,8 @@ function AddPayroll() {
                   className="px-6 py-2.5 rounded-full font-semibold bg-green-500 text-white hover:bg-green-600 transition-all flex items-center gap-2 text-sm shadow-md hover:shadow-lg disabled:opacity-50 disabled:cursor-not-allowed"
                   disabled={selectedPackageIds.length === 0}
                 >
-                  <i className="fas fa-save"></i> Save Packages
+                  <i className="fas fa-save"></i> Save Packages (
+                  {selectedPackageIds.length} selected)
                 </button>
               </div>
 
@@ -2692,7 +2788,7 @@ function AddPayroll() {
 
                 {!isConverted && (
                   <div className="grid grid-cols-1 md:grid-cols-2 gap-4 pt-4 border-t border-gray-200 dark:border-gray-700">
-                    {/* Gross Salary from Step 2 with currency breakdown */}
+                    {/* Gross Salary from Step 2 - Using saved data */}
                     <div className="p-4 rounded-xl bg-blue-50 dark:bg-blue-900/20 border border-blue-200 dark:border-blue-800">
                       <div className="flex items-center justify-between mb-2">
                         <div className="text-xs text-gray-500 dark:text-gray-400 font-medium">
@@ -2703,57 +2799,87 @@ function AddPayroll() {
                         </span>
                       </div>
 
-                      {/* Currency Breakdown - Show each currency separately */}
-                      <div className="mb-3">
-                        <div className="text-[10px] text-gray-500 mb-1">
-                          Currency Breakdown:
-                        </div>
-                        {countries.map((country, idx) => {
-                          const subtotal = country.subtotal || 0;
-                          if (subtotal > 0) {
-                            return (
-                              <div
-                                key={idx}
-                                className="flex justify-between items-center text-sm"
-                              >
+                      {/* Get location breakdown from saved step 2 data */}
+                      {(() => {
+                        const step2Data = stepData[2] || {};
+                        const locationBreakdown =
+                          step2Data.location_breakdown || [];
+                        const packageIds = step2Data.package_ids || [];
+
+                        if (locationBreakdown.length === 0) {
+                          return (
+                            <div className="text-sm text-gray-400">
+                              No packages selected
+                            </div>
+                          );
+                        }
+
+                        return (
+                          <>
+                            <div className="mb-3">
+                              <div className="text-[10px] text-gray-500 mb-1">
+                                Currency Breakdown:
+                              </div>
+                              {locationBreakdown.map((loc, idx) => {
+                                const subtotal = loc.subtotal || 0;
+                                if (subtotal > 0) {
+                                  return (
+                                    <div
+                                      key={idx}
+                                      className="flex justify-between items-center text-sm"
+                                    >
+                                      <span className="text-gray-600 dark:text-gray-400">
+                                        {loc.location_name || loc.name}:
+                                      </span>
+                                      <span className="font-semibold text-gray-700 dark:text-gray-300">
+                                        {loc.currency?.code ||
+                                          loc.package?.currency ||
+                                          "INR"}{" "}
+                                        {subtotal.toFixed(2)}
+                                      </span>
+                                    </div>
+                                  );
+                                }
+                                return null;
+                              })}
+
+                              {/* Total - Show as Mixed or individual currencies */}
+                              <div className="border-t border-blue-200 dark:border-blue-700 mt-1 pt-1 flex justify-between items-center font-semibold">
                                 <span className="text-gray-600 dark:text-gray-400">
-                                  {country.name}:
+                                  Total ({locationBreakdown.length} package
+                                  {locationBreakdown.length > 1 ? "s" : ""}):
                                 </span>
-                                <span className="font-semibold text-gray-700 dark:text-gray-300">
-                                  {country.currency} {subtotal.toFixed(2)}
+                                <span className="text-blue-600 dark:text-blue-400">
+                                  {locationBreakdown
+                                    .filter((loc) => (loc.subtotal || 0) > 0)
+                                    .map(
+                                      (loc) =>
+                                        `${loc.currency?.code || loc.package?.currency || "INR"} ${(loc.subtotal || 0).toFixed(2)}`,
+                                    )
+                                    .join(" + ")}
                                 </span>
                               </div>
-                            );
-                          }
-                          return null;
-                        })}
+                            </div>
 
-                        {/* Total - Show as "Mixed" or individual currencies */}
-                        <div className="border-t border-blue-200 dark:border-blue-700 mt-1 pt-1 flex justify-between items-center font-semibold">
-                          <span className="text-gray-600 dark:text-gray-400">
-                            Total :
-                          </span>
-                          <span className="text-blue-600 dark:text-blue-400">
-                            {countries
-                              .filter((c) => (c.subtotal || 0) > 0)
-                              .map(
-                                (c) =>
-                                  `${c.currency} ${(c.subtotal || 0).toFixed(2)}`,
-                              )
-                              .join(" + ")}
-                          </span>
-                        </div>
-                      </div>
-
-                      <div className="text-xs text-gray-400 mt-1">
-                        Based on{" "}
-                        {countries.filter((c) => (c.subtotal || 0) > 0).length}{" "}
-                        location(s):{" "}
-                        {countries
-                          .filter((c) => (c.subtotal || 0) > 0)
-                          .map((c) => `${c.name} (${c.currency})`)
-                          .join(", ")}
-                      </div>
+                            <div className="text-xs text-gray-400 mt-1">
+                              Based on{" "}
+                              {
+                                locationBreakdown.filter(
+                                  (loc) => (loc.subtotal || 0) > 0,
+                                ).length
+                              }{" "}
+                              location(s):{" "}
+                              {locationBreakdown
+                                .filter((loc) => (loc.subtotal || 0) > 0)
+                                .map(
+                                  (loc) =>
+                                    `${loc.location_name || loc.name} (${loc.currency?.code || loc.package?.currency || "INR"})`,
+                                )
+                                .join(", ")}
+                            </div>
+                          </>
+                        );
+                      })()}
                     </div>
 
                     {/* Overtime Amount from Step 3 */}
@@ -2885,7 +3011,7 @@ function AddPayroll() {
                       </div>
                     </div>
 
-                    {/* Net Pay - Show calculation with mixed currencies INCLUDING OVERTIME */}
+                    {/* Net Pay - Show calculation with saved data */}
                     <div className="p-4 rounded-xl bg-green-50 dark:bg-green-900/20 border border-green-200 dark:border-green-800">
                       <div className="flex items-center justify-between mb-2">
                         <div className="text-xs text-gray-500 dark:text-gray-400 font-medium">
@@ -2896,371 +3022,486 @@ function AddPayroll() {
                         </span>
                       </div>
 
-                      {/* Net Pay Calculation - Show formula with OVERTIME included */}
-                      <div className="mb-3 text-sm">
-                        <div className="flex justify-between items-center text-gray-600 dark:text-gray-400">
-                          <span>Gross Salary:</span>
-                          <span>
-                            {countries
-                              .filter((c) => (c.subtotal || 0) > 0)
-                              .map(
-                                (c) =>
-                                  `${c.currency} ${(c.subtotal || 0).toFixed(2)}`,
-                              )
-                              .join(" + ")}
-                          </span>
-                        </div>
-                        <div className="flex justify-between items-center text-gray-600 dark:text-gray-400">
-                          <span>Overtime:</span>
-                          <span className="text-orange-600 dark:text-orange-400">
-                            +{" "}
-                            {overtimeRequests
-                              .filter(
-                                (req) =>
-                                  parseFloat(req.overtime_amount || 0) > 0,
-                              )
-                              .map(
-                                (req) =>
-                                  `${req.currency || "INR"} ${(parseFloat(req.overtime_amount) || 0).toFixed(2)}`,
-                              )
-                              .join(" + ")}
-                          </span>
-                        </div>
-                        <div className="flex justify-between items-center text-gray-600 dark:text-gray-400">
-                          <span>Total Deductions:</span>
-                          <span className="text-red-500">
-                            -{" "}
-                            {deductions
-                              .filter((d) => parseFloat(d.amount || 0) > 0)
-                              .map(
-                                (d) =>
-                                  `${d.currency} ${(parseFloat(d.amount) || 0).toFixed(2)}`,
-                              )
-                              .join(" + ")}
-                          </span>
-                        </div>
-                        <div className="border-t border-green-200 dark:border-green-700 mt-1 pt-1 flex justify-between items-center font-semibold">
-                          <span className="text-gray-700 dark:text-gray-300">
-                            Net Pay :
-                          </span>
-                          <span className="text-green-600 dark:text-green-400">
-                            {(() => {
-                              // Calculate net pay per currency (Gross + Overtime - Deductions)
-                              const netPayByCurrency = {};
+                      {(() => {
+                        // Get saved data from Redux
+                        const step2Data = stepData[2] || {};
+                        const locationBreakdown =
+                          step2Data.location_breakdown || [];
 
-                              // Add gross amounts by currency
-                              countries.forEach((c) => {
-                                const subtotal = c.subtotal || 0;
-                                if (subtotal > 0) {
-                                  netPayByCurrency[c.currency] =
-                                    (netPayByCurrency[c.currency] || 0) +
-                                    subtotal;
-                                }
-                              });
+                        const step3Data = stepData[3] || {};
+                        const overtimeDetails =
+                          step3Data.overtime_details || [];
 
-                              // Add overtime by currency
-                              overtimeRequests.forEach((req) => {
-                                const amount =
-                                  parseFloat(req.overtime_amount) || 0;
-                                if (amount > 0) {
-                                  const currency = req.currency || "INR";
-                                  netPayByCurrency[currency] =
-                                    (netPayByCurrency[currency] || 0) + amount;
-                                }
-                              });
+                        const step4Data = stepData[4] || {};
+                        const deductionsList = step4Data.deductions || [];
 
-                              // Subtract deductions by currency
-                              deductions.forEach((d) => {
-                                const amount = parseFloat(d.amount) || 0;
-                                if (amount > 0) {
-                                  netPayByCurrency[d.currency] =
-                                    (netPayByCurrency[d.currency] || 0) -
-                                    amount;
-                                }
-                              });
+                        // Calculate totals by currency
+                        const netPayByCurrency = {};
 
-                              return Object.entries(netPayByCurrency)
-                                .filter(([_, amount]) => amount !== 0)
-                                .map(
-                                  ([currency, amount]) =>
-                                    `${currency} ${amount.toFixed(2)}`,
-                                )
-                                .join(" + ");
-                            })()}
-                          </span>
-                        </div>
-                        <div className="text-[10px] text-gray-400 mt-1">
-                          Net pay calculated per currency (Gross + Overtime -
-                          Deductions)
-                        </div>
-                      </div>
+                        // Add gross amounts by currency from step 2
+                        locationBreakdown.forEach((loc) => {
+                          const subtotal = loc.subtotal || 0;
+                          const currency =
+                            loc.currency?.code ||
+                            loc.package?.currency ||
+                            "INR";
+                          if (subtotal > 0) {
+                            netPayByCurrency[currency] =
+                              (netPayByCurrency[currency] || 0) + subtotal;
+                          }
+                        });
+
+                        // Add overtime by currency from step 3
+                        overtimeDetails.forEach((item) => {
+                          const amount = parseFloat(item.amount) || 0;
+                          const currency = item.currency || "INR";
+                          if (amount > 0) {
+                            netPayByCurrency[currency] =
+                              (netPayByCurrency[currency] || 0) + amount;
+                          }
+                        });
+
+                        // Subtract deductions by currency from step 4
+                        deductionsList.forEach((item) => {
+                          const amount = parseFloat(item.amount) || 0;
+                          const currency = item.currency || "INR";
+                          if (amount > 0) {
+                            netPayByCurrency[currency] =
+                              (netPayByCurrency[currency] || 0) - amount;
+                          }
+                        });
+
+                        // Format display
+                        const grossDisplay = locationBreakdown
+                          .filter((loc) => (loc.subtotal || 0) > 0)
+                          .map(
+                            (loc) =>
+                              `${loc.currency?.code || loc.package?.currency || "INR"} ${(loc.subtotal || 0).toFixed(2)}`,
+                          )
+                          .join(" + ");
+
+                        const overtimeDisplay = overtimeDetails
+                          .filter((item) => parseFloat(item.amount) > 0)
+                          .map(
+                            (item) =>
+                              `${item.currency} ${parseFloat(item.amount).toFixed(2)}`,
+                          )
+                          .join(" + ");
+
+                        const deductionsDisplay = deductionsList
+                          .filter((item) => parseFloat(item.amount) > 0)
+                          .map(
+                            (item) =>
+                              `${item.currency} ${parseFloat(item.amount).toFixed(2)}`,
+                          )
+                          .join(" + ");
+
+                        const netPayDisplay = Object.entries(netPayByCurrency)
+                          .filter(([_, amount]) => amount !== 0)
+                          .map(
+                            ([currency, amount]) =>
+                              `${currency} ${amount.toFixed(2)}`,
+                          )
+                          .join(" + ");
+
+                        return (
+                          <div className="mb-3 text-sm">
+                            <div className="flex justify-between items-center text-gray-600 dark:text-gray-400">
+                              <span>Gross Salary:</span>
+                              <span>{grossDisplay || "0"}</span>
+                            </div>
+                            {overtimeDisplay && (
+                              <div className="flex justify-between items-center text-gray-600 dark:text-gray-400">
+                                <span>Overtime:</span>
+                                <span className="text-orange-600 dark:text-orange-400">
+                                  + {overtimeDisplay}
+                                </span>
+                              </div>
+                            )}
+                            {deductionsDisplay && (
+                              <div className="flex justify-between items-center text-gray-600 dark:text-gray-400">
+                                <span>Total Deductions:</span>
+                                <span className="text-red-500">
+                                  - {deductionsDisplay}
+                                </span>
+                              </div>
+                            )}
+                            <div className="border-t border-green-200 dark:border-green-700 mt-1 pt-1 flex justify-between items-center font-semibold">
+                              <span className="text-gray-700 dark:text-gray-300">
+                                Net Pay :
+                              </span>
+                              <span className="text-green-600 dark:text-green-400">
+                                {netPayDisplay || "0"}
+                              </span>
+                            </div>
+                            <div className="text-[10px] text-gray-400 mt-1">
+                              Net pay calculated per currency (Gross + Overtime
+                              - Deductions)
+                            </div>
+                          </div>
+                        );
+                      })()}
                     </div>
                   </div>
                 )}
 
                 {isConverted && conversionDetails.gross_salary && (
-                  <div className="grid grid-cols-1 md:grid-cols-2 gap-4 pt-4 border-t border-gray-200 dark:border-gray-700">
-                    {/* Gross Salary - Show mixed currency breakdown */}
-                    <div className="p-4 rounded-xl bg-blue-50 dark:bg-blue-900/20 border border-blue-200 dark:border-blue-800">
-                      <div className="text-xs text-gray-500 dark:text-gray-400 font-medium mb-2">
-                        Gross Salary
-                      </div>
+  <div className="grid grid-cols-1 md:grid-cols-2 gap-4 pt-4 border-t border-gray-200 dark:border-gray-700">
+    {/* Gross Salary - Show mixed currency breakdown */}
+    <div className="p-4 rounded-xl bg-blue-50 dark:bg-blue-900/20 border border-blue-200 dark:border-blue-800">
+      <div className="text-xs text-gray-500 dark:text-gray-400 font-medium mb-2">
+        Gross Salary
+      </div>
 
-                      {/* Original Mixed Currency Breakdown */}
-                      <div className="mb-2">
-                        <div className="text-[10px] text-gray-500 mb-1">
-                          Original:
-                        </div>
-                        {conversionDetails.gross_salary.currencyBreakdown?.map(
-                          (item, idx) => (
-                            <div
-                              key={idx}
-                              className="flex justify-between items-center text-sm"
-                            >
-                              <span className="text-gray-600 dark:text-gray-400">
-                                {item.currency}:
-                              </span>
-                              <span className="font-semibold text-gray-700 dark:text-gray-300">
-                                {item.currency} {item.amount.toFixed(2)}
-                              </span>
-                            </div>
-                          ),
-                        )}
-                      </div>
+      {/* Original Mixed Currency Breakdown - FROM SAVED STEP 2 DATA */}
+      <div className="mb-2">
+        <div className="text-[10px] text-gray-500 mb-1">
+          Original:
+        </div>
+        {(() => {
+          const step2Data = stepData[2] || {};
+          const locationBreakdown = step2Data.location_breakdown || [];
+          const hasData = locationBreakdown.some(loc => (loc.subtotal || 0) > 0);
+          
+          if (!hasData) {
+            return <div className="text-sm text-gray-400">No data available</div>;
+          }
+          
+          return locationBreakdown
+            .filter(loc => (loc.subtotal || 0) > 0)
+            .map((loc, idx) => (
+              <div key={idx} className="flex justify-between items-center text-sm">
+                <span className="text-gray-600 dark:text-gray-400">
+                  {loc.location_name || loc.name}:
+                </span>
+                <span className="font-semibold text-gray-700 dark:text-gray-300">
+                  {loc.currency?.code || loc.package?.currency || "INR"} {(loc.subtotal || 0).toFixed(2)}
+                </span>
+              </div>
+            ));
+        })()}
+        
+        {/* Show the total breakdown string */}
+        <div className="mt-1 text-xs text-gray-500">
+          {(() => {
+            const step2Data = stepData[2] || {};
+            const locationBreakdown = step2Data.location_breakdown || [];
+            const parts = locationBreakdown
+              .filter(loc => (loc.subtotal || 0) > 0)
+              .map(loc => `${loc.currency?.code || loc.package?.currency || "INR"} ${(loc.subtotal || 0).toFixed(2)}`);
+            return parts.length > 0 ? parts.join(" + ") : "0";
+          })()}
+        </div>
+      </div>
 
-                      {/* Conversion Display */}
-                      <div className="flex justify-between items-center gap-2 bg-white/50 dark:bg-gray-800/50 p-2 rounded-lg">
-                        <div className="flex-1">
-                          <div className="text-[10px] text-gray-500">
-                            Original
-                          </div>
-                          <div className="text-xs text-gray-600 dark:text-gray-400">
-                            {conversionDetails.gross_salary.breakdown}
-                          </div>
-                        </div>
-                        <div className="text-center px-1">
-                          <div className="text-[9px] text-gray-400">
-                            Converted
-                          </div>
-                          <i className="fas fa-arrow-right text-blue-400 my-1"></i>
-                        </div>
-                        <div className="text-right flex-1">
-                          <div className="text-[10px] text-blue-500">
-                            Converted
-                          </div>
-                          <div className="text-base font-bold text-blue-600 dark:text-blue-400">
-                            {conversionDetails.gross_salary.toCurrency}{" "}
-                            {conversionDetails.gross_salary.convertedAmount.toFixed(
-                              2,
-                            )}
-                          </div>
-                        </div>
-                      </div>
-                    </div>
+      {/* Conversion Display */}
+      <div className="flex justify-between items-center gap-2 bg-white/50 dark:bg-gray-800/50 p-2 rounded-lg">
+        <div className="flex-1">
+          <div className="text-[10px] text-gray-500">
+            Original
+          </div>
+          <div className="text-xs text-gray-600 dark:text-gray-400">
+            {(() => {
+              const step2Data = stepData[2] || {};
+              const locationBreakdown = step2Data.location_breakdown || [];
+              return locationBreakdown
+                .filter(loc => (loc.subtotal || 0) > 0)
+                .map(loc => `${loc.currency?.code || loc.package?.currency || "INR"} ${(loc.subtotal || 0).toFixed(2)}`)
+                .join(" + ") || "0";
+            })()}
+          </div>
+        </div>
+        <div className="text-center px-1">
+          <i className="fas fa-arrow-right text-blue-400 my-1"></i>
+        </div>
+        <div className="text-right flex-1">
+          <div className="text-[10px] text-blue-500">
+            Converted
+          </div>
+          <div className="text-base font-bold text-blue-600 dark:text-blue-400">
+            {conversionDetails.gross_salary.toCurrency} {conversionDetails.gross_salary.convertedAmount.toFixed(2)}
+          </div>
+        </div>
+      </div>
+    </div>
 
-                    {/* Overtime Amount - Show mixed currency breakdown */}
-                    <div className="p-4 rounded-xl bg-orange-50 dark:bg-orange-900/20 border border-orange-200 dark:border-orange-800">
-                      <div className="text-xs text-gray-500 dark:text-gray-400 font-medium mb-2">
-                        Overtime Amount
-                      </div>
+    {/* Overtime Amount - FROM SAVED STEP 3 DATA */}
+    <div className="p-4 rounded-xl bg-orange-50 dark:bg-orange-900/20 border border-orange-200 dark:border-orange-800">
+      <div className="text-xs text-gray-500 dark:text-gray-400 font-medium mb-2">
+        Overtime Amount
+      </div>
 
-                      {/* Original Mixed Currency Breakdown */}
-                      <div className="mb-2">
-                        <div className="text-[10px] text-gray-500 mb-1">
-                          Original :
-                        </div>
-                        {conversionDetails.overtime_amount.currencyBreakdown?.map(
-                          (item, idx) => (
-                            <div
-                              key={idx}
-                              className="flex justify-between items-center text-sm"
-                            >
-                              <span className="text-gray-600 dark:text-gray-400">
-                                {item.currency}:
-                              </span>
-                              <span className="font-semibold text-gray-700 dark:text-gray-300">
-                                {item.currency} {item.amount.toFixed(2)}
-                              </span>
-                            </div>
-                          ),
-                        )}
-                        {(!conversionDetails.overtime_amount
-                          .currencyBreakdown ||
-                          conversionDetails.overtime_amount.currencyBreakdown
-                            .length === 0) && (
-                          <div className="text-sm text-gray-400">
-                            No overtime entries
-                          </div>
-                        )}
-                      </div>
+      <div className="mb-2">
+        <div className="text-[10px] text-gray-500 mb-1">
+          Original:
+        </div>
+        {(() => {
+          const step3Data = stepData[3] || {};
+          const overtimeDetails = step3Data.overtime_details || [];
+          const hasData = overtimeDetails.some(item => parseFloat(item.amount) > 0);
+          
+          if (!hasData) {
+            return <div className="text-sm text-gray-400">No overtime entries</div>;
+          }
+          
+          return overtimeDetails
+            .filter(item => parseFloat(item.amount) > 0)
+            .map((item, idx) => (
+              <div key={idx} className="flex justify-between items-center text-sm">
+                <span className="text-gray-600 dark:text-gray-400">
+                  {item.date || `Entry ${idx + 1}`}:
+                </span>
+                <span className="font-semibold text-gray-700 dark:text-gray-300">
+                  {item.currency || "INR"} {parseFloat(item.amount).toFixed(2)}
+                </span>
+              </div>
+            ));
+        })()}
+      </div>
 
-                      {/* Conversion Display */}
-                      {conversionDetails.overtime_amount.currencyBreakdown
-                        ?.length > 0 && (
-                        <div className="flex justify-between items-center gap-2 bg-white/50 dark:bg-gray-800/50 p-2 rounded-lg">
-                          <div className="flex-1">
-                            <div className="text-[10px] text-gray-500">
-                              Original{" "}
-                            </div>
-                            <div className="text-xs text-gray-600 dark:text-gray-400">
-                              {conversionDetails.overtime_amount.breakdown}
-                            </div>
-                          </div>
-                          <div className="text-center px-1">
-                            <i className="fas fa-arrow-right text-orange-400 my-1"></i>
-                          </div>
-                          <div className="text-right flex-1">
-                            <div className="text-[10px] text-orange-500">
-                              Converted
-                            </div>
-                            <div className="text-base font-bold text-orange-600 dark:text-orange-400">
-                              {conversionDetails.overtime_amount.toCurrency}{" "}
-                              {conversionDetails.overtime_amount.convertedAmount.toFixed(
-                                2,
-                              )}
-                            </div>
-                          </div>
-                        </div>
-                      )}
-                    </div>
+      {conversionDetails.overtime_amount.currencyBreakdown?.length > 0 && (
+        <div className="flex justify-between items-center gap-2 bg-white/50 dark:bg-gray-800/50 p-2 rounded-lg">
+          <div className="flex-1">
+            <div className="text-[10px] text-gray-500">
+              Original
+            </div>
+            <div className="text-xs text-gray-600 dark:text-gray-400">
+              {conversionDetails.overtime_amount.breakdown || "0"}
+            </div>
+          </div>
+          <div className="text-center px-1">
+            <i className="fas fa-arrow-right text-orange-400 my-1"></i>
+          </div>
+          <div className="text-right flex-1">
+            <div className="text-[10px] text-orange-500">
+              Converted
+            </div>
+            <div className="text-base font-bold text-orange-600 dark:text-orange-400">
+              {conversionDetails.overtime_amount.toCurrency} {conversionDetails.overtime_amount.convertedAmount.toFixed(2)}
+            </div>
+          </div>
+        </div>
+      )}
+    </div>
 
-                    {/* Deductions - Show mixed currency breakdown */}
-                    <div className="p-4 rounded-xl bg-red-50 dark:bg-red-900/20 border border-red-200 dark:border-red-800">
-                      <div className="text-xs text-gray-500 dark:text-gray-400 font-medium mb-2">
-                        Deductions
-                      </div>
+    {/* Deductions - FROM SAVED STEP 4 DATA */}
+    <div className="p-4 rounded-xl bg-red-50 dark:bg-red-900/20 border border-red-200 dark:border-red-800">
+      <div className="text-xs text-gray-500 dark:text-gray-400 font-medium mb-2">
+        Deductions
+      </div>
 
-                      {/* Original Mixed Currency Breakdown */}
-                      <div className="mb-2">
-                        <div className="text-[10px] text-gray-500 mb-1">
-                          Original :
-                        </div>
-                        {conversionDetails.deductions.currencyBreakdown?.map(
-                          (item, idx) => (
-                            <div
-                              key={idx}
-                              className="flex justify-between items-center text-sm"
-                            >
-                              <span className="text-gray-600 dark:text-gray-400">
-                                {item.currency}:
-                              </span>
-                              <span className="font-semibold text-gray-700 dark:text-gray-300">
-                                {item.currency} {item.amount.toFixed(2)}
-                              </span>
-                            </div>
-                          ),
-                        )}
-                        {(!conversionDetails.deductions.currencyBreakdown ||
-                          conversionDetails.deductions.currencyBreakdown
-                            .length === 0) && (
-                          <div className="text-sm text-gray-400">
-                            No deductions
-                          </div>
-                        )}
-                      </div>
+      <div className="mb-2">
+        <div className="text-[10px] text-gray-500 mb-1">
+          Original:
+        </div>
+        {(() => {
+          const step4Data = stepData[4] || {};
+          const deductionsList = step4Data.deductions || [];
+          const hasData = deductionsList.some(item => parseFloat(item.amount) > 0);
+          
+          if (!hasData) {
+            return <div className="text-sm text-gray-400">No deductions</div>;
+          }
+          
+          return deductionsList
+            .filter(item => parseFloat(item.amount) > 0)
+            .map((item, idx) => (
+              <div key={idx} className="flex justify-between items-center text-sm">
+                <span className="text-gray-600 dark:text-gray-400">
+                  {item.type || `Deduction ${idx + 1}`}:
+                </span>
+                <span className="font-semibold text-gray-700 dark:text-gray-300">
+                  {item.currency || "INR"} {parseFloat(item.amount).toFixed(2)}
+                </span>
+              </div>
+            ));
+        })()}
+      </div>
 
-                      {/* Conversion Display */}
-                      {conversionDetails.deductions.currencyBreakdown?.length >
-                        0 && (
-                        <div className="flex justify-between items-center gap-2 bg-white/50 dark:bg-gray-800/50 p-2 rounded-lg">
-                          <div className="flex-1">
-                            <div className="text-[10px] text-gray-500">
-                              Original{" "}
-                            </div>
-                            <div className="text-xs text-gray-600 dark:text-gray-400">
-                              {conversionDetails.deductions.breakdown}
-                            </div>
-                          </div>
-                          <div className="text-center px-1">
-                            <i className="fas fa-arrow-right text-red-400 my-1"></i>
-                          </div>
-                          <div className="text-right flex-1">
-                            <div className="text-[10px] text-red-500">
-                              Converted
-                            </div>
-                            <div className="text-base font-bold text-red-500">
-                              {conversionDetails.deductions.toCurrency}{" "}
-                              {conversionDetails.deductions.convertedAmount.toFixed(
-                                2,
-                              )}
-                            </div>
-                          </div>
-                        </div>
-                      )}
-                    </div>
+      {conversionDetails.deductions.currencyBreakdown?.length > 0 && (
+        <div className="flex justify-between items-center gap-2 bg-white/50 dark:bg-gray-800/50 p-2 rounded-lg">
+          <div className="flex-1">
+            <div className="text-[10px] text-gray-500">
+              Original
+            </div>
+            <div className="text-xs text-gray-600 dark:text-gray-400">
+              {conversionDetails.deductions.breakdown || "0"}
+            </div>
+          </div>
+          <div className="text-center px-1">
+            <i className="fas fa-arrow-right text-red-400 my-1"></i>
+          </div>
+          <div className="text-right flex-1">
+            <div className="text-[10px] text-red-500">
+              Converted
+            </div>
+            <div className="text-base font-bold text-red-500">
+              {conversionDetails.deductions.toCurrency} {conversionDetails.deductions.convertedAmount.toFixed(2)}
+            </div>
+          </div>
+        </div>
+      )}
+    </div>
 
-                    {/* Net Pay - Show mixed currency breakdown INCLUDING OVERTIME */}
-                    <div className="p-4 rounded-xl bg-green-50 dark:bg-green-900/20 border border-green-200 dark:border-green-800">
-                      <div className="text-xs text-gray-500 dark:text-gray-400 font-medium mb-2">
-                        Net Pay
-                      </div>
+    {/* Net Pay - Combine all saved data */}
+    <div className="p-4 rounded-xl bg-green-50 dark:bg-green-900/20 border border-green-200 dark:border-green-800">
+      <div className="text-xs text-gray-500 dark:text-gray-400 font-medium mb-2">
+        Net Pay
+      </div>
 
-                      {/* Original Mixed Currency Breakdown */}
-                      <div className="mb-2">
-                        <div className="text-[10px] text-gray-500 mb-1">
-                          Original (Gross + Overtime - Deductions):
-                        </div>
-                        {conversionDetails.net_pay.currencyBreakdown?.map(
-                          (item, idx) => (
-                            <div
-                              key={idx}
-                              className="flex justify-between items-center text-sm"
-                            >
-                              <span className="text-gray-600 dark:text-gray-400">
-                                {item.currency}:
-                              </span>
-                              <span className="font-semibold text-gray-700 dark:text-gray-300">
-                                {item.currency} {item.amount.toFixed(2)}
-                              </span>
-                            </div>
-                          ),
-                        )}
-                      </div>
+      <div className="mb-2">
+        <div className="text-[10px] text-gray-500 mb-1">
+          Original (Gross + Overtime - Deductions):
+        </div>
+        {(() => {
+          // Get data from stepData
+          const step2Data = stepData[2] || {};
+          const locationBreakdown = step2Data.location_breakdown || [];
+          const step3Data = stepData[3] || {};
+          const overtimeDetails = step3Data.overtime_details || [];
+          const step4Data = stepData[4] || {};
+          const deductionsList = step4Data.deductions || [];
+          
+          // Calculate by currency
+          const netByCurrency = {};
+          
+          // Add gross
+          locationBreakdown.forEach(loc => {
+            const subtotal = loc.subtotal || 0;
+            const currency = loc.currency?.code || loc.package?.currency || "INR";
+            if (subtotal > 0) {
+              netByCurrency[currency] = (netByCurrency[currency] || 0) + subtotal;
+            }
+          });
+          
+          // Add overtime
+          overtimeDetails.forEach(item => {
+            const amount = parseFloat(item.amount) || 0;
+            const currency = item.currency || "INR";
+            if (amount > 0) {
+              netByCurrency[currency] = (netByCurrency[currency] || 0) + amount;
+            }
+          });
+          
+          // Subtract deductions
+          deductionsList.forEach(item => {
+            const amount = parseFloat(item.amount) || 0;
+            const currency = item.currency || "INR";
+            if (amount > 0) {
+              netByCurrency[currency] = (netByCurrency[currency] || 0) - amount;
+            }
+          });
+          
+          const hasData = Object.keys(netByCurrency).length > 0;
+          
+          if (!hasData) {
+            return <div className="text-sm text-gray-400">No data available</div>;
+          }
+          
+          return Object.entries(netByCurrency)
+            .filter(([_, amount]) => amount !== 0)
+            .map(([currency, amount]) => (
+              <div key={currency} className="flex justify-between items-center text-sm">
+                <span className="text-gray-600 dark:text-gray-400">
+                  {currency}:
+                </span>
+                <span className="font-semibold text-gray-700 dark:text-gray-300">
+                  {currency} {amount.toFixed(2)}
+                </span>
+              </div>
+            ));
+        })()}
+      </div>
 
-                      {/* Calculation Breakdown */}
-                      <div className="mb-2 text-xs text-gray-500">
-                        <div>
-                          Gross:{" "}
-                          {conversionDetails.gross_salary?.breakdown || "0"}
-                        </div>
-                        <div>
-                          + Overtime:{" "}
-                          {conversionDetails.overtime_amount?.breakdown || "0"}
-                        </div>
-                        <div>
-                          - Deductions:{" "}
-                          {conversionDetails.deductions?.breakdown || "0"}
-                        </div>
-                      </div>
+      {/* Calculation Breakdown */}
+      <div className="mb-2 text-xs text-gray-500">
+        <div>
+          Gross: {(() => {
+            const step2Data = stepData[2] || {};
+            const locationBreakdown = step2Data.location_breakdown || [];
+            return locationBreakdown
+              .filter(loc => (loc.subtotal || 0) > 0)
+              .map(loc => `${loc.currency?.code || loc.package?.currency || "INR"} ${(loc.subtotal || 0).toFixed(2)}`)
+              .join(" + ") || "0";
+          })()}
+        </div>
+        <div>
+          + Overtime: {(() => {
+            const step3Data = stepData[3] || {};
+            const overtimeDetails = step3Data.overtime_details || [];
+            return overtimeDetails
+              .filter(item => parseFloat(item.amount) > 0)
+              .map(item => `${item.currency || "INR"} ${parseFloat(item.amount).toFixed(2)}`)
+              .join(" + ") || "0";
+          })()}
+        </div>
+        <div>
+          - Deductions: {(() => {
+            const step4Data = stepData[4] || {};
+            const deductionsList = step4Data.deductions || [];
+            return deductionsList
+              .filter(item => parseFloat(item.amount) > 0)
+              .map(item => `${item.currency || "INR"} ${parseFloat(item.amount).toFixed(2)}`)
+              .join(" + ") || "0";
+          })()}
+        </div>
+      </div>
 
-                      {/* Conversion Display */}
-                      <div className="flex justify-between items-center gap-2 bg-white/50 dark:bg-gray-800/50 p-2 rounded-lg">
-                        <div className="flex-1">
-                          <div className="text-[10px] text-gray-500">
-                            Original{" "}
-                          </div>
-                          <div className="text-xs text-gray-600 dark:text-gray-400">
-                            {conversionDetails.net_pay.breakdown}
-                          </div>
-                        </div>
-                        <div className="text-center px-1">
-                          <i className="fas fa-arrow-right text-green-400 my-1"></i>
-                        </div>
-                        <div className="text-right flex-1">
-                          <div className="text-[10px] text-green-500">
-                            Converted
-                          </div>
-                          <div className="text-base font-bold text-green-600 dark:text-green-400">
-                            {conversionDetails.net_pay.toCurrency}{" "}
-                            {conversionDetails.net_pay.convertedAmount.toFixed(
-                              2,
-                            )}
-                          </div>
-                        </div>
-                      </div>
-                    </div>
-                  </div>
-                )}
+      {/* Conversion Display */}
+      <div className="flex justify-between items-center gap-2 bg-white/50 dark:bg-gray-800/50 p-2 rounded-lg">
+        <div className="flex-1">
+          <div className="text-[10px] text-gray-500">
+            Original
+          </div>
+          <div className="text-xs text-gray-600 dark:text-gray-400">
+            {(() => {
+              const step2Data = stepData[2] || {};
+              const locationBreakdown = step2Data.location_breakdown || [];
+              const step3Data = stepData[3] || {};
+              const overtimeDetails = step3Data.overtime_details || [];
+              const step4Data = stepData[4] || {};
+              const deductionsList = step4Data.deductions || [];
+              
+              const parts = [];
+              // Gross parts
+              locationBreakdown
+                .filter(loc => (loc.subtotal || 0) > 0)
+                .forEach(loc => {
+                  parts.push(`${loc.currency?.code || loc.package?.currency || "INR"} ${(loc.subtotal || 0).toFixed(2)}`);
+                });
+              // Overtime parts
+              overtimeDetails
+                .filter(item => parseFloat(item.amount) > 0)
+                .forEach(item => {
+                  parts.push(`(${item.currency || "INR"} ${parseFloat(item.amount).toFixed(2)})`);
+                });
+              // Deductions parts (negative)
+              deductionsList
+                .filter(item => parseFloat(item.amount) > 0)
+                .forEach(item => {
+                  parts.push(`-(${item.currency || "INR"} ${parseFloat(item.amount).toFixed(2)})`);
+                });
+              
+              return parts.join(" + ") || "0";
+            })()}
+          </div>
+        </div>
+        <div className="text-center px-1">
+          <i className="fas fa-arrow-right text-green-400 my-1"></i>
+        </div>
+        <div className="text-right flex-1">
+          <div className="text-[10px] text-green-500">
+            Converted
+          </div>
+          <div className="text-base font-bold text-green-600 dark:text-green-400">
+            {conversionDetails.net_pay.toCurrency} {conversionDetails.net_pay.convertedAmount.toFixed(2)}
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>
+)}
+                
 
                 <div className="mt-4 p-4 bg-blue-50 dark:bg-blue-900/20 rounded-xl border border-blue-200 dark:border-blue-800 flex items-start gap-3">
                   <i className="fas fa-envelope text-blue-500 mt-1"></i>
@@ -3286,7 +3527,7 @@ function AddPayroll() {
                 disabled={isLoading || isSubmitting}
                 className="px-4 md:px-6 py-2 md:py-2.5 rounded-full font-semibold bg-gray-100 dark:bg-gray-700 text-gray-700 dark:text-gray-300 hover:bg-gray-200 dark:hover:bg-gray-600 transition-all flex items-center justify-center gap-2 text-sm md:text-base disabled:opacity-50 disabled:cursor-not-allowed"
               >
-                <i className="fas fa-arrow-left text-xs md:text-sm"></i>
+                <i className="fas fa-arrow-right text-xs md:text-sm"></i>
                 <span>Previous</span>
               </button>
             )}

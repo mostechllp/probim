@@ -31,11 +31,9 @@ const getStatusColor = (status) => {
 const parseDateFromString = (dateStr) => {
   if (!dateStr) return null;
   
-  // If it's already in DD/MM/YYYY format
   if (dateStr.includes('/')) {
     const parts = dateStr.split('/');
     if (parts.length === 3) {
-      // DD/MM/YYYY
       const day = parseInt(parts[0]);
       const month = parseInt(parts[1]) - 1;
       const year = parseInt(parts[2]);
@@ -43,7 +41,6 @@ const parseDateFromString = (dateStr) => {
     }
   }
   
-  // Try standard date parsing
   const date = new Date(dateStr);
   if (!isNaN(date.getTime())) return date;
   
@@ -59,6 +56,19 @@ const formatDateToDDMMYYYY = (date) => {
   const month = String(d.getMonth() + 1).padStart(2, '0');
   const year = d.getFullYear();
   return `${day}/${month}/${year}`;
+};
+
+// Helper to format date from YYYY-MM-DD to DD/MM/YYYY
+const formatDateToDisplay = (dateStr) => {
+  if (!dateStr) return '';
+  if (dateStr.includes('/')) return dateStr;
+  if (dateStr.includes('-')) {
+    const parts = dateStr.split('-');
+    if (parts.length === 3) {
+      return `${parts[2]}/${parts[1]}/${parts[0]}`;
+    }
+  }
+  return dateStr;
 };
 
 const Attendances = () => {
@@ -87,8 +97,8 @@ const Attendances = () => {
     ...new Set(
       records
         .map((record) => {
-          // Get employee name from nested structure
-          let name = record.employeeName || record.name || record.employee_name;
+          // Get employee name from record
+          let name = record.name || record.employee_name || record.employeeName;
           if (!name && record.user) {
             if (record.user.employee) {
               name = `${record.user.employee.first_name || ''} ${record.user.employee.last_name || ''}`.trim() || record.user.employee.employee_id;
@@ -98,8 +108,8 @@ const Attendances = () => {
             }
           }
           return {
-            id: record.userid || record.user_id || record.employee_id || record.id || record.user?.id,
-            name: name || `Employee #${record.userid || record.id}`,
+            id: record.employee_id || record.user_id || record.userid || record.id || record.user?.id,
+            name: name || `Employee #${record.employee_id || record.id}`,
           };
         })
         .filter((emp) => emp.id && emp.name)
@@ -108,28 +118,33 @@ const Attendances = () => {
 
   // Fetch attendance data on mount and when month changes
   useEffect(() => {
-    const year = selectedMonth.getFullYear();
-    const month = selectedMonth.getMonth() + 1;
-    
-    dispatch(fetchAttendanceRecords({
-      page: 1,
-      per_page: 1000,
-      month: month,
-      year: year,
-    }));
-    
-    // Fetch stats
-    dispatch(fetchPunchInToday());
-    dispatch(fetchPunchInYesterday());
-    dispatch(fetchPunchOutToday());
-    dispatch(fetchLateComers());
-    dispatch(fetchAbsentees());
-  }, [dispatch, selectedMonth]);
+  const year = selectedMonth.getFullYear();
+  const month = selectedMonth.getMonth() + 1;
+  
+  // Use the new combined format
+  const monthParam = `${year}-${String(month).padStart(2, '0')}`;
+  
+  dispatch(fetchAttendanceRecords({
+    page: 1,
+    per_page: 1000,
+    month: monthParam,
+    // No need for separate year parameter
+  }));
+  
+  dispatch(fetchPunchInToday());
+  dispatch(fetchPunchInYesterday());
+  dispatch(fetchPunchOutToday());
+  dispatch(fetchLateComers());
+  dispatch(fetchAbsentees());
+}, [dispatch, selectedMonth]);
 
   // Process records for calendar
   const getDayStatus = (date) => {
     const dateStr = formatDateToDDMMYYYY(date);
-    const dayRecords = records.filter(r => r.log_date === dateStr || r.date === dateStr);
+    const dayRecords = records.filter(r => {
+      const recordDate = r.date || r.log_date || r.attendance_date;
+      return recordDate === dateStr || formatDateToDDMMYYYY(recordDate) === dateStr;
+    });
     
     if (dayRecords.length === 0) {
       return { status: 'no-data', count: 0, records: [] };
@@ -137,10 +152,12 @@ const Attendances = () => {
     
     // Determine overall status for the day
     const statuses = dayRecords.map(r => {
-      // Check if punch_in exists - if yes, consider them present
-      if (r.punch_in && r.punch_in !== '--') {
-        // Check if they were late (based on punch_in time or late flag)
-        if (r.lateBy && r.lateBy > 0) return 'late';
+      const status = (r.status || r.attendance_status || '').toLowerCase();
+      if (status === 'present' || status === 'ontime' || status === 'on time') return 'present';
+      if (status === 'late') return 'late';
+      if (status === 'absent' || status === 'absentee') return 'absent';
+      // If punch_in exists, consider them present
+      if (r.punch_in && r.punch_in !== '--' && r.punch_in !== '-') {
         return 'present';
       }
       return 'absent';
@@ -192,16 +209,13 @@ const Attendances = () => {
     const dayInfo = getDayStatus(date);
     const today = isToday(date);
     
-    // Base classes
     let classes = 'transition-colors';
     
-    // Today's date - always green background with white text
     if (today) {
       classes += ' today-highlight bg-green-500 text-white hover:bg-green-600';
       return classes;
     }
     
-    // Status-based styling for other days
     if (dayInfo.status !== 'no-data') {
       classes += ' hover:bg-gray-100 dark:hover:bg-gray-700';
       if (dayInfo.status === 'present') classes += ' bg-green-50 dark:bg-green-900/20';
@@ -216,7 +230,10 @@ const Attendances = () => {
   // Handle day click
   const handleDayClick = (date) => {
     const dateStr = formatDateToDDMMYYYY(date);
-    const dayRecords = records.filter(r => r.log_date === dateStr || r.date === dateStr);
+    const dayRecords = records.filter(r => {
+      const recordDate = r.date || r.log_date || r.attendance_date;
+      return recordDate === dateStr || formatDateToDDMMYYYY(recordDate) === dateStr;
+    });
     
     if (dayRecords.length === 0) {
       showToast("No attendance records for this day", "info");
@@ -233,10 +250,9 @@ const Attendances = () => {
     const year = selectedMonth.getFullYear();
     const month = String(selectedMonth.getMonth() + 1).padStart(2, '0');
     const monthRecords = records.filter(r => {
-      const dateStr = r.log_date || r.date;
+      const dateStr = r.date || r.log_date || r.attendance_date;
       if (!dateStr) return false;
       
-      // Check if date is in DD/MM/YYYY format
       if (dateStr.includes('/')) {
         const parts = dateStr.split('/');
         if (parts.length === 3) {
@@ -246,7 +262,15 @@ const Attendances = () => {
         }
       }
       
-      // Try parsing as Date
+      if (dateStr.includes('-')) {
+        const parts = dateStr.split('-');
+        if (parts.length === 3) {
+          const recordMonth = parts[1];
+          const recordYear = parts[0];
+          return recordMonth === month && recordYear === String(year);
+        }
+      }
+      
       const date = new Date(dateStr);
       if (!isNaN(date.getTime())) {
         return date.getMonth() + 1 === parseInt(month) && date.getFullYear() === year;
@@ -263,8 +287,8 @@ const Attendances = () => {
   const filteredMonthData = employeeFilter === "all" 
     ? monthData 
     : monthData.filter(r => {
-        const empId = r.userid || r.user_id || r.employee_id || r.id || r.user?.id;
-        return empId == employeeFilter;
+        const empId = r.employee_id || r.user_id || r.userid || r.id || r.user?.id;
+        return String(empId) === String(employeeFilter);
       });
 
   // Stats calculations
@@ -293,7 +317,7 @@ const Attendances = () => {
 
   // Helper to get employee name from record
   const getEmployeeName = (record) => {
-    let name = record.employeeName || record.name || record.employee_name;
+    let name = record.name || record.employee_name || record.employeeName;
     if (!name && record.user) {
       if (record.user.employee) {
         name = `${record.user.employee.first_name || ''} ${record.user.employee.last_name || ''}`.trim() || record.user.employee.employee_id;
@@ -302,7 +326,7 @@ const Attendances = () => {
         name = record.user.username;
       }
     }
-    return name || `Employee #${record.userid || record.id}`;
+    return name || `Employee #${record.employee_id || record.user_id || record.id}`;
   };
 
   // Helper to get department from record
@@ -314,8 +338,19 @@ const Attendances = () => {
 
   // Helper to get status from record
   const getRecordStatus = (record) => {
-    if (record.punch_in && record.punch_in !== '--') {
+    // First check if status field exists
+    if (record.status) {
+      const status = record.status.toLowerCase();
+      if (status === 'present' || status === 'ontime' || status === 'on time') return 'Present';
+      if (status === 'late') return 'Late';
+      if (status === 'absent' || status === 'absentee') return 'Absent';
+    }
+    
+    // Check punch_in
+    if (record.punch_in && record.punch_in !== '--' && record.punch_in !== '-' && record.punch_in !== '') {
+      // Check if late
       if (record.lateBy && record.lateBy > 0) return 'Late';
+      if (record.status && record.status.toLowerCase() === 'late') return 'Late';
       return 'Present';
     }
     return 'Absent';
@@ -325,33 +360,24 @@ const Attendances = () => {
   const getEmployeeNamesForStats = (records, status) => {
     if (!records || records.length === 0) return [];
     
-    let filteredRecords = records;
+    let filteredRecords = records.filter(r => {
+      const recordStatus = getRecordStatus(r);
+      if (status === 'present') return recordStatus === 'Present';
+      if (status === 'late') return recordStatus === 'Late';
+      if (status === 'absent') return recordStatus === 'Absent';
+      return false;
+    });
     
-    if (status === 'present') {
-      filteredRecords = records.filter(r => {
-        const recordStatus = getRecordStatus(r);
-        return recordStatus === 'Present';
-      });
-    } else if (status === 'late') {
-      filteredRecords = records.filter(r => {
-        const recordStatus = getRecordStatus(r);
-        return recordStatus === 'Late';
-      });
-    } else if (status === 'absent') {
-      filteredRecords = records.filter(r => {
-        const recordStatus = getRecordStatus(r);
-        return recordStatus === 'Absent';
-      });
-    }
-    
-    // Get unique employee names
     const names = [...new Set(filteredRecords.map(r => getEmployeeName(r)))];
     return names;
   };
 
   // Get today's date in DD/MM/YYYY format
   const todayStr = formatDateToDDMMYYYY(new Date());
-  const todayRecords = records.filter(r => r.log_date === todayStr || r.date === todayStr);
+  const todayRecords = records.filter(r => {
+    const recordDate = r.date || r.log_date || r.attendance_date;
+    return recordDate === todayStr || formatDateToDDMMYYYY(recordDate) === todayStr;
+  });
 
   // Get employee lists for tooltips
   const presentEmployees = getEmployeeNamesForStats(todayRecords, 'present');
@@ -359,43 +385,54 @@ const Attendances = () => {
   const absentEmployees = getEmployeeNamesForStats(todayRecords, 'absent');
 
   // Tooltip component
-  const TooltipCard = ({ title, employees, color, icon }) => {
-    if (!employees || employees.length === 0) {
-      return (
-        <div className="mt-2 pt-2 border-t border-gray-200 dark:border-gray-600">
-          <p className="text-xs text-gray-400 dark:text-gray-500 italic">No {title.toLowerCase()} employees</p>
-        </div>
-      );
-    }
+  // Tooltip component with clickable "Show more"
+const TooltipCard = ({ title, employees, color, icon }) => {
+  const [showAll, setShowAll] = useState(false);
+  const displayCount = 5;
+  const hasMore = employees && employees.length > displayCount;
+  const displayEmployees = showAll ? employees : (employees || []).slice(0, displayCount);
 
+  if (!employees || employees.length === 0) {
     return (
-      <div className="mt-2 pt-2 border-t border-gray-200 dark:border-gray-600 max-h-[150px] overflow-y-auto scrollbar-thin">
-        <p className="text-xs font-semibold text-gray-600 dark:text-gray-400 mb-1">
-          <i className={`fas ${icon} mr-1`} style={{ color: color }}></i>
-          {title} ({employees.length}):
-        </p>
-        <ul className="space-y-0.5">
-          {employees.slice(0, 10).map((name, idx) => (
-            <li key={idx} className="text-xs text-gray-700 dark:text-gray-300 flex items-center gap-1">
-              <span className="w-1 h-1 rounded-full" style={{ backgroundColor: color }}></span>
-              {name}
-            </li>
-          ))}
-          {employees.length > 10 && (
-            <li className="text-xs text-gray-400 dark:text-gray-500 italic">
-              +{employees.length - 10} more...
-            </li>
-          )}
-        </ul>
+      <div className="mt-2 pt-2 border-t border-gray-200 dark:border-gray-600">
+        <p className="text-xs text-gray-400 dark:text-gray-500 italic">No {title.toLowerCase()} employees</p>
       </div>
     );
-  };
+  }
 
-  // Tooltip wrapper component with hover state
-  // Tooltip wrapper component with hover state - Tooltip positioned BELOW
-const StatCardWithTooltip = ({ children, present, late, absent }) => {
+  return (
+    <div className="mt-2 pt-2 border-t border-gray-200 dark:border-gray-600 max-h-[300px] overflow-y-auto scrollbar-thin">
+      <p className="text-xs font-semibold text-gray-600 dark:text-gray-400 mb-1 flex items-center gap-1">
+        <i className={`fas ${icon} mr-1`} style={{ color: color }}></i>
+        {title} ({employees.length}):
+      </p>
+      <ul className="space-y-0.5">
+        {displayEmployees.map((name, idx) => (
+          <li key={idx} className="text-xs text-gray-700 dark:text-gray-300 flex items-center gap-1">
+            <span className="w-1 h-1 rounded-full" style={{ backgroundColor: color }}></span>
+            {name}
+          </li>
+        ))}
+        {hasMore && (
+          <li className="mt-1">
+            <button
+              onClick={() => setShowAll(!showAll)}
+              className="text-xs text-blue-500 hover:text-blue-700 dark:text-blue-400 dark:hover:text-blue-300 font-medium flex items-center gap-1 transition-colors"
+            >
+              <i className={`fas ${showAll ? 'fa-chevron-up' : 'fa-chevron-down'} text-[10px]`}></i>
+              {showAll ? 'Show less' : `Show ${employees.length - displayCount} more...`}
+            </button>
+          </li>
+        )}
+      </ul>
+    </div>
+  );
+};
+  // ─── INDIVIDUAL STAT CARDS WITH THEIR OWN TOOLTIPS ──────────────────────
+
+// 1. Punched In Today - Shows Present employees
+const PunchedInCard = ({ count, employees }) => {
   const [showTooltip, setShowTooltip] = useState(false);
-  const tooltipRef = useRef(null);
   let timeoutId = useRef(null);
 
   const handleMouseEnter = () => {
@@ -423,41 +460,209 @@ const StatCardWithTooltip = ({ children, present, late, absent }) => {
       onMouseEnter={handleMouseEnter}
       onMouseLeave={handleMouseLeave}
     >
-      {children}
+      <div className="bg-white dark:bg-gray-800 rounded-xl p-3 md:p-4 border border-gray-200 dark:border-gray-700 transition-all hover:-translate-y-0.5 hover:shadow-soft cursor-pointer">
+        <div className="w-8 h-8 md:w-10 md:h-10 bg-blue-100 dark:bg-blue-900/30 rounded-xl flex items-center justify-center mb-1 md:mb-2">
+          <i className="fas fa-fingerprint text-blue-600 dark:text-blue-400 text-sm md:text-lg"></i>
+        </div>
+        <div className="text-xl md:text-2xl font-bold text-blue-600 dark:text-blue-400">{count}</div>
+        <div className="text-[10px] md:text-xs text-gray-500 dark:text-gray-400 font-medium">Punched In Today</div>
+        <div className="text-[8px] text-gray-400 dark:text-gray-500 mt-0.5">
+          <i className="fas fa-info-circle mr-0.5"></i> Hover for details
+        </div>
+      </div>
       
       {showTooltip && (
-        <div 
-          ref={tooltipRef}
-          className="absolute top-full left-1/2 transform -translate-x-1/2 mt-2 z-50 w-64 bg-white dark:bg-gray-800 rounded-xl shadow-2xl border border-gray-200 dark:border-gray-700 p-3"
-        >
-          {/* Triangle arrow pointing UP (since tooltip is below) */}
+        <div className="absolute top-full left-1/2 transform -translate-x-1/2 mt-2 z-50 w-64 bg-white dark:bg-gray-800 rounded-xl shadow-2xl border border-gray-200 dark:border-gray-700 p-3">
           <div className="absolute -top-1.5 left-1/2 transform -translate-x-1/2 rotate-45 w-3 h-3 bg-white dark:bg-gray-800 border-t border-l border-gray-200 dark:border-gray-700"></div>
-          
-          <div className="space-y-2 max-h-[300px] overflow-y-auto scrollbar-thin">
-            <TooltipCard 
-              title="Present" 
-              employees={present} 
-              color="#22c55e" 
-              icon="fa-check-circle" 
-            />
-            <TooltipCard 
-              title="Late" 
-              employees={late} 
-              color="#eab308" 
-              icon="fa-clock" 
-            />
-            <TooltipCard 
-              title="Absent" 
-              employees={absent} 
-              color="#ef4444" 
-              icon="fa-user-slash" 
-            />
-          </div>
+          <TooltipCard 
+            title="Present" 
+            employees={employees} 
+            color="#22c55e" 
+            icon="fa-check-circle" 
+          />
         </div>
       )}
     </div>
   );
 };
+
+// 2. Late Today - Shows Late employees
+const LateCard = ({ count, employees }) => {
+  const [showTooltip, setShowTooltip] = useState(false);
+  let timeoutId = useRef(null);
+
+  const handleMouseEnter = () => {
+    clearTimeout(timeoutId.current);
+    setShowTooltip(true);
+  };
+
+  const handleMouseLeave = () => {
+    timeoutId.current = setTimeout(() => {
+      setShowTooltip(false);
+    }, 300);
+  };
+
+  useEffect(() => {
+    return () => {
+      if (timeoutId.current) {
+        clearTimeout(timeoutId.current);
+      }
+    };
+  }, []);
+
+  return (
+    <div 
+      className="relative"
+      onMouseEnter={handleMouseEnter}
+      onMouseLeave={handleMouseLeave}
+    >
+      <div className="bg-white dark:bg-gray-800 rounded-xl p-3 md:p-4 border border-gray-200 dark:border-gray-700 transition-all hover:-translate-y-0.5 hover:shadow-soft cursor-pointer">
+        <div className="w-8 h-8 md:w-10 md:h-10 bg-amber-100 dark:bg-amber-900/30 rounded-xl flex items-center justify-center mb-1 md:mb-2">
+          <i className="fas fa-clock text-amber-600 dark:text-amber-400 text-sm md:text-lg"></i>
+        </div>
+        <div className="text-xl md:text-2xl font-bold text-amber-600 dark:text-amber-400">{count}</div>
+        <div className="text-[10px] md:text-xs text-gray-500 dark:text-gray-400 font-medium">Late Today</div>
+        <div className="text-[8px] text-gray-400 dark:text-gray-500 mt-0.5">
+          <i className="fas fa-info-circle mr-0.5"></i> Hover for details
+        </div>
+      </div>
+      
+      {showTooltip && (
+        <div className="absolute top-full left-1/2 transform -translate-x-1/2 mt-2 z-50 w-64 bg-white dark:bg-gray-800 rounded-xl shadow-2xl border border-gray-200 dark:border-gray-700 p-3">
+          <div className="absolute -top-1.5 left-1/2 transform -translate-x-1/2 rotate-45 w-3 h-3 bg-white dark:bg-gray-800 border-t border-l border-gray-200 dark:border-gray-700"></div>
+          <TooltipCard 
+            title="Late" 
+            employees={employees} 
+            color="#eab308" 
+            icon="fa-clock" 
+          />
+        </div>
+      )}
+    </div>
+  );
+};
+
+// 3. Absent Today - Shows Absent employees
+const AbsentCard = ({ count, employees }) => {
+  const [showTooltip, setShowTooltip] = useState(false);
+  let timeoutId = useRef(null);
+
+  const handleMouseEnter = () => {
+    clearTimeout(timeoutId.current);
+    setShowTooltip(true);
+  };
+
+  const handleMouseLeave = () => {
+    timeoutId.current = setTimeout(() => {
+      setShowTooltip(false);
+    }, 300);
+  };
+
+  useEffect(() => {
+    return () => {
+      if (timeoutId.current) {
+        clearTimeout(timeoutId.current);
+      }
+    };
+  }, []);
+
+  return (
+    <div 
+      className="relative"
+      onMouseEnter={handleMouseEnter}
+      onMouseLeave={handleMouseLeave}
+    >
+      <div className="bg-white dark:bg-gray-800 rounded-xl p-3 md:p-4 border border-gray-200 dark:border-gray-700 transition-all hover:-translate-y-0.5 hover:shadow-soft cursor-pointer">
+        <div className="w-8 h-8 md:w-10 md:h-10 bg-red-100 dark:bg-red-900/30 rounded-xl flex items-center justify-center mb-1 md:mb-2">
+          <i className="fas fa-user-slash text-red-600 dark:text-red-400 text-sm md:text-lg"></i>
+        </div>
+        <div className="text-xl md:text-2xl font-bold text-red-600 dark:text-red-400">{count}</div>
+        <div className="text-[10px] md:text-xs text-gray-500 dark:text-gray-400 font-medium">Absent Today</div>
+        <div className="text-[8px] text-gray-400 dark:text-gray-500 mt-0.5">
+          <i className="fas fa-info-circle mr-0.5"></i> Hover for details
+        </div>
+      </div>
+      
+      {showTooltip && (
+        <div className="absolute top-full left-1/2 transform -translate-x-1/2 mt-2 z-50 w-64 bg-white dark:bg-gray-800 rounded-xl shadow-2xl border border-gray-200 dark:border-gray-700 p-3">
+          <div className="absolute -top-1.5 left-1/2 transform -translate-x-1/2 rotate-45 w-3 h-3 bg-white dark:bg-gray-800 border-t border-l border-gray-200 dark:border-gray-700"></div>
+          <TooltipCard 
+            title="Absent" 
+            employees={employees} 
+            color="#ef4444" 
+            icon="fa-user-slash" 
+          />
+        </div>
+      )}
+    </div>
+  );
+};
+
+  // Tooltip wrapper component with hover state
+  const StatCardWithTooltip = ({ children, present, late, absent }) => {
+    const [showTooltip, setShowTooltip] = useState(false);
+    const tooltipRef = useRef(null);
+    let timeoutId = useRef(null);
+
+    const handleMouseEnter = () => {
+      clearTimeout(timeoutId.current);
+      setShowTooltip(true);
+    };
+
+    const handleMouseLeave = () => {
+      timeoutId.current = setTimeout(() => {
+        setShowTooltip(false);
+      }, 300);
+    };
+
+    useEffect(() => {
+      return () => {
+        if (timeoutId.current) {
+          clearTimeout(timeoutId.current);
+        }
+      };
+    }, []);
+
+    return (
+      <div 
+        className="relative"
+        onMouseEnter={handleMouseEnter}
+        onMouseLeave={handleMouseLeave}
+      >
+        {children}
+        
+        {showTooltip && (
+          <div 
+            ref={tooltipRef}
+            className="absolute top-full left-1/2 transform -translate-x-1/2 mt-2 z-50 w-64 bg-white dark:bg-gray-800 rounded-xl shadow-2xl border border-gray-200 dark:border-gray-700 p-3"
+          >
+            <div className="absolute -top-1.5 left-1/2 transform -translate-x-1/2 rotate-45 w-3 h-3 bg-white dark:bg-gray-800 border-t border-l border-gray-200 dark:border-gray-700"></div>
+            
+            <div className="space-y-2 max-h-[300px] overflow-y-auto scrollbar-thin">
+              <TooltipCard 
+                title="Present" 
+                employees={present} 
+                color="#22c55e" 
+                icon="fa-check-circle" 
+              />
+              <TooltipCard 
+                title="Late" 
+                employees={late} 
+                color="#eab308" 
+                icon="fa-clock" 
+              />
+              <TooltipCard 
+                title="Absent" 
+                employees={absent} 
+                color="#ef4444" 
+                icon="fa-user-slash" 
+              />
+            </div>
+          </div>
+        )}
+      </div>
+    );
+  };
 
   // Month navigation
   const goToPrevMonth = () => {
@@ -475,7 +680,6 @@ const StatCardWithTooltip = ({ children, present, late, absent }) => {
   const goToToday = () => {
     const today = new Date();
     setSelectedMonth(today);
-    // Force a re-render to apply today highlight
     setSelectedDate(today);
   };
 
@@ -499,82 +703,36 @@ const StatCardWithTooltip = ({ children, present, late, absent }) => {
         </div>
       </div>
 
-      {/* Stats Cards with Tooltips */}
-      <div className="stats-grid grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-5 gap-3 md:gap-4 mb-6">
-        {/* Total Employees */}
-        <div className="bg-white dark:bg-gray-800 rounded-xl p-3 md:p-4 border border-gray-200 dark:border-gray-700 transition-all hover:-translate-y-0.5 hover:shadow-soft">
-          <div className="w-8 h-8 md:w-10 md:h-10 bg-green-100 dark:bg-green-900/30 rounded-xl flex items-center justify-center mb-1 md:mb-2">
-            <i className="fas fa-users text-green-600 dark:text-green-400 text-sm md:text-lg"></i>
-          </div>
-          <div className="text-xl md:text-2xl font-bold text-green-600 dark:text-green-400">{totalEmployees}</div>
-          <div className="text-[10px] md:text-xs text-gray-500 dark:text-gray-400 font-medium">Total Employees</div>
-        </div>
+      {/* Stats Cards with Individual Tooltips */}
+<div className="stats-grid grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-5 gap-3 md:gap-4 mb-6">
+  {/* Total Employees */}
+  <div className="bg-white dark:bg-gray-800 rounded-xl p-3 md:p-4 border border-gray-200 dark:border-gray-700 transition-all hover:-translate-y-0.5 hover:shadow-soft">
+    <div className="w-8 h-8 md:w-10 md:h-10 bg-green-100 dark:bg-green-900/30 rounded-xl flex items-center justify-center mb-1 md:mb-2">
+      <i className="fas fa-users text-green-600 dark:text-green-400 text-sm md:text-lg"></i>
+    </div>
+    <div className="text-xl md:text-2xl font-bold text-green-600 dark:text-green-400">{totalEmployees}</div>
+    <div className="text-[10px] md:text-xs text-gray-500 dark:text-gray-400 font-medium">Total Employees</div>
+  </div>
 
-        {/* Punched In Today - With Tooltip */}
-        <StatCardWithTooltip 
-          present={presentEmployees} 
-          late={lateEmployees} 
-          absent={absentEmployees}
-        >
-          <div className="bg-white dark:bg-gray-800 rounded-xl p-3 md:p-4 border border-gray-200 dark:border-gray-700 transition-all hover:-translate-y-0.5 hover:shadow-soft cursor-pointer">
-            <div className="w-8 h-8 md:w-10 md:h-10 bg-blue-100 dark:bg-blue-900/30 rounded-xl flex items-center justify-center mb-1 md:mb-2">
-              <i className="fas fa-fingerprint text-blue-600 dark:text-blue-400 text-sm md:text-lg"></i>
-            </div>
-            <div className="text-xl md:text-2xl font-bold text-blue-600 dark:text-blue-400">{punchedInCount}</div>
-            <div className="text-[10px] md:text-xs text-gray-500 dark:text-gray-400 font-medium">Punched In Today</div>
-            <div className="text-[8px] text-gray-400 dark:text-gray-500 mt-0.5">
-              <i className="fas fa-info-circle mr-0.5"></i> Hover for details
-            </div>
-          </div>
-        </StatCardWithTooltip>
+  {/* Punched In Today - Shows ONLY Present employees */}
+  <PunchedInCard count={punchedInCount} employees={presentEmployees} />
 
-        {/* Late Today - With Tooltip */}
-        <StatCardWithTooltip 
-          present={presentEmployees} 
-          late={lateEmployees} 
-          absent={absentEmployees}
-        >
-          <div className="bg-white dark:bg-gray-800 rounded-xl p-3 md:p-4 border border-gray-200 dark:border-gray-700 transition-all hover:-translate-y-0.5 hover:shadow-soft cursor-pointer">
-            <div className="w-8 h-8 md:w-10 md:h-10 bg-amber-100 dark:bg-amber-900/30 rounded-xl flex items-center justify-center mb-1 md:mb-2">
-              <i className="fas fa-clock text-amber-600 dark:text-amber-400 text-sm md:text-lg"></i>
-            </div>
-            <div className="text-xl md:text-2xl font-bold text-amber-600 dark:text-amber-400">{lateTodayCount}</div>
-            <div className="text-[10px] md:text-xs text-gray-500 dark:text-gray-400 font-medium">Late Today</div>
-            <div className="text-[8px] text-gray-400 dark:text-gray-500 mt-0.5">
-              <i className="fas fa-info-circle mr-0.5"></i> Hover for details
-            </div>
-          </div>
-        </StatCardWithTooltip>
+  {/* Late Today - Shows ONLY Late employees */}
+  <LateCard count={lateTodayCount} employees={lateEmployees} />
 
-        {/* Absent Today - With Tooltip */}
-        <StatCardWithTooltip 
-          present={presentEmployees} 
-          late={lateEmployees} 
-          absent={absentEmployees}
-        >
-          <div className="bg-white dark:bg-gray-800 rounded-xl p-3 md:p-4 border border-gray-200 dark:border-gray-700 transition-all hover:-translate-y-0.5 hover:shadow-soft cursor-pointer">
-            <div className="w-8 h-8 md:w-10 md:h-10 bg-red-100 dark:bg-red-900/30 rounded-xl flex items-center justify-center mb-1 md:mb-2">
-              <i className="fas fa-user-slash text-red-600 dark:text-red-400 text-sm md:text-lg"></i>
-            </div>
-            <div className="text-xl md:text-2xl font-bold text-red-600 dark:text-red-400">{absentTodayCount}</div>
-            <div className="text-[10px] md:text-xs text-gray-500 dark:text-gray-400 font-medium">Absent Today</div>
-            <div className="text-[8px] text-gray-400 dark:text-gray-500 mt-0.5">
-              <i className="fas fa-info-circle mr-0.5"></i> Hover for details
-            </div>
-          </div>
-        </StatCardWithTooltip>
+  {/* Absent Today - Shows ONLY Absent employees */}
+  <AbsentCard count={absentTodayCount} employees={absentEmployees} />
 
-        {/* Punch Out Today */}
-        <div className="bg-white dark:bg-gray-800 rounded-xl p-3 md:p-4 border border-gray-200 dark:border-gray-700 transition-all hover:-translate-y-0.5 hover:shadow-soft">
-          <div className="w-8 h-8 md:w-10 md:h-10 bg-purple-100 dark:bg-purple-900/30 rounded-xl flex items-center justify-center mb-1 md:mb-2">
-            <i className="fas fa-sign-out-alt text-purple-600 dark:text-purple-400 text-sm md:text-lg"></i>
-          </div>
-          <div className="text-xl md:text-2xl font-bold text-purple-600 dark:text-purple-400">{punchOutCount}</div>
-          <div className="text-[10px] md:text-xs text-gray-500 dark:text-gray-400 font-medium">Punch Out Today</div>
-        </div>
-      </div>
+  {/* Punch Out Today */}
+  <div className="bg-white dark:bg-gray-800 rounded-xl p-3 md:p-4 border border-gray-200 dark:border-gray-700 transition-all hover:-translate-y-0.5 hover:shadow-soft">
+    <div className="w-8 h-8 md:w-10 md:h-10 bg-purple-100 dark:bg-purple-900/30 rounded-xl flex items-center justify-center mb-1 md:mb-2">
+      <i className="fas fa-sign-out-alt text-purple-600 dark:text-purple-400 text-sm md:text-lg"></i>
+    </div>
+    <div className="text-xl md:text-2xl font-bold text-purple-600 dark:text-purple-400">{punchOutCount}</div>
+    <div className="text-[10px] md:text-xs text-gray-500 dark:text-gray-400 font-medium">Punch Out Today</div>
+  </div>
+</div>
 
-      {/* Rest of your component remains the same... */}
       {/* Calendar Navigation */}
       <div className="flex flex-wrap items-center justify-between gap-3 mb-4 bg-white dark:bg-gray-800 rounded-xl border border-gray-200 dark:border-gray-700 p-3 md:p-4">
         <div className="flex items-center gap-2">
@@ -682,7 +840,6 @@ const StatCardWithTooltip = ({ children, present, late, absent }) => {
               .react-calendar__tile--active:hover {
                 background: #27ae60 !important;
               }
-              /* Remove default react-calendar now styles - we'll use custom */
               .react-calendar__tile--now {
                 background: transparent !important;
                 border: none !important;
@@ -701,7 +858,6 @@ const StatCardWithTooltip = ({ children, present, late, absent }) => {
               .react-calendar__month-view__days__day--neighboringMonth {
                 color: #9ca3af !important;
               }
-              /* Custom today highlight - green background with white text */
               .today-highlight {
                 background: #22c55e !important;
                 color: white !important;
@@ -725,8 +881,6 @@ const StatCardWithTooltip = ({ children, present, late, absent }) => {
               .dark .today-highlight abbr {
                 color: #1a1a1a !important;
               }
-
-              /* Scrollbar styling for tooltip */
               .scrollbar-thin::-webkit-scrollbar {
                 width: 3px;
               }
@@ -862,7 +1016,7 @@ const StatCardWithTooltip = ({ children, present, late, absent }) => {
                         </div>
                         <div>
                           <span className="text-gray-500 dark:text-gray-400">Hours</span>
-                          <p className="font-semibold text-gray-700 dark:text-gray-300">{record.working_hours || record.workingHours || "--"}</p>
+                          <p className="font-semibold text-gray-700 dark:text-gray-300">{record.worked_hours || record.working_hours || record.workingHours || "--"}</p>
                         </div>
                       </div>
                     </div>
@@ -902,7 +1056,6 @@ const StatCardWithTooltip = ({ children, present, late, absent }) => {
               </button>
             </div>
             <div className="p-4 overflow-y-auto max-h-[70vh]">
-              {/* Filters */}
               <div className="mb-4 flex flex-wrap items-center gap-3">
                 <label className="text-sm font-medium text-gray-700 dark:text-gray-300">
                   <i className="fas fa-filter text-green-500 mr-1"></i> Filter:
@@ -922,7 +1075,6 @@ const StatCardWithTooltip = ({ children, present, late, absent }) => {
                 </span>
               </div>
 
-              {/* Table */}
               <div className="overflow-x-auto">
                 <table className="w-full border-collapse">
                   <thead>
@@ -950,14 +1102,18 @@ const StatCardWithTooltip = ({ children, present, late, absent }) => {
                         return (
                           <tr key={idx} className="border-b border-gray-200 dark:border-gray-700 hover:bg-gray-50 dark:hover:bg-gray-700/50 transition-colors">
                             <td className="px-3 py-2 text-xs text-gray-600 dark:text-gray-400">{idx + 1}</td>
-                            <td className="px-3 py-2 text-xs text-gray-600 dark:text-gray-400">{record.log_date || record.date}</td>
+                            <td className="px-3 py-2 text-xs text-gray-600 dark:text-gray-400">
+                              {record.date || record.log_date || record.attendance_date || "-"}
+                            </td>
                             <td className="px-3 py-2 text-xs font-semibold text-gray-800 dark:text-gray-200">
                               {getEmployeeName(record)}
                             </td>
                             <td className="px-3 py-2 text-xs text-gray-600 dark:text-gray-400">{getDepartment(record)}</td>
                             <td className="px-3 py-2 text-xs font-medium text-gray-700 dark:text-gray-300">{record.punch_in || record.punchIn || "--"}</td>
                             <td className="px-3 py-2 text-xs font-medium text-gray-700 dark:text-gray-300">{record.punch_out || record.punchOut || "--"}</td>
-                            <td className="px-3 py-2 text-xs text-gray-600 dark:text-gray-400">{record.working_hours || record.workingHours || "--"}</td>
+                            <td className="px-3 py-2 text-xs text-gray-600 dark:text-gray-400">
+                              {record.worked_hours || record.working_hours || record.workingHours || "--"}
+                            </td>
                             <td className="px-3 py-2">
                               <span className={`px-2 py-0.5 rounded-full text-xs font-medium ${statusColor}`}>
                                 {status}
@@ -980,7 +1136,7 @@ const StatCardWithTooltip = ({ children, present, late, absent }) => {
             <div className="p-4 border-t border-gray-200 dark:border-gray-700 flex justify-between">
               <div className="text-sm text-gray-500 dark:text-gray-400">
                 <i className="fas fa-info-circle mr-1"></i>
-                {filteredMonthData.length} records • {new Set(filteredMonthData.map(r => r.userid || r.user_id || r.id)).size} employees
+                {filteredMonthData.length} records • {new Set(filteredMonthData.map(r => r.employee_id || r.user_id || r.id)).size} employees
               </div>
               <button
                 onClick={() => setShowMonthModal(false)}
@@ -992,8 +1148,12 @@ const StatCardWithTooltip = ({ children, present, late, absent }) => {
           </div>
         </div>
       )}
+
+      
     </div>
   );
 };
+
+
 
 export default Attendances;

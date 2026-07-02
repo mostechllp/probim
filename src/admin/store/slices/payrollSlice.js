@@ -549,25 +549,35 @@ export const sendPayslip = createAsyncThunk(
 );
 
 // ─── Fetch Employee Salary Packages ──────────────────────────────────
+// In payrollSlice.js - update the fetchEmployeeSalaryPackages
 export const fetchEmployeeSalaryPackages = createAsyncThunk(
   "payroll/fetchEmployeeSalaryPackages",
   async (employeeId, { rejectWithValue }) => {
     try {
+      console.log("Fetching salary packages for employee:", employeeId);
       const response = await apiClient.get(
         `/admin/employees/salary-packages/${employeeId}`,
       );
       console.log("Fetch employee salary packages response:", response.data);
 
-      if (response.data?.success !== false) {
-        return {
-          data: response.data?.data || response.data || [],
-          message:
-            response.data?.message || "Salary packages fetched successfully",
-        };
+      // The response might be nested differently
+      let packagesData = [];
+      if (response.data?.data?.data) {
+        packagesData = response.data.data.data;
+      } else if (response.data?.data) {
+        packagesData = response.data.data;
+      } else if (Array.isArray(response.data)) {
+        packagesData = response.data;
+      } else if (response.data?.success !== false) {
+        packagesData = response.data?.data || response.data || [];
       }
-      return rejectWithValue(
-        response.data?.message || "Failed to fetch salary packages",
-      );
+
+      console.log("Extracted packages data:", packagesData);
+
+      return {
+        data: packagesData,
+        message: response.data?.message || "Salary packages fetched successfully",
+      };
     } catch (error) {
       console.error("Fetch employee salary packages error:", error);
       return rejectWithValue(
