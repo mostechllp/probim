@@ -161,6 +161,13 @@ const Dashboard = () => {
     0,
   );
 
+  const onTimeCount = charts?.today_status?.["On time"] || 0;
+  const lateCount = charts?.today_status?.Late || 0;
+  const absentCount = charts?.today_status?.Absent || 0;
+  const totalPresent = onTimeCount + lateCount;
+  const attendanceRate =
+    totalEmployees > 0 ? Math.round((totalPresent / totalEmployees) * 100) : 0;
+
   const todayStatus = charts?.today_status || {};
   const punchedInToday =
     Object.values(todayStatus).reduce((a, b) => a + b, 0) ||
@@ -211,7 +218,14 @@ const Dashboard = () => {
   return (
     <div className="dashboard-container">
       <WelcomeBanner
-        stats={{ totalEmployees, punchedInToday, absentToday }}
+        stats={{
+          punchedInToday: punchedInToday, // Use punchedInToday instead of present
+          attendanceRate: attendanceRate,
+          late: lateCount,
+          // If you have these additional stats from attendance slice
+          totalEmployees: totalEmployees,
+          absent: absentCount,
+        }}
         user={user}
       />
 
@@ -316,7 +330,10 @@ const Dashboard = () => {
         Today's Punch-in Activity
       </div>
       <div className="grid grid-cols-1 lg:grid-cols-2 gap-4 mb-6">
-        <RecentPunchesList punches={charts?.recent_punches || []} employees={employees} />
+        <RecentPunchesList
+          punches={charts?.recent_punches || []}
+          employees={employees}
+        />
         <PunchDistributionChart data={charts?.punch_distribution || []} />
       </div>
 

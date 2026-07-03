@@ -44,7 +44,7 @@ const AdminWFH = () => {
 
     if (filter.status !== "all") {
       filtered = filtered.filter(
-        (r) => r.status?.toLowerCase() === filter.status.toLowerCase(),
+        (r) => (r.status?.toLowerCase() || "") === filter.status.toLowerCase(),
       );
     }
 
@@ -112,32 +112,33 @@ const AdminWFH = () => {
     setConfirmOpen(true);
   };
 
-  const handleConfirmAction = async () => {
-    if (!selectedRequestId) return;
 
-    setActionLoading(true);
-    const newStatus = actionType === "approve" ? "approved" : "rejected";
+const handleConfirmAction = async () => {
+  if (!selectedRequestId) return;
 
-    const result = await dispatch(
-      updateWFHRequestStatus({ id: selectedRequestId, status: newStatus }),
+  setActionLoading(true);
+  // Send the status as lowercase, the thunk will convert it to proper case
+  const newStatus = actionType === "approve" ? "approved" : "rejected";
+
+  const result = await dispatch(
+    updateWFHRequestStatus({ id: selectedRequestId, status: newStatus }),
+  );
+
+  if (updateWFHRequestStatus.fulfilled.match(result)) {
+    showToast(
+      `WFH request ${actionType === "approve" ? "approved" : "rejected"} successfully`,
+      "success",
     );
+    setConfirmOpen(false);
+    setSelectedRequestId(null);
+    setActionType(null);
+    dispatch(fetchAdminWFHRequests());
+  } else {
+    showToast(result.payload || `Failed to ${actionType} request`, "error");
+  }
 
-    if (updateWFHRequestStatus.fulfilled.match(result)) {
-      showToast(
-        `WFH request ${actionType === "approve" ? "approved" : "rejected"} successfully`,
-        "success",
-      );
-      setConfirmOpen(false);
-      setSelectedRequestId(null);
-      setActionType(null);
-      dispatch(fetchAdminWFHRequests());
-    } else {
-      showToast(result.payload || `Failed to ${actionType} request`, "error");
-    }
-
-    setActionLoading(false);
-  };
-
+  setActionLoading(false);
+};
   const formatDate = (dateString) => {
     if (!dateString) return "-";
     const date = new Date(dateString);
@@ -159,12 +160,15 @@ const AdminWFH = () => {
 
   const stats = {
     total: requests.length,
-    pending: requests.filter((r) => r.status?.toLowerCase() === "pending")
-      .length,
-    approved: requests.filter((r) => r.status?.toLowerCase() === "approved")
-      .length,
-    rejected: requests.filter((r) => r.status?.toLowerCase() === "rejected")
-      .length,
+    pending: requests.filter(
+      (r) => (r.status?.toLowerCase() || "") === "pending",
+    ).length,
+    approved: requests.filter(
+      (r) => (r.status?.toLowerCase() || "") === "approved",
+    ).length,
+    rejected: requests.filter(
+      (r) => (r.status?.toLowerCase() || "") === "rejected",
+    ).length,
   };
 
   if (loading && requests.length === 0) {
@@ -517,7 +521,7 @@ const AdminWFH = () => {
         }
         confirmText={actionType === "approve" ? "Approve" : "Reject"}
         loading={actionLoading}
-        type={actionType === "approve" ? "approve" : "delete"} 
+        type={actionType === "approve" ? "approve" : "delete"}
       />
     </div>
   );
