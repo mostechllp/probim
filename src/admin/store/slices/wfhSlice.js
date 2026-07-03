@@ -1,3 +1,5 @@
+// src/admin/store/slices/wfhSlice.js
+
 import { createSlice, createAsyncThunk } from "@reduxjs/toolkit";
 import apiClient from "../../../utils/apiClient";
 
@@ -42,16 +44,29 @@ export const fetchWFHRequestById = createAsyncThunk(
   }
 );
 
-// Update WFH request status
+// Update WFH request status - FIXED: Send proper case
 export const updateWFHRequestStatus = createAsyncThunk(
   "adminWfh/updateStatus",
   async ({ id, status }, { rejectWithValue }) => {
     try {
-      const response = await apiClient.post(`/admin/wfh-requests/${id}/status`, { status });
+      // Map status to the format expected by backend (capitalized)
+      const statusMap = {
+        approved: "Approved",
+        rejected: "Rejected",
+        pending: "Pending",
+      };
+      
+      // Get the properly formatted status
+      const formattedStatus = statusMap[status.toLowerCase()] || status;
+      
+      const response = await apiClient.post(`/admin/wfh-requests/${id}/status`, { 
+        status: formattedStatus 
+      });
       console.log("Update WFH status response:", response.data);
       
       if (response.data?.status === "success") {
-        return { id, status };
+        // Return the original status (lowercase) for consistent state management
+        return { id, status: status.toLowerCase() };
       }
       return rejectWithValue(response.data?.message || "Failed to update status");
     } catch (error) {
