@@ -13,42 +13,39 @@ const isValidPunch = (value) => value && value !== "-" && value.trim() !== "";
 
 const extractAttendanceRecords = (response) => {
   try {
-    const attendance = response.data?.data?.attendance;
+    // The data is directly in response.data.data, not in response.data.data.attendance
+    const recordsData = response.data?.data?.data || [];
+    const meta = response.data?.data?.meta || {};
 
-    if (attendance?.data && Array.isArray(attendance.data)) {
-      const records = attendance.data.map((record, idx) => {
-        const hasPunchOut = isValidPunch(record.punch_out);
-        const punchIn = isValidPunch(record.punch_in) ? record.punch_in : "-";
+    if (recordsData && Array.isArray(recordsData)) {
+      const records = recordsData.map((record, idx) => {
+        const hasPunchOut = record.punch_out && record.punch_out !== "-";
+        const punchIn = record.punch_in && record.punch_in !== "-" ? record.punch_in : "-";
         const punchOut = hasPunchOut ? record.punch_out : null;
 
-        // Derive present/absent from punch_in
-        const isPresent = isValidPunch(record.punch_in);
-
-        // ✅ FIX: Get employee name from the correct nested path
-        const employeeName = record.user?.employee
-          ? `${record.user.employee.first_name || ""} ${record.user.employee.last_name || ""}`.trim()
-          : record.user?.username || `Employee ${record.userid}`;
-
-        // ✅ FIX: Get department from the correct path
-        const department = record.user?.department?.name || "-";
+        // Get employee name directly from the response
+        const employeeName = record.name || `Employee ${record.employee_id}`;
+        
+        // Get department directly from the response
+        const department = record.department || "-";
 
         // Get working hours from the API response
-        const workingHours = record.working_hours || "--";
+        const workingHours = record.worked_hours !== undefined ? record.worked_hours : "--";
 
         return {
-          id: record.userid || idx,
-          employee_id: record.userid,
-          employeeName: employeeName || `Employee ${record.userid}`,
-          company: record.company?.company_name || "N/A",
+          id: record.employee_id || idx,
+          employee_id: record.employee_id,
+          employeeName: employeeName,
+          company: record.company || "N/A",
           company_id: record.company_id || null,
           department: department,
-          date: record.log_date || "-",
-          punchIn,
+          date: record.date || "-",
+          punchIn: punchIn,
           punchOut: hasPunchOut ? record.punch_out : null,
           punch_in_raw: record.punch_in,
           punch_out_raw: record.punch_out,
           workingHours: workingHours,
-          status: isPresent ? "Present" : "Absent",
+          status: record.status || (record.punch_in && record.punch_in !== "-" ? "Present" : "Absent"),
           isLate: false,
           hasPunchOut,
           // Keep raw data for debugging
@@ -56,23 +53,14 @@ const extractAttendanceRecords = (response) => {
         };
       });
 
-      const meta = {
-        total: attendance.total,
-        current_page: attendance.current_page,
-        last_page: attendance.last_page,
-        per_page: attendance.per_page,
-      };
-
-      // ✅ FIX: Use stats from API response
-      const apiStats = response.data?.data?.stats || {};
-      
+      // Stats would need to be calculated from the records since your API doesn't seem to provide stats
       const stats = {
-        totalActiveEmployees: apiStats.total_active_employees || meta.total || records.length,
-        presentToday: apiStats.present_today || records.filter((r) => r.status === "Present").length,
-        absentToday: apiStats.absent_today || records.filter((r) => r.status === "Absent").length,
-        punchedInOnTime: apiStats.punched_in_on_time || 0,
-        punchedLate: apiStats.punched_late || 0,
-        punchedOutToday: apiStats.punched_out_today || 0,
+        totalActiveEmployees: meta.total || records.length,
+        presentToday: records.filter((r) => r.status === "Present").length,
+        absentToday: records.filter((r) => r.status === "Absent").length,
+        punchedInOnTime: 0,
+        punchedLate: 0,
+        punchedOutToday: records.filter((r) => r.hasPunchOut).length,
       };
 
       return {
