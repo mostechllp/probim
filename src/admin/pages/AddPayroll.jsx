@@ -169,14 +169,14 @@ function AddPayroll() {
     {
       id: 1,
       type: "",
-      currency: "INR",
+      currency: "AED",
       amount: "0",
       is_statutory: "no",
     },
   ]);
 
   // Step 5 - Summary with currency conversion
-  const [targetCurrency, setTargetCurrency] = useState("INR");
+  const [targetCurrency, setTargetCurrency] = useState("AED");
   const [conversionRatesList, setConversionRatesList] = useState([]);
   const [conversionDetails, setConversionDetails] = useState({
     gross_salary: null,

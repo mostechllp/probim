@@ -1,4 +1,4 @@
-// src/admin/pages/EditPayroll.js - Complete rewrite to match AddPayroll style
+// src/admin/pages/EditPayroll.js - Complete with all AddPayroll features
 
 import { useState, useEffect } from "react";
 import { useDispatch, useSelector } from "react-redux";
@@ -136,6 +136,8 @@ function EditPayroll() {
 
   // Step 2 - Country Split
   const [countries, setCountries] = useState([]);
+  const [selectedPackageIds, setSelectedPackageIds] = useState([]);
+  const [availablePackages, setAvailablePackages] = useState([]);
   const [totalEarnings, setTotalEarnings] = useState(0);
   const [totalDeductions, setTotalDeductions] = useState(0);
   const [grossSalary, setGrossSalary] = useState(0);
@@ -225,21 +227,6 @@ function EditPayroll() {
 
   // ─── Fetch payroll data on mount ─────────────────────────────────────
   useEffect(() => {
-    if (id) {
-      dispatch(fetchPayrollById(id));
-    }
-    dispatch(fetchEmployees());
-    dispatch(clearEmployeePackages());
-    dispatch(setCurrentStep(1));
-
-    return () => {
-      dispatch(resetCurrentEmployee());
-      dispatch(clearEmployeePackages());
-    };
-  }, [dispatch, id]);
-
-  // ─── Fetch payroll data on mount ─────────────────────────────────────
-  useEffect(() => {
     // Reset all local state when ID changes
     setIsDataLoaded(false);
     setSelectedEmployee("");
@@ -259,6 +246,8 @@ function EditPayroll() {
     setTotalWorkingDays("");
     setDaysPresent("");
     setCountries([]);
+    setSelectedPackageIds([]);
+    setAvailablePackages([]);
     setOvertimeRequests([]);
     setDeductions([]);
     setConversionRatesList([]);
@@ -281,7 +270,6 @@ function EditPayroll() {
     return () => {
       dispatch(resetCurrentEmployee());
       dispatch(clearEmployeePackages());
-      // Reset current payroll in Redux
       dispatch(setCurrentPayroll(null));
     };
   }, [dispatch, id]);
@@ -310,7 +298,6 @@ function EditPayroll() {
             foundEmployee.name || currentPayroll.employee_name || "",
           );
 
-          // Fetch employee details
           dispatch(fetchEmployeeById(foundEmployee.id))
             .unwrap()
             .then((data) => {
@@ -366,6 +353,16 @@ function EditPayroll() {
           }),
         );
         setCountries(mappedCountries);
+        
+        // Set available packages and selected package IDs
+        const packages = mappedCountries.map(c => ({
+          id: c.packageId || c.id,
+          name: c.name,
+          currency: c.currency,
+        }));
+        setAvailablePackages(packages);
+        setSelectedPackageIds(packages.map(p => p.id));
+        
         setTotalEarnings(stepData.step_2?.total_earnings || 0);
         setTotalDeductions(stepData.step_2?.total_deductions || 0);
         setGrossSalary(stepData.step_2?.gross_salary || 0);
@@ -377,7 +374,6 @@ function EditPayroll() {
       const step5Overtime = stepData.step_5?.overtime_details || [];
       const step3Overtime = stepData.step_3?.overtime_details || [];
 
-      // Create a map of step_5 overtime by date for quick lookup
       const step5OvertimeMap = {};
       step5Overtime.forEach((ot) => {
         if (ot.date) {
@@ -389,7 +385,6 @@ function EditPayroll() {
         }
       });
 
-      // Use step_3 for structure (overtime_hours, projects, etc.) but step_5 for amounts
       if (step3Overtime.length > 0) {
         setOvertimeRequests(
           step3Overtime.map((ot, index) => {
@@ -404,9 +399,7 @@ function EditPayroll() {
               projects: ot.projects || [],
               project: ot.projects?.map((p) => p.project_name).join(", ") || "",
               hours: ot.overtime_hours || 0,
-              // Use amount from step_5 if available
               overtime_amount: step5Data.amount || ot.amount || 0,
-              // Use currency from step_5 if available
               currency: step5Data.currency || ot.currency || "INR",
               status: ot.status || "pending",
               reason: "",
@@ -414,7 +407,6 @@ function EditPayroll() {
           }),
         );
       } else if (step5Overtime.length > 0) {
-        // Fallback: if no step_3 data, use step_5 directly
         setOvertimeRequests(
           step5Overtime.map((ot, index) => ({
             id: index + 1,
@@ -548,6 +540,8 @@ function EditPayroll() {
       clearEmployeeFields();
       setSelectedUserId("");
       setCountries([]);
+      setAvailablePackages([]);
+      setSelectedPackageIds([]);
       dispatch(clearEmployeePackages());
     }
   };
@@ -560,6 +554,29 @@ function EditPayroll() {
     setDepartment("");
     setDesignation("");
     setEmploymentType("");
+  };
+
+  // ─── Package Selection Handlers ──────────────────────────────────────
+  const handlePackageSelection = (packageId) => {
+    setSelectedPackageIds((prev) => {
+      if (prev.includes(packageId)) {
+        return prev.filter((id) => id !== packageId);
+      } else {
+        return [...prev, packageId];
+      }
+    });
+    setIsStep2Saved(false);
+  };
+
+  const handleSelectAllPackages = () => {
+    const allPackageIds = availablePackages.map((pkg) => pkg.id);
+    setSelectedPackageIds(allPackageIds);
+    setIsStep2Saved(false);
+  };
+
+  const handleDeselectAllPackages = () => {
+    setSelectedPackageIds([]);
+    setIsStep2Saved(false);
   };
 
   // ─── STEP 5: Convert Currency ──────────────────────────────────────────
@@ -830,13 +847,24 @@ function EditPayroll() {
         break;
 
       case 2:
+        // Filter countries to only include selected packages
+        const selectedCountriesForStep = countries.filter((c) =>
+          selectedPackageIds.includes(c.packageId || c.id)
+        );
+
+        const step2TotalEarnings = selectedCountriesForStep.reduce(
+          (sum, c) => sum + (c.subtotal || 0),
+          0,
+        );
+
         data = {
           pay_period_month: monthNumber,
           pay_period_year: year,
-          location_breakdown: countries.map((c) => ({
+          package_ids: selectedPackageIds,
+          location_breakdown: selectedCountriesForStep.map((c) => ({
             location_name: c.name,
             package: {
-              id: c.packageId,
+              id: c.packageId || c.id,
               name: c.name,
               currency: c.currency,
             },
@@ -848,10 +876,10 @@ function EditPayroll() {
             salary_components: c.salary_components || [],
             subtotal: c.subtotal || 0,
           })),
-          total_earnings: totalEarnings,
+          total_earnings: step2TotalEarnings,
           total_deductions: totalDeductions,
-          gross_salary: grossSalary,
-          net_salary: netSalary,
+          gross_salary: step2TotalEarnings,
+          net_salary: step2TotalEarnings,
         };
         break;
 
@@ -905,6 +933,11 @@ function EditPayroll() {
           conversionDetails.deductions?.convertedAmount || 0;
         const convertedNetPay = conversionDetails.net_pay?.convertedAmount || 0;
 
+        // Build location breakdown from saved step 2 data
+        const selectedCountries = countries.filter((c) =>
+          selectedPackageIds.includes(c.packageId || c.id)
+        );
+
         data = {
           pay_period_month: monthNumber,
           pay_period_year: year,
@@ -930,7 +963,7 @@ function EditPayroll() {
           currency:
             targetCurrency ||
             (countries.length > 0 ? countries[0].currency : "INR"),
-          location_breakdown: countries.map((c) => ({
+          location_breakdown: selectedCountries.map((c) => ({
             location_name: c.name,
             currency: c.currency,
             subtotal: c.subtotal || 0,
@@ -1193,13 +1226,15 @@ function EditPayroll() {
           acc[item.currency] = parseFloat(item.rate) || 1;
           return acc;
         }, {}),
-        location_breakdown: countries.map((c) => ({
-          location_name: c.name,
-          currency: c.currency,
-          subtotal: c.subtotal || 0,
-          worked_days: c.daysWorked || 0,
-          salary_components: c.salary_components || [],
-        })),
+        location_breakdown: countries
+          .filter((c) => selectedPackageIds.includes(c.packageId || c.id))
+          .map((c) => ({
+            location_name: c.name,
+            currency: c.currency,
+            subtotal: c.subtotal || 0,
+            worked_days: c.daysWorked || 0,
+            salary_components: c.salary_components || [],
+          })),
         overtime_details: overtimeRequests.map((req) => ({
           date: req.date,
           overtime_hours: req.overtime_hours || 0,
@@ -1247,17 +1282,16 @@ function EditPayroll() {
         deductions: convertedDeductions,
         net_pay: convertedNetPay,
         currency: primaryCurrency,
+        calculation: `${convertedGrossSalary} + ${convertedOvertime} - ${convertedDeductions} = ${convertedNetPay}`,
       });
 
       await dispatch(submitPayroll(payload)).unwrap();
 
-      if (saved) {
-        showToast("Payroll updated successfully!", "success");
-        dispatch(setCurrentPayroll(null)); // Clear the current payroll
-        setTimeout(() => {
-          navigate(`${basePath}/payroll/${id}`);
-        }, 2000);
-      }
+      showToast("Payroll updated successfully!", "success");
+      dispatch(setCurrentPayroll(null));
+      setTimeout(() => {
+        navigate(`${basePath}/payroll/${id}`);
+      }, 2000);
     } catch (error) {
       console.error("Update payroll error:", error);
       showToast(
@@ -1269,7 +1303,7 @@ function EditPayroll() {
 
   // ─── Handle cancel ────────────────────────────────────────────────────
   const handleCancel = () => {
-    dispatch(setCurrentPayroll(null)); // Clear the current payroll
+    dispatch(setCurrentPayroll(null));
     navigate(`${basePath}/payroll`);
   };
 
@@ -1291,34 +1325,6 @@ function EditPayroll() {
     setCountries((prev) =>
       prev.map((c) => (c.id === id ? { ...c, [field]: value } : c)),
     );
-  };
-
-  const handleAddCountry = () => {
-    const newId =
-      countries.length > 0 ? Math.max(...countries.map((c) => c.id)) + 1 : 1;
-    setCountries([
-      ...countries,
-      {
-        id: newId,
-        name: "",
-        currency: "INR",
-        dailyRate: "",
-        daysWorked: "",
-        fxRate: "",
-        packageId: null,
-        salary_components: [],
-        subtotal: 0,
-        is_saved: false,
-      },
-    ]);
-  };
-
-  const handleRemoveCountry = (id) => {
-    if (countries.length <= 1) {
-      showToast("At least one country split is required", "error");
-      return;
-    }
-    setCountries(countries.filter((c) => c.id !== id));
   };
 
   // ─── Deduction actions ────────────────────────────────────────────────
@@ -1368,21 +1374,24 @@ function EditPayroll() {
     doc.text(`Currency: ${targetCurrency}`, 14, 56);
 
     // Country Split Table
-    const countryRows = countries.map((c) => {
-      const subtotal = c.subtotal || 0;
-      let convertedAmount = subtotal;
-      if (c.currency !== targetCurrency) {
-        const rate =
-          conversionRatesList.find((r) => r.currency === c.currency)?.rate || 1;
-        convertedAmount = subtotal * rate;
-      }
-      return [
-        c.name || "-",
-        c.daysWorked || "0",
-        `${c.currency || ""} ${(c.dailyRate || 0).toFixed(2)}`,
-        `${targetCurrency} ${convertedAmount.toFixed(2)}`,
-      ];
-    });
+    const countryRows = countries
+      .filter((c) => selectedPackageIds.includes(c.packageId || c.id))
+      .map((c) => {
+        const subtotal = c.subtotal || 0;
+        let convertedAmount = subtotal;
+        if (c.currency !== targetCurrency) {
+          const rate =
+            conversionRatesList.find((r) => r.currency === c.currency)?.rate ||
+            1;
+          convertedAmount = subtotal * rate;
+        }
+        return [
+          c.name || "-",
+          c.daysWorked || "0",
+          `${c.currency || ""} ${(c.dailyRate || 0).toFixed(2)}`,
+          `${targetCurrency} ${convertedAmount.toFixed(2)}`,
+        ];
+      });
 
     autoTable(doc, {
       startY: 62,
@@ -1458,16 +1467,19 @@ function EditPayroll() {
 
     // Summary
     let totalGrossConverted = 0;
-    countries.forEach((c) => {
-      const subtotal = c.subtotal || 0;
-      if (c.currency !== targetCurrency) {
-        const rate =
-          conversionRatesList.find((r) => r.currency === c.currency)?.rate || 1;
-        totalGrossConverted += subtotal * rate;
-      } else {
-        totalGrossConverted += subtotal;
-      }
-    });
+    countries
+      .filter((c) => selectedPackageIds.includes(c.packageId || c.id))
+      .forEach((c) => {
+        const subtotal = c.subtotal || 0;
+        if (c.currency !== targetCurrency) {
+          const rate =
+            conversionRatesList.find((r) => r.currency === c.currency)?.rate ||
+            1;
+          totalGrossConverted += subtotal * rate;
+        } else {
+          totalGrossConverted += subtotal;
+        }
+      });
 
     let totalOvertimeConverted = 0;
     overtimeRequests.forEach((req) => {
@@ -1560,6 +1572,20 @@ function EditPayroll() {
           is_saved: true,
         }));
         setCountries(updatedCountries);
+        
+        // Update available packages
+        const packages = updatedCountries.map(c => ({
+          id: c.packageId || c.id,
+          name: c.name,
+          currency: c.currency,
+        }));
+        setAvailablePackages(packages);
+        
+        // If no packages selected yet, select all
+        if (selectedPackageIds.length === 0) {
+          setSelectedPackageIds(packages.map(p => p.id));
+        }
+        
         setTotalEarnings(data.total_earnings || 0);
         setTotalDeductions(data.total_deductions || 0);
         setGrossSalary(data.gross_salary || 0);
@@ -1983,8 +2009,9 @@ function EditPayroll() {
                       }
                     >
                       <option value="">Select Payment Mode</option>
-                      <option value="NEFT">Bank Transfer (NEFT)</option>
-                      <option value="RTGS">Bank Transfer (RTGS)</option>
+                      <option value="NEFT">WPS</option>
+                      <option value="RTGS">Bank Transfer</option>
+                      <option value="RTGS">INR Transfer</option>
                       <option value="Cheque">Cheque</option>
                       <option value="Cash">Cash</option>
                     </select>
@@ -2028,7 +2055,7 @@ function EditPayroll() {
             </>
           )}
 
-          {/* Step 2 - Country Split */}
+          {/* Step 2 - Country Split with Package Selection */}
           {reduxCurrentStep === 2 && (
             <div>
               <div className="flex items-center gap-2 pb-3 border-b-2 border-green-100 dark:border-green-900/30 mb-4 md:mb-6">
@@ -2082,127 +2109,233 @@ function EditPayroll() {
                           Worked Days
                         </div>
                       </div>
+                      <div className="text-center">
+                        <div className="text-2xl font-bold text-green-600 dark:text-green-400">
+                          {selectedPackageIds.length}
+                        </div>
+                        <div className="text-[10px] text-gray-500 dark:text-gray-400 uppercase tracking-wider">
+                          Packages Selected
+                        </div>
+                      </div>
                     </div>
                   </div>
                 </div>
               )}
 
-              {/* Country Cards */}
-              <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                {countries.map((country) => (
-                  <div
-                    key={country.id}
-                    className="bg-white dark:bg-gray-800 border border-gray-200 dark:border-gray-700 rounded-xl overflow-hidden shadow-sm hover:shadow-md transition-shadow"
-                  >
-                    <div className="bg-gray-50 dark:bg-gray-700/50 px-4 py-3 border-b border-gray-200 dark:border-gray-700 flex justify-between items-center">
-                      <div>
-                        <h4 className="font-semibold text-gray-800 dark:text-gray-200">
-                          {country.name || "Location"}
-                        </h4>
-                        <div className="flex items-center gap-2 text-xs text-gray-500 dark:text-gray-400">
-                          <span>{country.packageId ? "Saved" : "Unsaved"}</span>
-                          <span className="w-1 h-1 rounded-full bg-gray-400"></span>
-                          <span>{country.currency}</span>
-                        </div>
-                      </div>
-                      <div className="text-right">
-                        <div className="text-sm font-semibold text-gray-800 dark:text-gray-200">
-                          {country.daysWorked || 0}
-                        </div>
-                        <div className="text-[10px] text-gray-500 dark:text-gray-400 uppercase">
-                          Worked Days
-                        </div>
-                      </div>
-                    </div>
-
-                    <div className="p-4 space-y-3">
-                      {country.salary_components &&
-                      country.salary_components.length > 0 ? (
-                        <div className="space-y-2">
-                          {country.salary_components.map((comp, idx) => (
-                            <div key={idx} className="flex items-center gap-2">
-                              <span className="text-sm text-gray-600 dark:text-gray-400 w-32 flex-shrink-0">
-                                {comp.name}
-                              </span>
-                              <span className="text-xs text-gray-400">
-                                {country.currency}
-                              </span>
-                              <input
-                                type="number"
-                                step="0.01"
-                                value={comp.amount}
-                                onChange={(e) => {
-                                  const newAmount =
-                                    parseFloat(e.target.value) || 0;
-                                  const updatedCountries = countries.map(
-                                    (c) => {
-                                      if (c.id === country.id) {
-                                        const updatedComponents =
-                                          c.salary_components.map((c2, i) =>
-                                            i === idx
-                                              ? { ...c2, amount: newAmount }
-                                              : c2,
-                                          );
-                                        const newSubtotal =
-                                          updatedComponents.reduce(
-                                            (sum, c2) => sum + c2.amount,
-                                            0,
-                                          );
-                                        return {
-                                          ...c,
-                                          salary_components: updatedComponents,
-                                          subtotal: newSubtotal,
-                                        };
-                                      }
-                                      return c;
-                                    },
-                                  );
-                                  setCountries(updatedCountries);
-                                  setIsStep2Saved(false);
-                                }}
-                                className="flex-1 px-2 py-1 text-sm rounded border border-gray-200 dark:border-gray-600 bg-white dark:bg-gray-800 text-gray-700 dark:text-gray-300 focus:outline-none focus:border-green-500"
-                                disabled={
-                                  currentPayroll?.status === "completed" ||
-                                  currentPayroll?.status === "paid"
-                                }
-                              />
-                            </div>
-                          ))}
-                          <div className="pt-2 mt-2 border-t border-gray-200 dark:border-gray-700 flex justify-between font-semibold">
-                            <span className="text-gray-800 dark:text-gray-200">
-                              Subtotal
-                            </span>
-                            <span className="text-green-600 dark:text-green-400">
-                              {country.currency} {country.subtotal.toFixed(2)}
-                            </span>
-                          </div>
-                        </div>
-                      ) : (
-                        <div className="text-center py-2 text-gray-400 text-sm">
-                          No salary components
-                        </div>
-                      )}
+              {/* Package Selection Controls */}
+              {countries.length > 0 && (
+                <>
+                  <div className="mb-3 flex items-center justify-between">
+                    <p className="text-sm text-gray-500 dark:text-gray-400">
+                      <i className="fas fa-info-circle mr-1"></i>
+                      Click on a package card to select/deselect it
+                    </p>
+                    <div className="flex gap-2">
+                      <button
+                        onClick={handleSelectAllPackages}
+                        className="px-2 py-1 text-xs bg-green-500 text-white rounded hover:bg-green-600 transition-colors"
+                      >
+                        Select All
+                      </button>
+                      <button
+                        onClick={handleDeselectAllPackages}
+                        className="px-2 py-1 text-xs bg-gray-300 dark:bg-gray-600 text-gray-700 dark:text-gray-300 rounded hover:bg-gray-400 dark:hover:bg-gray-500 transition-colors"
+                      >
+                        Deselect All
+                      </button>
                     </div>
                   </div>
-                ))}
-              </div>
+
+                  {/* Country Cards with Selection */}
+                  <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                    {countries.map((country) => {
+                      const isSelected = selectedPackageIds.includes(
+                        country.packageId || country.id,
+                      );
+
+                      return (
+                        <div
+                          key={country.id}
+                          onClick={() =>
+                            handlePackageSelection(country.packageId || country.id)
+                          }
+                          className={`bg-white dark:bg-gray-800 border-2 rounded-xl overflow-hidden shadow-sm hover:shadow-md transition-all cursor-pointer ${
+                            isSelected
+                              ? "border-green-500 ring-2 ring-green-500/20"
+                              : "border-gray-200 dark:border-gray-700 hover:border-gray-300 dark:hover:border-gray-600"
+                          }`}
+                        >
+                          {/* Header */}
+                          <div
+                            className={`px-4 py-3 border-b flex justify-between items-center ${
+                              isSelected
+                                ? "bg-green-50 dark:bg-green-900/20 border-green-200 dark:border-green-800"
+                                : "bg-gray-50 dark:bg-gray-700/50 border-gray-200 dark:border-gray-700"
+                            }`}
+                          >
+                            <div className="flex items-center gap-3">
+                              <input
+                                type="checkbox"
+                                checked={isSelected}
+                                onChange={() =>
+                                  handlePackageSelection(country.packageId || country.id)
+                                }
+                                className="w-5 h-5 text-green-500 focus:ring-green-500 rounded border-gray-300 dark:border-gray-600 cursor-pointer"
+                              />
+                              <div>
+                                <h4 className="font-semibold text-gray-800 dark:text-gray-200">
+                                  {country.name || "Location"}
+                                </h4>
+                                <div className="flex items-center gap-2 text-xs text-gray-500 dark:text-gray-400">
+                                  <span>{country.packageId ? "Saved" : "Unsaved"}</span>
+                                  <span className="w-1 h-1 rounded-full bg-gray-400"></span>
+                                  <span>{country.currency}</span>
+                                  {isSelected && (
+                                    <span className="text-green-600 dark:text-green-400">
+                                      <i className="fas fa-check-circle"></i> Selected
+                                    </span>
+                                  )}
+                                </div>
+                              </div>
+                            </div>
+                            <div className="text-right">
+                              <div className="text-sm font-semibold text-gray-800 dark:text-gray-200">
+                                {country.daysWorked || 0}
+                              </div>
+                              <div className="text-[10px] text-gray-500 dark:text-gray-400 uppercase">
+                                Worked Days
+                              </div>
+                            </div>
+                          </div>
+
+                          {/* Body - Editable Salary Components */}
+                          <div className="p-4 space-y-3">
+                            {country.salary_components &&
+                            country.salary_components.length > 0 ? (
+                              <div className="space-y-2">
+                                {country.salary_components.map((comp, idx) => (
+                                  <div key={idx} className="flex items-center gap-2">
+                                    <span className="text-sm text-gray-600 dark:text-gray-400 w-32 flex-shrink-0">
+                                      {comp.name}
+                                    </span>
+                                    <span className="text-xs text-gray-400">
+                                      {country.currency}
+                                    </span>
+                                    <input
+                                      type="number"
+                                      step="0.01"
+                                      value={comp.amount}
+                                      onChange={(e) => {
+                                        const newAmount =
+                                          parseFloat(e.target.value) || 0;
+                                        const updatedCountries = countries.map(
+                                          (c) => {
+                                            if (c.id === country.id) {
+                                              const updatedComponents =
+                                                c.salary_components.map(
+                                                  (c2, i) =>
+                                                    i === idx
+                                                      ? { ...c2, amount: newAmount }
+                                                      : c2,
+                                                );
+                                              const newSubtotal =
+                                                updatedComponents.reduce(
+                                                  (sum, c2) => sum + c2.amount,
+                                                  0,
+                                                );
+                                              return {
+                                                ...c,
+                                                salary_components:
+                                                  updatedComponents,
+                                                subtotal: newSubtotal,
+                                              };
+                                            }
+                                            return c;
+                                          },
+                                        );
+                                        setCountries(updatedCountries);
+                                        setIsStep2Saved(false);
+                                      }}
+                                      onClick={(e) => e.stopPropagation()}
+                                      className="flex-1 px-2 py-1 text-sm rounded border border-gray-200 dark:border-gray-600 bg-white dark:bg-gray-800 text-gray-700 dark:text-gray-300 focus:outline-none focus:border-green-500"
+                                      disabled={
+                                        currentPayroll?.status === "completed" ||
+                                        currentPayroll?.status === "paid"
+                                      }
+                                    />
+                                  </div>
+                                ))}
+                                <div className="pt-2 mt-2 border-t border-gray-200 dark:border-gray-700 flex justify-between font-semibold">
+                                  <span className="text-gray-800 dark:text-gray-200">
+                                    Subtotal
+                                  </span>
+                                  <span className="text-green-600 dark:text-green-400">
+                                    {country.currency} {country.subtotal.toFixed(2)}
+                                  </span>
+                                </div>
+                              </div>
+                            ) : (
+                              <div className="text-center py-2 text-gray-400 text-sm">
+                                No salary components
+                              </div>
+                            )}
+                          </div>
+                        </div>
+                      );
+                    })}
+                  </div>
+
+                  {/* Selected Packages Summary */}
+                  {selectedPackageIds.length > 0 && (
+                    <div className="mt-4 p-3 bg-green-50 dark:bg-green-900/20 rounded-lg border border-green-200 dark:border-green-800">
+                      <p className="text-sm font-medium text-green-700 dark:text-green-300">
+                        <i className="fas fa-check-circle mr-1"></i>
+                        {selectedPackageIds.length} package
+                        {selectedPackageIds.length > 1 ? "s" : ""} selected
+                      </p>
+                    </div>
+                  )}
+
+                  {selectedPackageIds.length === 0 && countries.length > 0 && (
+                    <p className="mt-2 text-xs text-yellow-600 dark:text-yellow-400">
+                      <i className="fas fa-exclamation-triangle mr-1"></i>
+                      Please select at least one package to save
+                    </p>
+                  )}
+                </>
+              )}
 
               {/* Save Packages Button */}
               <div className="mt-6 flex justify-end">
                 <button
                   onClick={async () => {
+                    if (selectedPackageIds.length === 0) {
+                      showToast("Please select at least one package", "warning");
+                      return;
+                    }
+
                     const monthNumber =
                       monthNames[payPeriodMonth] || new Date().getMonth() + 1;
                     const year =
                       parseInt(payPeriodYear) || new Date().getFullYear();
 
+                    const selectedCountries = countries.filter((c) =>
+                      selectedPackageIds.includes(c.packageId || c.id)
+                    );
+
+                    const selectedTotalEarnings = selectedCountries.reduce(
+                      (sum, c) => sum + (c.subtotal || 0),
+                      0,
+                    );
+
                     const step2Data = {
                       pay_period_month: monthNumber,
                       pay_period_year: year,
-                      location_breakdown: countries.map((c) => ({
+                      package_ids: selectedPackageIds,
+                      location_breakdown: selectedCountries.map((c) => ({
                         location_name: c.name,
                         package: {
-                          id: c.packageId,
+                          id: c.packageId || c.id,
                           name: c.name,
                           currency: c.currency,
                         },
@@ -2214,32 +2347,32 @@ function EditPayroll() {
                         salary_components: c.salary_components || [],
                         subtotal: c.subtotal || 0,
                       })),
-                      total_earnings: totalEarnings,
+                      total_earnings: selectedTotalEarnings,
                       total_deductions: totalDeductions,
-                      gross_salary: grossSalary,
-                      net_salary: netSalary,
+                      gross_salary: selectedTotalEarnings,
+                      net_salary: selectedTotalEarnings,
                     };
+
+                    console.log("Saving only selected packages:", step2Data);
 
                     const saved = await handleSaveStep(2, step2Data);
                     if (saved) {
                       setIsStep2Saved(true);
                       dispatch(markStepCompleted(2));
                       showToast(
-                        "Salary packages saved successfully!",
+                        `Salary packages saved successfully! (${selectedPackageIds.length} selected)`,
                         "success",
                       );
                     }
                   }}
-                  className="px-6 py-2.5 rounded-full font-semibold bg-green-500 text-white hover:bg-green-600 transition-all flex items-center gap-2 text-sm shadow-md hover:shadow-lg"
-                  disabled={
-                    currentPayroll?.status === "completed" ||
-                    currentPayroll?.status === "paid"
-                  }
+                  className="px-6 py-2.5 rounded-full font-semibold bg-green-500 text-white hover:bg-green-600 transition-all flex items-center gap-2 text-sm shadow-md hover:shadow-lg disabled:opacity-50 disabled:cursor-not-allowed"
+                  disabled={selectedPackageIds.length === 0}
                 >
-                  <i className="fas fa-save"></i> Save Packages
+                  <i className="fas fa-save"></i> Save Packages ({selectedPackageIds.length} selected)
                 </button>
               </div>
 
+              {/* Mixed Currencies Notice */}
               {countries.some((c) => c.currency !== targetCurrency) && (
                 <div className="mt-4 p-3 bg-yellow-50 dark:bg-yellow-900/20 border border-yellow-200 dark:border-yellow-800 rounded-lg text-sm text-yellow-700 dark:text-yellow-300">
                   <i className="fas fa-exclamation-triangle mr-2"></i>
@@ -2692,14 +2825,16 @@ function EditPayroll() {
                                 rate: 1,
                               })),
                             ]);
+                            showToast(`Added ${availableCurrencies.length} currency conversion rates`, "success");
                           } else {
-                            showToast("All available currencies added", "info");
+                            showToast("All available currencies have been added", "info");
                           }
                         }}
                         className="px-2 py-1 text-xs bg-green-500 text-white rounded-lg hover:bg-green-600 transition-colors flex items-center gap-1"
                         disabled={
                           currentPayroll?.status === "completed" ||
-                          currentPayroll?.status === "paid"
+                          currentPayroll?.status === "paid" ||
+                          conversionRatesList.length >= currencies.length - 1
                         }
                       >
                         <i className="fas fa-plus text-[10px]"></i> Add
@@ -2751,12 +2886,15 @@ function EditPayroll() {
                               }
                             >
                               {currencies
-                                .filter((c) => c !== targetCurrency)
+                                .filter((c) => c !== targetCurrency && !conversionRatesList.some((i) => i.id !== item.id && i.currency === c))
                                 .map((curr) => (
                                   <option key={curr} value={curr}>
                                     {curr}
                                   </option>
                                 ))}
+                              {conversionRatesList.some((i) => i.id === item.id && !currencies.includes(i.currency)) && (
+                                <option value={item.currency}>{item.currency}</option>
+                              )}
                             </select>
                             <span className="text-xs text-gray-400">→</span>
                             <span className="text-xs font-semibold text-green-600 dark:text-green-400 w-8">
@@ -2885,25 +3023,27 @@ function EditPayroll() {
                         <div className="text-[10px] text-gray-500 mb-1">
                           Currency Breakdown:
                         </div>
-                        {countries.map((country, idx) => {
-                          const subtotal = country.subtotal || 0;
-                          if (subtotal > 0) {
-                            return (
-                              <div
-                                key={idx}
-                                className="flex justify-between items-center text-sm"
-                              >
-                                <span className="text-gray-600 dark:text-gray-400">
-                                  {country.name}:
-                                </span>
-                                <span className="font-semibold text-gray-700 dark:text-gray-300">
-                                  {country.currency} {subtotal.toFixed(2)}
-                                </span>
-                              </div>
-                            );
-                          }
-                          return null;
-                        })}
+                        {countries
+                          .filter((c) => selectedPackageIds.includes(c.packageId || c.id))
+                          .map((country, idx) => {
+                            const subtotal = country.subtotal || 0;
+                            if (subtotal > 0) {
+                              return (
+                                <div
+                                  key={idx}
+                                  className="flex justify-between items-center text-sm"
+                                >
+                                  <span className="text-gray-600 dark:text-gray-400">
+                                    {country.name}:
+                                  </span>
+                                  <span className="font-semibold text-gray-700 dark:text-gray-300">
+                                    {country.currency} {subtotal.toFixed(2)}
+                                  </span>
+                                </div>
+                              );
+                            }
+                            return null;
+                          })}
 
                         <div className="border-t border-blue-200 dark:border-blue-700 mt-1 pt-1 flex justify-between items-center font-semibold">
                           <span className="text-gray-600 dark:text-gray-400">
@@ -2911,7 +3051,7 @@ function EditPayroll() {
                           </span>
                           <span className="text-blue-600 dark:text-blue-400">
                             {countries
-                              .filter((c) => (c.subtotal || 0) > 0)
+                              .filter((c) => selectedPackageIds.includes(c.packageId || c.id) && (c.subtotal || 0) > 0)
                               .map(
                                 (c) =>
                                   `${c.currency} ${(c.subtotal || 0).toFixed(2)}`,
@@ -3063,7 +3203,7 @@ function EditPayroll() {
                           <span>Gross Salary:</span>
                           <span>
                             {countries
-                              .filter((c) => (c.subtotal || 0) > 0)
+                              .filter((c) => selectedPackageIds.includes(c.packageId || c.id) && (c.subtotal || 0) > 0)
                               .map(
                                 (c) =>
                                   `${c.currency} ${(c.subtotal || 0).toFixed(2)}`,
@@ -3108,14 +3248,16 @@ function EditPayroll() {
                             {(() => {
                               const netPayByCurrency = {};
 
-                              countries.forEach((c) => {
-                                const subtotal = c.subtotal || 0;
-                                if (subtotal > 0) {
-                                  netPayByCurrency[c.currency] =
-                                    (netPayByCurrency[c.currency] || 0) +
-                                    subtotal;
-                                }
-                              });
+                              countries
+                                .filter((c) => selectedPackageIds.includes(c.packageId || c.id))
+                                .forEach((c) => {
+                                  const subtotal = c.subtotal || 0;
+                                  if (subtotal > 0) {
+                                    netPayByCurrency[c.currency] =
+                                      (netPayByCurrency[c.currency] || 0) +
+                                      subtotal;
+                                  }
+                                });
 
                               overtimeRequests.forEach((req) => {
                                 const amount =
