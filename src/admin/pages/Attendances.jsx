@@ -95,36 +95,40 @@ const Attendances = () => {
   const calendarRef = useRef(null);
 
   // Get unique employees for filter
-  const uniqueEmployees = [
-    ...new Set(
-      records
-        .map((record) => {
-          // Get employee name from record
-          let name = record.name || record.employee_name || record.employeeName;
-          if (!name && record.user) {
-            if (record.user.employee) {
-              name =
-                `${record.user.employee.first_name || ""} ${record.user.employee.last_name || ""}`.trim() ||
-                record.user.employee.employee_id;
-            }
-            if (!name && record.user.username) {
-              name = record.user.username;
-            }
-          }
-          return {
-            id:
-              record.employee_id ||
-              record.user_id ||
-              record.userid ||
-              record.id ||
-              record.user?.id,
-            name: name || `Employee #${record.employee_id || record.id}`,
-          };
-        })
-        .filter((emp) => emp.id && emp.name),
-    ),
-  ];
+  // Get unique employees for filter
+const uniqueEmployeesMap = new Map();
 
+records.forEach((record) => {
+  // Get employee name from record
+  let name = record.name || record.employee_name || record.employeeName;
+  if (!name && record.user) {
+    if (record.user.employee) {
+      name =
+        `${record.user.employee.first_name || ""} ${record.user.employee.last_name || ""}`.trim() ||
+        record.user.employee.employee_id;
+    }
+    if (!name && record.user.username) {
+      name = record.user.username;
+    }
+  }
+  
+  const id =
+    record.employee_id ||
+    record.user_id ||
+    record.userid ||
+    record.id ||
+    record.user?.id;
+  
+  const employeeName = name || `Employee #${record.employee_id || record.id}`;
+  
+  // Use the employee name as the key to deduplicate
+  // This ensures each employee appears only once
+  if (id && employeeName && !uniqueEmployeesMap.has(employeeName)) {
+    uniqueEmployeesMap.set(employeeName, { id, name: employeeName });
+  }
+});
+
+const uniqueEmployees = Array.from(uniqueEmployeesMap.values());
   // Fetch attendance data on mount and when month changes
   useEffect(() => {
     const year = selectedMonth.getFullYear();
