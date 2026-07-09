@@ -18,47 +18,45 @@ const isValidPunch = (value) => value && value !== "-" && value.trim() !== "";
 // FIXED: Improved extractData function
 const extractData = (response) => {
   try {
-    // The data is directly in response.data.data, not in response.data.data.attendance
     const recordsData = response.data?.data?.data || [];
     const meta = response.data?.data?.meta || {};
 
     if (recordsData && Array.isArray(recordsData)) {
       const records = recordsData.map((record, idx) => {
         const hasPunchOut = record.punch_out && record.punch_out !== "-";
-        const punchIn = record.punch_in && record.punch_in !== "-" ? record.punch_in : "-";
-        const punchOut = hasPunchOut ? record.punch_out : null;
 
-        // Get employee name directly from the response
+        const punchIn =
+          record.punch_in && record.punch_in !== "-" ? record.punch_in : "-";
+
         const employeeName = record.name || `Employee ${record.employee_id}`;
-        
-        // Get department directly from the response
+
         const department = record.department || "-";
 
-        // Get working hours from the API response
-        const workingHours = record.worked_hours !== undefined ? record.worked_hours : "--";
+        const workingHours =
+          record.worked_hours !== undefined ? record.worked_hours : "--";
 
         return {
           id: record.employee_id || idx,
           employee_id: record.employee_id,
-          employeeName: employeeName,
+          employeeName,
           company: record.company || "N/A",
           company_id: record.company_id || null,
-          department: department,
+          department,
           date: record.date || "-",
-          punchIn: punchIn,
+          punchIn,
           punchOut: hasPunchOut ? record.punch_out : null,
           punch_in_raw: record.punch_in,
           punch_out_raw: record.punch_out,
-          workingHours: workingHours,
-          status: record.status || (record.punch_in && record.punch_in !== "-" ? "Present" : "Absent"),
+          workingHours,
+          status:
+            record.status ||
+            (record.punch_in && record.punch_in !== "-" ? "Present" : "Absent"),
           isLate: false,
           hasPunchOut,
-          // Keep raw data for debugging
           raw: record,
         };
       });
 
-      // Stats would need to be calculated from the records since your API doesn't seem to provide stats
       const stats = {
         totalActiveEmployees: meta.total || records.length,
         presentToday: records.filter((r) => r.status === "Present").length,
@@ -67,6 +65,13 @@ const extractData = (response) => {
         punchedLate: 0,
         punchedOutToday: records.filter((r) => r.hasPunchOut).length,
       };
+
+      return {
+        records,
+        stats,
+        meta,
+      };
+    }
 
     // Check for: response.data (array)
     if (response?.data && Array.isArray(response.data)) {
@@ -79,6 +84,7 @@ const extractData = (response) => {
     }
 
     console.warn("No array data found in response, returning empty array");
+
     return [];
   } catch (error) {
     console.error("Error extracting data:", error);
@@ -403,10 +409,10 @@ export const fetchAttendanceStats = createAsyncThunk(
     try {
       const response = await apiClient.get(`/admin/attendance/stats`);
       console.log("Attendance stats response:", response.data);
-      
+
       // Extract data from response
       const data = response.data?.data || response.data;
-      
+
       // Map the stats from the API response
       return {
         total: {
@@ -434,7 +440,7 @@ export const fetchAttendanceStats = createAsyncThunk(
       console.error("Error fetching attendance stats:", error);
       return rejectWithValue(handleApiError(error));
     }
-  }
+  },
 );
 
 const attendanceSlice = createSlice({
@@ -655,6 +661,11 @@ const attendanceSlice = createSlice({
   },
 });
 
-export const { clearUploadStatus, clearErrors, updateUploadStatus, removeUpload, clearCompletedUploads } =
-  attendanceSlice.actions;
+export const {
+  clearUploadStatus,
+  clearErrors,
+  updateUploadStatus,
+  removeUpload,
+  clearCompletedUploads,
+} = attendanceSlice.actions;
 export default attendanceSlice.reducer;
