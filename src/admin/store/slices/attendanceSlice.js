@@ -18,17 +18,55 @@ const isValidPunch = (value) => value && value !== "-" && value.trim() !== "";
 // FIXED: Improved extractData function
 const extractData = (response) => {
   try {
-    console.log("Extracting data from response:", response);
+    // The data is directly in response.data.data, not in response.data.data.attendance
+    const recordsData = response.data?.data?.data || [];
+    const meta = response.data?.data?.meta || {};
 
-    // Check for nested structure: response.data.data.data (for paginated responses)
-    if (response?.data?.data?.data && Array.isArray(response.data.data.data)) {
-      return response.data.data.data;
-    }
+    if (recordsData && Array.isArray(recordsData)) {
+      const records = recordsData.map((record, idx) => {
+        const hasPunchOut = record.punch_out && record.punch_out !== "-";
+        const punchIn = record.punch_in && record.punch_in !== "-" ? record.punch_in : "-";
+        const punchOut = hasPunchOut ? record.punch_out : null;
 
-    // Check for: response.data.data (direct array in data)
-    if (response?.data?.data && Array.isArray(response.data.data)) {
-      return response.data.data;
-    }
+        // Get employee name directly from the response
+        const employeeName = record.name || `Employee ${record.employee_id}`;
+        
+        // Get department directly from the response
+        const department = record.department || "-";
+
+        // Get working hours from the API response
+        const workingHours = record.worked_hours !== undefined ? record.worked_hours : "--";
+
+        return {
+          id: record.employee_id || idx,
+          employee_id: record.employee_id,
+          employeeName: employeeName,
+          company: record.company || "N/A",
+          company_id: record.company_id || null,
+          department: department,
+          date: record.date || "-",
+          punchIn: punchIn,
+          punchOut: hasPunchOut ? record.punch_out : null,
+          punch_in_raw: record.punch_in,
+          punch_out_raw: record.punch_out,
+          workingHours: workingHours,
+          status: record.status || (record.punch_in && record.punch_in !== "-" ? "Present" : "Absent"),
+          isLate: false,
+          hasPunchOut,
+          // Keep raw data for debugging
+          raw: record,
+        };
+      });
+
+      // Stats would need to be calculated from the records since your API doesn't seem to provide stats
+      const stats = {
+        totalActiveEmployees: meta.total || records.length,
+        presentToday: records.filter((r) => r.status === "Present").length,
+        absentToday: records.filter((r) => r.status === "Absent").length,
+        punchedInOnTime: 0,
+        punchedLate: 0,
+        punchedOutToday: records.filter((r) => r.hasPunchOut).length,
+      };
 
     // Check for: response.data (array)
     if (response?.data && Array.isArray(response.data)) {
@@ -617,11 +655,6 @@ const attendanceSlice = createSlice({
   },
 });
 
-export const {
-  clearUploadStatus,
-  clearErrors,
-  updateUploadStatus,
-  removeUpload,
-  clearCompletedUploads,
-} = attendanceSlice.actions;
+export const { clearUploadStatus, clearErrors, updateUploadStatus, removeUpload, clearCompletedUploads } =
+  attendanceSlice.actions;
 export default attendanceSlice.reducer;
