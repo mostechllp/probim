@@ -46,26 +46,117 @@ export const generateAttendancePDF = (records, filters = {}) => {
   const pdf = new PDFGenerator();
   pdf.init("landscape");
 
-  const totalPresent = records.filter(r => r.status !== "Absent" && !r.lateBy).length;
-  const totalLate = records.filter(r => r.lateBy && r.lateBy > 0).length;
-  const totalAbsent = records.filter(r => r.status === "Absent").length;
-  const stats = `Total: ${records.length} | Present: ${totalPresent} | Late: ${totalLate} | Absent: ${totalAbsent}`;
+  // Helper function to check if overtime exists (handles both string and number)
+  const hasOvertimeValue = (overtime) => {
+    if (!overtime || overtime === "-" || overtime === "0" || overtime === 0) return false;
+    // If it's a string like "5 mins", "1 hour 32 mins", it has overtime
+    if (typeof overtime === 'string' && overtime.trim() !== "") return true;
+    // If it's a number greater than 0
+    if (typeof overtime === 'number' && overtime > 0) return true;
+    return false;
+  };
+
+  // Update stats calculation to include overtime
+  const totalPresent = records.filter(r => {
+    const status = String(r.status || r.attendance_status || "").toLowerCase();
+    return status === "present" || status === "full day" || status === "fullday";
+  }).length;
+  const totalAbsent = records.filter(r => {
+    const status = String(r.status || r.attendance_status || "").toLowerCase();
+    return status === "absent";
+  }).length;
+  const totalLate = records.filter(r => {
+    const status = String(r.status || r.attendance_status || "").toLowerCase();
+    return status === "late";
+  }).length;
+  const totalHalfDay = records.filter(r => {
+    const status = String(r.status || r.attendance_status || "").toLowerCase();
+    return status === "half day" || status === "halfday";
+  }).length;
+  const totalOvertime = records.filter(r => hasOvertimeValue(r.overtime)).length;
+  
+  const stats = `Total: ${records.length} | Present: ${totalPresent} | Late: ${totalLate} | Half Day: ${totalHalfDay} | Absent: ${totalAbsent} | Overtime: ${totalOvertime}`;
   
   pdf.addHeader("Attendance Report", `Period: ${filters.start_date} to ${filters.end_date}`, { ...filters, stats });
 
-  const columns = ["S.No", "Date", "Employee", "Department", "Punch In", "Punch Out", "Duration", "Status", "Late By"];
+  // Updated columns - added OVERTIME column
+  const columns = ["S.No", "Date", "Employee", "Department", "Punch In", "Punch Out", "Worked Hours", "Overtime", "Status"];
 
-  const data = records.map((record, index) => [
-    index + 1,
-    record.date,
-    record.employeeName || record.name,
-    record.department,
-    record.punchIn || record.punch_in,
-    record.punchOut || record.punch_out || "Not Punched Out",
-    record.duration,
-    record.lateBy ? "Late" : (record.status === "Absent" ? "Absent" : "Present"),
-    record.lateBy ? `${record.lateBy} min` : "-",
-  ]);
+  // Helper function to format worked hours (handles both number and string)
+  const formatWorkedHours = (hours) => {
+    if (!hours || hours === 0 || hours === "0" || hours === "-") return "-";
+    
+    let numHours;
+    if (typeof hours === 'string') {
+      // If it's already a formatted string like "9 hrs 5 mins", return as-is
+      if (hours.includes('hr') || hours.includes('min') || hours.includes('hour')) {
+        return hours;
+      }
+      numHours = parseFloat(hours);
+    } else {
+      numHours = hours;
+    }
+    
+    if (isNaN(numHours) || numHours === 0) return "-";
+    const h = Math.floor(numHours);
+    const m = Math.round((numHours - h) * 60);
+    if (h === 0) return `${m} mins`;
+    if (m === 0) return `${h} hr${h > 1 ? 's' : ''}`;
+    return `${h} hr${h > 1 ? 's' : ''} ${m} min${m > 1 ? 's' : ''}`;
+  };
+
+  // Helper function to get status label
+  const getStatusLabel = (status) => {
+    const statusLower = String(status || "").toLowerCase();
+    const statusMap = {
+      "present": "Full Day",
+      "full day": "Full Day",
+      "fullday": "Full Day",
+      "absent": "Absent",
+      "late": "Late",
+      "half day": "Half Day",
+      "halfday": "Half Day",
+      "holiday": "Holiday",
+      "leave": "Leave",
+    };
+    return statusMap[statusLower] || status || "Unknown";
+  };
+
+  // Build the data array
+  const data = records.map((record, index) => {
+    const status = record.status || record.attendance_status || "Present";
+    const hasOvertime = hasOvertimeValue(record.overtime);
+    
+    // Get the overtime display value (as-is from API)
+    const overtimeDisplay = hasOvertime ? record.overtime : "-";
+    
+    // Format worked hours - if it's already formatted, keep it
+    let workedHoursDisplay = record.worked_hours || record.working_hours;
+    if (workedHoursDisplay && typeof workedHoursDisplay === 'number') {
+      workedHoursDisplay = formatWorkedHours(workedHoursDisplay);
+    } else if (workedHoursDisplay && typeof workedHoursDisplay === 'string') {
+      // If it's a string that already contains 'hr' or 'min', keep it as-is
+      if (workedHoursDisplay.includes('hr') || workedHoursDisplay.includes('min') || workedHoursDisplay.includes('hour')) {
+        // Keep as-is
+      } else {
+        workedHoursDisplay = formatWorkedHours(workedHoursDisplay);
+      }
+    } else {
+      workedHoursDisplay = "-";
+    }
+    
+    return [
+      index + 1,
+      record.date || "-",
+      record.employeeName || record.name || "-",
+      record.department || "-",
+      record.punchIn || record.punch_in || "-",
+      record.punchOut || record.punch_out || (record.punchOut === null ? "Not Punched Out" : "-"),
+      workedHoursDisplay,
+      overtimeDisplay,
+      getStatusLabel(status) + (hasOvertime ? " + OT" : ""),
+    ];
+  });
 
   pdf.addTable(columns, data, 55);
   pdf.addFooter();

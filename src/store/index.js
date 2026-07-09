@@ -25,6 +25,7 @@ import offboardingReducer from "../admin/store/slices/offboardingSlice";
 import checklistCategoryReducer from "../admin/store/slices/checklistCategorySlice";
 import assetReducer from "../admin/store/slices/assetSlice";
 import checklistReducer from "../admin/store/slices/checklistSlice";
+import reportReducer from "../admin/store/slices/reportSlice";
 
 // Employee reducers
 import leavesReducer from "../employee/store/slices/leavesSlice";
@@ -65,6 +66,7 @@ export const store = configureStore({
     assets: assetReducer,
     checklist: checklistReducer,
     checklistCategory: checklistCategoryReducer,
+    reports: reportReducer,
 
     // Employee
     EmpLeaves: leavesReducer,
