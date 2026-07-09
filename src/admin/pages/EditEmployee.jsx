@@ -43,6 +43,12 @@ const EditEmployee = () => {
   const [departmentModalLoading, setDepartmentModalLoading] = useState(false);
   const [designationModalLoading, setDesignationModalLoading] = useState(false);
 
+  const [idGenerationMethod, setIdGenerationMethod] = useState("manual"); // manual, auto
+const [idPrefix, setIdPrefix] = useState("EMP");
+const [idFormat, setIdFormat] = useState("prefix+year+month+day+random");
+const [manualEmployeeId, setManualEmployeeId] = useState("");
+const [generatedPreview, setGeneratedPreview] = useState("");
+
   // Document file states - matching AddEmployee structure
   const [documents, setDocuments] = useState({
     avatar: null,
@@ -212,6 +218,185 @@ const EditEmployee = () => {
       setFormInitialized(false);
     };
   }, [id, dispatch]);
+
+  const formatOptions = [
+  {
+    value: "prefix+year+month+day+random",
+    label: "EMP20241225001",
+    description: "Prefix + Year + Month + Day + Random",
+  },
+  {
+    value: "prefix+year+dob_ddmm+random",
+    label: "EMP20242512001",
+    description: "Prefix + Year + DOB(DDMM) + Random",
+  },
+  {
+    value: "prefix+timestamp",
+    label: "EMP170351234567",
+    description: "Prefix + Timestamp",
+  },
+  {
+    value: "prefix+year+sequence",
+    label: "EMP2024001",
+    description: "Prefix + Year + Sequence",
+  },
+  {
+    value: "year+month+day+random",
+    label: "20241225001",
+    description: "Year + Month + Day + Random (No Prefix)",
+  },
+  {
+    value: "custom",
+    label: "Custom Format",
+    description: "Create your own format",
+  },
+];
+
+// Add custom format state
+const [customFormat, setCustomFormat] = useState("prefix+year+month+day+timestamp");
+
+// Add the generateEmployeeIdWithOptions function
+const generateEmployeeIdWithOptions = (dob, joiningDate, prefix, format) => {
+  if (
+    (format !== "manual" && (!dob || !joiningDate)) ||
+    format === "manual"
+  ) {
+    return "";
+  }
+
+  // Parse dates
+  let dobFormatted = dob;
+  let joiningFormatted = joiningDate;
+
+  if (dob && dob.match(/^\d{2}\/\d{2}\/\d{4}$/)) {
+    const [day, month, year] = dob.split("/");
+    dobFormatted = `${year}-${month}-${day}`;
+  }
+
+  if (joiningDate && joiningDate.match(/^\d{2}\/\d{2}\/\d{4}$/)) {
+    const [day, month, year] = joiningDate.split("/");
+    joiningFormatted = `${year}-${month}-${day}`;
+  }
+
+  const dobDate = dob ? new Date(dobFormatted) : null;
+  const joiningDateObj = joiningDate ? new Date(joiningFormatted) : null;
+
+  // Get current timestamp for uniqueness
+  const timestamp = Date.now().toString().slice(-4);
+  const random = Math.random().toString(36).substring(2, 6).toUpperCase();
+
+  // Replace placeholders in format
+  let generatedId = format;
+
+  // Replace prefix
+  generatedId = generatedId.replace(/prefix/g, prefix || "EMP");
+
+  // Replace year (joining or current)
+  if (generatedId.includes("year")) {
+    const year = joiningDateObj
+      ? joiningDateObj.getFullYear()
+      : new Date().getFullYear();
+    generatedId = generatedId.replace(/year/g, year);
+  }
+
+  // Replace month (from joining date or DOB or current)
+  if (generatedId.includes("month")) {
+    let month;
+    if (generatedId.includes("dob_month") && dobDate) {
+      month = String(dobDate.getMonth() + 1).padStart(2, "0");
+      generatedId = generatedId.replace(/dob_month/g, month);
+    } else if (generatedId.includes("joining_month") && joiningDateObj) {
+      month = String(joiningDateObj.getMonth() + 1).padStart(2, "0");
+      generatedId = generatedId.replace(/joining_month/g, month);
+    } else {
+      month = String(new Date().getMonth() + 1).padStart(2, "0");
+      generatedId = generatedId.replace(/month/g, month);
+    }
+  }
+
+  // Replace day (from DOB or joining date or current)
+  if (generatedId.includes("day")) {
+    let day;
+    if (generatedId.includes("dob_day") && dobDate) {
+      day = String(dobDate.getDate()).padStart(2, "0");
+      generatedId = generatedId.replace(/dob_day/g, day);
+    } else if (generatedId.includes("joining_day") && joiningDateObj) {
+      day = String(joiningDateObj.getDate()).padStart(2, "0");
+      generatedId = generatedId.replace(/joining_day/g, day);
+    } else {
+      day = String(new Date().getDate()).padStart(2, "0");
+      generatedId = generatedId.replace(/day/g, day);
+    }
+  }
+
+  // Replace DOB day+month (DDMM)
+  if (generatedId.includes("dob_ddmm") && dobDate) {
+    const dobDay = String(dobDate.getDate()).padStart(2, "0");
+    const dobMonth = String(dobDate.getMonth() + 1).padStart(2, "0");
+    generatedId = generatedId.replace(/dob_ddmm/g, `${dobDay}${dobMonth}`);
+  }
+
+  // Replace timestamp
+  if (generatedId.includes("timestamp")) {
+    generatedId = generatedId.replace(/timestamp/g, timestamp);
+  }
+
+  // Replace random
+  if (generatedId.includes("random")) {
+    generatedId = generatedId.replace(/random/g, random);
+  }
+
+  // Replace sequence (you can implement DB check for uniqueness)
+  if (generatedId.includes("sequence")) {
+    generatedId = generatedId.replace(/sequence/g, "001");
+  }
+
+  generatedId = generatedId.replace(/\+/g, "-");
+
+  return generatedId;
+};
+
+// Add useEffect for preview generation
+useEffect(() => {
+  if (idGenerationMethod === "auto" && watchDob && watchJoiningDate) {
+    const preview = generateEmployeeIdWithOptions(
+      watchDob,
+      watchJoiningDate,
+      idPrefix,
+      idFormat === "custom" ? customFormat : idFormat,
+    );
+    setGeneratedPreview(preview);
+    setValue("employee_id", preview);
+  } else if (idGenerationMethod === "manual") {
+    setValue("employee_id", manualEmployeeId);
+  }
+}, [
+  idGenerationMethod,
+  idPrefix,
+  idFormat,
+  customFormat,
+  watchDob,
+  watchJoiningDate,
+  manualEmployeeId,
+  setValue,
+]);
+
+// When manual ID changes
+useEffect(() => {
+  if (idGenerationMethod === "manual") {
+    setValue("employee_id", manualEmployeeId);
+  }
+}, [manualEmployeeId, idGenerationMethod, setValue]);
+
+// Initialize the manualEmployeeId with current employee_id when editing
+useEffect(() => {
+  if (currentEmployee && formInitialized) {
+    if (currentEmployee.employee_id) {
+      setManualEmployeeId(currentEmployee.employee_id);
+      setValue("employee_id", currentEmployee.employee_id);
+    }
+  }
+}, [currentEmployee, formInitialized, setValue]);
 
   // Add these handler functions after the existing handlers
   const handleAddDepartment = async (data) => {
@@ -538,7 +723,13 @@ const EditEmployee = () => {
     { number: 4, title: "Contact", icon: "fas fa-address-card" },
   ];
 
-  const userTypeOptions = ["employee", "admin"];
+  const userTypeOptions = [
+  { value: "employee", label: "Employee" },
+  { value: "admin", label: "Admin" },
+  { value: "hr", label: "HR" },
+  { value: "manager", label: "Manager" },
+  { value: "team-lead", label: "Team Lead" },
+];
   const genderOptions = [
     { value: "male", label: "Male" },
     { value: "female", label: "Female" },
@@ -732,215 +923,233 @@ const EditEmployee = () => {
   };
 
   const onSubmit = async (data) => {
-    setLoading(true);
+  setLoading(true);
 
-    const formData = new FormData();
-
-    // Basic fields
-    formData.append("first_name", data.first_name);
-    formData.append("last_name", data.last_name || "");
-    formData.append("employee_id", data.employee_id);
-    formData.append("organization_id", parseInt(data.organization_id));
-
-    // Handle company based on multi_company setting
-    if (selectedOrgDetails?.multi_company === "Yes") {
-      if (!data.company_id) {
-        showToast("Please select a company", "error");
-        setLoading(false);
-        return;
-      }
-      formData.append("company_id", parseInt(data.company_id));
-    } else {
-      formData.append("company_id", "");
-    }
-
-    formData.append("type", data.type);
-    formData.append("gender", data.gender || "");
-    formData.append("nationality", data.nationality || "");
-    formData.append("marital_status", data.marital_status || "");
-    if (data.is_skilled !== undefined) {
-      formData.append("is_skilled", data.is_skilled ? 1 : 0);
-    }
-
-    if (data.designation_id)
-      formData.append("designation_id", parseInt(data.designation_id));
-    if (data.department_id)
-      formData.append("department_id", parseInt(data.department_id));
-
-    // Convert dates to backend format
-    const dob = convertDateToBackend(data.dob);
-    const joiningDate = convertDateToBackend(data.joining_date);
-    if (dob) formData.append("dob", dob);
-    if (joiningDate) formData.append("joining_date", joiningDate);
-
-    // Special days - Send as arrays
-    if (data.special_days && data.special_days.length > 0) {
-      const validSpecialDays = data.special_days.filter(
-        (day) => day.name && day.name.trim() !== "" && day.date,
-      );
-      if (validSpecialDays.length > 0) {
-        const specialDaysName = validSpecialDays.map((day) => day.name.trim());
-        const specialDaysDate = validSpecialDays.map((day) =>
-          convertDateToBackend(day.date),
-        );
-
-        specialDaysName.forEach((name) =>
-          formData.append("special_days_name[]", name),
-        );
-        specialDaysDate.forEach((date) =>
-          formData.append("special_days_date[]", date),
-        );
-      }
-    }
-
-    // Passport fields with date conversion
-    if (data.passport_full_name)
-      formData.append("passport_full_name", data.passport_full_name);
-    if (data.passport_number)
-      formData.append("passport_number", data.passport_number);
-    if (data.passport_issued_date)
-      formData.append(
-        "passport_issued_date",
-        convertDateToBackend(data.passport_issued_date),
-      );
-    if (data.passport_expiry_date)
-      formData.append(
-        "passport_expiry_date",
-        convertDateToBackend(data.passport_expiry_date),
-      );
-    if (data.passport_issued_from)
-      formData.append("passport_issued_from", data.passport_issued_from);
-    if (data.place_of_birth)
-      formData.append("place_of_birth", data.place_of_birth);
-    if (data.father_name) formData.append("father_name", data.father_name);
-    if (data.mother_name) formData.append("mother_name", data.mother_name);
-    if (data.address) formData.append("address", data.address);
-
-    // Visa & Labor & EID with date conversion
-    if (data.visa_number) formData.append("visa_number", data.visa_number);
-    if (data.visa_type) formData.append("visa_type", data.visa_type);
-    if (data.visa_issued_date)
-      formData.append(
-        "visa_issued_date",
-        convertDateToBackend(data.visa_issued_date),
-      );
-    if (data.visa_expiry_date)
-      formData.append(
-        "visa_expiry_date",
-        convertDateToBackend(data.visa_expiry_date),
-      );
-
-    // Only send labor data if company trade license is "mainland"
-    if (selectedCompanyDetails?.raw?.trade_license === "mainland") {
-      if (data.labor_number) formData.append("labor_number", data.labor_number);
-      if (data.labor_issued_date)
-        formData.append(
-          "labor_issued_date",
-          convertDateToBackend(data.labor_issued_date),
-        );
-      if (data.labor_expiry_date)
-        formData.append(
-          "labor_expiry_date",
-          convertDateToBackend(data.labor_expiry_date),
-        );
-    } else {
-      formData.append("labor_number", "");
-      formData.append("labor_issued_date", "");
-      formData.append("labor_expiry_date", "");
-    }
-
-    if (data.eid_number) formData.append("eid_number", data.eid_number);
-    if (data.eid_issued_date)
-      formData.append(
-        "eid_issued_date",
-        convertDateToBackend(data.eid_issued_date),
-      );
-    if (data.eid_expiry_date)
-      formData.append(
-        "eid_expiry_date",
-        convertDateToBackend(data.eid_expiry_date),
-      );
-
-    // Contact
-    if (data.dependents) formData.append("dependents", String(data.dependents));
-    if (data.company_email)
-      formData.append("company_email", data.company_email);
-    if (data.company_mobile_number)
-      formData.append("company_mobile_number", data.company_mobile_number);
-    if (data.personal_number)
-      formData.append("personal_number", data.personal_number);
-    if (data.personal_email)
-      formData.append("personal_email", data.personal_email);
-    if (data.other_number) formData.append("other_number", data.other_number);
-    if (data.home_country_number)
-      formData.append("home_country_number", data.home_country_number);
-    if (data.role) formData.append("role_id", data.role);
-
-    // Avatar - send temp path if new file uploaded
-    if (documents.avatar) {
-      formData.append("avatar", documents.avatar);
-    }
-    if (removedDocuments.avatar && existingDocuments.avatar) {
-      formData.append("remove_avatar", "true");
-    }
-
-    // Document fields - send temp paths
-    const documentFields = [
-      "passport_1st_page",
-      "passport_2nd_page",
-      "passport_outer_page",
-      "passport_id_page",
-      "visa_page",
-      "labor_card",
-      "labor_contract",
-      "eid_1st_page",
-      "eid_2nd_page",
-      "educational_1st_page",
-      "educational_2nd_page",
-      "home_country_id_proof",
-    ];
-
-    documentFields.forEach((field) => {
-      if (documents[field]) {
-        formData.append(field, documents[field]);
-      }
-      if (removedDocuments[field] && existingDocuments[field]) {
-        formData.append(`remove_${field}`, "true");
-      }
-    });
-
-    // Add _method for PUT
-    formData.append("_method", "PUT");
-
-    // Debug log
-    console.log("=== FINAL FORM DATA TO BE SENT ===");
-    for (let pair of formData.entries()) {
-      console.log(`${pair[0]}: ${pair[1]}`);
-    }
-
-    const result = await dispatch(
-      updateEmployee({ id: parseInt(id), data: formData }),
-    );
+  // IMPORTANT: Get the employee_id from the form data
+  // The employee_id might be in data.employee_id or from manualEmployeeId state
+  const employeeIdValue = data.employee_id || manualEmployeeId;
+  
+  if (!employeeIdValue) {
+    showToast("Employee ID is required", "error");
     setLoading(false);
+    return;
+  }
 
-    if (updateEmployee.fulfilled.match(result)) {
-      showToast(`✓ Employee updated successfully!`, "success");
-      setTimeout(() => navigate("/admin/employees"), 1200);
-    } else {
-      const errorPayload = result.payload;
-      if (errorPayload && errorPayload.errors) {
-        const errorMessages = Object.entries(errorPayload.errors).map(
-          ([field, messages]) =>
-            `${field}: ${Array.isArray(messages) ? messages[0] : messages}`,
-        );
-        showToast(errorMessages.join("\n"), "error");
-      } else if (typeof errorPayload === "string") {
-        showToast(errorPayload, "error");
-      } else {
-        showToast("Failed to update employee", "error");
-      }
+  const formData = new FormData();
+
+  // Basic fields - MAKE SURE employee_id is included
+  formData.append("first_name", data.first_name);
+  formData.append("last_name", data.last_name || "");
+  formData.append("employee_id", employeeIdValue); // <-- THIS IS THE KEY FIX
+  formData.append("organization_id", parseInt(data.organization_id));
+
+  // Handle company based on multi_company setting
+  if (selectedOrgDetails?.multi_company === "Yes") {
+    if (!data.company_id) {
+      showToast("Please select a company", "error");
+      setLoading(false);
+      return;
     }
-  };
+    formData.append("company_id", parseInt(data.company_id));
+  } else {
+    formData.append("company_id", "");
+  }
+
+  formData.append("type", data.type);
+  formData.append("gender", data.gender || "");
+  formData.append("nationality", data.nationality || "");
+  formData.append("marital_status", data.marital_status || "");
+  if (data.is_skilled !== undefined) {
+    formData.append("is_skilled", data.is_skilled ? 1 : 0);
+  }
+
+  if (data.designation_id)
+    formData.append("designation_id", parseInt(data.designation_id));
+  if (data.department_id)
+    formData.append("department_id", parseInt(data.department_id));
+
+  // Convert dates to backend format
+  const dob = convertDateToBackend(data.dob);
+  const joiningDate = convertDateToBackend(data.joining_date);
+  if (dob) formData.append("dob", dob);
+  if (joiningDate) formData.append("joining_date", joiningDate);
+
+  // Special days - Send as arrays
+  if (data.special_days && data.special_days.length > 0) {
+    const validSpecialDays = data.special_days.filter(
+      (day) => day.name && day.name.trim() !== "" && day.date,
+    );
+    if (validSpecialDays.length > 0) {
+      const specialDaysName = validSpecialDays.map((day) => day.name.trim());
+      const specialDaysDate = validSpecialDays.map((day) =>
+        convertDateToBackend(day.date),
+      );
+
+      specialDaysName.forEach((name) =>
+        formData.append("special_days_name[]", name),
+      );
+      specialDaysDate.forEach((date) =>
+        formData.append("special_days_date[]", date),
+      );
+    }
+  }
+
+  // Passport fields with date conversion
+  if (data.passport_full_name)
+    formData.append("passport_full_name", data.passport_full_name);
+  if (data.passport_number)
+    formData.append("passport_number", data.passport_number);
+  if (data.passport_issued_date)
+    formData.append(
+      "passport_issued_date",
+      convertDateToBackend(data.passport_issued_date),
+    );
+  if (data.passport_expiry_date)
+    formData.append(
+      "passport_expiry_date",
+      convertDateToBackend(data.passport_expiry_date),
+    );
+  if (data.passport_issued_from)
+    formData.append("passport_issued_from", data.passport_issued_from);
+  if (data.place_of_birth)
+    formData.append("place_of_birth", data.place_of_birth);
+  if (data.father_name) formData.append("father_name", data.father_name);
+  if (data.mother_name) formData.append("mother_name", data.mother_name);
+  if (data.address) formData.append("address", data.address);
+
+  // Visa & Labor & EID with date conversion
+  if (data.visa_number) formData.append("visa_number", data.visa_number);
+  if (data.visa_type) formData.append("visa_type", data.visa_type);
+  if (data.visa_issued_date)
+    formData.append(
+      "visa_issued_date",
+      convertDateToBackend(data.visa_issued_date),
+    );
+  if (data.visa_expiry_date)
+    formData.append(
+      "visa_expiry_date",
+      convertDateToBackend(data.visa_expiry_date),
+    );
+
+  // Only send labor data if company trade license is "mainland"
+  if (selectedCompanyDetails?.raw?.trade_license === "mainland") {
+    if (data.labor_number) formData.append("labor_number", data.labor_number);
+    if (data.labor_issued_date)
+      formData.append(
+        "labor_issued_date",
+        convertDateToBackend(data.labor_issued_date),
+      );
+    if (data.labor_expiry_date)
+      formData.append(
+        "labor_expiry_date",
+        convertDateToBackend(data.labor_expiry_date),
+      );
+  } else {
+    formData.append("labor_number", "");
+    formData.append("labor_issued_date", "");
+    formData.append("labor_expiry_date", "");
+  }
+
+  if (data.eid_number) formData.append("eid_number", data.eid_number);
+  if (data.eid_issued_date)
+    formData.append(
+      "eid_issued_date",
+      convertDateToBackend(data.eid_issued_date),
+    );
+  if (data.eid_expiry_date)
+    formData.append(
+      "eid_expiry_date",
+      convertDateToBackend(data.eid_expiry_date),
+    );
+
+  // Contact
+  if (data.dependents) formData.append("dependents", String(data.dependents));
+  if (data.company_email)
+    formData.append("company_email", data.company_email);
+  if (data.company_mobile_number)
+    formData.append("company_mobile_number", data.company_mobile_number);
+  if (data.personal_number)
+    formData.append("personal_number", data.personal_number);
+  if (data.personal_email)
+    formData.append("personal_email", data.personal_email);
+  if (data.other_number) formData.append("other_number", data.other_number);
+  if (data.home_country_number)
+    formData.append("home_country_number", data.home_country_number);
+  if (data.role) formData.append("role_id", data.role);
+
+  // Avatar - send temp path if new file uploaded
+  if (documents.avatar) {
+    formData.append("avatar", documents.avatar);
+  }
+  if (removedDocuments.avatar && existingDocuments.avatar) {
+    formData.append("remove_avatar", "true");
+  }
+
+  // Document fields - send temp paths
+  const documentFields = [
+    "passport_1st_page",
+    "passport_2nd_page",
+    "passport_outer_page",
+    "passport_id_page",
+    "visa_page",
+    "labor_card",
+    "labor_contract",
+    "eid_1st_page",
+    "eid_2nd_page",
+    "educational_1st_page",
+    "educational_2nd_page",
+    "home_country_id_proof",
+  ];
+
+  documentFields.forEach((field) => {
+    if (documents[field]) {
+      formData.append(field, documents[field]);
+    }
+    if (removedDocuments[field] && existingDocuments[field]) {
+      formData.append(`remove_${field}`, "true");
+    }
+  });
+
+  // Add _method for PUT
+  formData.append("_method", "PUT");
+
+  // Debug log - verify employee_id is included
+  console.log("=== FINAL FORM DATA TO BE SENT ===");
+  for (let pair of formData.entries()) {
+    console.log(`${pair[0]}: ${pair[1]}`);
+  }
+
+  // Make sure employee_id is in the form data before submitting
+  if (!formData.has("employee_id")) {
+    console.error("ERROR: employee_id is missing from form data!");
+    showToast("Employee ID is required", "error");
+    setLoading(false);
+    return;
+  }
+
+  const result = await dispatch(
+    updateEmployee({ id: parseInt(id), data: formData }),
+  );
+  setLoading(false);
+
+  if (updateEmployee.fulfilled.match(result)) {
+    showToast(`✓ Employee updated successfully!`, "success");
+    setTimeout(() => navigate("/admin/employees"), 1200);
+  } else {
+    const errorPayload = result.payload;
+    if (errorPayload && errorPayload.errors) {
+      const errorMessages = Object.entries(errorPayload.errors).map(
+        ([field, messages]) =>
+          `${field}: ${Array.isArray(messages) ? messages[0] : messages}`,
+      );
+      showToast(errorMessages.join("\n"), "error");
+    } else if (typeof errorPayload === "string") {
+      showToast(errorPayload, "error");
+    } else {
+      showToast("Failed to update employee", "error");
+    }
+  }
+};
 
   // Validation rules
   const validationRules = {
@@ -1597,7 +1806,7 @@ const EditEmployee = () => {
                         >
                           {userTypeOptions.map((type) => (
                             <option key={type} value={type}>
-                              {type.charAt(0).toUpperCase() + type.slice(1)}
+                              {type.label}
                             </option>
                           ))}
                         </select>
@@ -1791,39 +2000,198 @@ const EditEmployee = () => {
                     </div>
                   </div>
 
-                  {/* Employee ID - Read Only */}
-                  <div className="md:col-span-2">
-                    <label className="block text-xs md:text-sm font-semibold text-gray-700 mb-1 md:mb-2">
-                      <i className="fas fa-id-card text-green-500 mr-1"></i>{" "}
-                      Employee ID <span className="text-red-500">*</span>
-                    </label>
-                    <Controller
-                      name="employee_id"
-                      control={control}
-                      render={({ field }) => (
-                        <>
-                          <input
-                            {...field}
-                            type="text"
-                            readOnly
-                            disabled
-                            className="w-full px-3 md:px-4 py-2 md:py-3 bg-gray-100 border border-gray-200 rounded-lg text-sm md:text-base text-gray-600 cursor-not-allowed"
-                            placeholder="Employee ID"
-                          />
-                          {errors.employee_id && (
-                            <p className="mt-1 text-xs text-red-500">
-                              {errors.employee_id.message}
-                            </p>
-                          )}
-                        </>
-                      )}
-                    />
-                    <p className="mt-1 text-xs text-gray-400">
-                      <i className="fas fa-info-circle mr-1"></i>
-                      Employee ID is auto-generated based on DOB and Joining
-                      Date and cannot be edited
-                    </p>
-                  </div>
+                  {/* Enhanced Employee ID Generation - Editable */}
+<div className="md:col-span-2">
+  <label className="block text-xs md:text-sm font-semibold text-gray-700 mb-2">
+    <i className="fas fa-id-card text-green-500 mr-1"></i>
+    Employee ID Generation{" "}
+    <span className="text-red-500">*</span>
+  </label>
+
+  {/* Generation Method Toggle */}
+  <div className="flex gap-4 mb-4">
+    <label className="flex items-center">
+      <input
+        type="radio"
+        checked={idGenerationMethod === "manual"}
+        onChange={() => setIdGenerationMethod("manual")}
+        className="mr-2 text-green-500 focus:ring-green-500"
+      />
+      <span className="text-sm text-gray-700">
+        Manual Entry
+      </span>
+    </label>
+    <label className="flex items-center">
+      <input
+        type="radio"
+        checked={idGenerationMethod === "auto"}
+        onChange={() => setIdGenerationMethod("auto")}
+        className="mr-2 text-green-500 focus:ring-green-500"
+      />
+      <span className="text-sm text-gray-700">
+        Auto-Generate
+      </span>
+    </label>
+  </div>
+
+  {idGenerationMethod === "manual" ? (
+    // Manual Entry
+    <div>
+      <input
+        type="text"
+        value={manualEmployeeId}
+        onChange={(e) => setManualEmployeeId(e.target.value.toUpperCase())}
+        placeholder="Enter Employee ID (e.g., EMP001, STAFF-001)"
+        className="w-full px-3 md:px-4 py-2 md:py-3 bg-gray-50 border border-gray-200 rounded-lg text-sm md:text-base text-gray-800 focus:outline-none focus:border-green-500 focus:ring-2 focus:ring-green-500/20"
+      />
+      <p className="text-xs text-gray-400 mt-1">
+        <i className="fas fa-info-circle mr-1"></i>
+        You can enter any unique ID format (e.g., EMP001, STAFF-2024-001)
+      </p>
+    </div>
+  ) : (
+    // Auto-Generation Options
+    <div className="space-y-4">
+      {/* Prefix */}
+      <div>
+        <label className="block text-xs font-semibold text-gray-700 mb-1">
+          Prefix
+        </label>
+        <input
+          type="text"
+          value={idPrefix}
+          onChange={(e) => setIdPrefix(e.target.value.toUpperCase())}
+          placeholder="e.g., EMP, STAFF, ENG"
+          className="w-full px-3 py-2 bg-gray-50 border border-gray-200 rounded-lg text-sm focus:outline-none focus:border-green-500"
+        />
+      </div>
+
+      {/* Format Selection */}
+      <div>
+        <label className="block text-xs font-semibold text-gray-700 mb-1">
+          ID Format
+        </label>
+        <select
+          value={idFormat}
+          onChange={(e) => setIdFormat(e.target.value)}
+          className="w-full px-3 py-2 bg-gray-50 border border-gray-200 rounded-lg text-sm focus:outline-none focus:border-green-500"
+        >
+          {formatOptions.map((option) => (
+            <option key={option.value} value={option.value}>
+              {option.label} - {option.description}
+            </option>
+          ))}
+        </select>
+      </div>
+
+      {/* Custom Format Builder */}
+      {idFormat === "custom" && (
+        <div>
+          <label className="block text-xs font-semibold text-gray-700 mb-1">
+            Custom Format Pattern
+          </label>
+          <input
+            type="text"
+            value={customFormat}
+            onChange={(e) => setCustomFormat(e.target.value)}
+            placeholder="e.g., prefix+year+month+day+random"
+            className="w-full px-3 py-2 bg-gray-50 border border-gray-200 rounded-lg text-sm font-mono focus:outline-none focus:border-green-500"
+          />
+          <div className="mt-2 text-xs text-gray-500">
+            <p className="font-semibold mb-1">
+              Available placeholders:
+            </p>
+            <div className="grid grid-cols-2 gap-1">
+              <span>
+                <code className="bg-gray-100 px-1">
+                  prefix
+                </code>{" "}
+                - Your prefix
+              </span>
+              <span>
+                <code className="bg-gray-100 px-1">year</code>{" "}
+                - Joining year
+              </span>
+              <span>
+                <code className="bg-gray-100 px-1">
+                  month
+                </code>{" "}
+                - Joining month
+              </span>
+              <span>
+                <code className="bg-gray-100 px-1">day</code>{" "}
+                - Joining day
+              </span>
+              <span>
+                <code className="bg-gray-100 px-1">
+                  dob_ddmm
+                </code>{" "}
+                - DOB (DDMM)
+              </span>
+              <span>
+                <code className="bg-gray-100 px-1">
+                  timestamp
+                </code>{" "}
+                - Unix timestamp
+              </span>
+              <span>
+                <code className="bg-gray-100 px-1">
+                  random
+                </code>{" "}
+                - Random string
+              </span>
+              <span>
+                <code className="bg-gray-100 px-1">
+                  sequence
+                </code>{" "}
+                - Sequence number
+              </span>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Preview Section */}
+      {watchDob && watchJoiningDate && generatedPreview && (
+        <div className="mt-3 p-3 bg-green-50 border border-green-200 rounded-lg">
+          <p className="text-xs text-green-700 font-semibold mb-1">
+            Preview:
+          </p>
+          <p className="text-sm font-mono font-bold text-green-800">
+            {generatedPreview}
+          </p>
+          <p className="text-xs text-green-600 mt-1">
+            <i className="fas fa-check-circle mr-1"></i>
+            ID will be generated based on DOB and Joining Date
+          </p>
+        </div>
+      )}
+
+      {(!watchDob || !watchJoiningDate) && (
+        <div className="p-3 bg-yellow-50 border border-yellow-200 rounded-lg">
+          <p className="text-xs text-yellow-700">
+            <i className="fas fa-info-circle mr-1"></i>
+            Please enter DOB and Joining Date to see ID preview
+          </p>
+        </div>
+      )}
+    </div>
+  )}
+
+  {/* Hidden Employee ID Field for form submission */}
+  <Controller
+    name="employee_id"
+    control={control}
+    rules={{ required: "Employee ID is required" }}
+    render={({ field }) => <input {...field} type="hidden" />}
+  />
+
+  {errors.employee_id && (
+    <p className="mt-1 text-xs text-red-500">
+      {errors.employee_id.message}
+    </p>
+  )}
+</div>
 
                   {/* Date of Birth */}
                   <div>

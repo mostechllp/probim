@@ -1,189 +1,356 @@
-/* eslint-disable no-unused-vars */
+// src/admin/pages/Dashboard.js
+
 import React, { useEffect, useState } from "react";
 import { useDispatch, useSelector } from "react-redux";
+import { useNavigate } from "react-router-dom";
 import { fetchEmployees } from "../store/slices/employeeSlice";
 import { fetchProjects } from "../store/slices/projectSlice";
+import {
+  fetchDashboard,
+  fetchMonthlyHoursByProject,
+  fetchEmployeeDetails,
+  clearMonthlyHours,
+} from "../store/slices/dashboardSlice";
 import { fetchAssignments } from "../store/slices/projectAssignmentSlice";
-import Sidebar from "../components/common/Sidebar";
-import Header from "../components/common/Header";
+import { StatsCard } from "../components/dashboard/StatsCard";
 import WelcomeBanner from "../components/dashboard/WelcomeBanner";
-import StatsCard from "../components/dashboard/StatsCard";
-import AttendanceChart from "../components/dashboard/AttendanceChart";
-import PunchChart from "../components/dashboard/PunchChart";
-import RecentFiles from "../components/dashboard/RecentFiles";
-import { fetchDashboard } from "../store/slices/dashboardSlice";
-import ProjectResourceChart from "../components/dashboard/ProjectResourceChart";
-import ProjectStatusChart from "../components/dashboard/ProjectStatusChart";
-import EmployeeEngagementChart from "../components/dashboard/EmployeeEngagementChart";
+import {
+  BarChart,
+  Bar,
+  XAxis,
+  YAxis,
+  CartesianGrid,
+  Tooltip,
+  Legend,
+  ResponsiveContainer,
+  Cell,
+  PieChart,
+  Pie,
+  LineChart,
+  Line,
+  Area,
+  ComposedChart,
+} from "recharts";
+import { showToast } from "../../components/common/Toast";
+import { ProjectAllocationChart } from "../components/dashboard/ProjectAllocationChart";
+import { ProjectHoursChart } from "../components/dashboard/ProjectHoursChart";
+import { WeeklyAttendanceChart } from "../components/dashboard/WeeklyAttendanceChart";
+import { TodayStatusChart } from "../components/dashboard/TodayStatsChart";
+import { AvgPunchTimeCard } from "../components/dashboard/AvgPunchTimeCrd";
+import { RecentPunchesList } from "../components/dashboard/RecentPunchesList";
+import { PunchDistributionChart } from "../components/dashboard/PunchDistributionChart";
+import { ProjectHoursModal } from "../components/dashboard/ProjectHoursModal";
+
+// ─── COLOR PALETTE ──────────────────────────────────────────────────────
+export const COLORS = {
+  blue: "#2a78d6",
+  aqua: "#1baf7a",
+  yellow: "#eda100",
+  violet: "#4a3aa7",
+  red: "#e34948",
+  green: "#008300",
+  orange: "#f97316",
+  purple: "#8b5cf6",
+  pink: "#ec4899",
+  cyan: "#06b6d4",
+};
+
+export const STATUS_COLORS = {
+  "On time": "#2a78d6",
+  Late: "#eda100",
+  Absent: "#e34948",
+  WFH: "#1baf7a",
+  Leave: "#4a3aa7",
+};
+
+export const CHART_COLORS = [
+  "#2a78d6",
+  "#1baf7a",
+  "#eda100",
+  "#e34948",
+  "#4a3aa7",
+  "#f97316",
+  "#8b5cf6",
+  "#ec4899",
+  "#06b6d4",
+  "#14b8a6",
+];
+
+// ─── HELPERS ──────────────────────────────────────────────────────────────
+const formatTime = (minutes) => {
+  if (!minutes || minutes === 0) return "0h";
+  const hours = Math.floor(minutes / 60);
+  const mins = minutes % 60;
+  if (hours === 0) return `${mins}m`;
+  if (mins === 0) return `${hours}h`;
+  return `${hours}h ${mins}m`;
+};
+
+export const getInitials = (name) => {
+  if (!name) return "?";
+  return name
+    .split(" ")
+    .map((n) => n[0])
+    .join("")
+    .toUpperCase()
+    .slice(0, 2);
+};
+
+export const getStatusBadge = (status) => {
+  const statusMap = {
+    on_time: { label: "On time", className: "badge-success" },
+    "on-time": { label: "On time", className: "badge-success" },
+    ontime: { label: "On time", className: "badge-success" },
+    late: { label: "Late", className: "badge-warn" },
+    absent: { label: "Absent", className: "badge-danger" },
+    wfh: { label: "WFH", className: "badge-blue" },
+    leave: { label: "Leave", className: "badge-violet" },
+  };
+  return statusMap[status] || { label: status, className: "badge-gray" };
+};
+
+export const formatDateDisplay = (dateString) => {
+  if (!dateString) return "-";
+  try {
+    const date = new Date(dateString);
+    return date.toLocaleDateString("en-GB", {
+      day: "2-digit",
+      month: "short",
+      year: "numeric",
+    });
+  } catch {
+    return dateString;
+  }
+};
 
 const Dashboard = () => {
   const dispatch = useDispatch();
+  const navigate = useNavigate();
   const { employees } = useSelector((state) => state.employees);
   const { user } = useSelector((state) => state.auth);
   const { stats, charts, recentData, loading } = useSelector(
     (state) => state.dashboard,
   );
-  const { projects, loading: projectsLoading } = useSelector((state) => state.projects || { projects: [], loading: false });
-  const { assignments, loading: assignmentsLoading } = useSelector((state) => state.projectAssignments || { assignments: [], loading: false });
+  const { projects, loading: projectsLoading } = useSelector(
+    (state) => state.projects || { projects: [], loading: false },
+  );
+  const { assignments } = useSelector(
+    (state) => state.projectAssignments || { assignments: [], loading: false },
+  );
+
+  const [showProjectHoursModal, setShowProjectHoursModal] = useState(false);
+  const [selectedProject, setSelectedProject] = useState(null);
+  const [modalMonth, setModalMonth] = useState(new Date().getMonth() + 1);
+  const [modalYear, setModalYear] = useState(new Date().getFullYear());
+
+  const userType = user?.type || "admin";
+  const basePath = userType === "admin" ? "/admin" : "/employee";
 
   useEffect(() => {
     dispatch(fetchDashboard());
     dispatch(fetchProjects());
     dispatch(fetchAssignments());
-  }, [dispatch]);
-
-  const [sidebarOpen, setSidebarOpen] = useState(false);
-  const [isMobile, setIsMobile] = useState(false);
-
-  useEffect(() => {
     dispatch(fetchEmployees());
-
-    const checkMobile = () => {
-      setIsMobile(window.innerWidth < 768);
-    };
-    checkMobile();
-    window.addEventListener("resize", checkMobile);
-    return () => window.removeEventListener("resize", checkMobile);
   }, [dispatch]);
 
-  const formattedStats = stats && {
-    totalEmployees: recentData?.employees?.length || 0,
-    punchedInToday: stats.today.punched_in,
-    lateArrivals: stats.today.late,
-    absentToday: stats.today.absent,
+  const totalEmployees = employees?.length || 0;
+  const activeProjects = projects.filter((p) => p.status === "Active").length;
+  const totalAssignments = assignments.length;
+  const totalTaggedEmployees = assignments.reduce(
+    (sum, a) => sum + (a.projectIds?.length || 0),
+    0,
+  );
+
+  const onTimeCount = charts?.today_status?.["On time"] || 0;
+  const lateCount = charts?.today_status?.Late || 0;
+  const absentCount = charts?.today_status?.Absent || 0;
+  const totalPresent = onTimeCount + lateCount;
+  const attendanceRate =
+    totalEmployees > 0 ? Math.round((totalPresent / totalEmployees) * 100) : 0;
+
+  const todayStatus = charts?.today_status || {};
+  const punchedInToday =
+    Object.values(todayStatus).reduce((a, b) => a + b, 0) ||
+    stats?.today?.punched_in ||
+    0;
+  const lateArrivals = todayStatus.Late || stats?.today?.late || 0;
+  const absentToday = todayStatus.Absent || stats?.today?.absent || 0;
+
+  const projectStats = charts?.project_stats || {};
+  const totalProjects = projectStats.total_projects || projects.length;
+  const activeProjectsCount = projectStats.active_projects || activeProjects;
+  const totalAssignmentsCount =
+    projectStats.total_assignments || totalAssignments;
+  const employeesAssigned =
+    projectStats.employees_assigned || totalTaggedEmployees;
+
+  const allocationData = charts?.project_allocation || [];
+  const hoursData = charts?.project_hours || [];
+
+  const handleNavigate = (route) => {
+    navigate(`${basePath}${route}`);
   };
 
-  // Calculate project engagement metrics
-  const calculateEngagementMetrics = () => {
-    if (!projects.length || !assignments.length) return [];
+  const handleBarClick = (data) => {
+    if (data && data.activePayload && data.activePayload.length > 0) {
+      const projectData = data.activePayload[0].payload;
+      const projectName =
+        projectData.fullName || projectData.name || projectData.displayName;
+      const matchedProject = projects.find((p) => p.name === projectName);
+      const projectId =
+        matchedProject?.id || projectData.id || projectData.projectId;
 
-    return projects.map(project => {
-      const assignedEmployees = assignments.filter(assignment =>
-        assignment.projectIds && assignment.projectIds.includes(String(project.id))
-      );
-      
-      const employeeCount = assignedEmployees.length;
-      const percentageOfTotal = employees?.length ? (employeeCount / employees.length) * 100 : 0;
-      
-      return {
-        id: project.id,
-        name: project.name,
-        status: project.status,
-        employeeCount,
-        percentageOfTotal: Math.round(percentageOfTotal),
-        priority: project.priority || 'Medium',
-        managerId: project.managerId,
-        teamLeadId: project.teamLeadId
-      };
-    });
+      if (projectId) {
+        setSelectedProject({
+          id: projectId,
+          name: projectName,
+          projectId: projectId,
+        });
+        setModalMonth(new Date().getMonth() + 1);
+        setModalYear(new Date().getFullYear());
+        setShowProjectHoursModal(true);
+      } else {
+        showToast("Project ID not found", "error");
+      }
+    }
   };
-
-  const engagementMetrics = calculateEngagementMetrics();
-  const activeProjects = engagementMetrics.filter(p => p.status === 'Active');
-  const totalTaggedEmployees = assignments.reduce((sum, a) => sum + (a.projectIds?.length || 0), 0);
 
   return (
-    <>
-      {formattedStats && <WelcomeBanner stats={formattedStats} user={user} />}
+    <div className="dashboard-container">
+      <WelcomeBanner
+        stats={{
+          punchedInToday: punchedInToday, // Use punchedInToday instead of present
+          attendanceRate: attendanceRate,
+          late: lateCount,
+          // If you have these additional stats from attendance slice
+          totalEmployees: totalEmployees,
+          absent: absentCount,
+        }}
+        user={user}
+      />
 
-      {/* Stats Grid - 2 columns on mobile, 4 on desktop */}
-      <div className="stats-grid grid grid-cols-2 lg:grid-cols-4 gap-3 md:gap-5 mb-6">
+      {/* ─── ROW 1: Overview (8 cards in a single row) ────────────────────── */}
+      <div className="section-label text-xs font-medium uppercase tracking-wider text-gray-400 dark:text-gray-500 mt-4 mb-2">
+        Overview
+      </div>
+      <div className="stats-grid grid grid-cols-2 sm:grid-cols-4 lg:grid-cols-8 gap-3 md:gap-4 mb-6">
         <StatsCard
           title="Total Employees"
-          value={formattedStats?.totalEmployees}
+          value={totalEmployees}
           icon="fas fa-users"
           color="green"
+          route="/employees"
+          onClick={() => handleNavigate("/employees")}
         />
         <StatsCard
           title="Punched In Today"
-          value={formattedStats?.punchedInToday}
+          value={punchedInToday}
           icon="fas fa-fingerprint"
           color="blue"
+          route="/attendances"
+          onClick={() => handleNavigate("/attendances")}
         />
         <StatsCard
           title="Late Arrivals"
-          value={formattedStats?.lateArrivals}
+          value={lateArrivals}
           icon="fas fa-clock"
           color="amber"
+          route="/attendances"
+          onClick={() => handleNavigate("/attendances")}
         />
         <StatsCard
           title="Absent Today"
-          value={formattedStats?.absentToday}
+          value={absentToday}
           icon="fas fa-user-slash"
           color="red"
+          route="/attendances"
+          onClick={() => handleNavigate("/attendances")}
         />
-      </div>
-
-      {/* Project Stats Summary Cards */}
-      <div className="stats-grid grid grid-cols-2 lg:grid-cols-4 gap-3 md:gap-5 mb-6">
         <StatsCard
           title="Total Projects"
-          value={projects.length}
+          value={totalProjects}
           icon="fas fa-project-diagram"
           color="purple"
+          route="/projects"
+          onClick={() => handleNavigate("/projects")}
         />
         <StatsCard
           title="Active Projects"
-          value={projects.filter(p => p.status === 'Active').length}
+          value={activeProjectsCount}
           icon="fas fa-play-circle"
           color="green"
-        />
-        <StatsCard
-          title="Employees Tagged"
-          value={assignments.length}
-          icon="fas fa-tags"
-          color="blue"
+          route="/projects"
+          onClick={() => handleNavigate("/projects")}
         />
         <StatsCard
           title="Total Assignments"
-          value={totalTaggedEmployees}
+          value={totalAssignmentsCount}
           icon="fas fa-link"
           color="orange"
+          route="/project-assignments"
+          onClick={() => handleNavigate("/project-assignments")}
+        />
+        <StatsCard
+          title="Employees Assigned"
+          value={employeesAssigned}
+          icon="fas fa-user-check"
+          color="blue"
+          route="/project-assignments"
+          onClick={() => handleNavigate("/project-assignments")}
         />
       </div>
 
-      {/* Project Charts Section */}
-      <div className="charts-grid grid grid-cols-1 lg:grid-cols-2 gap-4 md:gap-5 mb-6">
-        <div className="w-full min-w-0 overflow-hidden">
-          <ProjectResourceChart 
-            projects={engagementMetrics}
-            title="Project Resource Allocation"
-            subtitle="Number of employees assigned per project"
-          />
+      {/* ─── ROW 3: Project Allocation & Hours ────────────────────────── */}
+      <div className="section-label text-xs font-medium uppercase tracking-wider text-gray-400 dark:text-gray-500 mt-4 mb-2">
+        Project Allocation & Hours
+      </div>
+      <div className="grid grid-cols-1 lg:grid-cols-2 gap-4 mb-6">
+        <ProjectAllocationChart data={allocationData} />
+        <ProjectHoursChart data={hoursData} onBarClick={handleBarClick} />
+      </div>
+
+      {/* ─── ROW 4: Attendance Analytics (3 equal height cards) ────────── */}
+      <div className="section-label text-xs font-medium uppercase tracking-wider text-gray-400 dark:text-gray-500 mt-4 mb-2">
+        Attendance Analytics
+      </div>
+      <div className="grid grid-cols-1 lg:grid-cols-3 gap-4 mb-6">
+        <div className="h-[220px]">
+          <WeeklyAttendanceChart data={charts?.weekly_attendance} />
         </div>
-        <div className="w-full min-w-0 overflow-hidden">
-          <ProjectStatusChart 
-            projects={projects}
-            title="Project Status Distribution"
-            subtitle="Active vs Inactive projects"
-          />
+        <div className="h-[220px]">
+          <TodayStatusChart data={charts?.today_status} />
+        </div>
+        <div className="h-[220px]">
+          <AvgPunchTimeCard data={charts?.avg_punch_time} />
         </div>
       </div>
 
-      {/* Employee Engagement Section */}
-      <div className="charts-grid grid grid-cols-1 gap-4 md:gap-5 mb-6">
-        <div className="w-full min-w-0 overflow-hidden">
-          <EmployeeEngagementChart 
-            projects={engagementMetrics}
-            totalEmployees={formattedStats?.totalEmployees || 0}
-            title="Employee Engagement by Project"
-            subtitle="Percentage of employees assigned to each project"
-          />
-        </div>
+      {/* ─── ROW 5: Today's Punch-in Activity ──────────────────────────── */}
+      <div className="section-label text-xs font-medium uppercase tracking-wider text-gray-400 dark:text-gray-500 mt-4 mb-2">
+        Today's Punch-in Activity
+      </div>
+      <div className="grid grid-cols-1 lg:grid-cols-2 gap-4 mb-6">
+        <RecentPunchesList
+          punches={charts?.recent_punches || []}
+          employees={employees}
+        />
+        <PunchDistributionChart data={charts?.punch_distribution || []} />
       </div>
 
-      {/* Attendance Charts - Original */}
-      <div className="charts-grid grid grid-cols-1 lg:grid-cols-2 gap-4 md:gap-5 mb-6">
-        <div className="w-full min-w-0 overflow-hidden">
-          <AttendanceChart />
-        </div>
-        <div className="w-full min-w-0 overflow-hidden">
-          <PunchChart />
-        </div>
-      </div>
-
-      <RecentFiles />
-    </>
+      {/* ─── PROJECT HOURS DETAIL MODAL ───────────────────────────────── */}
+      <ProjectHoursModal
+        isOpen={showProjectHoursModal}
+        onClose={() => {
+          setShowProjectHoursModal(false);
+          setSelectedProject(null);
+          dispatch(clearMonthlyHours());
+        }}
+        project={selectedProject}
+        month={modalMonth}
+        year={modalYear}
+        employees={employees}
+      />
+    </div>
   );
 };
 

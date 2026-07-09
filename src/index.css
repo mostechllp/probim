@@ -858,3 +858,83 @@ i.text-green-600 {
   background: rgba(255, 255, 255, 0.08);
   color: #fff;
 }
+
+/* Add to your global CSS file */
+.dashboard-container .section-label {
+  font-size: 11px;
+  font-weight: 500;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  color: var(--text-muted, #9ca3af);
+  margin: 1.5rem 0 0.6rem;
+}
+
+.badge {
+  display: inline-flex;
+  align-items: center;
+  padding: 2px 8px;
+  border-radius: 20px;
+  font-size: 11px;
+  font-weight: 500;
+}
+
+.badge-success {
+  background: #e0f4ec;
+  color: #0a7a56;
+}
+
+.badge-warn {
+  background: #fef3d8;
+  color: #8a5d00;
+}
+
+.badge-danger {
+  background: #fde8e8;
+  color: #991f1f;
+}
+
+.badge-blue {
+  background: #e3edfb;
+  color: #185fa5;
+}
+
+.badge-violet {
+  background: #ede9fd;
+  color: #534ab7;
+}
+
+.badge-gray {
+  background: #f3f4f6;
+  color: #6b7280;
+}
+
+/* Dark mode */
+.dark .badge-success {
+  background: #064e3b;
+  color: #34d399;
+}
+
+.dark .badge-warn {
+  background: #78350f;
+  color: #fbbf24;
+}
+
+.dark .badge-danger {
+  background: #7f1d1d;
+  color: #f87171;
+}
+
+.dark .badge-blue {
+  background: #1e3a5f;
+  color: #60a5fa;
+}
+
+.dark .badge-violet {
+  background: #2e1a5e;
+  color: #a78bfa;
+}
+
+.dark .badge-gray {
+  background: #374151;
+  color: #9ca3af;
+}

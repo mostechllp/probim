@@ -1,9 +1,13 @@
+// src/admin/store/slices/attendanceSlice.js
+
 import { createSlice, createAsyncThunk } from "@reduxjs/toolkit";
 import apiClient from "../../../utils/apiClient";
 
 const handleApiError = (error) => {
   if (error.response) {
-    return error.response.data?.message || `Server error: ${error.response.status}`;
+    return (
+      error.response.data?.message || `Server error: ${error.response.status}`
+    );
   }
   if (error.request) return "Network error: Unable to connect to server";
   return error.message || "An unexpected error occurred";
@@ -11,49 +15,48 @@ const handleApiError = (error) => {
 
 const isValidPunch = (value) => value && value !== "-" && value.trim() !== "";
 
-const extractAttendanceRecords = (response) => {
+// FIXED: Improved extractData function
+const extractData = (response) => {
   try {
-    // The data is directly in response.data.data, not in response.data.data.attendance
     const recordsData = response.data?.data?.data || [];
     const meta = response.data?.data?.meta || {};
 
     if (recordsData && Array.isArray(recordsData)) {
       const records = recordsData.map((record, idx) => {
         const hasPunchOut = record.punch_out && record.punch_out !== "-";
-        const punchIn = record.punch_in && record.punch_in !== "-" ? record.punch_in : "-";
-        const punchOut = hasPunchOut ? record.punch_out : null;
 
-        // Get employee name directly from the response
+        const punchIn =
+          record.punch_in && record.punch_in !== "-" ? record.punch_in : "-";
+
         const employeeName = record.name || `Employee ${record.employee_id}`;
-        
-        // Get department directly from the response
+
         const department = record.department || "-";
 
-        // Get working hours from the API response
-        const workingHours = record.worked_hours !== undefined ? record.worked_hours : "--";
+        const workingHours =
+          record.worked_hours !== undefined ? record.worked_hours : "--";
 
         return {
           id: record.employee_id || idx,
           employee_id: record.employee_id,
-          employeeName: employeeName,
+          employeeName,
           company: record.company || "N/A",
           company_id: record.company_id || null,
-          department: department,
+          department,
           date: record.date || "-",
-          punchIn: punchIn,
+          punchIn,
           punchOut: hasPunchOut ? record.punch_out : null,
           punch_in_raw: record.punch_in,
           punch_out_raw: record.punch_out,
-          workingHours: workingHours,
-          status: record.status || (record.punch_in && record.punch_in !== "-" ? "Present" : "Absent"),
+          workingHours,
+          status:
+            record.status ||
+            (record.punch_in && record.punch_in !== "-" ? "Present" : "Absent"),
           isLate: false,
           hasPunchOut,
-          // Keep raw data for debugging
           raw: record,
         };
       });
 
-      // Stats would need to be calculated from the records since your API doesn't seem to provide stats
       const stats = {
         totalActiveEmployees: meta.total || records.length,
         presentToday: records.filter((r) => r.status === "Present").length,
@@ -65,39 +68,190 @@ const extractAttendanceRecords = (response) => {
 
       return {
         records,
-        total: meta.total || records.length,
-        currentPage: meta.current_page || 1,
-        lastPage: meta.last_page || 1,
-        perPage: meta.per_page || 15,
         stats,
+        meta,
       };
     }
 
-    return { records: [], total: 0, stats: {} };
+    // Check for: response.data (array)
+    if (response?.data && Array.isArray(response.data)) {
+      return response.data;
+    }
+
+    // Check if response itself is an array
+    if (Array.isArray(response)) {
+      return response;
+    }
+
+    console.warn("No array data found in response, returning empty array");
+
+    return [];
   } catch (error) {
-    console.error("Error extracting attendance records:", error);
-    return { records: [], total: 0, stats: {} };
+    console.error("Error extracting data:", error);
+    return [];
   }
 };
 
-const extractData = (response) => {
-  if (response.data?.data?.data && Array.isArray(response.data.data.data)) return response.data.data.data;
-  if (response.data?.data && Array.isArray(response.data.data)) return response.data.data;
-  if (Array.isArray(response.data)) return response.data;
-  return [];
+// FIXED: Improved extractAttendanceRecords function
+// FIXED: Improved extractAttendanceRecords function - REMOVE stats calculation
+const extractAttendanceRecords = (response) => {
+  try {
+    console.log("Extracting attendance records from response:", response);
+
+    let attendanceData = [];
+    let meta = {};
+
+    // Handle different response structures
+    if (response?.data?.data?.data && Array.isArray(response.data.data.data)) {
+      attendanceData = response.data.data.data;
+      meta = response.data.data.meta || {};
+    } else if (response?.data?.data && Array.isArray(response.data.data)) {
+      attendanceData = response.data.data;
+      meta = response.data.meta || {};
+    } else if (response?.data && Array.isArray(response.data)) {
+      attendanceData = response.data;
+    } else if (Array.isArray(response)) {
+      attendanceData = response;
+    } else {
+      attendanceData = [];
+    }
+
+    console.log("Attendance data extracted:", attendanceData);
+    console.log("Meta:", meta);
+
+    // Map the records
+    const records = attendanceData.map((record, idx) => {
+      const employeeName =
+        record.name ||
+        record.employee_name ||
+        record.employeeName ||
+        record.user?.username ||
+        `Employee ${record.userid || record.employee_id || record.id || idx}`;
+
+      const department =
+        record.department ||
+        record.user?.department?.name ||
+        record.user?.department_id ||
+        "-";
+
+      const designation =
+        record.designation || record.user?.designation?.name || "-";
+
+      const company = record.company || record.user?.company?.name || "N/A";
+
+      const punchIn =
+        record.punch_in && record.punch_in !== "-" ? record.punch_in : "--";
+      const punchOut =
+        record.punch_out && record.punch_out !== "-" ? record.punch_out : "--";
+
+      // Determine status based on available data
+      let status = record.status || record.attendance_status || "Absent";
+
+      if (
+        status.toLowerCase() === "present" ||
+        status.toLowerCase() === "ontime" ||
+        status.toLowerCase() === "on time"
+      ) {
+        status = "Present";
+      } else if (
+        status.toLowerCase() === "absent" ||
+        status.toLowerCase() === "absentee"
+      ) {
+        status = "Absent";
+      } else if (status.toLowerCase() === "late") {
+        status = "Late";
+      }
+
+      if (
+        (!status || status === "Absent") &&
+        punchIn &&
+        punchIn !== "--" &&
+        punchIn !== "-"
+      ) {
+        if (record.lateBy && record.lateBy > 0) {
+          status = "Late";
+        } else {
+          status = "Present";
+        }
+      }
+
+      const workedHours =
+        record.worked_hours !== undefined ? record.worked_hours : 0;
+      const standardHours = record.standard_hours || 9;
+      const overtime = record.overtime || "-";
+
+      let date =
+        record.date || record.log_date || record.attendance_date || "-";
+      if (date && date.includes("-") && date !== "-") {
+        const parts = date.split("-");
+        if (parts.length === 3) {
+          date = `${parts[2]}/${parts[1]}/${parts[0]}`;
+        }
+      }
+
+      return {
+        id: record.employee_id || record.userid || record.id || idx,
+        employee_id: record.employee_id || record.userid || record.id || idx,
+        user_id: record.userid || record.user_id || record.user?.id || null,
+        employeeName: employeeName,
+        name: employeeName,
+        employee_name: employeeName,
+        department: department,
+        designation: designation,
+        company: company,
+        date: date,
+        log_date: date,
+        attendance_date: date,
+        punch_in: punchIn,
+        punch_out: punchOut,
+        punchIn: punchIn,
+        punchOut: punchOut,
+        worked_hours: workedHours,
+        working_hours: workedHours,
+        workingHours: workedHours,
+        standard_hours: standardHours,
+        overtime: overtime,
+        status: status,
+        isLate: status === "Late" || status === "late",
+        hasPunchOut: punchOut !== "--",
+        raw: record,
+      };
+    });
+
+    const total = meta.total || records.length;
+    const currentPage = meta.current_page || 1;
+    const lastPage = meta.last_page || 1;
+    const perPage = meta.per_page || 1000;
+
+    return {
+      records,
+      total,
+      currentPage,
+      lastPage,
+      perPage,
+      // REMOVED: stats - we'll use fetchAttendanceStats for stats
+    };
+  } catch (error) {
+    console.error("Error extracting attendance records:", error);
+    return { records: [], total: 0 };
+  }
 };
 
+// Async thunks
 export const fetchAttendanceRecords = createAsyncThunk(
   "attendance/fetchAll",
   async (params = {}, { rejectWithValue }) => {
     try {
       const response = await apiClient.get(`/admin/attendance`, { params });
-      console.log("Result: ", response)
-      return extractAttendanceRecords(response);
+      console.log("Fetch attendance response:", response.data);
+      const result = extractAttendanceRecords(response);
+      console.log("Extracted attendance result:", result);
+      return result;
     } catch (error) {
+      console.error("Fetch attendance error:", error);
       return rejectWithValue(handleApiError(error));
     }
-  }
+  },
 );
 
 export const uploadAttendanceFile = createAsyncThunk(
@@ -107,15 +261,27 @@ export const uploadAttendanceFile = createAsyncThunk(
       const formData = new FormData();
       formData.append("file", file);
 
-      const response = await apiClient.post(`/admin/attendance/upload`, formData, {
-        headers: { "Content-Type": "multipart/form-data" },
-      });
+      const response = await apiClient.post(
+        `/admin/attendance/upload`,
+        formData,
+        {
+          headers: { "Content-Type": "multipart/form-data" },
+        },
+      );
 
-      console.log("Upload response full:", JSON.stringify(response.data, null, 2));
+      console.log(
+        "Upload response full:",
+        JSON.stringify(response.data, null, 2),
+      );
 
       const uploadId = response.data?.data?.id || null;
       const rawStatus = response.data?.data?.status || "pending";
-      const processingStatus = ["completed", "done", "success", "processed"].includes(rawStatus)
+      const processingStatus = [
+        "completed",
+        "done",
+        "success",
+        "processed",
+      ].includes(rawStatus)
         ? "completed"
         : "processing";
 
@@ -131,17 +297,24 @@ export const uploadAttendanceFile = createAsyncThunk(
         const msgs = Object.values(error.response.data.errors).flat();
         return rejectWithValue(msgs.join(", "));
       }
-      return rejectWithValue(error.response?.data?.message || "Failed to upload attendance file");
+      return rejectWithValue(
+        error.response?.data?.message || "Failed to upload attendance file",
+      );
     }
-  }
+  },
 );
 
 export const fetchUploadStatus = createAsyncThunk(
   "attendance/fetchUploadStatus",
   async (id, { rejectWithValue }) => {
     try {
-      const response = await apiClient.get(`/admin/attendance/upload-status/${id}`);
-      console.log("Upload status response:", JSON.stringify(response.data, null, 2));
+      const response = await apiClient.get(
+        `/admin/attendance/upload-status/${id}`,
+      );
+      console.log(
+        "Upload status response:",
+        JSON.stringify(response.data, null, 2),
+      );
 
       const processingStatus = response.data?.data?.status || "pending";
 
@@ -158,33 +331,117 @@ export const fetchUploadStatus = createAsyncThunk(
     } catch (error) {
       return rejectWithValue(handleApiError(error));
     }
-  }
+  },
 );
 
-export const fetchPunchInToday = createAsyncThunk("attendance/fetchPunchInToday", async () => {
-  try { return extractData(await apiClient.get(`/admin/attendance/punch-in-today`)); }
-  catch { return []; }
-});
+// These thunks now use the fixed extractData function
+export const fetchPunchInToday = createAsyncThunk(
+  "attendance/fetchPunchInToday",
+  async () => {
+    try {
+      return extractData(
+        await apiClient.get(`/admin/attendance/punch-in-today`),
+      );
+    } catch {
+      return [];
+    }
+  },
+);
 
-export const fetchPunchInYesterday = createAsyncThunk("attendance/fetchPunchInYesterday", async () => {
-  try { return extractData(await apiClient.get(`/admin/attendance/punch-in-yesterday`)); }
-  catch { return []; }
-});
+export const fetchPunchInYesterday = createAsyncThunk(
+  "attendance/fetchPunchInYesterday",
+  async () => {
+    try {
+      return extractData(
+        await apiClient.get(`/admin/attendance/punch-in-yesterday`),
+      );
+    } catch {
+      return [];
+    }
+  },
+);
 
-export const fetchPunchOutToday = createAsyncThunk("attendance/fetchPunchOutToday", async () => {
-  try { return extractData(await apiClient.get(`/admin/attendance/punch-out-today`)); }
-  catch { return []; }
-});
+export const fetchPunchOutToday = createAsyncThunk(
+  "attendance/fetchPunchOutToday",
+  async () => {
+    try {
+      return extractData(
+        await apiClient.get(`/admin/attendance/punch-out-today`),
+      );
+    } catch {
+      return [];
+    }
+  },
+);
 
-export const fetchLateComers = createAsyncThunk("attendance/fetchLateComers", async () => {
-  try { return extractData(await apiClient.get(`/admin/attendance/late-comers`)); }
-  catch { return []; }
-});
+export const fetchLateComers = createAsyncThunk(
+  "attendance/fetchLateComers",
+  async () => {
+    try {
+      const response = await apiClient.get(`/admin/attendance/late-comers`);
+      console.log("Late comers response:", response.data);
+      return extractData(response);
+    } catch (error) {
+      console.error("Error fetching late comers:", error);
+      return [];
+    }
+  },
+);
 
-export const fetchAbsentees = createAsyncThunk("attendance/fetchAbsentees", async () => {
-  try { return extractData(await apiClient.get(`/admin/attendance/absentees`)); }
-  catch { return []; }
-});
+export const fetchAbsentees = createAsyncThunk(
+  "attendance/fetchAbsentees",
+  async () => {
+    try {
+      const response = await apiClient.get(`/admin/attendance/absentees`);
+      console.log("Absentees response:", response.data);
+      return extractData(response);
+    } catch (error) {
+      console.error("Error fetching absentees:", error);
+      return [];
+    }
+  },
+);
+
+// ==================== ATTENDANCE STATS THUNK ====================
+export const fetchAttendanceStats = createAsyncThunk(
+  "attendance/fetchStats",
+  async (_, { rejectWithValue }) => {
+    try {
+      const response = await apiClient.get(`/admin/attendance/stats`);
+      console.log("Attendance stats response:", response.data);
+
+      // Extract data from response
+      const data = response.data?.data || response.data;
+
+      // Map the stats from the API response
+      return {
+        total: {
+          count: data.total?.count || 0,
+          employees: data.total?.employees || [],
+        },
+        punched_in: {
+          count: data.punched_in?.count || 0,
+          employees: data.punched_in?.employees || [],
+        },
+        punched_out: {
+          count: data.punched_out?.count || 0,
+          employees: data.punched_out?.employees || [],
+        },
+        absent: {
+          count: data.absent?.count || 0,
+          employees: data.absent?.employees || [],
+        },
+        late: {
+          count: data.late?.count || 0,
+          employees: data.late?.employees || [],
+        },
+      };
+    } catch (error) {
+      console.error("Error fetching attendance stats:", error);
+      return rejectWithValue(handleApiError(error));
+    }
+  },
+);
 
 const attendanceSlice = createSlice({
   name: "attendance",
@@ -192,11 +449,28 @@ const attendanceSlice = createSlice({
     records: [],
     stats: {
       totalActiveEmployees: 0,
+      total_active_employees: 0,
+      totalEmployees: 0,
+      total_employees: 0,
+      totalEmployeesList: [],
       presentToday: 0,
+      present_today: 0,
+      punchedInToday: 0,
+      punched_in_today: 0,
+      punchedInEmployees: [],
       absentToday: 0,
-      punchedInOnTime: 0,
+      absent_today: 0,
+      absentEmployees: [],
       punchedLate: 0,
+      punched_late: 0,
+      lateToday: 0,
+      late_today: 0,
+      lateEmployees: [],
       punchedOutToday: 0,
+      punched_out_today: 0,
+      punchedOutEmployees: [],
+      punchedInOnTime: 0,
+      punched_in_on_time: 0,
     },
     uploadStatus: null,
     uploadStatusId: null,
@@ -219,11 +493,16 @@ const attendanceSlice = createSlice({
       state.uploadStatus = null;
       state.uploadStatusId = null;
     },
-    clearErrors: (state) => { state.error = null; },
+    clearErrors: (state) => {
+      state.error = null;
+    },
     updateUploadStatus: (state, action) => {
       const { id, status } = action.payload;
       const upload = state.uploads.find((u) => u.id === id);
-      if (upload) { upload.status = status; upload.updatedAt = new Date().toISOString(); }
+      if (upload) {
+        upload.status = status;
+        upload.updatedAt = new Date().toISOString();
+      }
       if (state.uploadStatusId === id) state.uploadStatus = status;
     },
     removeUpload: (state, action) => {
@@ -239,7 +518,10 @@ const attendanceSlice = createSlice({
   },
   extraReducers: (builder) => {
     builder
-      .addCase(fetchAttendanceRecords.pending, (state) => { state.loading = true; state.error = null; })
+      .addCase(fetchAttendanceRecords.pending, (state) => {
+        state.loading = true;
+        state.error = null;
+      })
       .addCase(fetchAttendanceRecords.fulfilled, (state, action) => {
         state.loading = false;
         state.records = action.payload.records;
@@ -247,14 +529,18 @@ const attendanceSlice = createSlice({
         state.currentPage = action.payload.currentPage || 1;
         state.lastPage = action.payload.lastPage || 1;
         state.perPage = action.payload.perPage || 15;
-        if (action.payload.stats) state.stats = action.payload.stats;
       })
       .addCase(fetchAttendanceRecords.rejected, (state, action) => {
-        state.loading = false; state.error = action.payload; state.records = []; state.totalCount = 0;
+        state.loading = false;
+        state.error = action.payload;
+        state.records = [];
+        state.totalCount = 0;
       })
 
       .addCase(uploadAttendanceFile.pending, (state) => {
-        state.uploadLoading = true; state.error = null; state.uploadStatus = null;
+        state.uploadLoading = true;
+        state.error = null;
+        state.uploadStatus = null;
       })
       .addCase(uploadAttendanceFile.fulfilled, (state, action) => {
         state.uploadLoading = false;
@@ -268,7 +554,9 @@ const attendanceSlice = createSlice({
         });
       })
       .addCase(uploadAttendanceFile.rejected, (state, action) => {
-        state.uploadLoading = false; state.error = action.payload; state.uploadStatus = "failed";
+        state.uploadLoading = false;
+        state.error = action.payload;
+        state.uploadStatus = "failed";
       })
 
       .addCase(fetchUploadStatus.fulfilled, (state, action) => {
@@ -277,21 +565,107 @@ const attendanceSlice = createSlice({
         if (upload) upload.status = status;
         if (state.uploadStatusId === id) state.uploadStatus = status;
       })
-      .addCase(fetchUploadStatus.rejected, (state, action) => { state.error = action.payload; })
+      .addCase(fetchUploadStatus.rejected, (state, action) => {
+        state.error = action.payload;
+      })
 
-      .addCase(fetchPunchInToday.fulfilled, (state, action) => { state.punchInToday = action.payload; })
-      .addCase(fetchPunchInToday.rejected, (state) => { state.punchInToday = []; })
-      .addCase(fetchPunchInYesterday.fulfilled, (state, action) => { state.punchInYesterday = action.payload; })
-      .addCase(fetchPunchInYesterday.rejected, (state) => { state.punchInYesterday = []; })
-      .addCase(fetchPunchOutToday.fulfilled, (state, action) => { state.punchOutToday = action.payload; })
-      .addCase(fetchPunchOutToday.rejected, (state) => { state.punchOutToday = []; })
-      .addCase(fetchLateComers.fulfilled, (state, action) => { state.lateComers = action.payload; })
-      .addCase(fetchLateComers.rejected, (state) => { state.lateComers = []; })
-      .addCase(fetchAbsentees.fulfilled, (state, action) => { state.absentees = action.payload; })
-      .addCase(fetchAbsentees.rejected, (state) => { state.absentees = []; });
+      .addCase(fetchPunchInToday.fulfilled, (state, action) => {
+        state.punchInToday = action.payload;
+      })
+      .addCase(fetchPunchInToday.rejected, (state) => {
+        state.punchInToday = [];
+      })
+      .addCase(fetchPunchInYesterday.fulfilled, (state, action) => {
+        state.punchInYesterday = action.payload;
+      })
+      .addCase(fetchPunchInYesterday.rejected, (state) => {
+        state.punchInYesterday = [];
+      })
+      .addCase(fetchPunchOutToday.fulfilled, (state, action) => {
+        state.punchOutToday = action.payload;
+      })
+      .addCase(fetchPunchOutToday.rejected, (state) => {
+        state.punchOutToday = [];
+      })
+      .addCase(fetchLateComers.fulfilled, (state, action) => {
+        console.log("Late comers data set:", action.payload);
+        state.lateComers = action.payload;
+      })
+      .addCase(fetchLateComers.rejected, (state) => {
+        state.lateComers = [];
+      })
+      .addCase(fetchAbsentees.fulfilled, (state, action) => {
+        console.log("Absentees data set:", action.payload);
+        state.absentees = action.payload;
+      })
+      .addCase(fetchAbsentees.rejected, (state) => {
+        state.absentees = [];
+      })
+      // In the extraReducers section
+      .addCase(fetchAttendanceStats.pending, (state) => {
+        state.loading = true;
+        state.error = null;
+      })
+      .addCase(fetchAttendanceStats.fulfilled, (state, action) => {
+        state.loading = false;
+        const statsData = action.payload;
+
+        // Map the stats from the API response
+        state.stats = {
+          // Total employees
+          totalActiveEmployees: statsData.total?.count || 0,
+          total_active_employees: statsData.total?.count || 0,
+          totalEmployees: statsData.total?.count || 0,
+          total_employees: statsData.total?.count || 0,
+
+          // Punched In (Present)
+          presentToday: statsData.punched_in?.count || 0,
+          present_today: statsData.punched_in?.count || 0,
+          punchedInToday: statsData.punched_in?.count || 0,
+          punched_in_today: statsData.punched_in?.count || 0,
+
+          // Punched In employees list
+          punchedInEmployees: statsData.punched_in?.employees || [],
+
+          // Punched Out
+          punchedOutToday: statsData.punched_out?.count || 0,
+          punched_out_today: statsData.punched_out?.count || 0,
+
+          // Punched Out employees list
+          punchedOutEmployees: statsData.punched_out?.employees || [],
+
+          // Absent
+          absentToday: statsData.absent?.count || 0,
+          absent_today: statsData.absent?.count || 0,
+
+          // Absent employees list
+          absentEmployees: statsData.absent?.employees || [],
+
+          // Late
+          punchedLate: statsData.late?.count || 0,
+          punched_late: statsData.late?.count || 0,
+          lateToday: statsData.late?.count || 0,
+          late_today: statsData.late?.count || 0,
+
+          // Late employees list
+          lateEmployees: statsData.late?.employees || [],
+
+          // Total employees list
+          totalEmployeesList: statsData.total?.employees || [],
+        };
+      })
+      .addCase(fetchAttendanceStats.rejected, (state, action) => {
+        state.loading = false;
+        state.error = action.payload;
+      });
   },
 });
 
-export const { clearUploadStatus, clearErrors, updateUploadStatus, removeUpload, clearCompletedUploads } =
-  attendanceSlice.actions;
+export const {
+  clearUploadStatus,
+  clearErrors,
+  updateUploadStatus,
+  removeUpload,
+  clearCompletedUploads,
+} = attendanceSlice.actions;
 export default attendanceSlice.reducer;
