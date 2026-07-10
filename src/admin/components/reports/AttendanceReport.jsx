@@ -39,7 +39,7 @@ const AttendanceReport = () => {
   const [appliedEmployeeFilter, setAppliedEmployeeFilter] = useState("all");
 
   const [showExportModal, setShowExportModal] = useState(false);
-  const [exportType, setExportType] = useState("current");
+  const [exportType, setExportType] = useState("all");
 
   // Date range state
   const [startDate, setStartDate] = useState(() => {
