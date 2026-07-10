@@ -9,8 +9,10 @@ import {
   exportReport,
   fetchAllAttendanceReport,
   fetchAttendanceReport,
+  fetchEmployeesForFilter,
 } from "../../store/slices/reportSlice";
 import ExportModal from "../../../components/common/ExportModal";
+import DateInput from "../common/DateInput";
 
 const AttendanceReport = () => {
   const dispatch = useDispatch();
@@ -20,24 +22,23 @@ const AttendanceReport = () => {
     attendanceTotalCount: totalCount = 0,
     attendanceLastPage: lastPage = 1,
     exportLoading = false,
+    employeesList = [],
   } = useSelector((state) => state.reports || {});
 
-  const reportState = useSelector((state) => state.reports);
-  console.log("Report State:", {
-    records: reportState.attendanceRecords,
-    totalCount: reportState.attendanceTotalCount,
-    lastPage: reportState.attendanceLastPage,
-    currentPage: reportState.attendanceCurrentPage,
-  });
-
-  // Local state
+  // Local state for filters (these will be applied when "Apply" is clicked)
   const [currentPage, setCurrentPage] = useState(1);
   const [perPage, setPerPage] = useState(10);
+
+  // Filter values that are displayed in the UI
   const [searchTerm, setSearchTerm] = useState("");
-  const [companyFilter, setCompanyFilter] = useState("all");
   const [employeeFilter, setEmployeeFilter] = useState("all");
-  const [showExportModal, setShowExportModal] = useState(false);
   const [datePreset, setDatePreset] = useState("custom");
+
+  // Actual filter values that are sent to the API (only updated on Apply)
+  const [appliedSearchTerm, setAppliedSearchTerm] = useState("");
+  const [appliedEmployeeFilter, setAppliedEmployeeFilter] = useState("all");
+
+  const [showExportModal, setShowExportModal] = useState(false);
   const [exportType, setExportType] = useState("current");
 
   // Date range state
@@ -50,53 +51,109 @@ const AttendanceReport = () => {
     return new Date().toISOString().split("T")[0];
   });
 
-  // Get unique employees and companies for filters
-  const uniqueCompanies = [
-    ...new Set(records.map((record) => record.company).filter(Boolean)),
-  ];
+  // Applied date range (only updated on Apply)
+  const [appliedStartDate, setAppliedStartDate] = useState(startDate);
+  const [appliedEndDate, setAppliedEndDate] = useState(endDate);
 
-  const uniqueEmployees = [
-    ...new Set(
-      records
-        .map((record) => ({
-          id: record.employeeId || record.employee_id || record.id,
-          name: record.employeeName || record.name || record.employee_name,
-        }))
-        .filter((emp) => emp.id && emp.name),
-    ),
-  ];
+  // Fetch employees for filter dropdown
+  useEffect(() => {
+    dispatch(fetchEmployeesForFilter());
+  }, [dispatch]);
 
-  // Fetch attendance data with filters
+  // Fetch attendance data with applied filters
   useEffect(() => {
     const fetchData = async () => {
-      await dispatch(
-        fetchAttendanceReport({
-          page: currentPage,
-          per_page: perPage,
-          company: companyFilter !== "all" ? companyFilter : undefined,
-          employee_id: employeeFilter !== "all" ? employeeFilter : undefined,
-          search: searchTerm || undefined,
-          start_date: startDate,
-          end_date: endDate,
-        }),
-      );
+      const params = {
+        page: currentPage,
+        per_page: perPage,
+        search: appliedSearchTerm || undefined,
+        start_date: appliedStartDate,
+        end_date: appliedEndDate,
+      };
+
+      // Add employee filter only if not "all"
+      if (appliedEmployeeFilter !== "all" && appliedEmployeeFilter) {
+        const empId = parseInt(appliedEmployeeFilter);
+        params.employee_id = isNaN(empId) ? appliedEmployeeFilter : empId;
+      }
+
+      console.log("Fetch attendance with applied params:", params);
+
+      await dispatch(fetchAttendanceReport(params));
     };
     fetchData();
   }, [
     dispatch,
     currentPage,
     perPage,
-    companyFilter,
-    employeeFilter,
-    searchTerm,
-    startDate,
-    endDate,
+    appliedEmployeeFilter,
+    appliedSearchTerm,
+    appliedStartDate,
+    appliedEndDate,
   ]);
 
-  // Reset to first page when filters change
+  // Reset to first page when applied filters change
   useEffect(() => {
     setCurrentPage(1);
-  }, [companyFilter, employeeFilter, searchTerm, perPage, startDate, endDate]);
+  }, [
+    appliedEmployeeFilter,
+    appliedSearchTerm,
+    perPage,
+    appliedStartDate,
+    appliedEndDate,
+  ]);
+
+  // Add this useEffect after the other useEffects
+  useEffect(() => {
+    // Clear records when employee filter changes (before applying)
+    // This prevents showing old data while fetching new data
+    if (employeeFilter !== appliedEmployeeFilter) {
+      // Optionally clear records here to prevent showing old data
+      // But we want to keep the loading state clean
+    }
+  }, [employeeFilter, appliedEmployeeFilter]);
+
+  // Update the fetch attendance useEffect to handle loading state better
+  useEffect(() => {
+    const fetchData = async () => {
+      // Clear records before fetching new data
+      // This prevents showing old data while loading
+      if (
+        appliedEmployeeFilter !== "all" ||
+        appliedSearchTerm ||
+        appliedStartDate !== startDate
+      ) {
+        // The loading state will show while fetching
+      }
+
+      const params = {
+        page: currentPage,
+        per_page: perPage,
+        search: appliedSearchTerm || undefined,
+        start_date: appliedStartDate,
+        end_date: appliedEndDate,
+      };
+
+      // Add employee filter only if not "all"
+      if (appliedEmployeeFilter !== "all" && appliedEmployeeFilter) {
+        const empId = parseInt(appliedEmployeeFilter);
+        params.employee_id = isNaN(empId) ? appliedEmployeeFilter : empId;
+      }
+
+      console.log("Fetch attendance with applied params:", params);
+
+      await dispatch(fetchAttendanceReport(params));
+    };
+    fetchData();
+  }, [
+    dispatch,
+    currentPage,
+    perPage,
+    appliedEmployeeFilter,
+    appliedSearchTerm,
+    appliedStartDate,
+    appliedEndDate,
+  ]);
 
   const handleDatePresetChange = (preset) => {
     setDatePreset(preset);
@@ -146,78 +203,114 @@ const AttendanceReport = () => {
   };
 
   const handleApplyFilters = () => {
+    // Apply the filters by updating the applied state
+    setAppliedEmployeeFilter(employeeFilter);
+    setAppliedSearchTerm(searchTerm);
+    setAppliedStartDate(startDate);
+    setAppliedEndDate(endDate);
     setCurrentPage(1);
-    showToast("Filters applied successfully", "success");
-  };
 
-  const handleResetFilters = () => {
-    const firstDayOfMonth = new Date();
-    firstDayOfMonth.setDate(1);
-    setStartDate(firstDayOfMonth.toISOString().split("T")[0]);
-    setEndDate(new Date().toISOString().split("T")[0]);
-    setCompanyFilter("all");
-    setEmployeeFilter("all");
-    setSearchTerm("");
-    setCurrentPage(1);
-    showToast("Filters reset successfully", "success");
-  };
-
-
-  const handleExport = async (format) => {
-  // Show loading toast
-  showToast(`Preparing ${format.toUpperCase()} export...`, "success");
-
-  try {
-    // Build filters object with exact API format
-    const filters = {
+    // Force a re-fetch by dispatching with a timestamp
+    // This ensures the API call is made with fresh parameters
+    const params = {
+      page: 1,
+      per_page: perPage,
+      search: searchTerm || undefined,
       start_date: startDate,
       end_date: endDate,
     };
 
-    // Add optional filters - employee_id should be number
     if (employeeFilter !== "all" && employeeFilter) {
-      filters.employee_id = parseInt(employeeFilter) || employeeFilter;
-    }
-    
-    if (companyFilter !== "all") {
-      filters.company = companyFilter;
-    }
-    
-    if (searchTerm) {
-      filters.search = searchTerm;
+      const empId = parseInt(employeeFilter);
+      params.employee_id = isNaN(empId) ? employeeFilter : empId;
     }
 
-    // For "all" export, include a flag
-    if (exportType === "all") {
-      filters.export_all = true;
-    }
+    // Directly dispatch with the new params
+    dispatch(fetchAttendanceReport(params));
 
-    console.log("Export filters:", filters);
+    showToast("Filters applied successfully", "success");
+  };
+  const handleResetFilters = () => {
+  const firstDayOfMonth = new Date();
+  firstDayOfMonth.setDate(1);
+  const newStartDate = firstDayOfMonth.toISOString().split("T")[0];
+  const newEndDate = new Date().toISOString().split("T")[0];
 
-    // Dispatch the export action
-    const result = await dispatch(
-      exportReport({
-        reportType: "attendance",
-        format: format, // "pdf" or "xlsx"
-        filters: filters,
-      })
-    ).unwrap();
+  setStartDate(newStartDate);
+  setEndDate(newEndDate);
+  setEmployeeFilter("all");
+  setSearchTerm("");
+  setDatePreset("custom");
+  setCurrentPage(1);
 
-    if (result.success) {
-      showToast(
-        `${format.toUpperCase()} report exported successfully!`,
-        "success"
-      );
-      setShowExportModal(false);
-    }
-  } catch (error) {
-    console.error("Export error:", error);
-    showToast(
-      typeof error === "string" ? error : "Failed to export report",
-      "error"
-    );
-  }
+  // Reset the applied filters
+  setAppliedEmployeeFilter("all");
+  setAppliedSearchTerm("");
+  setAppliedStartDate(newStartDate);
+  setAppliedEndDate(newEndDate);
+
+  // Force a re-fetch with reset params
+  const params = {
+    page: 1,
+    per_page: perPage,
+    search: undefined,
+    start_date: newStartDate,
+    end_date: newEndDate,
+  };
+
+  // Don't include employee_id when reset
+  dispatch(fetchAttendanceReport(params));
+
+  showToast("Filters reset successfully", "success");
 };
+
+  const handleExport = async (format) => {
+    showToast(`Preparing ${format.toUpperCase()} export...`, "success");
+
+    try {
+      const filters = {
+        start_date: appliedStartDate,
+        end_date: appliedEndDate,
+      };
+
+      if (appliedEmployeeFilter !== "all" && appliedEmployeeFilter) {
+        filters.employee_id =
+          parseInt(appliedEmployeeFilter) || appliedEmployeeFilter;
+      }
+
+      if (appliedSearchTerm) {
+        filters.search = appliedSearchTerm;
+      }
+
+      if (exportType === "all") {
+        filters.export_all = true;
+      }
+
+      console.log("Export filters:", filters);
+
+      const result = await dispatch(
+        exportReport({
+          reportType: "attendance",
+          format: format,
+          filters: filters,
+        }),
+      ).unwrap();
+
+      if (result.success) {
+        showToast(
+          `${format.toUpperCase()} report exported successfully!`,
+          "success",
+        );
+        setShowExportModal(false);
+      }
+    } catch (error) {
+      console.error("Export error:", error);
+      showToast(
+        typeof error === "string" ? error : "Failed to export report",
+        "error",
+      );
+    }
+  };
 
   const formatTime = (time) => {
     if (!time) return "-";
@@ -235,7 +328,6 @@ const AttendanceReport = () => {
     return `${h} hr${h > 1 ? "s" : ""} ${m} min${m > 1 ? "s" : ""}`;
   };
 
-  // ✅ Updated status badge with overtime indicator
   const getStatusBadge = (status, overtime = 0) => {
     const statusLower = String(status || "").toLowerCase();
     const hasOvertime = overtime > 0;
@@ -392,7 +484,7 @@ const AttendanceReport = () => {
           </p>
         </div>
 
-        {/* Stats Cards - Added Overtime Card */}
+        {/* Stats Cards */}
         <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-5 gap-4 mb-6">
           <div className="bg-white dark:bg-gray-800 rounded-xl p-4 border border-gray-200 dark:border-gray-700">
             <div className="flex items-center justify-between">
@@ -458,7 +550,6 @@ const AttendanceReport = () => {
             </div>
           </div>
 
-          {/* NEW Overtime Stats Card */}
           <div className="bg-white dark:bg-gray-800 rounded-xl p-4 border border-emerald-200 dark:border-emerald-800 shadow-md">
             <div className="flex items-center justify-between">
               <div>
@@ -476,10 +567,10 @@ const AttendanceReport = () => {
           </div>
         </div>
 
-        {/* Date Range Filter */}
+        {/* Date Range Filter - All in One Row */}
         <div className="bg-white dark:bg-gray-800 border border-gray-200 dark:border-gray-700 rounded-xl p-4 mb-6">
-          <div className="grid grid-cols-1 md:grid-cols-4 gap-4 items-end">
-            <div>
+          <div className="flex flex-wrap items-end gap-3">
+            <div className="flex-1 min-w-[120px]">
               <label className="block text-xs font-semibold text-gray-500 dark:text-gray-400 mb-1">
                 <i className="fas fa-clock mr-1"></i> DATE RANGE
               </label>
@@ -495,28 +586,61 @@ const AttendanceReport = () => {
                 <option value="this_month">This Month</option>
               </select>
             </div>
-            <div>
+
+            <div className="flex-1 min-w-[130px]">
               <label className="block text-xs font-semibold text-gray-500 dark:text-gray-400 mb-1">
-                <i className="fas fa-calendar-alt mr-1"></i> START DATE
+                <i className="fas fa-calendar-alt mr-1"></i> START
               </label>
-              <input
-                type="date"
+              <DateInput
                 value={startDate}
-                onChange={(e) => setStartDate(e.target.value)}
-                className="w-full px-3 py-2 bg-gray-50 dark:bg-gray-700 border border-gray-200 dark:border-gray-600 rounded-lg text-sm text-gray-700 dark:text-gray-300 focus:outline-none focus:border-green-500"
+                onChange={(date) => setStartDate(date)}
+                placeholder="dd/mm/yyyy"
+                type="general"
               />
             </div>
-            <div>
+
+            <div className="flex-1 min-w-[130px]">
               <label className="block text-xs font-semibold text-gray-500 dark:text-gray-400 mb-1">
-                <i className="fas fa-calendar-alt mr-1"></i> END DATE
+                <i className="fas fa-calendar-alt mr-1"></i> END
               </label>
-              <input
-                type="date"
+              <DateInput
                 value={endDate}
-                onChange={(e) => setEndDate(e.target.value)}
-                className="w-full px-3 py-2 bg-gray-50 dark:bg-gray-700 border border-gray-200 dark:border-gray-600 rounded-lg text-sm text-gray-700 dark:text-gray-300 focus:outline-none focus:border-green-500"
+                onChange={(date) => setEndDate(date)}
+                placeholder="dd/mm/yyyy"
+                type="general"
               />
             </div>
+
+            <div className="flex-1 min-w-[150px]">
+              <label className="block text-xs font-semibold text-gray-500 dark:text-gray-400 mb-1">
+                <i className="fas fa-user mr-1"></i> EMPLOYEE
+              </label>
+              <select
+                value={employeeFilter}
+                onChange={(e) => setEmployeeFilter(e.target.value)}
+                className="w-full px-3 py-2 bg-gray-50 dark:bg-gray-700 border border-gray-200 dark:border-gray-600 rounded-lg text-sm text-gray-700 dark:text-gray-300 focus:outline-none focus:border-green-500"
+              >
+                <option value="all">All Employees</option>
+                {Array.isArray(employeesList) &&
+                  employeesList.map((employee) => (
+                    <option key={employee.id} value={String(employee.id)}>
+                      {employee.name || `Employee ${employee.id}`}
+                    </option>
+                  ))}
+              </select>
+            </div>
+
+            <div className="flex-1 min-w-[140px]">
+              <label className="block text-xs font-semibold text-gray-500 dark:text-gray-400 mb-1">
+                <i className="fas fa-search mr-1"></i> SEARCH
+              </label>
+              <SearchBar
+                value={searchTerm}
+                onChange={(val) => setSearchTerm(val)}
+                placeholder="Search employees..."
+              />
+            </div>
+
             <div className="flex gap-2">
               <button
                 onClick={handleApplyFilters}
@@ -533,42 +657,6 @@ const AttendanceReport = () => {
             </div>
           </div>
         </div>
-
-        {/* Additional Filters - Company and Employee */}
-        <div className="flex flex-col sm:flex-row flex-wrap gap-3 mb-5">
-          <select
-            value={companyFilter}
-            onChange={(e) => {
-              setCompanyFilter(e.target.value);
-              setCurrentPage(1);
-            }}
-            className="px-3 md:px-4 py-2 bg-white dark:bg-gray-800 border border-gray-200 dark:border-gray-700 rounded-full text-xs md:text-sm text-gray-700 dark:text-gray-300 focus:outline-none focus:border-green-500"
-          >
-            <option value="all">All Companies</option>
-            {uniqueCompanies.map((company) => (
-              <option key={company} value={company}>
-                {company}
-              </option>
-            ))}
-          </select>
-
-          <select
-            value={employeeFilter}
-            onChange={(e) => {
-              setEmployeeFilter(e.target.value);
-              setCurrentPage(1);
-            }}
-            className="px-3 md:px-4 py-2 bg-white dark:bg-gray-800 border border-gray-200 dark:border-gray-700 rounded-full text-xs md:text-sm text-gray-700 dark:text-gray-300 focus:outline-none focus:border-green-500 min-w-[150px]"
-          >
-            <option value="all">All Employees</option>
-            {uniqueEmployees.map((employee) => (
-              <option key={employee.id} value={employee.id}>
-                {employee.name}
-              </option>
-            ))}
-          </select>
-        </div>
-
         {/* Actions Bar */}
         <div className="flex flex-col sm:flex-row justify-between items-stretch sm:items-center gap-4 mb-5">
           <EntriesSelector
@@ -579,21 +667,13 @@ const AttendanceReport = () => {
             }}
           />
           <div className="flex flex-col sm:flex-row gap-3 w-full sm:w-auto">
-            <SearchBar
-              value={searchTerm}
-              onChange={(val) => {
-                setSearchTerm(val);
-                setCurrentPage(1);
-              }}
-              placeholder="Search by employee name..."
-            />
             <select
               value={exportType}
               onChange={(e) => setExportType(e.target.value)}
               className="px-3 py-2 bg-gray-100 dark:bg-gray-700 border border-gray-200 dark:border-gray-600 rounded-full text-xs md:text-sm text-gray-700 dark:text-gray-300 focus:outline-none focus:border-green-500"
             >
-              <option value="current">Export Current Page</option>
               <option value="all">Export All Data</option>
+              <option value="current">Export Current Page</option>
             </select>
 
             <button
@@ -812,14 +892,14 @@ const AttendanceReport = () => {
         onExport={handleExport}
         title="Export Attendance Report"
         totalRecords={exportType === "all" ? totalCount : records.length}
-        formats={["csv", "pdf", "xlsx"]} // Add xlsx option
+        formats={["csv", "pdf", "xlsx"]}
         defaultFormat="csv"
         subtitle={
           exportType === "all"
             ? `Exporting all ${totalCount} records across all pages`
             : `Exporting ${records.length} records from current page`
         }
-        isLoading={exportLoading} // Pass the loading state
+        isLoading={exportLoading}
       />
     </div>
   );
