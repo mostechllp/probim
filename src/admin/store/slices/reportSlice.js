@@ -14,15 +14,30 @@ export const fetchAttendanceReport = createAsyncThunk(
       to_date: params.end_date,
     };
 
+    // Add employee_id filter if present
+    if (params.employee_id) {
+      apiParams.employee_id = params.employee_id;
+    }
+
+    // Add company filter if present
     if (params.company && params.company !== "all") {
       apiParams.company = params.company;
     }
+
+    // Add search filter if present
     if (params.search) {
       apiParams.search = params.search;
     }
 
+    console.log("API Params being sent:", apiParams);
+
     const response = await apiClient.get("/admin/reports/attendance", {
       params: apiParams,
+      headers: {
+        "Cache-Control": "no-cache",
+        Pragma: "no-cache",
+        Expires: "0",
+      },
     });
 
     // Log to verify structure
@@ -126,7 +141,10 @@ export const fetchAllAttendanceReport = createAsyncThunk(
 // ==================== Export Report ====================
 export const exportReport = createAsyncThunk(
   "reports/exportReport",
-  async ({ reportType = "attendance", format = "pdf", filters = {} }, { rejectWithValue }) => {
+  async (
+    { reportType = "attendance", format = "pdf", filters = {} },
+    { rejectWithValue },
+  ) => {
     try {
       // Prepare request body with exact format expected by API
       const requestBody = {
@@ -139,13 +157,14 @@ export const exportReport = createAsyncThunk(
 
       // Add optional filters if they exist
       if (filters.employee_id && filters.employee_id !== "all") {
-        requestBody.employee_id = parseInt(filters.employee_id) || filters.employee_id;
+        requestBody.employee_id =
+          parseInt(filters.employee_id) || filters.employee_id;
       }
-      
+
       if (filters.company && filters.company !== "all") {
         requestBody.company = filters.company;
       }
-      
+
       if (filters.search) {
         requestBody.search = filters.search;
       }
@@ -157,19 +176,25 @@ export const exportReport = createAsyncThunk(
 
       console.log("Export Request Body:", requestBody);
 
-      const response = await apiClient.post("/admin/reports/export", requestBody, {
-        responseType: "blob",
-        headers: {
-          "Content-Type": "application/json",
+      const response = await apiClient.post(
+        "/admin/reports/export",
+        requestBody,
+        {
+          responseType: "blob",
+          headers: {
+            "Content-Type": "application/json",
+          },
         },
-      });
+      );
 
       // Create a download link and trigger download
       const contentDisposition = response.headers["content-disposition"];
       let filename = `attendance_report_${filters.start_date}_to_${filters.end_date}.${format === "xlsx" ? "xlsx" : format}`;
 
       if (contentDisposition) {
-        const filenameMatch = contentDisposition.match(/filename[^;=\n]*=((['"]).*?\2|[^;\n]*)/);
+        const filenameMatch = contentDisposition.match(
+          /filename[^;=\n]*=((['"]).*?\2|[^;\n]*)/,
+        );
         if (filenameMatch && filenameMatch[1]) {
           filename = filenameMatch[1].replace(/['"]/g, "");
         }
@@ -178,7 +203,8 @@ export const exportReport = createAsyncThunk(
       // Determine content type based on format
       let contentType = "application/pdf";
       if (format === "xlsx") {
-        contentType = "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet";
+        contentType =
+          "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet";
       }
 
       // Create blob URL and download
@@ -203,16 +229,54 @@ export const exportReport = createAsyncThunk(
           // Try to parse as JSON for error message
           const errorText = await new Response(error.response.data).text();
           const errorJson = JSON.parse(errorText);
-          return rejectWithValue(errorJson.message || "Failed to export report");
+          return rejectWithValue(
+            errorJson.message || "Failed to export report",
+          );
         } catch (e) {
           return rejectWithValue("Failed to export report");
         }
       }
       return rejectWithValue(error.message || "Failed to export report");
     }
-  }
+  },
 );
 
+// ==================== Fetch Employees for Filter ====================
+export const fetchEmployeesForFilter = createAsyncThunk(
+  "reports/fetchEmployeesForFilter",
+  async (_, { rejectWithValue }) => {
+    try {
+      const response = await apiClient.get("/admin/employees", {
+        params: {
+          per_page: 1000,
+          status: "active",
+        },
+      });
+
+      const employees = response.data?.data?.data || response.data?.data || [];
+
+      console.log("Employees data:", employees);
+
+      return employees.map((emp) => ({
+        // Use user_id (which is the actual user ID) for filtering
+        id: emp.user_id || emp.id,
+        name:
+          `${emp.first_name || ""} ${emp.last_name || ""}`.trim() ||
+          emp.name ||
+          emp.employee_id,
+        employee_id: emp.employee_id,
+        user_id: emp.user_id || emp.id,
+        first_name: emp.first_name,
+        last_name: emp.last_name,
+      }));
+    } catch (error) {
+      console.error("Error fetching employees:", error);
+      return rejectWithValue(
+        error.response?.data?.message || "Failed to fetch employees",
+      );
+    }
+  },
+);
 // ==================== Leaves Report ====================
 export const fetchLeavesReport = createAsyncThunk(
   "reports/fetchLeaves",
@@ -458,6 +522,11 @@ const initialState = {
   attendancePerPage: 10,
   attendanceLastPage: 1,
 
+  // Employees for filter
+  employeesList: [],
+  employeesLoading: false,
+  employeesError: null,
+
   // Export state
   exportLoading: false,
   exportError: null,
@@ -571,19 +640,27 @@ const reportSlice = createSlice({
     resetAllReports: () => {
       return initialState;
     },
+    clearAttendanceRecords: (state) => {
+      state.attendanceRecords = [];
+      state.attendanceTotalCount = 0;
+      state.attendanceLastPage = 1;
+      state.attendanceCurrentPage = 1;
+    },
   },
   extraReducers: (builder) => {
     builder
       // ==================== Attendance Report ====================
+      // In the extraReducers for fetchAttendanceReport
       .addCase(fetchAttendanceReport.pending, (state) => {
         state.attendanceLoading = true;
         state.attendanceError = null;
+        // Clear records when loading to prevent showing stale data
+        state.attendanceRecords = [];
+        state.attendanceTotalCount = 0;
       })
       .addCase(fetchAttendanceReport.fulfilled, (state, action) => {
         state.attendanceLoading = false;
-        // action.payload already contains the properly structured data from your thunk
         const payload = action.payload;
-
         state.attendanceRecords = payload.data || [];
         state.attendanceTotalCount = payload.total || 0;
         state.attendanceCurrentPage = payload.current_page || 1;
@@ -593,16 +670,8 @@ const reportSlice = createSlice({
       .addCase(fetchAttendanceReport.rejected, (state, action) => {
         state.attendanceLoading = false;
         state.attendanceError = action.payload;
-      })
-
-      .addCase(fetchAllAttendanceReport.fulfilled, (state, action) => {
-        // Assuming you have this in your extraReducers
-        state.attendanceLoading = false;
-        const payload = action.payload;
-        state.attendanceRecords = payload.data || [];
-        state.attendanceTotalCount = payload.total || 0;
-        // For all data, current_page and last_page might not be applicable
-        state.attendanceLastPage = 1; // Or keep the existing value
+        state.attendanceRecords = []; // Clear on error too
+        state.attendanceTotalCount = 0;
       })
 
       // ==================== Export Report ====================
@@ -622,6 +691,20 @@ const reportSlice = createSlice({
         state.exportSuccess = false;
       })
 
+      // ==================== Fetch Employees for Filter ====================
+      .addCase(fetchEmployeesForFilter.pending, (state) => {
+        state.employeesLoading = true;
+        state.employeesError = null;
+      })
+      .addCase(fetchEmployeesForFilter.fulfilled, (state, action) => {
+        state.employeesLoading = false;
+        state.employeesList = action.payload || [];
+        console.log("Employees loaded:", state.employeesList); // Debug log
+      })
+      .addCase(fetchEmployeesForFilter.rejected, (state, action) => {
+        state.employeesLoading = false;
+        state.employeesError = action.payload;
+      })
       // ==================== Leaves Report ====================
       .addCase(fetchLeavesReport.pending, (state) => {
         state.leavesLoading = true;
