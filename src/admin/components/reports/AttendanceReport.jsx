@@ -630,17 +630,6 @@ const AttendanceReport = () => {
               </select>
             </div>
 
-            <div className="flex-1 min-w-[140px]">
-              <label className="block text-xs font-semibold text-gray-500 dark:text-gray-400 mb-1">
-                <i className="fas fa-search mr-1"></i> SEARCH
-              </label>
-              <SearchBar
-                value={searchTerm}
-                onChange={(val) => setSearchTerm(val)}
-                placeholder="Search employees..."
-              />
-            </div>
-
             <div className="flex gap-2">
               <button
                 onClick={handleApplyFilters}
