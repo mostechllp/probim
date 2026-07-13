@@ -19,8 +19,8 @@ import {
 import {
   setStep,
   updateEmployeeDetails,
-  fetchSalaryPackages,
   saveOnboardingSalary,
+  saveOnboardingBanks,
 } from "../../store/slices/onboardingSlice";
 import { showToast } from "../../components/common/Toast";
 
@@ -34,18 +34,12 @@ const SalaryBankDetailsForm = () => {
   const onboardingState = useSelector((state) => state.onboarding) || {};
   const { employeeDetails = {}, savedEmployeeId } = onboardingState;
 
-  // Get salary packages from Redux
-  const { availablePackages, packagesLoading } = useSelector(
-    (state) =>
-      state.onboarding || { availablePackages: [], packagesLoading: false },
-  );
-
   // --- Dynamic State Management ---
   const [isSavingDraft, setIsSavingDraft] = useState(false);
-  const [isLoadingPackages, setIsLoadingPackages] = useState(true);
+  const [isSubmitting, setIsSubmitting] = useState(false);
   const [validationErrors, setValidationErrors] = useState({});
 
-  // 1. Salary Packages State
+  // 1. Salary Packages State - Static packages
   const [packages, setPackages] = useState({
     package1: {
       id: "package1",
@@ -101,41 +95,16 @@ const SalaryBankDetailsForm = () => {
     { code: "LKR", name: "Sri Lankan Rupee (LKR)" },
   ];
 
-  // ─── Fetch Salary Packages ──────────────────────────────────────────────
-  useEffect(() => {
-    const fetchPackages = async () => {
-      setIsLoadingPackages(true);
-      try {
-        const result = await dispatch(fetchSalaryPackages()).unwrap();
-        console.log("Fetched salary packages:", result);
-
-        if (result && Array.isArray(result)) {
-          const updatedPackages = { ...packages };
-
-          result.forEach((pkg, index) => {
-            const key = index === 0 ? "package1" : "package2";
-            if (updatedPackages[key]) {
-              updatedPackages[key] = {
-                ...updatedPackages[key],
-                packageId: pkg.id,
-                name: pkg.name,
-                isActive: pkg.is_active,
-              };
-            }
-          });
-
-          setPackages(updatedPackages);
-        }
-      } catch (error) {
-        console.error("Failed to fetch salary packages:", error);
-        showToast("Failed to load salary packages", "error");
-      } finally {
-        setIsLoadingPackages(false);
-      }
-    };
-
-    fetchPackages();
-  }, [dispatch]);
+  // ─── Get userId from onboarding state ─────────────────────────────────────
+  const getUserId = () => {
+    return (
+      onboardingState.employeeDetails?.userId ||
+      onboardingState.employeeDetails?.user_id ||
+      localStorage.getItem('employeeUserId') ||
+      localStorage.getItem('onboardingEmployeeUserId') ||
+      null
+    );
+  };
 
   // ─── Load Draft / Restore Redux State ──────────────────────────────────
   useEffect(() => {
@@ -163,6 +132,7 @@ const SalaryBankDetailsForm = () => {
             ...details.packages.package1,
             salaryComponents: details.packages.package1.salaryComponents || [],
             isSaved: details.packages.package1.isSaved || false,
+            packageId: details.packages.package1.packageId || null,
           };
         }
         if (details.packages.package2) {
@@ -171,6 +141,7 @@ const SalaryBankDetailsForm = () => {
             ...details.packages.package2,
             salaryComponents: details.packages.package2.salaryComponents || [],
             isSaved: details.packages.package2.isSaved || false,
+            packageId: details.packages.package2.packageId || null,
           };
         }
         setPackages(updatedPackages);
@@ -202,6 +173,37 @@ const SalaryBankDetailsForm = () => {
       if (details.paymentCycle) setPaymentCycle(details.paymentCycle);
     }
   }, [employeeDetails]);
+
+  // ─── Save to localStorage and Redux ─────────────────────────────────────
+  const saveToStorageAndRedux = (data) => {
+    // Update Redux
+    dispatch(updateEmployeeDetails(data));
+
+    // Update localStorage draft
+    const draftStr = localStorage.getItem("onboarding-draft");
+    if (draftStr) {
+      try {
+        const draft = JSON.parse(draftStr);
+        draft.employeeDetails = {
+          ...draft.employeeDetails,
+          ...data,
+        };
+        localStorage.setItem("onboarding-draft", JSON.stringify(draft));
+      } catch (err) {
+        console.error("Failed to update draft:", err);
+      }
+    } else {
+      // Create new draft if none exists
+      const newDraft = {
+        ...onboardingState,
+        employeeDetails: {
+          ...onboardingState.employeeDetails,
+          ...data,
+        },
+      };
+      localStorage.setItem("onboarding-draft", JSON.stringify(newDraft));
+    }
+  };
 
   // Compute total salary for a package
   const computePackageTotal = (components) => {
@@ -281,7 +283,6 @@ const SalaryBankDetailsForm = () => {
 
     setNewComponentName("");
     setNewComponentPrice("");
-    // Clear validation error for this package
     setValidationErrors((prev) => ({ ...prev, [pkgId]: "" }));
     showToast("Component added successfully!", "success");
   };
@@ -308,22 +309,26 @@ const SalaryBankDetailsForm = () => {
       return;
     }
 
-    if (!pkg.packageId) {
-      showToast("Package not found. Please refresh and try again.", "error");
-      return;
-    }
-
     const total = computePackageTotal(pkg.salaryComponents);
+    const updatedPkg = {
+      ...pkg,
+      isSaved: true,
+      totalSalary: total,
+    };
+
     setPackages((prev) => ({
       ...prev,
-      [pkgId]: {
-        ...prev[pkgId],
-        isSaved: true,
-        totalSalary: total,
-      },
+      [pkgId]: updatedPkg,
     }));
 
-    // Clear validation error for this package
+    // Save to Redux and localStorage immediately
+    saveToStorageAndRedux({
+      packages: {
+        ...packages,
+        [pkgId]: updatedPkg,
+      },
+    });
+
     setValidationErrors((prev) => ({ ...prev, [pkgId]: "" }));
     showToast(`${pkg.name} salary structure saved!`, "success");
   };
@@ -529,7 +534,13 @@ const SalaryBankDetailsForm = () => {
       bankSwift,
     };
 
-    setBankAccounts((prev) => [...prev, newBank]);
+    const updatedBankAccounts = [...bankAccounts, newBank];
+    setBankAccounts(updatedBankAccounts);
+
+    // Save to Redux and localStorage immediately
+    saveToStorageAndRedux({
+      bankAccounts: updatedBankAccounts,
+    });
 
     setBankName("");
     setBankAccountNumber("");
@@ -543,7 +554,13 @@ const SalaryBankDetailsForm = () => {
   };
 
   const handleDeleteBank = (id) => {
-    setBankAccounts((prev) => prev.filter((b) => b.id !== id));
+    const updatedBankAccounts = bankAccounts.filter((b) => b.id !== id);
+    setBankAccounts(updatedBankAccounts);
+
+    // Save to Redux and localStorage immediately
+    saveToStorageAndRedux({
+      bankAccounts: updatedBankAccounts,
+    });
   };
 
   // ─── Draft Saving ────────────────────────────────────────────────────────
@@ -613,72 +630,226 @@ const SalaryBankDetailsForm = () => {
     }
   };
 
-  // ─── Final Submit ──────────────────────────────────────────────────────────
-// ─── Final Submit ──────────────────────────────────────────────────────────
-const handleSubmit = (e) => {
-  e.preventDefault();
+  // ─── Final Submit - Save to API ──────────────────────────────────────────
+  const handleSubmit = async (e) => {
+    e.preventDefault();
+    
+    if (isSubmitting) return;
+    setIsSubmitting(true);
 
-  // ─── Validate both packages are saved ──────────────────────────────────
-  const packageErrors = validateAllPackages();
-  setValidationErrors(packageErrors);
+    try {
+      // ─── Validate both packages are saved ──────────────────────────────────
+      const packageErrors = validateAllPackages();
+      setValidationErrors(packageErrors);
 
-  if (Object.keys(packageErrors).length > 0) {
-    const errorMessages = Object.values(packageErrors);
-    showToast(
-      `Please configure both salary packages: ${errorMessages.join(", ")}`,
-      "error"
-    );
-    return;
-  }
+      if (Object.keys(packageErrors).length > 0) {
+        const errorMessages = Object.values(packageErrors);
+        showToast(
+          `Please configure both salary packages: ${errorMessages.join(", ")}`,
+          "error",
+        );
+        setIsSubmitting(false);
+        return;
+      }
 
-  // Validate saved packages have packageId
-  if (!packages.package1.packageId) {
-    showToast("Package 1 is not properly configured. Please refresh.", "error");
-    return;
-  }
-  if (!packages.package2.packageId) {
-    showToast("Package 2 is not properly configured. Please refresh.", "error");
-    return;
-  }
+      if (bankAccounts.length === 0) {
+        showToast(
+          "Please add at least one Bank Account before continuing",
+          "warning",
+        );
+        setIsSubmitting(false);
+        return;
+      }
 
-  if (bankAccounts.length === 0) {
-    showToast(
-      "Please add at least one Bank Account before continuing",
-      "warning",
-    );
-    return;
-  }
+      // ─── Get userId ──────────────────────────────────────────────────────────
+      const userId = getUserId();
+      if (!userId) {
+        showToast("User ID not found. Please save employee details first.", "error");
+        setIsSubmitting(false);
+        return;
+      }
 
-  // ─── SAVE TO LOCAL STATE ONLY (NOT API) ──────────────────────────────
-  // The salary will be saved to the API in the Review step after employee is created
-  
-  console.log("[SalaryBankDetailsForm] Saving to Redux state (local only):", {
-    packages: {
-      package1: packages.package1,
-      package2: packages.package2,
-    },
-    paymentCycle,
-    bankAccounts: bankAccounts.length,
-  });
+      console.log("[SalaryBankDetailsForm] User ID:", userId);
 
-  // Update Redux state with all the data
-  dispatch(updateEmployeeDetails({
-    packages: {
-      package1: packages.package1,
-      package2: packages.package2,
-    },
-    paymentCycle,
-    bankAccounts: bankAccounts.map((bank) => ({
-      ...bank,
-      accountNumber: bank.accountNumber || "",
-      bankName: bank.bankName || "",
-    })),
-  }));
-  
-  // Move to next step (Review)
-  dispatch(setStep(4));
-  showToast("Financial details verified and saved locally!", "success");
-};
+      // ─── Prepare Salary Data ────────────────────────────────────────────────
+      const salaryPayload = {
+        user_id: parseInt(userId),
+        payment_cycle: paymentCycle,
+        packages: []
+      };
+
+      // Add package1 if saved
+      if (packages.package1.isSaved && packages.package1.salaryComponents.length > 0) {
+        salaryPayload.packages.push({
+          name: packages.package1.name || "Home Country / WFH",
+          is_active: true,
+          currency: packages.package1.currency || "AED",
+          salary_components: packages.package1.salaryComponents.map((comp) => ({
+            component_name: comp.name,
+            value: typeof comp.price === "number" ? comp.price : parseFloat(comp.price) || 0,
+          })),
+        });
+      }
+
+      // Add package2 if saved
+      if (packages.package2.isSaved && packages.package2.salaryComponents.length > 0) {
+        salaryPayload.packages.push({
+          name: packages.package2.name || "Dubai Onsite",
+          is_active: true,
+          currency: packages.package2.currency || "AED",
+          salary_components: packages.package2.salaryComponents.map((comp) => ({
+            component_name: comp.name,
+            value: typeof comp.price === "number" ? comp.price : parseFloat(comp.price) || 0,
+          })),
+        });
+      }
+
+      console.log("[SalaryBankDetailsForm] Saving salary payload:", JSON.stringify(salaryPayload, null, 2));
+
+      // ─── Save Salary to API ──────────────────────────────────────────────────
+      let salaryResult;
+      try {
+        salaryResult = await dispatch(saveOnboardingSalary(salaryPayload)).unwrap();
+        console.log("[SalaryBankDetailsForm] Salary saved:", salaryResult);
+        showToast("Salary packages saved successfully!", "success");
+      } catch (salaryError) {
+        console.error("[SalaryBankDetailsForm] Salary save error:", salaryError);
+        showToast(salaryError?.message || "Failed to save salary packages", "error");
+        setIsSubmitting(false);
+        return;
+      }
+
+      // ─── Update packages with API response data ─────────────────────────────
+      // The API returns the saved packages with their IDs and components
+      if (salaryResult?.data?.packages) {
+        const apiPackages = salaryResult.data.packages;
+        
+        // Update package1 with API response
+        if (apiPackages.package1) {
+          const updatedPkg1 = {
+            ...packages.package1,
+            packageId: apiPackages.package1.id,
+            name: apiPackages.package1.name || packages.package1.name,
+            currency: apiPackages.package1.currency || packages.package1.currency,
+            isSaved: true,
+            totalSalary: apiPackages.package1.total_monthly_salary || computePackageTotal(packages.package1.salaryComponents),
+            salaryComponents: (apiPackages.package1.salary_components || []).map((comp) => ({
+              id: comp.id,
+              name: comp.component_name,
+              price: comp.value,
+            })),
+          };
+          setPackages((prev) => ({
+            ...prev,
+            package1: updatedPkg1,
+          }));
+          
+          // Update Redux and localStorage with the API response
+          saveToStorageAndRedux({
+            packages: {
+              ...packages,
+              package1: updatedPkg1,
+            },
+          });
+        }
+        
+        // Update package2 with API response
+        if (apiPackages.package2) {
+          const updatedPkg2 = {
+            ...packages.package2,
+            packageId: apiPackages.package2.id,
+            name: apiPackages.package2.name || packages.package2.name,
+            currency: apiPackages.package2.currency || packages.package2.currency,
+            isSaved: true,
+            totalSalary: apiPackages.package2.total_monthly_salary || computePackageTotal(packages.package2.salaryComponents),
+            salaryComponents: (apiPackages.package2.salary_components || []).map((comp) => ({
+              id: comp.id,
+              name: comp.component_name,
+              price: comp.value,
+            })),
+          };
+          setPackages((prev) => ({
+            ...prev,
+            package2: updatedPkg2,
+          }));
+          
+          // Update Redux and localStorage with the API response
+          saveToStorageAndRedux({
+            packages: {
+              ...packages,
+              package2: updatedPkg2,
+            },
+          });
+        }
+      }
+
+      // ─── Prepare Bank Data ──────────────────────────────────────────────────
+      const bankPayload = {
+        user_id: parseInt(userId),
+        bank_details: bankAccounts.map((account) => ({
+          bank_country: account.bankCountry,
+          bank_name: account.bankName,
+          account_number: account.accountNumber,
+          ifsc_code: account.bankIfsc || null,
+          branch_name: account.bankBranch || null,
+          iban_number: account.bankIban || null,
+          swift_code: account.bankSwift || null,
+        })),
+      };
+
+      console.log("[SalaryBankDetailsForm] Saving bank payload:", JSON.stringify(bankPayload, null, 2));
+
+      // ─── Save Banks to API ───────────────────────────────────────────────────
+      let bankResult;
+      try {
+        bankResult = await dispatch(saveOnboardingBanks(bankPayload)).unwrap();
+        console.log("[SalaryBankDetailsForm] Banks saved:", bankResult);
+        showToast("Bank details saved successfully!", "success");
+      } catch (bankError) {
+        console.error("[SalaryBankDetailsForm] Bank save error:", bankError);
+        showToast(bankError?.message || "Failed to save bank details", "error");
+        setIsSubmitting(false);
+        return;
+      }
+
+      // ─── Update bank accounts with API response data ────────────────────────
+      if (bankResult?.data?.bank_details) {
+        const apiBankDetails = bankResult.data.bank_details;
+        const updatedBankAccounts = apiBankDetails.map((bank, index) => ({
+          id: bank.id || Date.now() + index,
+          bankCountry: bank.bank_country || bankAccounts[index]?.bankCountry || "UAE",
+          bankName: bank.bank_name || bankAccounts[index]?.bankName || "",
+          accountNumber: bank.account_number || bankAccounts[index]?.accountNumber || "",
+          bankIfsc: bank.ifsc_code || bankAccounts[index]?.bankIfsc || "",
+          bankBranch: bank.branch_name || bankAccounts[index]?.bankBranch || "",
+          bankIban: bank.iban_number || bankAccounts[index]?.bankIban || "",
+          bankSwift: bank.swift_code || bankAccounts[index]?.bankSwift || "",
+        }));
+        
+        setBankAccounts(updatedBankAccounts);
+        
+        // Update Redux and localStorage with the API response
+        saveToStorageAndRedux({
+          bankAccounts: updatedBankAccounts,
+        });
+      }
+
+      // ─── Save payment cycle ──────────────────────────────────────────────────
+      saveToStorageAndRedux({
+        paymentCycle,
+      });
+
+      // ─── Move to next step (Review) ──────────────────────────────────────
+      dispatch(setStep(4));
+      showToast("All financial details saved successfully!", "success");
+
+    } catch (error) {
+      console.error("[SalaryBankDetailsForm] Unexpected error:", error);
+      showToast("An unexpected error occurred. Please try again.", "error");
+    } finally {
+      setIsSubmitting(false);
+    }
+  };
 
   const handleBack = () => {
     dispatch(setStep(2));
@@ -763,21 +934,7 @@ const handleSubmit = (e) => {
         {/* Package Content */}
         {isActive && (
           <div className="p-5 space-y-5 bg-white dark:bg-gray-800/30">
-            {isLoadingPackages ? (
-              <div className="flex items-center justify-center py-8">
-                <FiLoader className="w-6 h-6 animate-spin text-green-500" />
-                <span className="ml-2 text-sm text-gray-500">
-                  Loading packages...
-                </span>
-              </div>
-            ) : !pkg.packageId ? (
-              <div className="text-center py-8 text-red-500">
-                <p>Package not found in system</p>
-                <p className="text-xs text-gray-400 mt-1">
-                  Please refresh and try again
-                </p>
-              </div>
-            ) : !pkg.isSaved ? (
+            {!pkg.isSaved ? (
               <div className="space-y-5">
                 {/* Currency Selector */}
                 <div className="space-y-2">
@@ -1320,7 +1477,8 @@ const handleSubmit = (e) => {
           <button
             type="button"
             onClick={handleBack}
-            className="w-full sm:w-auto flex items-center justify-center gap-2 px-6 py-3 font-bold text-gray-600 dark:text-gray-400 hover:text-gray-950 dark:hover:text-white transition-all rounded-xl hover:-translate-x-1"
+            disabled={isSubmitting}
+            className="w-full sm:w-auto flex items-center justify-center gap-2 px-6 py-3 font-bold text-gray-600 dark:text-gray-400 hover:text-gray-950 dark:hover:text-white transition-all rounded-xl hover:-translate-x-1 disabled:opacity-50"
           >
             <FiChevronLeft size={20} />
             Back
@@ -1328,6 +1486,7 @@ const handleSubmit = (e) => {
 
           <button
             type="submit"
+            disabled={isSubmitting || !packages.package1.isSaved || !packages.package2.isSaved || bankAccounts.length === 0}
             className={`w-full sm:w-auto px-8 py-3 rounded-full text-sm font-bold flex items-center justify-center gap-2 transition-all shadow-md hover:shadow-lg whitespace-nowrap ${
               packages.package1.isSaved &&
               packages.package2.isSaved &&
@@ -1336,8 +1495,17 @@ const handleSubmit = (e) => {
                 : "bg-gray-300 dark:bg-gray-700 cursor-not-allowed text-gray-500 dark:text-gray-400 opacity-60"
             }`}
           >
-            Save and Continue
-            <FiChevronRight size={18} />
+            {isSubmitting ? (
+              <>
+                <FiLoader className="animate-spin" size={16} />
+                Saving...
+              </>
+            ) : (
+              <>
+                Save and Continue
+                <FiChevronRight size={18} />
+              </>
+            )}
           </button>
         </div>
       </form>

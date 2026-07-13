@@ -3,7 +3,12 @@ import React, { useEffect, useState } from "react";
 import { useForm, Controller } from "react-hook-form";
 import { useDispatch, useSelector } from "react-redux";
 import { FiEdit3, FiInfo, FiChevronRight, FiChevronLeft, FiSave, FiPlus, FiLoader } from "react-icons/fi";
-import { setStep, updateEmployeeDetails, resetOnboarding } from "../../store/slices/onboardingSlice";
+import { 
+  setStep, 
+  updateEmployeeDetails, 
+  resetOnboarding,
+  saveOnboardingDetails 
+} from "../../store/slices/onboardingSlice";
 import { showToast } from "../../components/common/Toast";
 import DateInput from "../common/DateInput";
 import { fetchDepartments } from "../../store/slices/departmentSlice";
@@ -12,7 +17,7 @@ import { fetchDesignations } from "../../store/slices/designationSlice";
 const EmployeeDetailsForm = () => {
   const dispatch = useDispatch();
   const onboardingState = useSelector((state) => state.onboarding) || {};
-  const { employeeDetails = {} } = onboardingState;
+  const { employeeDetails = {}, isLoading = false } = onboardingState;
   
   // Get departments and designations from Redux store
   const { departments = [], loading: departmentsLoading } = useSelector((state) => state.departments || {});
@@ -24,6 +29,7 @@ const EmployeeDetailsForm = () => {
   const [newDesignationName, setNewDesignationName] = useState("");
   const [isAddingDepartment, setIsAddingDepartment] = useState(false);
   const [isAddingDesignation, setIsAddingDesignation] = useState(false);
+  const [isSubmitting, setIsSubmitting] = useState(false);
 
   const {
     register,
@@ -53,26 +59,165 @@ const EmployeeDetailsForm = () => {
     }
   }, [employeeDetails, reset]);
 
-  const onSubmit = (data) => {
-    dispatch(updateEmployeeDetails(data));
-    dispatch(setStep(3));
+  // ─── Submit Form ──────────────────────────────────────────────────────────
+  const onSubmit = async (data) => {
+    setIsSubmitting(true);
+    
+    try {
+      // ─── PREPARE PAYLOAD ──────────────────────────────────────────────────
+      // Format the payload to match API expectations
+      const payload = {
+        fullName: data.fullName,
+        email: data.email,
+        // Use phone as personal_number (the API requires personal_number)
+        personal_number: data.phone || data.personalNumber || "",
+        phone: data.phone || "", // Also send phone separately if needed
+        nationality: data.nationality,
+        address: data.address,
+        designation: data.designation,
+        department: data.department,
+        skills: data.skills,
+        experience: data.experience,
+        education: data.education,
+        joiningDate: data.joiningDate,
+        paymentCycle: data.paymentCycle || "Monthly",
+        // Include packages if they exist
+        packages: data.packages || {
+          package1: {
+            id: "package1",
+            name: "Home Country / WFH",
+            currency: "AED",
+            salaryComponents: [],
+            isSaved: false,
+            totalSalary: 0,
+            packageId: null
+          },
+          package2: {
+            id: "package2",
+            name: "Dubai Onsite",
+            currency: "AED",
+            salaryComponents: [],
+            isSaved: false,
+            totalSalary: 0,
+            packageId: null
+          }
+        },
+        bankAccounts: data.bankAccounts || [],
+        // Include fileName if available from resume upload
+        fileName: data.fileName || onboardingState.resumeData?.fileName || null,
+      };
+
+      console.log('[EmployeeDetailsForm] Sending payload:', payload);
+      
+      // First, update local Redux state
+      dispatch(updateEmployeeDetails(data));
+      
+      // ─── CALL API TO SAVE EMPLOYEE DETAILS ─────────────────────────────
+      const result = await dispatch(saveOnboardingDetails(payload)).unwrap();
+      console.log('[EmployeeDetailsForm] API Response:', result);
+      
+      // Extract IDs from the response
+      const employeeId = result?.data?.id || result?.id;
+      const userId = result?.data?.user_id || result?.user_id || result?.data?.userId || result?.userId;
+      
+      // Store the IDs
+      const updates = {};
+      
+      if (employeeId) {
+        updates.id = employeeId;
+        localStorage.setItem('employeeId', employeeId);
+        console.log('[EmployeeDetailsForm] Employee ID stored:', employeeId);
+      }
+      
+      if (userId) {
+        // This is the employee's user ID - this is what we need for fetching salary packages
+        updates.userId = userId;
+        updates.user_id = userId;
+        localStorage.setItem('employeeUserId', userId);
+        localStorage.setItem('onboardingEmployeeUserId', userId);
+        console.log('[EmployeeDetailsForm] Employee User ID stored:', userId);
+      }
+      
+      // Update Redux with the IDs
+      if (Object.keys(updates).length > 0) {
+        dispatch(updateEmployeeDetails(updates));
+      }
+      
+      // Also update the draft in localStorage with the new IDs
+      const draftStr = localStorage.getItem("onboarding-draft");
+      if (draftStr) {
+        try {
+          const draft = JSON.parse(draftStr);
+          if (!draft.employeeDetails) draft.employeeDetails = {};
+          draft.employeeDetails = { ...draft.employeeDetails, ...updates };
+          localStorage.setItem("onboarding-draft", JSON.stringify(draft));
+        } catch (err) {
+          console.error("Failed to update draft with IDs:", err);
+        }
+      }
+      
+      showToast('Employee details saved successfully!', 'success');
+      
+      // Move to next step (Step 3 - Salary & Bank Details)
+      dispatch(setStep(3));
+      
+    } catch (error) {
+      console.error('[EmployeeDetailsForm] Failed to save employee details:', error);
+      
+      // Handle validation errors from the API
+      if (error?.errors) {
+        const errorMessages = Object.values(error.errors).flat().join(', ');
+        showToast(`Validation error: ${errorMessages}`, 'error');
+      } else if (error?.message) {
+        showToast(error.message, 'error');
+      } else {
+        showToast('Failed to save employee details. Please try again.', 'error');
+      }
+    } finally {
+      setIsSubmitting(false);
+    }
   };
 
+  // ─── Handle Back ──────────────────────────────────────────────────────────
   const handleBack = () => {
-    dispatch(resetOnboarding());
+    // Check if we have saved data, if so, just go back to step 1
+    const hasSavedData = localStorage.getItem('employeeId') || localStorage.getItem('employeeUserId');
+    if (hasSavedData) {
+      // If we have saved data, just go back to step 1
+      dispatch(setStep(1));
+    } else {
+      // Otherwise reset the entire onboarding
+      dispatch(resetOnboarding());
+    }
   };
 
+  // ─── Handle Save Draft ────────────────────────────────────────────────────
   const handleSaveDraft = () => {
     const currentData = getValues();
+    
+    // Include any existing IDs in the draft
+    const existingIds = {};
+    if (localStorage.getItem('employeeId')) {
+      existingIds.id = localStorage.getItem('employeeId');
+    }
+    if (localStorage.getItem('employeeUserId')) {
+      existingIds.userId = localStorage.getItem('employeeUserId');
+      existingIds.user_id = localStorage.getItem('employeeUserId');
+    }
+    
     const draftState = {
       ...onboardingState,
-      employeeDetails: { ...onboardingState.employeeDetails, ...currentData }
+      employeeDetails: { 
+        ...onboardingState.employeeDetails, 
+        ...currentData,
+        ...existingIds 
+      }
     };
     localStorage.setItem("onboarding-draft", JSON.stringify(draftState));
     showToast("Draft saved successfully!", "success");
   };
 
-  // Add new department
+  // ─── Add Department ──────────────────────────────────────────────────────
   const handleAddDepartment = async () => {
     if (!newDepartmentName.trim()) {
       showToast("Please enter department name", "error");
@@ -97,7 +242,7 @@ const EmployeeDetailsForm = () => {
     }
   };
 
-  // Add new designation
+  // ─── Add Designation ──────────────────────────────────────────────────────
   const handleAddDesignation = async () => {
     if (!newDesignationName.trim()) {
       showToast("Please enter designation name", "error");
@@ -122,6 +267,7 @@ const EmployeeDetailsForm = () => {
     }
   };
 
+  // ─── Input Field Component ──────────────────────────────────────────────
   const InputField = ({ label, name, type = "text", placeholder, options = null, loading = false }) => (
     <div className="space-y-1.5">
       <label className="block text-sm font-semibold text-gray-700 dark:text-gray-300">
@@ -278,7 +424,8 @@ const EmployeeDetailsForm = () => {
             <button
               type="button"
               onClick={handleSaveDraft}
-              className="flex items-center gap-2 px-4 py-2 text-sm font-semibold text-green-600 bg-green-50 dark:bg-green-900/20 rounded-xl hover:bg-green-100 dark:hover:bg-green-900/40 transition-colors"
+              disabled={isSubmitting}
+              className="flex items-center gap-2 px-4 py-2 text-sm font-semibold text-green-600 bg-green-50 dark:bg-green-900/20 rounded-xl hover:bg-green-100 dark:hover:bg-green-900/40 transition-colors disabled:opacity-50"
             >
               <FiSave size={16} />
               Save Draft
@@ -289,7 +436,14 @@ const EmployeeDetailsForm = () => {
           <div className="p-8 grid grid-cols-1 md:grid-cols-2 gap-x-8 gap-y-6">
             <InputField label="Full Name" name="fullName" placeholder="Enter full name" />
             <InputField label="Email Address" name="email" type="email" placeholder="email@example.com" />
-            <InputField label="Phone Number" name="phone" placeholder="+971 -- --- ----" />
+            
+            {/* Phone Number - This will be sent as personal_number to the API */}
+            <InputField 
+              label="Personal Number / Phone" 
+              name="phone" 
+              placeholder="+971 -- --- ----" 
+            />
+            
             <InputField
               label="Nationality"
               name="nationality"
@@ -354,7 +508,8 @@ const EmployeeDetailsForm = () => {
             <button
               type="button"
               onClick={handleBack}
-              className="flex items-center gap-2 px-5 py-2.5 font-bold text-gray-600 dark:text-gray-400 hover:text-gray-900 dark:hover:text-white transition-colors"
+              disabled={isSubmitting}
+              className="flex items-center gap-2 px-5 py-2.5 font-bold text-gray-600 dark:text-gray-400 hover:text-gray-900 dark:hover:text-white transition-colors disabled:opacity-50"
             >
               <FiChevronLeft size={20} />
               Back
@@ -362,10 +517,20 @@ const EmployeeDetailsForm = () => {
 
             <button
               type="submit"
-              className="bg-green-500 hover:bg-green-600 text-white px-6 py-2 rounded-full text-sm font-semibold flex items-center justify-center gap-2 transition-all shadow-md hover:shadow-lg whitespace-nowrap"
+              disabled={isSubmitting}
+              className="bg-green-500 hover:bg-green-600 text-white px-6 py-2 rounded-full text-sm font-semibold flex items-center justify-center gap-2 transition-all shadow-md hover:shadow-lg whitespace-nowrap disabled:opacity-50 disabled:cursor-not-allowed"
             >
-              Continue
-              <FiChevronRight size={18} />
+              {isSubmitting ? (
+                <>
+                  <FiLoader className="animate-spin" size={16} />
+                  Saving...
+                </>
+              ) : (
+                <>
+                  Continue
+                  <FiChevronRight size={18} />
+                </>
+              )}
             </button>
           </div>
         </div>

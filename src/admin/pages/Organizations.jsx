@@ -157,7 +157,7 @@ const Organizations = () => {
       ) : (
         <>
           {/* Stats Cards */}
-          <div className="stats-grid grid grid-cols-1 sm:grid-cols-3 gap-3 md:gap-5 mb-6">
+          <div className="stats-grid grid grid-cols-2 sm:grid-cols-3 gap-3 md:gap-5 mb-6">
             <div className="bg-white dark:bg-gray-800 rounded-xl p-3 md:p-5 border border-gray-200 dark:border-gray-700 transition-all hover:-translate-y-0.5 hover:shadow-soft">
               <div className="flex justify-between items-start mb-2 md:mb-3">
                 <div className="w-10 h-10 md:w-12 md:h-12 bg-green-100 dark:bg-green-900/30 rounded-xl flex items-center justify-center">

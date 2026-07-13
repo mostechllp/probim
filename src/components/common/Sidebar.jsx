@@ -10,7 +10,7 @@ const ADMIN_ROUTE_MAP = {
   attendance: "/admin/attendances",
   "attendance-requests": "/admin/attendance-requests",
   wfh: "/admin/wfh",
-  documents: "/admin/documents",
+  documents: "/admin/agreements",
   leaves: "/admin/leaves",
   "my-leaves": "/admin/my-leaves",
   "task-reports": "/admin/task-reports",
