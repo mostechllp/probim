@@ -33,6 +33,16 @@ const AttendanceRequests = () => {
   const [showDropdown, setShowDropdown] = useState(false);
   const [localFilter, setLocalFilter] = useState({ status: "all", search: "" });
   const [localPagination, setLocalPagination] = useState({ currentPage: 1, perPage: 10 });
+  const [isMobile, setIsMobile] = useState(window.innerWidth < 768);
+
+  // Handle window resize for mobile detection
+  useEffect(() => {
+    const handleResize = () => {
+      setIsMobile(window.innerWidth < 768);
+    };
+    window.addEventListener('resize', handleResize);
+    return () => window.removeEventListener('resize', handleResize);
+  }, []);
 
   // Fetch attendance requests on component mount
   useEffect(() => {
@@ -67,14 +77,25 @@ const AttendanceRequests = () => {
     return () => document.removeEventListener('mousedown', handleClickOutside);
   }, [showDropdown]);
 
+  // Close dropdown on ESC key
+  useEffect(() => {
+    const handleEsc = (event) => {
+      if (event.key === 'Escape' && showDropdown) {
+        setShowDropdown(false);
+      }
+    };
+    document.addEventListener('keydown', handleEsc);
+    return () => document.removeEventListener('keydown', handleEsc);
+  }, [showDropdown]);
+
   const getRequestTypeLabel = (type) => {
     const types = {
       early_check_in: "Early Check-in",
       late_check_in: "Late Check-in",
       missed_punch_in: "Missed Punch In",
       missed_punch_out: "Missed Punch Out",
-      early_checkin: "Early Check-in", // Fallback for old format
-      late_checkin: "Late Check-in", // Fallback for old format
+      early_checkin: "Early Check-in",
+      late_checkin: "Late Check-in",
     };
     return types[type] || type?.replace(/_/g, ' ') || type;
   };
@@ -128,13 +149,12 @@ const AttendanceRequests = () => {
         year: "numeric",
       });
     } catch (error) {
-      return "-", error;
+      return "-";
     }
   };
 
   const formatTime = (timeString) => {
     if (!timeString) return "-";
-    // If time is in HH:MM:SS format, extract HH:MM
     if (timeString.includes(':')) {
       const parts = timeString.split(':');
       return `${parts[0]}:${parts[1]}`;
@@ -154,7 +174,7 @@ const AttendanceRequests = () => {
         minute: "2-digit",
       });
     } catch (error) {
-      return "-", error;
+      return "-";
     }
   };
 
@@ -216,7 +236,6 @@ const AttendanceRequests = () => {
     setShowLateCheckin(false);
     setShowMissedPunchIn(false);
     setShowMissedPunchOut(false);
-    // Refresh the list after modal closes
     loadAttendanceRequests();
   };
 
@@ -235,142 +254,167 @@ const AttendanceRequests = () => {
   return (
     <div>
       {/* Stats Grid */}
-      <div className="stats-grid grid grid-cols-2 md:grid-cols-4 gap-5 mb-7">
-        <div className="stat-card bg-[var(--surface)] border border-[var(--border)] rounded-xl p-5 text-center hover:-translate-y-0.5 hover:shadow-md transition-all">
-          <div className="stat-icon w-12 h-12 rounded-xl bg-blue-500/10 text-blue-500 flex items-center justify-center text-2xl mx-auto mb-3">
+      <div className="stats-grid grid grid-cols-2 md:grid-cols-4 gap-3 md:gap-5 mb-5 md:mb-7">
+        <div className="stat-card bg-[var(--surface)] border border-[var(--border)] rounded-xl p-3 md:p-5 text-center hover:-translate-y-0.5 hover:shadow-md transition-all">
+          <div className="stat-icon w-10 h-10 md:w-12 md:h-12 rounded-xl bg-blue-500/10 text-blue-500 flex items-center justify-center text-xl md:text-2xl mx-auto mb-2 md:mb-3">
             <FiClock />
           </div>
-          <div className="stat-number text-3xl font-extrabold text-blue-600 dark:text-blue-400">
+          <div className="stat-number text-2xl md:text-3xl font-extrabold text-blue-600 dark:text-blue-400">
             {stats.total}
           </div>
-          <div className="stat-label text-xs text-[var(--muted)]">
+          <div className="stat-label text-[10px] md:text-xs text-[var(--muted)]">
             Total Requests
           </div>
         </div>
 
-        <div className="stat-card bg-[var(--surface)] border border-[var(--border)] rounded-xl p-5 text-center hover:-translate-y-0.5 hover:shadow-md transition-all">
-          <div className="stat-icon w-12 h-12 rounded-xl bg-amber-500/10 text-amber-500 flex items-center justify-center text-2xl mx-auto mb-3">
+        <div className="stat-card bg-[var(--surface)] border border-[var(--border)] rounded-xl p-3 md:p-5 text-center hover:-translate-y-0.5 hover:shadow-md transition-all">
+          <div className="stat-icon w-10 h-10 md:w-12 md:h-12 rounded-xl bg-amber-500/10 text-amber-500 flex items-center justify-center text-xl md:text-2xl mx-auto mb-2 md:mb-3">
             <FiClock />
           </div>
-          <div className="stat-number text-3xl font-extrabold text-amber-500">
+          <div className="stat-number text-2xl md:text-3xl font-extrabold text-amber-500">
             {stats.pending}
           </div>
-          <div className="stat-label text-xs text-[var(--muted)]">
+          <div className="stat-label text-[10px] md:text-xs text-[var(--muted)]">
             Pending
           </div>
         </div>
 
-        <div className="stat-card bg-[var(--surface)] border border-[var(--border)] rounded-xl p-5 text-center hover:-translate-y-0.5 hover:shadow-md transition-all">
-          <div className="stat-icon w-12 h-12 rounded-xl bg-green-500/10 text-green-500 flex items-center justify-center text-2xl mx-auto mb-3">
+        <div className="stat-card bg-[var(--surface)] border border-[var(--border)] rounded-xl p-3 md:p-5 text-center hover:-translate-y-0.5 hover:shadow-md transition-all">
+          <div className="stat-icon w-10 h-10 md:w-12 md:h-12 rounded-xl bg-green-500/10 text-green-500 flex items-center justify-center text-xl md:text-2xl mx-auto mb-2 md:mb-3">
             <FiClock />
           </div>
-          <div className="stat-number text-3xl font-extrabold text-green-500">
+          <div className="stat-number text-2xl md:text-3xl font-extrabold text-green-500">
             {stats.approved}
           </div>
-          <div className="stat-label text-xs text-[var(--muted)]">
+          <div className="stat-label text-[10px] md:text-xs text-[var(--muted)]">
             Approved
           </div>
         </div>
 
-        <div className="stat-card bg-[var(--surface)] border border-[var(--border)] rounded-xl p-5 text-center hover:-translate-y-0.5 hover:shadow-md transition-all">
-          <div className="stat-icon w-12 h-12 rounded-xl bg-red-500/10 text-red-500 flex items-center justify-center text-2xl mx-auto mb-3">
+        <div className="stat-card bg-[var(--surface)] border border-[var(--border)] rounded-xl p-3 md:p-5 text-center hover:-translate-y-0.5 hover:shadow-md transition-all">
+          <div className="stat-icon w-10 h-10 md:w-12 md:h-12 rounded-xl bg-red-500/10 text-red-500 flex items-center justify-center text-xl md:text-2xl mx-auto mb-2 md:mb-3">
             <FiClock />
           </div>
-          <div className="stat-number text-3xl font-extrabold text-red-500">
+          <div className="stat-number text-2xl md:text-3xl font-extrabold text-red-500">
             {stats.rejected}
           </div>
-          <div className="stat-label text-xs text-[var(--muted)]">
+          <div className="stat-label text-[10px] md:text-xs text-[var(--muted)]">
             Rejected
           </div>
         </div>
       </div>
 
-      {/* Header with Dropdown */}
-      <div className="attendance-requests-header flex flex-col md:flex-row justify-between items-start md:items-center gap-5 mb-7">
-        <h2 className="text-xl md:text-2xl font-semibold bg-gradient-to-r from-[var(--text)] to-green-600 bg-clip-text text-transparent">
+      {/* Header with Dropdown - Mobile Friendly */}
+      <div className="attendance-requests-header flex flex-col md:flex-row justify-between items-start md:items-center gap-4 md:gap-5 mb-5 md:mb-7">
+        <h2 className="text-lg md:text-2xl font-semibold bg-gradient-to-r from-[var(--text)] to-green-600 bg-clip-text text-transparent">
           My Attendance Requests
         </h2>
         
-        {/* Dropdown Container */}
-        <div className="dropdown-container relative">
+        {/* Dropdown Container - Mobile Friendly */}
+        <div className="dropdown-container relative w-full md:w-auto">
           <button
             onClick={() => setShowDropdown(!showDropdown)}
-            className="flex items-center gap-2 px-4 py-2 bg-green-500 text-white rounded-lg hover:bg-green-600 transition-all text-sm"
+            className="flex items-center justify-center w-full md:w-auto gap-2 px-4 py-2.5 md:py-2 bg-green-500 text-white rounded-lg hover:bg-green-600 transition-all text-sm font-medium"
           >
             <FiPlus className="text-sm" />
             <span>New Request</span>
-            <FiChevronDown className={`text-sm transition-transform ${showDropdown ? 'rotate-180' : ''}`} />
+            <FiChevronDown className={`text-sm transition-transform duration-200 ${showDropdown ? 'rotate-180' : ''}`} />
           </button>
           
-          {/* Dropdown Menu */}
+          {/* Dropdown Menu - Full width on mobile */}
           {showDropdown && (
-            <div className="absolute right-0 mt-2 w-64 bg-[var(--surface)] border border-[var(--border)] rounded-lg shadow-lg overflow-hidden z-50">
-              <div className="py-1">
-                <button
-                  onClick={() => openRequestModal("early_check_in")}
-                  className="w-full flex items-center gap-3 px-4 py-3 text-left hover:bg-[var(--surface2)] transition-colors"
-                >
-                  <div className="w-8 h-8 rounded-lg bg-orange-500/10 text-orange-500 flex items-center justify-center">
-                    <FiSun className="text-sm" />
-                  </div>
-                  <div>
-                    <div className="text-sm font-medium text-[var(--text)]">Early Check-in</div>
-                    <div className="text-xs text-[var(--muted)]">Request early check-in approval</div>
-                  </div>
-                </button>
+            <>
+              {/* Backdrop for mobile */}
+              <div 
+                className="fixed inset-0 bg-black/30 z-40 md:hidden"
+                onClick={() => setShowDropdown(false)}
+              />
+              
+              <div className={`
+                absolute md:right-0 mt-2 w-full md:w-64 
+                bg-[var(--surface)] border border-[var(--border)] 
+                rounded-lg shadow-lg overflow-hidden z-50
+                ${isMobile ? 'left-0' : ''}
+              `}>
+                <div className="py-1 max-h-[70vh] overflow-y-auto">
+                  <button
+                    onClick={() => openRequestModal("early_check_in")}
+                    className="w-full flex items-center gap-3 px-4 py-3 text-left hover:bg-[var(--surface2)] transition-colors border-b border-[var(--border)] md:border-0"
+                  >
+                    <div className="w-8 h-8 rounded-lg bg-orange-500/10 text-orange-500 flex items-center justify-center flex-shrink-0">
+                      <FiSun className="text-sm" />
+                    </div>
+                    <div className="min-w-0">
+                      <div className="text-sm font-medium text-[var(--text)]">Early Check-in</div>
+                      <div className="text-xs text-[var(--muted)] truncate">Request early check-in approval</div>
+                    </div>
+                  </button>
+                  
+                  <button
+                    onClick={() => openRequestModal("late_check_in")}
+                    className="w-full flex items-center gap-3 px-4 py-3 text-left hover:bg-[var(--surface2)] transition-colors border-b border-[var(--border)] md:border-0"
+                  >
+                    <div className="w-8 h-8 rounded-lg bg-purple-500/10 text-purple-500 flex items-center justify-center flex-shrink-0">
+                      <FiMoon className="text-sm" />
+                    </div>
+                    <div className="min-w-0">
+                      <div className="text-sm font-medium text-[var(--text)]">Late Check-in</div>
+                      <div className="text-xs text-[var(--muted)] truncate">Request late check-in approval</div>
+                    </div>
+                  </button>
+                  
+                  <button
+                    onClick={() => openRequestModal("missed_punch_in")}
+                    className="w-full flex items-center gap-3 px-4 py-3 text-left hover:bg-[var(--surface2)] transition-colors border-b border-[var(--border)] md:border-0"
+                  >
+                    <div className="w-8 h-8 rounded-lg bg-blue-500/10 text-blue-500 flex items-center justify-center flex-shrink-0">
+                      <MdFingerprint className="text-sm" />
+                    </div>
+                    <div className="min-w-0">
+                      <div className="text-sm font-medium text-[var(--text)]">Missed Punch In</div>
+                      <div className="text-xs text-[var(--muted)] truncate">Request missed punch in approval</div>
+                    </div>
+                  </button>
+                  
+                  <button
+                    onClick={() => openRequestModal("missed_punch_out")}
+                    className="w-full flex items-center gap-3 px-4 py-3 text-left hover:bg-[var(--surface2)] transition-colors border-b border-[var(--border)] md:border-0"
+                  >
+                    <div className="w-8 h-8 rounded-lg bg-green-500/10 text-green-500 flex items-center justify-center flex-shrink-0">
+                      <FiLogIn className="text-sm" />
+                    </div>
+                    <div className="min-w-0">
+                      <div className="text-sm font-medium text-[var(--text)]">Missed Punch Out</div>
+                      <div className="text-xs text-[var(--muted)] truncate">Request missed punch out approval</div>
+                    </div>
+                  </button>
+                </div>
                 
-                <button
-                  onClick={() => openRequestModal("late_check_in")}
-                  className="w-full flex items-center gap-3 px-4 py-3 text-left hover:bg-[var(--surface2)] transition-colors"
-                >
-                  <div className="w-8 h-8 rounded-lg bg-purple-500/10 text-purple-500 flex items-center justify-center">
-                    <FiMoon className="text-sm" />
+                {/* Close button for mobile */}
+                {isMobile && (
+                  <div className="p-3 border-t border-[var(--border)] bg-[var(--surface2)] md:hidden">
+                    <button
+                      onClick={() => setShowDropdown(false)}
+                      className="w-full py-2 text-sm text-[var(--muted)] hover:text-[var(--text)] transition-colors"
+                    >
+                      Close
+                    </button>
                   </div>
-                  <div>
-                    <div className="text-sm font-medium text-[var(--text)]">Late Check-in</div>
-                    <div className="text-xs text-[var(--muted)]">Request late check-in approval</div>
-                  </div>
-                </button>
-                
-                <button
-                  onClick={() => openRequestModal("missed_punch_in")}
-                  className="w-full flex items-center gap-3 px-4 py-3 text-left hover:bg-[var(--surface2)] transition-colors"
-                >
-                  <div className="w-8 h-8 rounded-lg bg-blue-500/10 text-blue-500 flex items-center justify-center">
-                    <MdFingerprint className="text-sm" />
-                  </div>
-                  <div>
-                    <div className="text-sm font-medium text-[var(--text)]">Missed Punch In</div>
-                    <div className="text-xs text-[var(--muted)]">Request missed punch in approval</div>
-                  </div>
-                </button>
-                
-                <button
-                  onClick={() => openRequestModal("missed_punch_out")}
-                  className="w-full flex items-center gap-3 px-4 py-3 text-left hover:bg-[var(--surface2)] transition-colors border-t border-[var(--border)]"
-                >
-                  <div className="w-8 h-8 rounded-lg bg-green-500/10 text-green-500 flex items-center justify-center">
-                    <FiLogIn className="text-sm" />
-                  </div>
-                  <div>
-                    <div className="text-sm font-medium text-[var(--text)]">Missed Punch Out</div>
-                    <div className="text-xs text-[var(--muted)]">Request missed punch out approval</div>
-                  </div>
-                </button>
+                )}
               </div>
-            </div>
+            </>
           )}
         </div>
       </div>
 
-      {/* Status Tabs */}
-      <div className="overflow-x-auto pb-2 mb-5 -mx-4 px-4">
+      {/* Status Tabs - Scrollable on mobile */}
+      <div className="overflow-x-auto pb-2 mb-4 md:mb-5 -mx-4 px-4">
         <div className="flex gap-2 min-w-max border-b border-[var(--border)] pb-3">
           {["all", "pending", "approved", "rejected"].map((status) => (
             <button
               key={status}
               onClick={() => handleStatusFilter(status)}
-              className={`px-4 py-1.5 rounded-full text-xs md:text-sm font-medium transition-all whitespace-nowrap capitalize ${
+              className={`px-3 md:px-4 py-1.5 rounded-full text-xs md:text-sm font-medium transition-all whitespace-nowrap capitalize ${
                 localFilter.status === status
                   ? "bg-green-500 text-white shadow-md"
                   : "bg-[var(--surface)] text-[var(--text-secondary)] hover:bg-[var(--surface2)]"
@@ -382,14 +426,14 @@ const AttendanceRequests = () => {
         </div>
       </div>
 
-      {/* Action Bar */}
-      <div className="files-actions flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4 mb-5">
-        <div className="entries-select flex items-center gap-2.5 bg-[var(--surface)] border border-[var(--border)] rounded-full px-3.5 py-1.5 text-xs text-[var(--text-secondary)]">
-          <span>Show entries</span>
+      {/* Action Bar - Stack on mobile */}
+      <div className="files-actions flex flex-col sm:flex-row justify-between items-start sm:items-center gap-3 md:gap-4 mb-4 md:mb-5">
+        <div className="entries-select flex items-center gap-2.5 bg-[var(--surface)] border border-[var(--border)] rounded-full px-3.5 py-1.5 text-xs text-[var(--text-secondary)] w-full sm:w-auto">
+          <span className="whitespace-nowrap">Show entries</span>
           <select
             value={localPagination.perPage}
             onChange={handleEntriesChange}
-            className="border-none outline-none bg-transparent font-semibold text-[var(--text)] cursor-pointer"
+            className="border-none outline-none bg-transparent font-semibold text-[var(--text)] cursor-pointer flex-1"
           >
             <option value="5">5</option>
             <option value="10">10</option>
@@ -397,44 +441,44 @@ const AttendanceRequests = () => {
             <option value="50">50</option>
           </select>
         </div>
-        <div className="search-wrapper flex items-center gap-3 flex-wrap">
-          <div className="search-box flex items-center gap-2 bg-[var(--surface)] border border-[var(--border)] rounded-full px-3.5 py-2">
-            <FiSearch className="text-[var(--muted)] text-xs" />
+        <div className="search-wrapper flex items-center gap-3 flex-wrap w-full sm:w-auto">
+          <div className="search-box flex items-center gap-2 bg-[var(--surface)] border border-[var(--border)] rounded-full px-3.5 py-2 flex-1 sm:flex-initial">
+            <FiSearch className="text-[var(--muted)] text-xs flex-shrink-0" />
             <input
               type="text"
               value={localFilter.search}
               onChange={handleSearch}
               placeholder="Search by type, reason..."
-              className="border-none outline-none bg-transparent text-xs text-[var(--text)] w-36 sm:w-44"
+              className="border-none outline-none bg-transparent text-xs text-[var(--text)] w-full sm:w-36 md:w-44"
             />
           </div>
         </div>
       </div>
 
-      {/* Table */}
+      {/* Table - Horizontal scroll on mobile */}
       <div className="attendance-requests-table-wrapper bg-[var(--surface)] rounded-xl border border-[var(--border)] overflow-x-auto shadow-sm">
-        <table className="attendance-requests-table w-full border-collapse text-xs min-w-[900px]">
+        <table className="attendance-requests-table w-full border-collapse text-xs min-w-[700px] md:min-w-[900px]">
           <thead>
             <tr>
-              <th className="text-left py-3 px-4 text-xs font-semibold text-[var(--muted)] bg-[var(--surface2)] border-b border-[var(--border)]">
+              <th className="text-left py-3 px-3 md:px-4 text-xs font-semibold text-[var(--muted)] bg-[var(--surface2)] border-b border-[var(--border)]">
                 #
               </th>
-              <th className="text-left py-3 px-4 text-xs font-semibold text-[var(--muted)] bg-[var(--surface2)] border-b border-[var(--border)]">
+              <th className="text-left py-3 px-3 md:px-4 text-xs font-semibold text-[var(--muted)] bg-[var(--surface2)] border-b border-[var(--border)]">
                 Type
               </th>
-              <th className="text-left py-3 px-4 text-xs font-semibold text-[var(--muted)] bg-[var(--surface2)] border-b border-[var(--border)]">
+              <th className="text-left py-3 px-3 md:px-4 text-xs font-semibold text-[var(--muted)] bg-[var(--surface2)] border-b border-[var(--border)]">
                 Date
               </th>
-              <th className="text-left py-3 px-4 text-xs font-semibold text-[var(--muted)] bg-[var(--surface2)] border-b border-[var(--border)]">
+              <th className="text-left py-3 px-3 md:px-4 text-xs font-semibold text-[var(--muted)] bg-[var(--surface2)] border-b border-[var(--border)]">
                 Time
               </th>
-              <th className="text-left py-3 px-4 text-xs font-semibold text-[var(--muted)] bg-[var(--surface2)] border-b border-[var(--border)]">
+              <th className="text-left py-3 px-3 md:px-4 text-xs font-semibold text-[var(--muted)] bg-[var(--surface2)] border-b border-[var(--border)] hidden sm:table-cell">
                 Reason
               </th>
-              <th className="text-left py-3 px-4 text-xs font-semibold text-[var(--muted)] bg-[var(--surface2)] border-b border-[var(--border)]">
+              <th className="text-left py-3 px-3 md:px-4 text-xs font-semibold text-[var(--muted)] bg-[var(--surface2)] border-b border-[var(--border)]">
                 Status
               </th>
-              <th className="text-left py-3 px-4 text-xs font-semibold text-[var(--muted)] bg-[var(--surface2)] border-b border-[var(--border)]">
+              <th className="text-left py-3 px-3 md:px-4 text-xs font-semibold text-[var(--muted)] bg-[var(--surface2)] border-b border-[var(--border)]">
                 Action
               </th>
             </tr>
@@ -464,30 +508,30 @@ const AttendanceRequests = () => {
                   key={request.id}
                   className="hover:bg-[var(--surface2)] transition-colors"
                 >
-                  <td className="py-3.5 px-4 border-b border-[var(--border)] text-[var(--text-secondary)]">
+                  <td className="py-3 px-3 md:px-4 border-b border-[var(--border)] text-[var(--text-secondary)]">
                     {start + idx + 1}
                    </td>
-                  <td className="py-3.5 px-4 border-b border-[var(--border)]">
+                  <td className="py-3 px-3 md:px-4 border-b border-[var(--border)]">
                     <div className="flex items-center gap-2">
                       {getRequestTypeIcon(request.type)}
-                      <span className="text-[var(--text)] text-xs">
+                      <span className="text-[var(--text)] text-xs whitespace-nowrap">
                         {getRequestTypeLabel(request.type)}
                       </span>
                     </div>
                    </td>
-                  <td className="py-3.5 px-4 border-b border-[var(--border)] text-[var(--text-secondary)] whitespace-nowrap">
+                  <td className="py-3 px-3 md:px-4 border-b border-[var(--border)] text-[var(--text-secondary)] whitespace-nowrap">
                     {formatDate(request.request_date || request.date)}
                    </td>
-                  <td className="py-3.5 px-4 border-b border-[var(--border)] text-[var(--text-secondary)]">
+                  <td className="py-3 px-3 md:px-4 border-b border-[var(--border)] text-[var(--text-secondary)] whitespace-nowrap">
                     {formatTime(request.request_time || request.time)}
                    </td>
-                  <td className="py-3.5 px-4 border-b border-[var(--border)] text-[var(--text-secondary)] max-w-[200px] truncate" title={request.reason}>
+                  <td className="py-3 px-3 md:px-4 border-b border-[var(--border)] text-[var(--text-secondary)] max-w-[150px] truncate hidden sm:table-cell" title={request.reason}>
                     {request.reason || "-"}
                    </td>
-                  <td className="py-3.5 px-4 border-b border-[var(--border)]">
+                  <td className="py-3 px-3 md:px-4 border-b border-[var(--border)]">
                     <StatusBadge status={request.status} />
                    </td>
-                  <td className="py-3.5 px-4 border-b border-[var(--border)]">
+                  <td className="py-3 px-3 md:px-4 border-b border-[var(--border)]">
                     <button
                       onClick={() => handleViewDetails(request)}
                       className="p-1.5 rounded-lg hover:bg-[var(--surface2)] text-green-500 transition-colors"
@@ -503,15 +547,15 @@ const AttendanceRequests = () => {
          </table>
       </div>
 
-      {/* Pagination */}
+      {/* Pagination - Stack on mobile */}
       {filteredRequests.length > 0 && (
         <div className="pagination-container flex flex-col sm:flex-row justify-between items-center gap-3 mt-5">
-          <div className="text-xs text-[var(--muted)]">
+          <div className="text-xs text-[var(--muted)] text-center sm:text-left">
             Showing {start + 1} to{" "}
             {Math.min(start + localPagination.perPage, filteredRequests.length)} of{" "}
             {filteredRequests.length} entries
           </div>
-          <div className="page-buttons flex gap-1.5 flex-wrap">
+          <div className="page-buttons flex gap-1.5 flex-wrap justify-center">
             <button
               onClick={() => handlePageChange(localPagination.currentPage - 1)}
               disabled={localPagination.currentPage === 1}
@@ -546,46 +590,46 @@ const AttendanceRequests = () => {
         </div>
       )}
 
-      {/* Details Modal */}
+      {/* Details Modal - Mobile friendly */}
       {showDetailsModal && selectedRequest && (
         <div className="fixed inset-0 bg-black/50 backdrop-blur-sm z-[1100] flex items-center justify-center p-4" onClick={() => setShowDetailsModal(false)}>
-          <div className="bg-[var(--surface)] max-w-md w-full rounded-2xl p-6 shadow-xl border border-[var(--border)]" onClick={(e) => e.stopPropagation()}>
+          <div className="bg-[var(--surface)] max-w-md w-full rounded-2xl p-4 md:p-6 shadow-xl border border-[var(--border)] max-h-[90vh] overflow-y-auto" onClick={(e) => e.stopPropagation()}>
             <div className="flex justify-between items-center mb-4">
-              <h3 className="text-xl font-bold text-[var(--text)]">Request Details</h3>
-              <button onClick={() => setShowDetailsModal(false)} className="text-[var(--muted)] hover:text-[var(--text)]">
+              <h3 className="text-lg md:text-xl font-bold text-[var(--text)]">Request Details</h3>
+              <button onClick={() => setShowDetailsModal(false)} className="text-[var(--muted)] hover:text-[var(--text)] p-1">
                 ✕
               </button>
             </div>
             <div className="space-y-3">
-              <div className="flex py-2 border-b border-[var(--border)]">
-                <span className="font-semibold text-[var(--text)] w-28">Type:</span>
+              <div className="flex flex-col sm:flex-row py-2 border-b border-[var(--border)]">
+                <span className="font-semibold text-[var(--text)] sm:w-28">Type:</span>
                 <span className="text-[var(--text-secondary)]">{getRequestTypeLabel(selectedRequest.type)}</span>
               </div>
-              <div className="flex py-2 border-b border-[var(--border)]">
-                <span className="font-semibold text-[var(--text)] w-28">Date:</span>
+              <div className="flex flex-col sm:flex-row py-2 border-b border-[var(--border)]">
+                <span className="font-semibold text-[var(--text)] sm:w-28">Date:</span>
                 <span className="text-[var(--text-secondary)]">{formatDate(selectedRequest.request_date || selectedRequest.date)}</span>
               </div>
-              <div className="flex py-2 border-b border-[var(--border)]">
-                <span className="font-semibold text-[var(--text)] w-28">Time:</span>
+              <div className="flex flex-col sm:flex-row py-2 border-b border-[var(--border)]">
+                <span className="font-semibold text-[var(--text)] sm:w-28">Time:</span>
                 <span className="text-[var(--text-secondary)]">{formatTime(selectedRequest.request_time || selectedRequest.time)}</span>
               </div>
-              <div className="flex py-2 border-b border-[var(--border)]">
-                <span className="font-semibold text-[var(--text)] w-28">Reason:</span>
-                <span className="text-[var(--text-secondary)]">{selectedRequest.reason || "-"}</span>
+              <div className="flex flex-col sm:flex-row py-2 border-b border-[var(--border)]">
+                <span className="font-semibold text-[var(--text)] sm:w-28">Reason:</span>
+                <span className="text-[var(--text-secondary)] break-words">{selectedRequest.reason || "-"}</span>
               </div>
-              <div className="flex py-2 border-b border-[var(--border)]">
-                <span className="font-semibold text-[var(--text)] w-28">Status:</span>
+              <div className="flex flex-col sm:flex-row py-2 border-b border-[var(--border)]">
+                <span className="font-semibold text-[var(--text)] sm:w-28">Status:</span>
                 <StatusBadge status={selectedRequest.status} />
               </div>
-              <div className="flex py-2">
-                <span className="font-semibold text-[var(--text)] w-28">Submitted:</span>
+              <div className="flex flex-col sm:flex-row py-2">
+                <span className="font-semibold text-[var(--text)] sm:w-28">Submitted:</span>
                 <span className="text-[var(--text-secondary)]">{formatDateTime(selectedRequest.created_at)}</span>
               </div>
             </div>
             <div className="flex justify-end mt-6 pt-4 border-t border-[var(--border)]">
               <button
                 onClick={() => setShowDetailsModal(false)}
-                className="px-4 py-2 rounded-full bg-[var(--surface2)] text-[var(--text)] hover:bg-[var(--border)] transition-all"
+                className="px-4 py-2 rounded-full bg-[var(--surface2)] text-[var(--text)] hover:bg-[var(--border)] transition-all w-full sm:w-auto"
               >
                 Close
               </button>
