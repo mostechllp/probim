@@ -175,7 +175,7 @@ const Reports = () => {
         </div>
 
         {/* Report Cards Grid */}
-        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-4 md:gap-5">
+        <div className="grid grid-cols-2 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-4 md:gap-5">
           {reportCards.map((card) => (
             <Link key={card.id} to={card.link} className="group block">
               <div

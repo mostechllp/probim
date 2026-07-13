@@ -135,64 +135,67 @@ const OnboardingReview = () => {
   };
 
   // ─── Step 2: Save salary details with packages ──────────────────────────
-const saveSalaryDetails = async (userId, salaryData) => {
-  console.log("[Onboarding] Step 2: Saving salary details for user:", userId);
+  const saveSalaryDetails = async (userId, salaryData) => {
+    console.log("[Onboarding] Step 2: Saving salary details for user:", userId);
 
-  // Get packages from employeeDetails
-  const packages = salaryData.packages || {};
+    const packages = salaryData.packages || {};
+    const packagesArray = [];
 
-  // Build packages array for API - WITHOUT ID (backend creates new)
-  const packagesArray = [];
+    if (packages.package1 && packages.package1.isSaved) {
+      const pkg1 = packages.package1;
+      packagesArray.push({
+        name: pkg1.name || "Home Country / WFH",
+        is_active: true,
+        currency: pkg1.currency || "AED",
+        salary_components: (pkg1.salaryComponents || []).map((comp) => ({
+          component_name: comp.name,
+          value:
+            typeof comp.price === "number"
+              ? comp.price
+              : parseFloat(comp.price) || 0,
+        })),
+      });
+    }
 
-  // Package 1
-  if (packages.package1 && packages.package1.isSaved) {
-    const pkg1 = packages.package1;
-    packagesArray.push({
-      name: pkg1.name || "Home Country / WFH",
-      is_active: true,
-      currency: pkg1.currency || "AED",
-      salary_components: (pkg1.salaryComponents || []).map((comp) => ({
-        component_name: comp.name,
-        value: typeof comp.price === "number" ? comp.price : parseFloat(comp.price) || 0,
-      })),
-    });
-  }
+    if (packages.package2 && packages.package2.isSaved) {
+      const pkg2 = packages.package2;
+      packagesArray.push({
+        name: pkg2.name || "Dubai Onsite",
+        is_active: true,
+        currency: pkg2.currency || "AED",
+        salary_components: (pkg2.salaryComponents || []).map((comp) => ({
+          component_name: comp.name,
+          value:
+            typeof comp.price === "number"
+              ? comp.price
+              : parseFloat(comp.price) || 0,
+        })),
+      });
+    }
 
-  // Package 2
-  if (packages.package2 && packages.package2.isSaved) {
-    const pkg2 = packages.package2;
-    packagesArray.push({
-      name: pkg2.name || "Dubai Onsite",
-      is_active: true,
-      currency: pkg2.currency || "AED",
-      salary_components: (pkg2.salaryComponents || []).map((comp) => ({
-        component_name: comp.name,
-        value: typeof comp.price === "number" ? comp.price : parseFloat(comp.price) || 0,
-      })),
-    });
-  }
+    const payload = {
+      user_id: userId,
+      payment_cycle: salaryData.paymentCycle || "Monthly",
+      packages: packagesArray,
+    };
 
-  // Prepare payload matching backend expectations
-  const payload = {
-    user_id: userId,
-    payment_cycle: salaryData.paymentCycle || "Monthly",
-    packages: packagesArray,
-  };
-
-  console.log("[Onboarding] Salary payload:", JSON.stringify(payload, null, 2));
-  
-  try {
-    const response = await apiClient.post(
-      "/admin/employees/onboard/salary",
-      payload,
+    console.log(
+      "[Onboarding] Salary payload:",
+      JSON.stringify(payload, null, 2),
     );
-    console.log("[Onboarding] Salary details saved:", response.data);
-    return response.data;
-  } catch (error) {
-    console.error("[Onboarding] Error saving salary:", error);
-    throw error;
-  }
-};
+
+    try {
+      const response = await apiClient.post(
+        "/admin/employees/onboard/salary",
+        payload,
+      );
+      console.log("[Onboarding] Salary details saved:", response.data);
+      return response.data;
+    } catch (error) {
+      console.error("[Onboarding] Error saving salary:", error);
+      throw error;
+    }
+  };
 
   // ─── Step 3: Save bank details ──────────────────────────────────────────
   const saveBankDetails = async (userId, bankData) => {
@@ -648,16 +651,115 @@ const saveSalaryDetails = async (userId, salaryData) => {
   );
 
   // ─── Get packages from employeeDetails ──────────────────────────────────
+  // Try multiple sources for packages data
+  console.log("[OnboardingReview] employeeDetails:", employeeDetails);
+  console.log(
+    "[OnboardingReview] packages from employeeDetails:",
+    employeeDetails.packages,
+  );
+
   const packages = employeeDetails.packages || {};
   const package1 = packages.package1 || {};
   const package2 = packages.package2 || {};
 
+  console.log("[OnboardingReview] package1:", package1);
+  console.log("[OnboardingReview] package2:", package2);
+
+  const getPackagesFromLocalStorage = () => {
+    try {
+      const draftStr = localStorage.getItem("onboarding-draft");
+      if (draftStr) {
+        const draft = JSON.parse(draftStr);
+        if (draft?.employeeDetails?.packages) {
+          return draft.employeeDetails.packages;
+        }
+      }
+    } catch (e) {
+      console.error("Failed to parse draft:", e);
+    }
+    return null;
+  };
+  const getPackagesData = () => {
+    // First try employeeDetails.packages
+    if (employeeDetails.packages) {
+      return employeeDetails.packages;
+    }
+
+    // Try salaryBankDetails.packages
+    if (salaryBankDetails?.packages) {
+      return salaryBankDetails.packages;
+    }
+
+    // Try localStorage draft
+    try {
+      const draftStr = localStorage.getItem("onboarding-draft");
+      if (draftStr) {
+        const draft = JSON.parse(draftStr);
+        if (draft?.employeeDetails?.packages) {
+          return draft.employeeDetails.packages;
+        }
+      }
+    } catch (e) {
+      console.error("Failed to parse draft:", e);
+    }
+
+    return {};
+  };
+
+  const packagesData = getPackagesData();
+
+  // Get bank accounts from multiple sources
+  const getBankAccounts = () => {
+    if (
+      employeeDetails.bankAccounts &&
+      employeeDetails.bankAccounts.length > 0
+    ) {
+      return employeeDetails.bankAccounts;
+    }
+    if (
+      salaryBankDetails?.bankAccounts &&
+      salaryBankDetails.bankAccounts.length > 0
+    ) {
+      return salaryBankDetails.bankAccounts;
+    }
+    try {
+      const draftStr = localStorage.getItem("onboarding-draft");
+      if (draftStr) {
+        const draft = JSON.parse(draftStr);
+        if (draft?.employeeDetails?.bankAccounts) {
+          return draft.employeeDetails.bankAccounts;
+        }
+      }
+    } catch (e) {
+      console.error("Failed to parse draft:", e);
+    }
+    return [];
+  };
+
+  const bankAccounts = getBankAccounts();
+
   const totalSalary = (pkg) => {
     return (pkg.salaryComponents || []).reduce(
-      (sum, comp) => sum + (comp.price || 0),
+      (sum, comp) => sum + (comp.price || comp.value || 0),
       0,
     );
   };
+
+  const localPackages = getPackagesFromLocalStorage();
+const finalPackages = (package1.packageId || package2.packageId) ? packages : (localPackages || packages);
+const finalPackage1 = finalPackages.package1 || {};
+const finalPackage2 = finalPackages.package2 || {};
+
+console.log('[OnboardingReview] finalPackage1:', finalPackage1);
+console.log('[OnboardingReview] finalPackage2:', finalPackage2);
+
+
+  // Check if packages exist and are saved
+  const hasPackage1 = (finalPackage1.packageId || finalPackage1.id) && finalPackage1.isSaved;
+const hasPackage2 = (finalPackage2.packageId || finalPackage2.id) && finalPackage2.isSaved;
+
+console.log("[OnboardingReview] hasPackage1:", hasPackage1);
+console.log("[OnboardingReview] hasPackage2:", hasPackage2);
 
   return (
     <>
@@ -846,8 +948,8 @@ const saveSalaryDetails = async (userId, salaryData) => {
                     Salary Packages
                   </p>
 
-                  {/* Package 1 */}
-                  {package1.isSaved && package1.packageId && (
+                  {/* Package 1 - Home Country / WFH */}
+                  {hasPackage1 ? (
                     <div className="border border-gray-200 dark:border-gray-700 rounded-xl overflow-hidden">
                       <div className="bg-gray-50 dark:bg-gray-800/50 px-4 py-3 border-b border-gray-200 dark:border-gray-700 flex justify-between items-center">
                         <div className="flex items-center gap-2">
@@ -870,20 +972,24 @@ const saveSalaryDetails = async (userId, salaryData) => {
                             className="flex justify-between text-sm"
                           >
                             <span className="text-gray-600 dark:text-gray-400">
-                              {comp.name}
+                              {comp.name || comp.component_name}
                             </span>
                             <span className="font-medium text-gray-900 dark:text-white">
                               {package1.currency || "AED"}{" "}
-                              {comp.price.toLocaleString()}
+                              {(comp.price || comp.value || 0).toLocaleString()}
                             </span>
                           </div>
                         ))}
                       </div>
                     </div>
+                  ) : (
+                    <div className="text-center py-2 text-sm text-gray-400 italic border border-dashed border-gray-300 dark:border-gray-600 rounded-xl">
+                      Package 1 not configured
+                    </div>
                   )}
 
-                  {/* Package 2 */}
-                  {package2.isSaved && package2.packageId && (
+                  {/* Package 2 - Dubai Onsite */}
+                  {hasPackage2 ? (
                     <div className="border border-gray-200 dark:border-gray-700 rounded-xl overflow-hidden">
                       <div className="bg-gray-50 dark:bg-gray-800/50 px-4 py-3 border-b border-gray-200 dark:border-gray-700 flex justify-between items-center">
                         <div className="flex items-center gap-2">
@@ -906,19 +1012,23 @@ const saveSalaryDetails = async (userId, salaryData) => {
                             className="flex justify-between text-sm"
                           >
                             <span className="text-gray-600 dark:text-gray-400">
-                              {comp.name}
+                              {comp.name || comp.component_name}
                             </span>
                             <span className="font-medium text-gray-900 dark:text-white">
                               {package2.currency || "AED"}{" "}
-                              {comp.price.toLocaleString()}
+                              {(comp.price || comp.value || 0).toLocaleString()}
                             </span>
                           </div>
                         ))}
                       </div>
                     </div>
+                  ) : (
+                    <div className="text-center py-2 text-sm text-gray-400 italic border border-dashed border-gray-300 dark:border-gray-600 rounded-xl">
+                      Package 2 not configured
+                    </div>
                   )}
 
-                  {!package1.isSaved && !package2.isSaved && (
+                  {!hasPackage1 && !hasPackage2 && (
                     <div className="text-center py-4 text-gray-500 text-sm">
                       No salary packages configured
                     </div>
@@ -937,104 +1047,102 @@ const saveSalaryDetails = async (userId, salaryData) => {
                 </div>
 
                 {/* Bank Details Summary */}
-                {employeeDetails.bankAccounts &&
-                  employeeDetails.bankAccounts.length > 0 && (
-                    <div className="border-t border-gray-100 pt-4">
-                      <p className="text-xs font-semibold text-gray-400 uppercase mb-3">
-                        Bank Accounts ({employeeDetails.bankAccounts.length})
-                      </p>
-                      <div className="space-y-3">
-                        {employeeDetails.bankAccounts.map((bank, idx) => (
-                          <div
-                            key={idx}
-                            className="border border-gray-200 dark:border-gray-700 rounded-lg overflow-hidden"
-                          >
-                            <div className="bg-gray-50 dark:bg-gray-800/50 px-4 py-2 border-b border-gray-200 dark:border-gray-700 flex justify-between items-center">
-                              <div className="flex items-center gap-2">
-                                <span className="text-xs font-bold text-gray-500 uppercase">
-                                  Account {idx + 1}
-                                </span>
-                                <span className="text-xs px-2 py-0.5 bg-green-100 text-green-700 rounded-full">
-                                  {bank.bankCountry}
-                                </span>
-                              </div>
+                {bankAccounts && bankAccounts.length > 0 && (
+                  <div className="border-t border-gray-100 pt-4">
+                    <p className="text-xs font-semibold text-gray-400 uppercase mb-3">
+                      Bank Accounts ({bankAccounts.length})
+                    </p>
+                    <div className="space-y-3">
+                      {bankAccounts.map((bank, idx) => (
+                        <div
+                          key={idx}
+                          className="border border-gray-200 dark:border-gray-700 rounded-lg overflow-hidden"
+                        >
+                          <div className="bg-gray-50 dark:bg-gray-800/50 px-4 py-2 border-b border-gray-200 dark:border-gray-700 flex justify-between items-center">
+                            <div className="flex items-center gap-2">
+                              <span className="text-xs font-bold text-gray-500 uppercase">
+                                Account {idx + 1}
+                              </span>
+                              <span className="text-xs px-2 py-0.5 bg-green-100 text-green-700 rounded-full">
+                                {bank.bankCountry}
+                              </span>
                             </div>
-                            <div className="p-4">
-                              <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                                <div className="space-y-2">
-                                  <div>
-                                    <p className="text-xs text-gray-500 uppercase tracking-wide">
-                                      Bank Name
-                                    </p>
-                                    <p className="text-sm font-semibold text-gray-900 dark:text-white">
-                                      {bank.bankName}
-                                    </p>
-                                  </div>
-                                  <div>
-                                    <p className="text-xs text-gray-500 uppercase tracking-wide">
-                                      Account Number
-                                    </p>
-                                    <p className="text-sm font-mono font-medium text-gray-900 dark:text-white">
-                                      {bank.accountNumber}
-                                    </p>
-                                  </div>
-                                  {bank.bankCountry === "India" &&
-                                    bank.bankBranch && (
-                                      <div>
-                                        <p className="text-xs text-gray-500 uppercase tracking-wide">
-                                          Branch Name
-                                        </p>
-                                        <p className="text-sm font-medium text-gray-900 dark:text-white">
-                                          {bank.bankBranch}
-                                        </p>
-                                      </div>
-                                    )}
+                          </div>
+                          <div className="p-4">
+                            <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                              <div className="space-y-2">
+                                <div>
+                                  <p className="text-xs text-gray-500 uppercase tracking-wide">
+                                    Bank Name
+                                  </p>
+                                  <p className="text-sm font-semibold text-gray-900 dark:text-white">
+                                    {bank.bankName}
+                                  </p>
                                 </div>
-                                <div className="space-y-2">
-                                  {bank.bankCountry === "India" &&
-                                    bank.bankIfsc && (
-                                      <div>
-                                        <p className="text-xs text-gray-500 uppercase tracking-wide">
-                                          IFSC Code
-                                        </p>
-                                        <p className="text-sm font-mono font-medium text-gray-900 dark:text-white">
-                                          {bank.bankIfsc}
-                                        </p>
-                                      </div>
-                                    )}
-                                  {bank.bankCountry === "UAE" &&
-                                    bank.bankIban && (
-                                      <div>
-                                        <p className="text-xs text-gray-500 uppercase tracking-wide">
-                                          IBAN Number
-                                        </p>
-                                        <p className="text-sm font-mono font-medium text-gray-900 dark:text-white break-all">
-                                          {bank.bankIban}
-                                        </p>
-                                      </div>
-                                    )}
-                                  {bank.bankCountry === "UAE" &&
-                                    bank.bankSwift && (
-                                      <div>
-                                        <p className="text-xs text-gray-500 uppercase tracking-wide">
-                                          SWIFT/BIC Code
-                                        </p>
-                                        <p className="text-sm font-mono font-medium text-gray-900 dark:text-white">
-                                          {bank.bankSwift}
-                                        </p>
-                                      </div>
-                                    )}
+                                <div>
+                                  <p className="text-xs text-gray-500 uppercase tracking-wide">
+                                    Account Number
+                                  </p>
+                                  <p className="text-sm font-mono font-medium text-gray-900 dark:text-white">
+                                    {bank.accountNumber}
+                                  </p>
                                 </div>
+                                {bank.bankCountry === "India" &&
+                                  bank.bankBranch && (
+                                    <div>
+                                      <p className="text-xs text-gray-500 uppercase tracking-wide">
+                                        Branch Name
+                                      </p>
+                                      <p className="text-sm font-medium text-gray-900 dark:text-white">
+                                        {bank.bankBranch}
+                                      </p>
+                                    </div>
+                                  )}
+                              </div>
+                              <div className="space-y-2">
+                                {bank.bankCountry === "India" &&
+                                  bank.bankIfsc && (
+                                    <div>
+                                      <p className="text-xs text-gray-500 uppercase tracking-wide">
+                                        IFSC Code
+                                      </p>
+                                      <p className="text-sm font-mono font-medium text-gray-900 dark:text-white">
+                                        {bank.bankIfsc}
+                                      </p>
+                                    </div>
+                                  )}
+                                {bank.bankCountry === "UAE" &&
+                                  bank.bankIban && (
+                                    <div>
+                                      <p className="text-xs text-gray-500 uppercase tracking-wide">
+                                        IBAN Number
+                                      </p>
+                                      <p className="text-sm font-mono font-medium text-gray-900 dark:text-white break-all">
+                                        {bank.bankIban}
+                                      </p>
+                                    </div>
+                                  )}
+                                {bank.bankCountry === "UAE" &&
+                                  bank.bankSwift && (
+                                    <div>
+                                      <p className="text-xs text-gray-500 uppercase tracking-wide">
+                                        SWIFT/BIC Code
+                                      </p>
+                                      <p className="text-sm font-mono font-medium text-gray-900 dark:text-white">
+                                        {bank.bankSwift}
+                                      </p>
+                                    </div>
+                                  )}
                               </div>
                             </div>
                           </div>
-                        ))}
-                      </div>
+                        </div>
+                      ))}
                     </div>
-                  )}
+                  </div>
+                )}
 
-                {(!employeeDetails.bankAccounts ||
-                  employeeDetails.bankAccounts.length === 0) && (
+                {(!bankAccounts || bankAccounts.length === 0) && (
                   <div className="border-t border-gray-100 pt-4">
                     <p className="text-xs text-amber-600">
                       No bank accounts added yet

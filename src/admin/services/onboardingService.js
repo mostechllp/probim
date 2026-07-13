@@ -30,11 +30,19 @@ class OnboardingService {
   // ONBOARDING WIZARD STEPS
   // ─────────────────────────────────────────────────────────────────────────────
 
-  async getSalaryPackages() {
+  /**
+   * Get salary packages for a specific employee/user
+   * GET api/admin/employees/salary-packages/{userId}
+   * The userId here is the employee's user ID (the user being onboarded)
+   */
+  async getSalaryPackages(userId) {
     try {
-      const response = await apiClient.get(`${BASE_PATH}/employees/salary-packages`);
+      console.log('[OnboardingService] Fetching salary packages for userId:', userId);
+      const response = await apiClient.get(`${BASE_PATH}/employees/salary-packages/${userId}`);
+      console.log('[OnboardingService] Salary packages response:', response.data);
       return response.data;
     } catch (error) {
+      console.error('[OnboardingService] getSalaryPackages error:', error);
       throw error.response?.data || error;
     }
   }
