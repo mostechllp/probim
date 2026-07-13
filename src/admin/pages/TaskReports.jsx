@@ -172,7 +172,7 @@ const TaskReports = () => {
       {/* Dashboard Layout: 2x2 Grid (Left) + 1 Large Card (Right) */}
       <div className="flex flex-col xl:flex-row gap-5 mb-6">
         {/* Left: 4 Small Cards */}
-        <div className="xl:w-7/12 grid grid-cols-1 sm:grid-cols-2 gap-5">
+        <div className="xl:w-7/12 grid grid-cols-2 sm:grid-cols-2 gap-5">
           <div className="bg-white dark:bg-gray-800 rounded-xl p-4 md:p-5 border border-gray-200 dark:border-gray-700 flex justify-between items-center transition-all hover:-translate-y-0.5 hover:shadow-soft">
             <div>
               <div className="text-[13px] text-gray-500 dark:text-gray-400 font-medium mb-1">Total Reports</div>

@@ -944,204 +944,205 @@ function AddPayroll() {
   };
 
   // Get current step data based on form state
- // Get current step data based on form state
-const getCurrentStepData = () => {
-  const step = reduxCurrentStep;
-  let data = {};
+  // Get current step data based on form state
+  const getCurrentStepData = () => {
+    const step = reduxCurrentStep;
+    let data = {};
 
-  const monthNumber = monthNames[payPeriodMonth] || new Date().getMonth() + 1;
-  const year = parseInt(payPeriodYear) || new Date().getFullYear();
+    const monthNumber = monthNames[payPeriodMonth] || new Date().getMonth() + 1;
+    const year = parseInt(payPeriodYear) || new Date().getFullYear();
 
-  switch (step) {
-    case 1:
-      data = {
-        pay_period_month: monthNumber,
-        pay_period_year: year,
-        period_start: periodStart,
-        period_end: periodEnd,
-        payment_date: paymentDate,
-        payment_mode: paymentMode,
-        total_working_days: parseInt(totalWorkingDays) || 0,
-        days_present: parseInt(daysPresent) || 0,
-      };
-      break;
+    switch (step) {
+      case 1:
+        data = {
+          pay_period_month: monthNumber,
+          pay_period_year: year,
+          period_start: periodStart,
+          period_end: periodEnd,
+          payment_date: paymentDate,
+          payment_mode: paymentMode,
+          total_working_days: parseInt(totalWorkingDays) || 0,
+          days_present: parseInt(daysPresent) || 0,
+        };
+        break;
 
-    case 2:
-      // Filter countries to only include selected packages
-      const selectedCountriesForStep = countries.filter((c) =>
-        selectedPackageIds.includes(c.packageId),
-      );
+      case 2:
+        // Filter countries to only include selected packages
+        const selectedCountriesForStep = countries.filter((c) =>
+          selectedPackageIds.includes(c.packageId),
+        );
 
-      const step2TotalEarnings = selectedCountriesForStep.reduce(
-        (sum, c) => sum + (c.subtotal || 0),
-        0,
-      );
-
-      data = {
-        pay_period_month: monthNumber,
-        pay_period_year: year,
-        package_ids: selectedPackageIds,
-        location_breakdown: selectedCountriesForStep.map((c) => ({
-          location_name: c.name,
-          package: {
-            id: c.packageId,
-            name: c.name,
-            currency: c.currency,
-          },
-          worked_days: parseInt(c.daysWorked) || 0,
-          currency: {
-            code: c.currency,
-            symbol: c.currency,
-          },
-          salary_components: c.salary_components || [],
-          subtotal: c.subtotal || 0,
-        })),
-        total_earnings: step2TotalEarnings,
-        total_deductions: totalDeductions,
-        gross_salary: step2TotalEarnings,
-        net_salary: step2TotalEarnings,
-      };
-      break;
-
-    case 3:
-      data = {
-        pay_period_month: monthNumber,
-        pay_period_year: year,
-        overtime_details: overtimeRequests.map((req) => ({
-          date: req.date,
-          overtime_hours: parseFloat(req.hours) || 0,
-          amount: parseFloat(req.overtime_amount) || 0,
-          currency: req.currency || targetCurrency || "INR",
-          status: req.status || "pending",
-          projects: req.projects || [],
-        })),
-        total_overtime_amount: overtimeRequests.reduce(
-          (sum, req) => sum + parseFloat(req.overtime_amount || 0),
+        const step2TotalEarnings = selectedCountriesForStep.reduce(
+          (sum, c) => sum + (c.subtotal || 0),
           0,
-        ),
-      };
-      break;
+        );
 
-    case 4:
-      data = {
-        pay_period_month: monthNumber,
-        pay_period_year: year,
-        deductions: deductions.map((d) => ({
-          type: d.type,
-          currency: d.currency,
-          amount: parseFloat(d.amount) || 0,
-          is_statutory: d.is_statutory || "no",
-        })),
-        total_deductions: deductions.reduce(
-          (sum, d) => sum + parseFloat(d.amount || 0),
+        data = {
+          pay_period_month: monthNumber,
+          pay_period_year: year,
+          package_ids: selectedPackageIds,
+          location_breakdown: selectedCountriesForStep.map((c) => ({
+            location_name: c.name,
+            package: {
+              id: c.packageId,
+              name: c.name,
+              currency: c.currency,
+            },
+            worked_days: parseInt(c.daysWorked) || 0,
+            currency: {
+              code: c.currency,
+              symbol: c.currency,
+            },
+            salary_components: c.salary_components || [],
+            subtotal: c.subtotal || 0,
+          })),
+          total_earnings: step2TotalEarnings,
+          total_deductions: totalDeductions,
+          gross_salary: step2TotalEarnings,
+          net_salary: step2TotalEarnings,
+        };
+        break;
+
+      case 3:
+        data = {
+          pay_period_month: monthNumber,
+          pay_period_year: year,
+          overtime_details: overtimeRequests.map((req) => ({
+            date: req.date,
+            overtime_hours: parseFloat(req.hours) || 0,
+            amount: parseFloat(req.overtime_amount) || 0,
+            currency: req.currency || targetCurrency || "INR",
+            status: req.status || "pending",
+            projects: req.projects || [],
+          })),
+          total_overtime_amount: overtimeRequests.reduce(
+            (sum, req) => sum + parseFloat(req.overtime_amount || 0),
+            0,
+          ),
+        };
+        break;
+
+      case 4:
+        data = {
+          pay_period_month: monthNumber,
+          pay_period_year: year,
+          deductions: deductions.map((d) => ({
+            type: d.type,
+            currency: d.currency,
+            amount: parseFloat(d.amount) || 0,
+            is_statutory: d.is_statutory || "no",
+          })),
+          total_deductions: deductions.reduce(
+            (sum, d) => sum + parseFloat(d.amount || 0),
+            0,
+          ),
+        };
+        break;
+
+      case 5:
+        // Get step 2 data from Redux store (use the stepData from the component)
+        const step2Data = stepData[2] || {};
+        const step2LocationBreakdown = step2Data.location_breakdown || [];
+
+        // Get step 3 data from Redux store
+        const step3Data = stepData[3] || {};
+        const step3OvertimeDetails = step3Data.overtime_details || [];
+
+        // Get step 4 data from Redux store
+        const step4Data = stepData[4] || {};
+        const step4Deductions = step4Data.deductions || [];
+
+        // Build location breakdown from saved step 2 data
+        const locationBreakdown = step2LocationBreakdown.map((loc) => ({
+          location_name: loc.location_name || loc.name || "",
+          currency: loc.currency?.code || loc.package?.currency || "INR",
+          subtotal: loc.subtotal || 0,
+          worked_days: loc.worked_days || 0,
+          salary_components: loc.salary_components || [],
+          package: loc.package || {},
+        }));
+
+        // Calculate totals from saved step 2 data
+        const totalEarnings = locationBreakdown.reduce(
+          (sum, loc) => sum + (loc.subtotal || 0),
           0,
-        ),
-      };
-      break;
+        );
 
-    case 5:
-      // Get step 2 data from Redux store (use the stepData from the component)
-      const step2Data = stepData[2] || {};
-      const step2LocationBreakdown = step2Data.location_breakdown || [];
-      
-      // Get step 3 data from Redux store
-      const step3Data = stepData[3] || {};
-      const step3OvertimeDetails = step3Data.overtime_details || [];
+        // Get totals from saved step 3 data
+        const totalOvertime = step3OvertimeDetails.reduce(
+          (sum, item) => sum + (parseFloat(item.amount) || 0),
+          0,
+        );
 
-      // Get step 4 data from Redux store
-      const step4Data = stepData[4] || {};
-      const step4Deductions = step4Data.deductions || [];
+        // Get totals from saved step 4 data
+        const totalDeductionsFromSaved = step4Deductions.reduce(
+          (sum, item) => sum + (parseFloat(item.amount) || 0),
+          0,
+        );
 
-      // Build location breakdown from saved step 2 data
-      const locationBreakdown = step2LocationBreakdown.map((loc) => ({
-        location_name: loc.location_name || loc.name || "",
-        currency: loc.currency?.code || loc.package?.currency || "INR",
-        subtotal: loc.subtotal || 0,
-        worked_days: loc.worked_days || 0,
-        salary_components: loc.salary_components || [],
-        package: loc.package || {},
-      }));
+        // Get conversion rates from saved step 5 data if exists
+        const savedConversionRates = stepData[5]?.conversion_rates || {};
+        const savedTargetCurrency = stepData[5]?.target_currency || "INR";
 
-      // Calculate totals from saved step 2 data
-      const totalEarnings = locationBreakdown.reduce(
-        (sum, loc) => sum + (loc.subtotal || 0),
-        0,
-      );
+        // Use existing conversion details or create from saved data
+        const existingConversionDetails =
+          stepData[5]?.conversions || conversionDetails;
 
-      // Get totals from saved step 3 data
-      const totalOvertime = step3OvertimeDetails.reduce(
-        (sum, item) => sum + (parseFloat(item.amount) || 0),
-        0,
-      );
-
-      // Get totals from saved step 4 data
-      const totalDeductionsFromSaved = step4Deductions.reduce(
-        (sum, item) => sum + (parseFloat(item.amount) || 0),
-        0,
-      );
-
-      // Get conversion rates from saved step 5 data if exists
-      const savedConversionRates = stepData[5]?.conversion_rates || {};
-      const savedTargetCurrency = stepData[5]?.target_currency || "INR";
-
-      // Use existing conversion details or create from saved data
-      const existingConversionDetails = stepData[5]?.conversions || conversionDetails;
-
-      data = {
-        pay_period_month: monthNumber,
-        pay_period_year: year,
-        summary: {
+        data = {
+          pay_period_month: monthNumber,
+          pay_period_year: year,
+          summary: {
+            gross_salary: totalEarnings,
+            overtime_amount: totalOvertime,
+            deductions: totalDeductionsFromSaved,
+            net_pay: totalEarnings + totalOvertime - totalDeductionsFromSaved,
+            conversions: existingConversionDetails,
+            original_breakdown: {
+              gross_salary:
+                locationBreakdown
+                  .map((loc) => `${loc.currency} ${loc.subtotal.toFixed(2)}`)
+                  .join(" + ") || "",
+              overtime:
+                step3OvertimeDetails
+                  .map(
+                    (item) =>
+                      `${item.currency} ${parseFloat(item.amount).toFixed(2)}`,
+                  )
+                  .join(" + ") || "",
+              deductions:
+                step4Deductions
+                  .map(
+                    (item) =>
+                      `${item.currency} ${parseFloat(item.amount).toFixed(2)}`,
+                  )
+                  .join(" + ") || "",
+              net_pay: `${totalEarnings + totalOvertime - totalDeductionsFromSaved}`,
+            },
+          },
+          target_currency: savedTargetCurrency,
+          conversion_rates: savedConversionRates,
+          // Include all required fields for submission
           gross_salary: totalEarnings,
-          overtime_amount: totalOvertime,
+          overtime: totalOvertime,
           deductions: totalDeductionsFromSaved,
           net_pay: totalEarnings + totalOvertime - totalDeductionsFromSaved,
-          conversions: existingConversionDetails,
-          original_breakdown: {
-            gross_salary:
-              locationBreakdown
-                .map((loc) => `${loc.currency} ${loc.subtotal.toFixed(2)}`)
-                .join(" + ") || "",
-            overtime:
-              step3OvertimeDetails
-                .map(
-                  (item) =>
-                    `${item.currency} ${parseFloat(item.amount).toFixed(2)}`,
-                )
-                .join(" + ") || "",
-            deductions:
-              step4Deductions
-                .map(
-                  (item) =>
-                    `${item.currency} ${parseFloat(item.amount).toFixed(2)}`,
-                )
-                .join(" + ") || "",
-            net_pay: `${totalEarnings + totalOvertime - totalDeductionsFromSaved}`,
-          },
-        },
-        target_currency: savedTargetCurrency,
-        conversion_rates: savedConversionRates,
-        // Include all required fields for submission
-        gross_salary: totalEarnings,
-        overtime: totalOvertime,
-        deductions: totalDeductionsFromSaved,
-        net_pay: totalEarnings + totalOvertime - totalDeductionsFromSaved,
-        currency:
-          savedTargetCurrency ||
-          (locationBreakdown.length > 0
-            ? locationBreakdown[0].currency
-            : "INR"),
-        location_breakdown: locationBreakdown,
-        overtime_details: step3OvertimeDetails,
-        deductions_details: step4Deductions,
-      };
-      break;
+          currency:
+            savedTargetCurrency ||
+            (locationBreakdown.length > 0
+              ? locationBreakdown[0].currency
+              : "INR"),
+          location_breakdown: locationBreakdown,
+          overtime_details: step3OvertimeDetails,
+          deductions_details: step4Deductions,
+        };
+        break;
 
-    default:
-      data = {};
-  }
+      default:
+        data = {};
+    }
 
-  return data;
-};
+    return data;
+  };
 
   // Save current step data
   const handleSaveStep = async (step, data) => {
@@ -1892,7 +1893,6 @@ const getCurrentStepData = () => {
                   {countriesLoading ? "Calculating..." : "Calculate"}
                 </button>
               </div>
-
               {/* Employee Summary Card */}
               {selectedEmployee && countries.length > 0 && (
                 <div className="bg-gradient-to-r from-green-50 to-emerald-50 dark:from-green-900/20 dark:to-emerald-900/20 rounded-xl p-4 md:p-6 mb-6 border border-green-100 dark:border-green-800">
@@ -1932,15 +1932,12 @@ const getCurrentStepData = () => {
                   </div>
                 </div>
               )}
-
-              {/* Country Cards with Selection - Combined */}
-              {/* Country Cards with Selection - Combined */}
               {countries.length > 0 && (
                 <>
                   <div className="mb-3 flex items-center justify-between">
                     <p className="text-sm text-gray-500 dark:text-gray-400">
                       <i className="fas fa-info-circle mr-1"></i>
-                      Click on a package card to select/deselect it
+                      Click on a package card or checkbox to select/deselect it
                     </p>
                     <div className="flex gap-2">
                       <button
@@ -1988,9 +1985,11 @@ const getCurrentStepData = () => {
                               <input
                                 type="checkbox"
                                 checked={isSelected}
-                                onChange={() =>
-                                  handlePackageSelection(country.packageId)
-                                }
+                                onChange={(e) => {
+                                  e.stopPropagation(); // Stop event from bubbling to parent
+                                  handlePackageSelection(country.packageId);
+                                }}
+                                onClick={(e) => e.stopPropagation()} // Also stop click event
                                 className="w-5 h-5 text-green-500 focus:ring-green-500 rounded border-gray-300 dark:border-gray-600 cursor-pointer"
                               />
                               <div>
@@ -2031,6 +2030,7 @@ const getCurrentStepData = () => {
                                   <div
                                     key={idx}
                                     className="flex items-center gap-2"
+                                    onClick={(e) => e.stopPropagation()} // Prevent card click when editing
                                   >
                                     <span className="text-sm text-gray-600 dark:text-gray-400 w-32 flex-shrink-0">
                                       {comp.name}
@@ -2076,7 +2076,7 @@ const getCurrentStepData = () => {
                                         setCountries(updatedCountries);
                                         setIsStep2Saved(false);
                                       }}
-                                      onClick={(e) => e.stopPropagation()}
+                                      onClick={(e) => e.stopPropagation()} // Prevent card click when editing
                                       className="flex-1 px-2 py-1 text-sm rounded border border-gray-200 dark:border-gray-600 bg-white dark:bg-gray-800 text-gray-700 dark:text-gray-300 focus:outline-none focus:border-green-500"
                                     />
                                   </div>
@@ -2196,7 +2196,6 @@ const getCurrentStepData = () => {
                   {selectedPackageIds.length} selected)
                 </button>
               </div>
-
               {/* Mixed Currencies Notice */}
               {countries.some((c) => c.currency !== targetCurrency) && (
                 <div className="mt-4 p-3 bg-yellow-50 dark:bg-yellow-900/20 border border-yellow-200 dark:border-yellow-800 rounded-lg text-sm text-yellow-700 dark:text-yellow-300">
@@ -3146,362 +3145,463 @@ const getCurrentStepData = () => {
                 )}
 
                 {isConverted && conversionDetails.gross_salary && (
-  <div className="grid grid-cols-1 md:grid-cols-2 gap-4 pt-4 border-t border-gray-200 dark:border-gray-700">
-    {/* Gross Salary - Show mixed currency breakdown */}
-    <div className="p-4 rounded-xl bg-blue-50 dark:bg-blue-900/20 border border-blue-200 dark:border-blue-800">
-      <div className="text-xs text-gray-500 dark:text-gray-400 font-medium mb-2">
-        Gross Salary
-      </div>
+                  <div className="grid grid-cols-1 md:grid-cols-2 gap-4 pt-4 border-t border-gray-200 dark:border-gray-700">
+                    {/* Gross Salary - Show mixed currency breakdown */}
+                    <div className="p-4 rounded-xl bg-blue-50 dark:bg-blue-900/20 border border-blue-200 dark:border-blue-800">
+                      <div className="text-xs text-gray-500 dark:text-gray-400 font-medium mb-2">
+                        Gross Salary
+                      </div>
 
-      {/* Original Mixed Currency Breakdown - FROM SAVED STEP 2 DATA */}
-      <div className="mb-2">
-        <div className="text-[10px] text-gray-500 mb-1">
-          Original:
-        </div>
-        {(() => {
-          const step2Data = stepData[2] || {};
-          const locationBreakdown = step2Data.location_breakdown || [];
-          const hasData = locationBreakdown.some(loc => (loc.subtotal || 0) > 0);
-          
-          if (!hasData) {
-            return <div className="text-sm text-gray-400">No data available</div>;
-          }
-          
-          return locationBreakdown
-            .filter(loc => (loc.subtotal || 0) > 0)
-            .map((loc, idx) => (
-              <div key={idx} className="flex justify-between items-center text-sm">
-                <span className="text-gray-600 dark:text-gray-400">
-                  {loc.location_name || loc.name}:
-                </span>
-                <span className="font-semibold text-gray-700 dark:text-gray-300">
-                  {loc.currency?.code || loc.package?.currency || "INR"} {(loc.subtotal || 0).toFixed(2)}
-                </span>
-              </div>
-            ));
-        })()}
-        
-        {/* Show the total breakdown string */}
-        <div className="mt-1 text-xs text-gray-500">
-          {(() => {
-            const step2Data = stepData[2] || {};
-            const locationBreakdown = step2Data.location_breakdown || [];
-            const parts = locationBreakdown
-              .filter(loc => (loc.subtotal || 0) > 0)
-              .map(loc => `${loc.currency?.code || loc.package?.currency || "INR"} ${(loc.subtotal || 0).toFixed(2)}`);
-            return parts.length > 0 ? parts.join(" + ") : "0";
-          })()}
-        </div>
-      </div>
+                      {/* Original Mixed Currency Breakdown - FROM SAVED STEP 2 DATA */}
+                      <div className="mb-2">
+                        <div className="text-[10px] text-gray-500 mb-1">
+                          Original:
+                        </div>
+                        {(() => {
+                          const step2Data = stepData[2] || {};
+                          const locationBreakdown =
+                            step2Data.location_breakdown || [];
+                          const hasData = locationBreakdown.some(
+                            (loc) => (loc.subtotal || 0) > 0,
+                          );
 
-      {/* Conversion Display */}
-      <div className="flex justify-between items-center gap-2 bg-white/50 dark:bg-gray-800/50 p-2 rounded-lg">
-        <div className="flex-1">
-          <div className="text-[10px] text-gray-500">
-            Original
-          </div>
-          <div className="text-xs text-gray-600 dark:text-gray-400">
-            {(() => {
-              const step2Data = stepData[2] || {};
-              const locationBreakdown = step2Data.location_breakdown || [];
-              return locationBreakdown
-                .filter(loc => (loc.subtotal || 0) > 0)
-                .map(loc => `${loc.currency?.code || loc.package?.currency || "INR"} ${(loc.subtotal || 0).toFixed(2)}`)
-                .join(" + ") || "0";
-            })()}
-          </div>
-        </div>
-        <div className="text-center px-1">
-          <i className="fas fa-arrow-right text-blue-400 my-1"></i>
-        </div>
-        <div className="text-right flex-1">
-          <div className="text-[10px] text-blue-500">
-            Converted
-          </div>
-          <div className="text-base font-bold text-blue-600 dark:text-blue-400">
-            {conversionDetails.gross_salary.toCurrency} {conversionDetails.gross_salary.convertedAmount.toFixed(2)}
-          </div>
-        </div>
-      </div>
-    </div>
+                          if (!hasData) {
+                            return (
+                              <div className="text-sm text-gray-400">
+                                No data available
+                              </div>
+                            );
+                          }
 
-    {/* Overtime Amount - FROM SAVED STEP 3 DATA */}
-    <div className="p-4 rounded-xl bg-orange-50 dark:bg-orange-900/20 border border-orange-200 dark:border-orange-800">
-      <div className="text-xs text-gray-500 dark:text-gray-400 font-medium mb-2">
-        Overtime Amount
-      </div>
+                          return locationBreakdown
+                            .filter((loc) => (loc.subtotal || 0) > 0)
+                            .map((loc, idx) => (
+                              <div
+                                key={idx}
+                                className="flex justify-between items-center text-sm"
+                              >
+                                <span className="text-gray-600 dark:text-gray-400">
+                                  {loc.location_name || loc.name}:
+                                </span>
+                                <span className="font-semibold text-gray-700 dark:text-gray-300">
+                                  {loc.currency?.code ||
+                                    loc.package?.currency ||
+                                    "INR"}{" "}
+                                  {(loc.subtotal || 0).toFixed(2)}
+                                </span>
+                              </div>
+                            ));
+                        })()}
 
-      <div className="mb-2">
-        <div className="text-[10px] text-gray-500 mb-1">
-          Original:
-        </div>
-        {(() => {
-          const step3Data = stepData[3] || {};
-          const overtimeDetails = step3Data.overtime_details || [];
-          const hasData = overtimeDetails.some(item => parseFloat(item.amount) > 0);
-          
-          if (!hasData) {
-            return <div className="text-sm text-gray-400">No overtime entries</div>;
-          }
-          
-          return overtimeDetails
-            .filter(item => parseFloat(item.amount) > 0)
-            .map((item, idx) => (
-              <div key={idx} className="flex justify-between items-center text-sm">
-                <span className="text-gray-600 dark:text-gray-400">
-                  {item.date || `Entry ${idx + 1}`}:
-                </span>
-                <span className="font-semibold text-gray-700 dark:text-gray-300">
-                  {item.currency || "INR"} {parseFloat(item.amount).toFixed(2)}
-                </span>
-              </div>
-            ));
-        })()}
-      </div>
+                        {/* Show the total breakdown string */}
+                        <div className="mt-1 text-xs text-gray-500">
+                          {(() => {
+                            const step2Data = stepData[2] || {};
+                            const locationBreakdown =
+                              step2Data.location_breakdown || [];
+                            const parts = locationBreakdown
+                              .filter((loc) => (loc.subtotal || 0) > 0)
+                              .map(
+                                (loc) =>
+                                  `${loc.currency?.code || loc.package?.currency || "INR"} ${(loc.subtotal || 0).toFixed(2)}`,
+                              );
+                            return parts.length > 0 ? parts.join(" + ") : "0";
+                          })()}
+                        </div>
+                      </div>
 
-      {conversionDetails.overtime_amount.currencyBreakdown?.length > 0 && (
-        <div className="flex justify-between items-center gap-2 bg-white/50 dark:bg-gray-800/50 p-2 rounded-lg">
-          <div className="flex-1">
-            <div className="text-[10px] text-gray-500">
-              Original
-            </div>
-            <div className="text-xs text-gray-600 dark:text-gray-400">
-              {conversionDetails.overtime_amount.breakdown || "0"}
-            </div>
-          </div>
-          <div className="text-center px-1">
-            <i className="fas fa-arrow-right text-orange-400 my-1"></i>
-          </div>
-          <div className="text-right flex-1">
-            <div className="text-[10px] text-orange-500">
-              Converted
-            </div>
-            <div className="text-base font-bold text-orange-600 dark:text-orange-400">
-              {conversionDetails.overtime_amount.toCurrency} {conversionDetails.overtime_amount.convertedAmount.toFixed(2)}
-            </div>
-          </div>
-        </div>
-      )}
-    </div>
+                      {/* Conversion Display */}
+                      <div className="flex justify-between items-center gap-2 bg-white/50 dark:bg-gray-800/50 p-2 rounded-lg">
+                        <div className="flex-1">
+                          <div className="text-[10px] text-gray-500">
+                            Original
+                          </div>
+                          <div className="text-xs text-gray-600 dark:text-gray-400">
+                            {(() => {
+                              const step2Data = stepData[2] || {};
+                              const locationBreakdown =
+                                step2Data.location_breakdown || [];
+                              return (
+                                locationBreakdown
+                                  .filter((loc) => (loc.subtotal || 0) > 0)
+                                  .map(
+                                    (loc) =>
+                                      `${loc.currency?.code || loc.package?.currency || "INR"} ${(loc.subtotal || 0).toFixed(2)}`,
+                                  )
+                                  .join(" + ") || "0"
+                              );
+                            })()}
+                          </div>
+                        </div>
+                        <div className="text-center px-1">
+                          <i className="fas fa-arrow-right text-blue-400 my-1"></i>
+                        </div>
+                        <div className="text-right flex-1">
+                          <div className="text-[10px] text-blue-500">
+                            Converted
+                          </div>
+                          <div className="text-base font-bold text-blue-600 dark:text-blue-400">
+                            {conversionDetails.gross_salary.toCurrency}{" "}
+                            {conversionDetails.gross_salary.convertedAmount.toFixed(
+                              2,
+                            )}
+                          </div>
+                        </div>
+                      </div>
+                    </div>
 
-    {/* Deductions - FROM SAVED STEP 4 DATA */}
-    <div className="p-4 rounded-xl bg-red-50 dark:bg-red-900/20 border border-red-200 dark:border-red-800">
-      <div className="text-xs text-gray-500 dark:text-gray-400 font-medium mb-2">
-        Deductions
-      </div>
+                    {/* Overtime Amount - FROM SAVED STEP 3 DATA */}
+                    <div className="p-4 rounded-xl bg-orange-50 dark:bg-orange-900/20 border border-orange-200 dark:border-orange-800">
+                      <div className="text-xs text-gray-500 dark:text-gray-400 font-medium mb-2">
+                        Overtime Amount
+                      </div>
 
-      <div className="mb-2">
-        <div className="text-[10px] text-gray-500 mb-1">
-          Original:
-        </div>
-        {(() => {
-          const step4Data = stepData[4] || {};
-          const deductionsList = step4Data.deductions || [];
-          const hasData = deductionsList.some(item => parseFloat(item.amount) > 0);
-          
-          if (!hasData) {
-            return <div className="text-sm text-gray-400">No deductions</div>;
-          }
-          
-          return deductionsList
-            .filter(item => parseFloat(item.amount) > 0)
-            .map((item, idx) => (
-              <div key={idx} className="flex justify-between items-center text-sm">
-                <span className="text-gray-600 dark:text-gray-400">
-                  {item.type || `Deduction ${idx + 1}`}:
-                </span>
-                <span className="font-semibold text-gray-700 dark:text-gray-300">
-                  {item.currency || "INR"} {parseFloat(item.amount).toFixed(2)}
-                </span>
-              </div>
-            ));
-        })()}
-      </div>
+                      <div className="mb-2">
+                        <div className="text-[10px] text-gray-500 mb-1">
+                          Original:
+                        </div>
+                        {(() => {
+                          const step3Data = stepData[3] || {};
+                          const overtimeDetails =
+                            step3Data.overtime_details || [];
+                          const hasData = overtimeDetails.some(
+                            (item) => parseFloat(item.amount) > 0,
+                          );
 
-      {conversionDetails.deductions.currencyBreakdown?.length > 0 && (
-        <div className="flex justify-between items-center gap-2 bg-white/50 dark:bg-gray-800/50 p-2 rounded-lg">
-          <div className="flex-1">
-            <div className="text-[10px] text-gray-500">
-              Original
-            </div>
-            <div className="text-xs text-gray-600 dark:text-gray-400">
-              {conversionDetails.deductions.breakdown || "0"}
-            </div>
-          </div>
-          <div className="text-center px-1">
-            <i className="fas fa-arrow-right text-red-400 my-1"></i>
-          </div>
-          <div className="text-right flex-1">
-            <div className="text-[10px] text-red-500">
-              Converted
-            </div>
-            <div className="text-base font-bold text-red-500">
-              {conversionDetails.deductions.toCurrency} {conversionDetails.deductions.convertedAmount.toFixed(2)}
-            </div>
-          </div>
-        </div>
-      )}
-    </div>
+                          if (!hasData) {
+                            return (
+                              <div className="text-sm text-gray-400">
+                                No overtime entries
+                              </div>
+                            );
+                          }
 
-    {/* Net Pay - Combine all saved data */}
-    <div className="p-4 rounded-xl bg-green-50 dark:bg-green-900/20 border border-green-200 dark:border-green-800">
-      <div className="text-xs text-gray-500 dark:text-gray-400 font-medium mb-2">
-        Net Pay
-      </div>
+                          return overtimeDetails
+                            .filter((item) => parseFloat(item.amount) > 0)
+                            .map((item, idx) => (
+                              <div
+                                key={idx}
+                                className="flex justify-between items-center text-sm"
+                              >
+                                <span className="text-gray-600 dark:text-gray-400">
+                                  {item.date || `Entry ${idx + 1}`}:
+                                </span>
+                                <span className="font-semibold text-gray-700 dark:text-gray-300">
+                                  {item.currency || "INR"}{" "}
+                                  {parseFloat(item.amount).toFixed(2)}
+                                </span>
+                              </div>
+                            ));
+                        })()}
+                      </div>
 
-      <div className="mb-2">
-        <div className="text-[10px] text-gray-500 mb-1">
-          Original (Gross + Overtime - Deductions):
-        </div>
-        {(() => {
-          // Get data from stepData
-          const step2Data = stepData[2] || {};
-          const locationBreakdown = step2Data.location_breakdown || [];
-          const step3Data = stepData[3] || {};
-          const overtimeDetails = step3Data.overtime_details || [];
-          const step4Data = stepData[4] || {};
-          const deductionsList = step4Data.deductions || [];
-          
-          // Calculate by currency
-          const netByCurrency = {};
-          
-          // Add gross
-          locationBreakdown.forEach(loc => {
-            const subtotal = loc.subtotal || 0;
-            const currency = loc.currency?.code || loc.package?.currency || "INR";
-            if (subtotal > 0) {
-              netByCurrency[currency] = (netByCurrency[currency] || 0) + subtotal;
-            }
-          });
-          
-          // Add overtime
-          overtimeDetails.forEach(item => {
-            const amount = parseFloat(item.amount) || 0;
-            const currency = item.currency || "INR";
-            if (amount > 0) {
-              netByCurrency[currency] = (netByCurrency[currency] || 0) + amount;
-            }
-          });
-          
-          // Subtract deductions
-          deductionsList.forEach(item => {
-            const amount = parseFloat(item.amount) || 0;
-            const currency = item.currency || "INR";
-            if (amount > 0) {
-              netByCurrency[currency] = (netByCurrency[currency] || 0) - amount;
-            }
-          });
-          
-          const hasData = Object.keys(netByCurrency).length > 0;
-          
-          if (!hasData) {
-            return <div className="text-sm text-gray-400">No data available</div>;
-          }
-          
-          return Object.entries(netByCurrency)
-            .filter(([_, amount]) => amount !== 0)
-            .map(([currency, amount]) => (
-              <div key={currency} className="flex justify-between items-center text-sm">
-                <span className="text-gray-600 dark:text-gray-400">
-                  {currency}:
-                </span>
-                <span className="font-semibold text-gray-700 dark:text-gray-300">
-                  {currency} {amount.toFixed(2)}
-                </span>
-              </div>
-            ));
-        })()}
-      </div>
+                      {conversionDetails.overtime_amount.currencyBreakdown
+                        ?.length > 0 && (
+                        <div className="flex justify-between items-center gap-2 bg-white/50 dark:bg-gray-800/50 p-2 rounded-lg">
+                          <div className="flex-1">
+                            <div className="text-[10px] text-gray-500">
+                              Original
+                            </div>
+                            <div className="text-xs text-gray-600 dark:text-gray-400">
+                              {conversionDetails.overtime_amount.breakdown ||
+                                "0"}
+                            </div>
+                          </div>
+                          <div className="text-center px-1">
+                            <i className="fas fa-arrow-right text-orange-400 my-1"></i>
+                          </div>
+                          <div className="text-right flex-1">
+                            <div className="text-[10px] text-orange-500">
+                              Converted
+                            </div>
+                            <div className="text-base font-bold text-orange-600 dark:text-orange-400">
+                              {conversionDetails.overtime_amount.toCurrency}{" "}
+                              {conversionDetails.overtime_amount.convertedAmount.toFixed(
+                                2,
+                              )}
+                            </div>
+                          </div>
+                        </div>
+                      )}
+                    </div>
 
-      {/* Calculation Breakdown */}
-      <div className="mb-2 text-xs text-gray-500">
-        <div>
-          Gross: {(() => {
-            const step2Data = stepData[2] || {};
-            const locationBreakdown = step2Data.location_breakdown || [];
-            return locationBreakdown
-              .filter(loc => (loc.subtotal || 0) > 0)
-              .map(loc => `${loc.currency?.code || loc.package?.currency || "INR"} ${(loc.subtotal || 0).toFixed(2)}`)
-              .join(" + ") || "0";
-          })()}
-        </div>
-        <div>
-          + Overtime: {(() => {
-            const step3Data = stepData[3] || {};
-            const overtimeDetails = step3Data.overtime_details || [];
-            return overtimeDetails
-              .filter(item => parseFloat(item.amount) > 0)
-              .map(item => `${item.currency || "INR"} ${parseFloat(item.amount).toFixed(2)}`)
-              .join(" + ") || "0";
-          })()}
-        </div>
-        <div>
-          - Deductions: {(() => {
-            const step4Data = stepData[4] || {};
-            const deductionsList = step4Data.deductions || [];
-            return deductionsList
-              .filter(item => parseFloat(item.amount) > 0)
-              .map(item => `${item.currency || "INR"} ${parseFloat(item.amount).toFixed(2)}`)
-              .join(" + ") || "0";
-          })()}
-        </div>
-      </div>
+                    {/* Deductions - FROM SAVED STEP 4 DATA */}
+                    <div className="p-4 rounded-xl bg-red-50 dark:bg-red-900/20 border border-red-200 dark:border-red-800">
+                      <div className="text-xs text-gray-500 dark:text-gray-400 font-medium mb-2">
+                        Deductions
+                      </div>
 
-      {/* Conversion Display */}
-      <div className="flex justify-between items-center gap-2 bg-white/50 dark:bg-gray-800/50 p-2 rounded-lg">
-        <div className="flex-1">
-          <div className="text-[10px] text-gray-500">
-            Original
-          </div>
-          <div className="text-xs text-gray-600 dark:text-gray-400">
-            {(() => {
-              const step2Data = stepData[2] || {};
-              const locationBreakdown = step2Data.location_breakdown || [];
-              const step3Data = stepData[3] || {};
-              const overtimeDetails = step3Data.overtime_details || [];
-              const step4Data = stepData[4] || {};
-              const deductionsList = step4Data.deductions || [];
-              
-              const parts = [];
-              // Gross parts
-              locationBreakdown
-                .filter(loc => (loc.subtotal || 0) > 0)
-                .forEach(loc => {
-                  parts.push(`${loc.currency?.code || loc.package?.currency || "INR"} ${(loc.subtotal || 0).toFixed(2)}`);
-                });
-              // Overtime parts
-              overtimeDetails
-                .filter(item => parseFloat(item.amount) > 0)
-                .forEach(item => {
-                  parts.push(`(${item.currency || "INR"} ${parseFloat(item.amount).toFixed(2)})`);
-                });
-              // Deductions parts (negative)
-              deductionsList
-                .filter(item => parseFloat(item.amount) > 0)
-                .forEach(item => {
-                  parts.push(`-(${item.currency || "INR"} ${parseFloat(item.amount).toFixed(2)})`);
-                });
-              
-              return parts.join(" + ") || "0";
-            })()}
-          </div>
-        </div>
-        <div className="text-center px-1">
-          <i className="fas fa-arrow-right text-green-400 my-1"></i>
-        </div>
-        <div className="text-right flex-1">
-          <div className="text-[10px] text-green-500">
-            Converted
-          </div>
-          <div className="text-base font-bold text-green-600 dark:text-green-400">
-            {conversionDetails.net_pay.toCurrency} {conversionDetails.net_pay.convertedAmount.toFixed(2)}
-          </div>
-        </div>
-      </div>
-    </div>
-  </div>
-)}
-                
+                      <div className="mb-2">
+                        <div className="text-[10px] text-gray-500 mb-1">
+                          Original:
+                        </div>
+                        {(() => {
+                          const step4Data = stepData[4] || {};
+                          const deductionsList = step4Data.deductions || [];
+                          const hasData = deductionsList.some(
+                            (item) => parseFloat(item.amount) > 0,
+                          );
+
+                          if (!hasData) {
+                            return (
+                              <div className="text-sm text-gray-400">
+                                No deductions
+                              </div>
+                            );
+                          }
+
+                          return deductionsList
+                            .filter((item) => parseFloat(item.amount) > 0)
+                            .map((item, idx) => (
+                              <div
+                                key={idx}
+                                className="flex justify-between items-center text-sm"
+                              >
+                                <span className="text-gray-600 dark:text-gray-400">
+                                  {item.type || `Deduction ${idx + 1}`}:
+                                </span>
+                                <span className="font-semibold text-gray-700 dark:text-gray-300">
+                                  {item.currency || "INR"}{" "}
+                                  {parseFloat(item.amount).toFixed(2)}
+                                </span>
+                              </div>
+                            ));
+                        })()}
+                      </div>
+
+                      {conversionDetails.deductions.currencyBreakdown?.length >
+                        0 && (
+                        <div className="flex justify-between items-center gap-2 bg-white/50 dark:bg-gray-800/50 p-2 rounded-lg">
+                          <div className="flex-1">
+                            <div className="text-[10px] text-gray-500">
+                              Original
+                            </div>
+                            <div className="text-xs text-gray-600 dark:text-gray-400">
+                              {conversionDetails.deductions.breakdown || "0"}
+                            </div>
+                          </div>
+                          <div className="text-center px-1">
+                            <i className="fas fa-arrow-right text-red-400 my-1"></i>
+                          </div>
+                          <div className="text-right flex-1">
+                            <div className="text-[10px] text-red-500">
+                              Converted
+                            </div>
+                            <div className="text-base font-bold text-red-500">
+                              {conversionDetails.deductions.toCurrency}{" "}
+                              {conversionDetails.deductions.convertedAmount.toFixed(
+                                2,
+                              )}
+                            </div>
+                          </div>
+                        </div>
+                      )}
+                    </div>
+
+                    {/* Net Pay - Combine all saved data */}
+                    <div className="p-4 rounded-xl bg-green-50 dark:bg-green-900/20 border border-green-200 dark:border-green-800">
+                      <div className="text-xs text-gray-500 dark:text-gray-400 font-medium mb-2">
+                        Net Pay
+                      </div>
+
+                      <div className="mb-2">
+                        <div className="text-[10px] text-gray-500 mb-1">
+                          Original (Gross + Overtime - Deductions):
+                        </div>
+                        {(() => {
+                          // Get data from stepData
+                          const step2Data = stepData[2] || {};
+                          const locationBreakdown =
+                            step2Data.location_breakdown || [];
+                          const step3Data = stepData[3] || {};
+                          const overtimeDetails =
+                            step3Data.overtime_details || [];
+                          const step4Data = stepData[4] || {};
+                          const deductionsList = step4Data.deductions || [];
+
+                          // Calculate by currency
+                          const netByCurrency = {};
+
+                          // Add gross
+                          locationBreakdown.forEach((loc) => {
+                            const subtotal = loc.subtotal || 0;
+                            const currency =
+                              loc.currency?.code ||
+                              loc.package?.currency ||
+                              "INR";
+                            if (subtotal > 0) {
+                              netByCurrency[currency] =
+                                (netByCurrency[currency] || 0) + subtotal;
+                            }
+                          });
+
+                          // Add overtime
+                          overtimeDetails.forEach((item) => {
+                            const amount = parseFloat(item.amount) || 0;
+                            const currency = item.currency || "INR";
+                            if (amount > 0) {
+                              netByCurrency[currency] =
+                                (netByCurrency[currency] || 0) + amount;
+                            }
+                          });
+
+                          // Subtract deductions
+                          deductionsList.forEach((item) => {
+                            const amount = parseFloat(item.amount) || 0;
+                            const currency = item.currency || "INR";
+                            if (amount > 0) {
+                              netByCurrency[currency] =
+                                (netByCurrency[currency] || 0) - amount;
+                            }
+                          });
+
+                          const hasData = Object.keys(netByCurrency).length > 0;
+
+                          if (!hasData) {
+                            return (
+                              <div className="text-sm text-gray-400">
+                                No data available
+                              </div>
+                            );
+                          }
+
+                          return Object.entries(netByCurrency)
+                            .filter(([_, amount]) => amount !== 0)
+                            .map(([currency, amount]) => (
+                              <div
+                                key={currency}
+                                className="flex justify-between items-center text-sm"
+                              >
+                                <span className="text-gray-600 dark:text-gray-400">
+                                  {currency}:
+                                </span>
+                                <span className="font-semibold text-gray-700 dark:text-gray-300">
+                                  {currency} {amount.toFixed(2)}
+                                </span>
+                              </div>
+                            ));
+                        })()}
+                      </div>
+
+                      {/* Calculation Breakdown */}
+                      <div className="mb-2 text-xs text-gray-500">
+                        <div>
+                          Gross:{" "}
+                          {(() => {
+                            const step2Data = stepData[2] || {};
+                            const locationBreakdown =
+                              step2Data.location_breakdown || [];
+                            return (
+                              locationBreakdown
+                                .filter((loc) => (loc.subtotal || 0) > 0)
+                                .map(
+                                  (loc) =>
+                                    `${loc.currency?.code || loc.package?.currency || "INR"} ${(loc.subtotal || 0).toFixed(2)}`,
+                                )
+                                .join(" + ") || "0"
+                            );
+                          })()}
+                        </div>
+                        <div>
+                          + Overtime:{" "}
+                          {(() => {
+                            const step3Data = stepData[3] || {};
+                            const overtimeDetails =
+                              step3Data.overtime_details || [];
+                            return (
+                              overtimeDetails
+                                .filter((item) => parseFloat(item.amount) > 0)
+                                .map(
+                                  (item) =>
+                                    `${item.currency || "INR"} ${parseFloat(item.amount).toFixed(2)}`,
+                                )
+                                .join(" + ") || "0"
+                            );
+                          })()}
+                        </div>
+                        <div>
+                          - Deductions:{" "}
+                          {(() => {
+                            const step4Data = stepData[4] || {};
+                            const deductionsList = step4Data.deductions || [];
+                            return (
+                              deductionsList
+                                .filter((item) => parseFloat(item.amount) > 0)
+                                .map(
+                                  (item) =>
+                                    `${item.currency || "INR"} ${parseFloat(item.amount).toFixed(2)}`,
+                                )
+                                .join(" + ") || "0"
+                            );
+                          })()}
+                        </div>
+                      </div>
+
+                      {/* Conversion Display */}
+                      <div className="flex justify-between items-center gap-2 bg-white/50 dark:bg-gray-800/50 p-2 rounded-lg">
+                        <div className="flex-1">
+                          <div className="text-[10px] text-gray-500">
+                            Original
+                          </div>
+                          <div className="text-xs text-gray-600 dark:text-gray-400">
+                            {(() => {
+                              const step2Data = stepData[2] || {};
+                              const locationBreakdown =
+                                step2Data.location_breakdown || [];
+                              const step3Data = stepData[3] || {};
+                              const overtimeDetails =
+                                step3Data.overtime_details || [];
+                              const step4Data = stepData[4] || {};
+                              const deductionsList = step4Data.deductions || [];
+
+                              const parts = [];
+                              // Gross parts
+                              locationBreakdown
+                                .filter((loc) => (loc.subtotal || 0) > 0)
+                                .forEach((loc) => {
+                                  parts.push(
+                                    `${loc.currency?.code || loc.package?.currency || "INR"} ${(loc.subtotal || 0).toFixed(2)}`,
+                                  );
+                                });
+                              // Overtime parts
+                              overtimeDetails
+                                .filter((item) => parseFloat(item.amount) > 0)
+                                .forEach((item) => {
+                                  parts.push(
+                                    `(${item.currency || "INR"} ${parseFloat(item.amount).toFixed(2)})`,
+                                  );
+                                });
+                              // Deductions parts (negative)
+                              deductionsList
+                                .filter((item) => parseFloat(item.amount) > 0)
+                                .forEach((item) => {
+                                  parts.push(
+                                    `-(${item.currency || "INR"} ${parseFloat(item.amount).toFixed(2)})`,
+                                  );
+                                });
+
+                              return parts.join(" + ") || "0";
+                            })()}
+                          </div>
+                        </div>
+                        <div className="text-center px-1">
+                          <i className="fas fa-arrow-right text-green-400 my-1"></i>
+                        </div>
+                        <div className="text-right flex-1">
+                          <div className="text-[10px] text-green-500">
+                            Converted
+                          </div>
+                          <div className="text-base font-bold text-green-600 dark:text-green-400">
+                            {conversionDetails.net_pay.toCurrency}{" "}
+                            {conversionDetails.net_pay.convertedAmount.toFixed(
+                              2,
+                            )}
+                          </div>
+                        </div>
+                      </div>
+                    </div>
+                  </div>
+                )}
 
                 <div className="mt-4 p-4 bg-blue-50 dark:bg-blue-900/20 rounded-xl border border-blue-200 dark:border-blue-800 flex items-start gap-3">
                   <i className="fas fa-envelope text-blue-500 mt-1"></i>
