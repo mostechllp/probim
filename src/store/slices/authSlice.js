@@ -44,6 +44,70 @@ export const loginUser = createAsyncThunk(
   }
 );
 
+// ─── Request Password Reset (Step 1) ──────────────────────────────────────
+export const requestPasswordReset = createAsyncThunk(
+  "auth/requestPasswordReset",
+  async ({ email }, { rejectWithValue }) => {
+    try {
+      const response = await apiClient.post("/auth/forgot-password", { 
+        email: email 
+      });
+      
+      console.log("Request password reset response:", response.data);
+      
+      if (response.data.status === "success" || response.data.success) {
+        return {
+          message: response.data.message || "Password reset code sent to your email"
+        };
+      }
+      
+      return rejectWithValue(response.data.message || "Failed to send reset code");
+    } catch (error) {
+      console.error("Request password reset error:", error.response?.data);
+      return rejectWithValue(
+        error.response?.data?.message || "Failed to send reset code. Please try again."
+      );
+    }
+  }
+);
+
+// ─── Reset Password with Code (Step 2) ──────────────────────────────────────
+export const resetPassword = createAsyncThunk(
+  "auth/resetPassword",
+  async ({ code, password }, { rejectWithValue }) => {
+    try {
+      const response = await apiClient.post("/auth/reset-password", { 
+        code: code,
+        password: password
+      });
+      
+      console.log("Reset password response:", response.data);
+      
+      if (response.data.status === "success" || response.data.success) {
+        return {
+          message: response.data.message || "Password reset successfully"
+        };
+      }
+      
+      return rejectWithValue(response.data.message || "Failed to reset password");
+    } catch (error) {
+      console.error("Reset password error:", error.response?.data);
+      
+      // Handle validation errors
+      if (error.response?.data?.errors) {
+        const errorMessages = Object.values(error.response.data.errors)
+          .flat()
+          .join(", ");
+        return rejectWithValue(errorMessages);
+      }
+      
+      return rejectWithValue(
+        error.response?.data?.message || "Failed to reset password. Please try again."
+      );
+    }
+  }
+);
+
 export const logoutUser = createAsyncThunk("auth/logout", async () => {
   // Clear all storage
   localStorage.removeItem("auth-token");
@@ -233,6 +297,10 @@ const authSlice = createSlice({
         localStorage.setItem("employee-user", JSON.stringify(state.user));
       }
     },
+    clearResetState: (state) => {
+      state.resetSuccess = false;
+      state.resetError = null;
+    },
   },
   extraReducers: (builder) => {
     builder
@@ -310,6 +378,36 @@ const authSlice = createSlice({
       })
       .addCase(fetchCurrentUser.rejected, (state) => {
         state.loading = false;
+      })
+     .addCase(requestPasswordReset.pending, (state) => {
+        state.loading = true;
+        state.error = null;
+      })
+      .addCase(requestPasswordReset.fulfilled, (state, action) => {
+        state.loading = false;
+        state.resetSuccess = true;
+        state.resetMessage = action.payload.message;
+      })
+      .addCase(requestPasswordReset.rejected, (state, action) => {
+        state.loading = false;
+        state.error = action.payload;
+        state.resetSuccess = false;
+      })
+      
+    // ─── Reset Password with Code ────────────────────────────────────────────
+      .addCase(resetPassword.pending, (state) => {
+        state.loading = true;
+        state.error = null;
+      })
+      .addCase(resetPassword.fulfilled, (state, action) => {
+        state.loading = false;
+        state.resetSuccess = true;
+        state.resetMessage = action.payload.message;
+      })
+      .addCase(resetPassword.rejected, (state, action) => {
+        state.loading = false;
+        state.error = action.payload;
+        state.resetSuccess = false;
       });
   },
 });
@@ -319,7 +417,8 @@ export const {
   setRememberMe, 
   clearProfileUpdateError, 
   updateUserState ,
-  updateUser  
+  updateUser,
+  clearResetState 
 } = authSlice.actions;
 
 export default authSlice.reducer;

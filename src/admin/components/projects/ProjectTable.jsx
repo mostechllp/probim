@@ -39,6 +39,16 @@ const ProjectTable = ({
     );
   };
 
+   const formatCurrency = (amount, currency = "AED") => {
+  if (!amount) return "-";
+  return `${currency} ${Number(amount).toFixed(2)}`;
+};
+  const formatHours = (hours) => {
+    if (!hours || hours === 0) return "-";
+    return `${hours.toFixed(1)} hrs`;
+  };
+
+
   const [searchTerm, setSearchTerm] = useState("");
   const [sortField, setSortField] = useState("name");
   const [sortDirection, setSortDirection] = useState("asc");
@@ -173,6 +183,30 @@ const ProjectTable = ({
               </th>
 
               <th
+                onClick={() => handleSort("totalHours")}
+                className="px-6 py-4 text-xs font-bold text-gray-500 dark:text-gray-400 uppercase tracking-wider cursor-pointer hover:bg-gray-100/50 dark:hover:bg-gray-700/30 select-none whitespace-nowrap transition-colors"
+              >
+                Total Hours{" "}
+                {sortField === "totalHours" && (
+                  <i
+                    className={`fas fa-sort-amount-${sortDirection === "asc" ? "up" : "down"} text-green-500 ml-1.5`}
+                  ></i>
+                )}
+              </th>
+              {/* NEW: Total Cost Column */}
+              <th
+                onClick={() => handleSort("totalCost")}
+                className="px-6 py-4 text-xs font-bold text-gray-500 dark:text-gray-400 uppercase tracking-wider cursor-pointer hover:bg-gray-100/50 dark:hover:bg-gray-700/30 select-none whitespace-nowrap transition-colors"
+              >
+                Total Cost{" "}
+                {sortField === "totalCost" && (
+                  <i
+                    className={`fas fa-sort-amount-${sortDirection === "asc" ? "up" : "down"} text-green-500 ml-1.5`}
+                  ></i>
+                )}
+              </th>
+
+              <th
                 onClick={() => handleSort("createdDate")}
                 className="px-6 py-4 text-xs font-bold text-gray-500 dark:text-gray-400 uppercase tracking-wider cursor-pointer hover:bg-gray-100/50 dark:hover:bg-gray-700/30 select-none whitespace-nowrap transition-colors"
               >
@@ -274,6 +308,18 @@ const ProjectTable = ({
                       </div>
                     </div>
                   </td>
+
+                  <td className="px-6 py-4 whitespace-nowrap">
+                  <span className="text-xs font-semibold text-gray-700 dark:text-gray-300">
+                    {formatHours(project.totalHours)}
+                  </span>
+                </td>
+                {/* NEW: Total Cost Cell */}
+                <td className="px-6 py-4 whitespace-nowrap">
+                  <span className="text-xs font-semibold text-green-600 dark:text-green-400">
+                    {formatCurrency(project.totalCost)}
+                  </span>
+                </td>
 
                   <td className="px-6 py-4 whitespace-nowrap">
                     <span className="text-xs text-gray-500 dark:text-gray-400 font-semibold">

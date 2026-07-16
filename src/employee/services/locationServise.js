@@ -12,7 +12,7 @@ export const getCurrentLocation = () => {
       maximumAge: 0
     };
 
-    navigator.geolocation.getCurrentPosition(
+    navigator.geolocation.watchPosition(
       (position) => {
         resolve({
           latitude: position.coords.latitude,

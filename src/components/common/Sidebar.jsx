@@ -9,7 +9,7 @@ const ADMIN_ROUTE_MAP = {
   employees: "/admin/employees",
   attendance: "/admin/attendances",
   "attendance-requests": "/admin/attendance-requests",
-  wfh: "/admin/wfh",
+  "wfh-requests": "/admin/wfh",
   documents: "/admin/agreements",
   leaves: "/admin/leaves",
   "my-leaves": "/admin/my-leaves",
@@ -24,6 +24,7 @@ const ADMIN_ROUTE_MAP = {
   organizations: "/admin/organizations",
   agreements: "/admin/agreements",
   "role-management": "/admin/role-management",
+  "my-wfh-requests": "/employee/wfh",
 };
 
 const EMPLOYEE_ROUTE_MAP = {
@@ -39,7 +40,7 @@ const EMPLOYEE_ROUTE_MAP = {
   settings: "/employee/settings",
   leaves: "/employee/leave-management",
   "my-leaves": "/employee/leaves",
-  "wfh-requests": "/employee/wfh",
+  "my-wfh-requests": "/employee/wfh",
   payroll: "/employee/payroll",
   roles: "/employee/roles",
   "my-tasks": "/employee/my-tasks",
@@ -55,7 +56,7 @@ const ICON_MAP = {
   attendance: "fas fa-fingerprint",
   "attendance-requests": "fas fa-clock",
   "wfh-requests": "fas fa-house-user",
-  "wfh": "fas fa-house-user",
+  "my-wfh-requests": "fas fa-house-user",
   documents: "fas fa-file-signature",
   leaves: "fas fa-calendar-check",
   "my-leaves": "fas fa-calendar-alt",
@@ -89,10 +90,20 @@ const PARENT_MENU_CONFIG = {
     roles: ["HR Manager", "hr manager", "HR"],
     order: 1000,
   },
+  wfh: {
+    label: "WFH Requests",
+    icon: "fas fa-house-user",
+    children: ["wfh-requests", "my-wfh-requests"],
+    roles: ["HR Manager", "hr manager", "HR"],
+    order: 998,
+  },
 };
 
 // Define which modules are children (for filtering)
 const ALL_CHILDREN = Object.values(PARENT_MENU_CONFIG).flatMap(config => config.children);
+
+// Define modules that should be hidden (aliases/duplicates)
+const HIDDEN_MODULES = ["role-management", "agreements", "wfh"]; // Added "wfh" to hide duplicate
 
 // Define order of standalone modules
 const MODULE_ORDER = {
@@ -110,7 +121,7 @@ const MODULE_ORDER = {
   "task-reports": 12,
   "my-tasks": 13,
   "wfh-requests": 14,
-  "wfh": 15,
+  "my-wfh-requests": 15,
   reports: 16,
   payroll: 17,
   roles: 18,
@@ -120,9 +131,6 @@ const MODULE_ORDER = {
   "role-management": 22,
   "my-profile": 23,
 };
-
-// Modules that should be hidden for non-admin users (users without all permissions)
-const HIDDEN_MODULES = ["role-management", "agreements"];
 
 const Sidebar = ({ isOpen, setIsOpen }) => {
   const [isMobile, setIsMobile] = useState(false);
@@ -180,7 +188,7 @@ const Sidebar = ({ isOpen, setIsOpen }) => {
     }
     
     // If no permission found, check if it's a public module
-    const publicModules = ["dashboard", "my-leaves", "my-tasks", "task-reports", "wfh-requests", "my-profile"];
+    const publicModules = ["dashboard", "my-leaves", "my-tasks", "task-reports", "my-wfh-requests", "my-profile"];
     if (publicModules.includes(slug)) return true;
     
     return false;
@@ -190,6 +198,9 @@ const Sidebar = ({ isOpen, setIsOpen }) => {
   const shouldShowModule = (slug) => {
     // Always show dashboard
     if (slug === "dashboard") return true;
+    
+    // Hide hidden modules (duplicates, sensitive)
+    if (HIDDEN_MODULES.includes(slug)) return false;
     
     // Hide sensitive modules for users without all permissions
     if (!hasAllPermissions && HIDDEN_MODULES.includes(slug)) return false;
@@ -224,18 +235,21 @@ const Sidebar = ({ isOpen, setIsOpen }) => {
     const parentItems = [];
     const standaloneItems = [];
 
-    // Only create parent menus for HR (not for Admin with all permissions)
-    if (isHR && !hasAllPermissions) {
+    // Create parent menus for HR role
+    if (isHR || isAdmin) {
       Object.entries(PARENT_MENU_CONFIG).forEach(([parentKey, config]) => {
-        const hasRoleAccess = config.roles.some(role => userRole === role);
+        // Check if user has access to this parent menu
+        const hasRoleAccess = config.roles.some(role => userRole === role) || isAdmin;
         if (!hasRoleAccess) return;
 
-        const hasAllChildren = config.children.every(child => {
+        // Get children that exist in allModules
+        const availableChildren = config.children.filter(child => {
           return allModules.includes(child) && hasReadPermission(child);
         });
         
-        if (hasAllChildren) {
-          const children = config.children.map(childSlug => {
+        // Only show parent menu if at least one child is available
+        if (availableChildren.length > 0) {
+          const children = availableChildren.map(childSlug => {
             const module = user?.sidebar_modules?.find(m => m.slug === childSlug);
             return {
               slug: childSlug,
@@ -266,8 +280,8 @@ const Sidebar = ({ isOpen, setIsOpen }) => {
     allModules.forEach((slug) => {
       if (processedSlugs.has(slug)) return;
       
-      // Skip children if they are in parent menus and user is HR without all permissions
-      if (isHR && !hasAllPermissions && ALL_CHILDREN.includes(slug)) return;
+      // Skip children if they are in parent menus
+      if (ALL_CHILDREN.includes(slug)) return;
 
       const module = user?.sidebar_modules?.find(m => m.slug === slug);
       standaloneItems.push({
@@ -296,11 +310,9 @@ const Sidebar = ({ isOpen, setIsOpen }) => {
   };
 
   const isMenuExpanded = (slug) => {
-  // For mobile, use the expandedMenus state
-  if (isMobile) return expandedMenus[slug] || false;
-  // For desktop, only expand if the specific menu is toggled
-  return expandedMenus[slug] || false;
-};
+    if (isMobile) return expandedMenus[slug] || false;
+    return expandedMenus[slug] || false;
+  };
 
   const showChevron = !isMobile && isOpen;
 

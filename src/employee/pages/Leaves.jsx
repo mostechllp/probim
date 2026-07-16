@@ -1,9 +1,20 @@
-import { useEffect, useMemo } from 'react';
+import { useEffect, useMemo, useState } from 'react';
 import { Link } from 'react-router-dom';
 import { useDispatch, useSelector } from 'react-redux';
-import { setLeaveFilter, setLeavePagination, fetchEmployeeLeaves } from '../store/slices/leavesSlice';
-import { FiSearch, FiPlus, FiFileText, FiChevronLeft, FiChevronRight, FiCalendar, FiClock } from 'react-icons/fi';
+import { 
+  setLeaveFilter, 
+  setLeavePagination, 
+  fetchEmployeeLeaves,
+  deleteLeaveRequest,
+  updateLeaveRequest,
+  fetchLeaveBalance,
+  fetchLeaveTypes
+} from '../store/slices/leavesSlice';
+import { FiSearch, FiPlus, FiFileText, FiChevronLeft, FiChevronRight, FiCalendar, FiClock, FiEdit2, FiTrash2, FiX } from 'react-icons/fi';
 import StatusBadge from '../components/common/StatusBadge';
+import ConfirmModal from '../../admin/components/common/ConfirmModal';
+import { showToast } from '../components/common/Toast';
+import DateInput from '../../admin/components/common/DateInput';
 
 // Color mapping for leave types
 const getLeaveTypeColor = (typeName) => {
@@ -20,7 +31,6 @@ const getLeaveTypeColor = (typeName) => {
   if (name.includes("marriage") || name.includes("wedding")) return "bg-pink-100 text-pink-700 dark:bg-pink-900/30 dark:text-pink-400 border-pink-200 dark:border-pink-800";
   if (name.includes("bereavement") || name.includes("compassionate")) return "bg-gray-100 text-gray-700 dark:bg-gray-700 dark:text-gray-400 border-gray-200 dark:border-gray-600";
   
-  // Default color
   return "bg-teal-100 text-teal-700 dark:bg-teal-900/30 dark:text-teal-400 border-teal-200 dark:border-teal-800";
 };
 
@@ -44,14 +54,31 @@ const getLeaveTypeIcon = (typeName) => {
 const Leaves = () => {
   const dispatch = useDispatch();
   const leavesState = useSelector((state) => state.EmpLeaves);
+  const authState = useSelector((state) => state.auth);
+  const leaveTypes = useSelector((state) => state.EmpLeaves?.leaveTypes || []);
   
-  // Add safety defaults
   const leaves = leavesState?.leaves || [];
   const filter = leavesState?.filter || { status: 'all', search: '' };
   const pagination = leavesState?.pagination || { currentPage: 1, perPage: 10 };
   const loading = leavesState?.loading || false;
+  const submitting = leavesState?.submitting || false;
+
+  // Edit/Delete states
+  const [editingLeave, setEditingLeave] = useState(null);
+  const [showEditModal, setShowEditModal] = useState(false);
+  const [deleteConfirmOpen, setDeleteConfirmOpen] = useState(false);
+  const [leaveToDelete, setLeaveToDelete] = useState(null);
+  const [editFormData, setEditFormData] = useState({
+    leave_type_id: '',
+    start_date: '',
+    end_date: '',
+    reason: '',
+    claim_salary: '0',
+    session1: 'morning',
+    session2: 'morning',
+  });
+  const [editFile, setEditFile] = useState(null);
   
-  // Show ALL leave types
   const filteredLeaves = useMemo(() => {
     let filtered = [...leaves];
     
@@ -76,12 +103,11 @@ const Leaves = () => {
     return filtered;
   }, [leaves, filter.status, filter.search]);
   
-  // Fetch leaves on component mount
   useEffect(() => {
     dispatch(fetchEmployeeLeaves());
+    dispatch(fetchLeaveTypes());
   }, [dispatch]);
   
-  // Safety check for pagination
   const perPage = pagination?.perPage || 10;
   const currentPage = pagination?.currentPage || 1;
   
@@ -89,7 +115,6 @@ const Leaves = () => {
   const start = (currentPage - 1) * perPage;
   const currentLeaves = filteredLeaves.slice(start, start + perPage);
   
-  // Helper functions
   const getLeaveTypeName = (leaveType) => {
     if (!leaveType) return 'Leave';
     if (typeof leaveType === 'object') {
@@ -135,6 +160,20 @@ const Leaves = () => {
       return '-';
     }
   };
+
+  // Helper to format date for input (YYYY-MM-DD)
+  const formatDateForInput = (dateString) => {
+    if (!dateString) return '';
+    try {
+      const date = new Date(dateString);
+      const year = date.getFullYear();
+      const month = String(date.getMonth() + 1).padStart(2, '0');
+      const day = String(date.getDate()).padStart(2, '0');
+      return `${year}-${month}-${day}`;
+    } catch (error) {
+      return '';
+    }
+  };
   
   const calculateDays = (startDate, endDate) => {
     if (!startDate || !endDate) return 0;
@@ -170,6 +209,126 @@ const Leaves = () => {
   
   const handleEntriesChange = (e) => {
     dispatch(setLeavePagination({ currentPage: 1, perPage: parseInt(e.target.value) }));
+  };
+
+  // --- Edit Handlers ---
+  const handleEditClick = (leave) => {
+    // Only allow editing if status is pending
+    if (getStatus(leave.status) !== 'pending') {
+      showToast('Only pending leave requests can be edited', 'warning');
+      return;
+    }
+    
+    // Get the leave type ID from the leave_type object or direct field
+    const leaveTypeId = typeof leave.leave_type === 'object' ? leave.leave_type.id : leave.leave_type_id;
+    
+    // Format dates for input fields (YYYY-MM-DD)
+    const startDateFormatted = formatDateForInput(leave.start_date);
+    const endDateFormatted = formatDateForInput(leave.end_date);
+    
+    // Get session values (fallback to 'morning' if not set)
+    const session1 = leave.session1 || 'morning';
+    const session2 = leave.session2 || 'afternoon';
+    
+    setEditingLeave(leave);
+    setEditFormData({
+      leave_type_id: leaveTypeId || '',
+      start_date: startDateFormatted,
+      end_date: endDateFormatted,
+      reason: leave.reason || '',
+      claim_salary: leave.claim_salary === 1 || leave.claim_salary === '1' ? '1' : '0',
+      session1: session1,
+      session2: session2,
+    });
+    setEditFile(null);
+    setShowEditModal(true);
+  };
+
+  const handleEditSubmit = async (e) => {
+    e.preventDefault();
+    
+    if (!editFormData.leave_type_id) {
+      showToast('Please select a leave type', 'error');
+      return;
+    }
+    if (!editFormData.start_date || !editFormData.end_date) {
+      showToast('Please select dates', 'error');
+      return;
+    }
+    if (editFormData.reason.length < 10) {
+      showToast('Reason must be at least 10 characters', 'error');
+      return;
+    }
+    
+    const formDataToSend = new FormData();
+    formDataToSend.append('leave_type_id', editFormData.leave_type_id);
+    formDataToSend.append('start_date', editFormData.start_date);
+    formDataToSend.append('end_date', editFormData.end_date);
+    formDataToSend.append('reason', editFormData.reason);
+    formDataToSend.append('claim_salary', editFormData.claim_salary);
+    formDataToSend.append('session1', editFormData.session1);
+    formDataToSend.append('session2', editFormData.session2);
+    
+    if (editFile) {
+      formDataToSend.append('document', editFile);
+    }
+    
+    const result = await dispatch(updateLeaveRequest({ 
+      id: editingLeave.id, 
+      formData: formDataToSend 
+    }));
+    
+    if (updateLeaveRequest.fulfilled.match(result)) {
+      showToast('Leave request updated successfully!', 'success');
+      setShowEditModal(false);
+      setEditingLeave(null);
+      setEditFile(null);
+      dispatch(fetchEmployeeLeaves());
+      dispatch(fetchLeaveBalance());
+    } else {
+      showToast(result.payload || 'Failed to update leave request', 'error');
+    }
+  };
+
+  // --- Delete Handlers ---
+  const handleDeleteClick = (leave) => {
+    if (getStatus(leave.status) !== 'pending') {
+      showToast('Only pending leave requests can be deleted', 'warning');
+      return;
+    }
+    setLeaveToDelete(leave);
+    setDeleteConfirmOpen(true);
+  };
+
+  const handleDeleteConfirm = async () => {
+    if (!leaveToDelete) return;
+    
+    const result = await dispatch(deleteLeaveRequest(leaveToDelete.id));
+    
+    if (deleteLeaveRequest.fulfilled.match(result)) {
+      showToast('Leave request deleted successfully!', 'success');
+      setDeleteConfirmOpen(false);
+      setLeaveToDelete(null);
+      dispatch(fetchEmployeeLeaves());
+      dispatch(fetchLeaveBalance());
+    } else {
+      showToast(result.payload || 'Failed to delete leave request', 'error');
+    }
+  };
+
+  const handleEditClose = () => {
+    setShowEditModal(false);
+    setEditingLeave(null);
+    setEditFile(null);
+  };
+
+  // Handle date changes from DateInput
+  const handleStartDateChange = (dateValue) => {
+    setEditFormData({ ...editFormData, start_date: dateValue });
+  };
+
+  const handleEndDateChange = (dateValue) => {
+    setEditFormData({ ...editFormData, end_date: dateValue });
   };
   
   if (loading) {
@@ -285,24 +444,25 @@ const Leaves = () => {
       
       {/* Table */}
       <div className="leave-table-wrapper bg-[var(--surface)] rounded-xl border border-[var(--border)] overflow-x-auto shadow-sm">
-        <table className="leave-table w-full border-collapse text-xs min-w-[900px]">
+        <table className="leave-table w-full border-collapse text-xs min-w-[1100px]">
           <thead>
             <tr className="bg-[var(--surface2)]">
               <th className="text-left py-3 px-4 text-xs font-semibold text-[var(--muted)] border-b border-[var(--border)] w-16">#</th>
               <th className="text-left py-3 px-4 text-xs font-semibold text-[var(--muted)] border-b border-[var(--border)]">Leave Type</th>
               <th className="text-left py-3 px-4 text-xs font-semibold text-[var(--muted)] border-b border-[var(--border)]">From</th>
               <th className="text-left py-3 px-4 text-xs font-semibold text-[var(--muted)] border-b border-[var(--border)]">To</th>
+              <th className="text-left py-3 px-4 text-xs font-semibold text-[var(--muted)] border-b border-[var(--border)]">Sessions</th>
               <th className="text-left py-3 px-4 text-xs font-semibold text-[var(--muted)] border-b border-[var(--border)]">Days</th>
               <th className="text-left py-3 px-4 text-xs font-semibold text-[var(--muted)] border-b border-[var(--border)]">Claim Salary</th>
               <th className="text-left py-3 px-4 text-xs font-semibold text-[var(--muted)] border-b border-[var(--border)]">Document</th>
               <th className="text-left py-3 px-4 text-xs font-semibold text-[var(--muted)] border-b border-[var(--border)]">Status</th>
-              <th className="text-left py-3 px-4 text-xs font-semibold text-[var(--muted)] border-b border-[var(--border)]">Reason</th>
+              <th className="text-left py-3 px-4 text-xs font-semibold text-[var(--muted)] border-b border-[var(--border)] w-24">Actions</th>
             </tr>
           </thead>
           <tbody>
             {currentLeaves.length === 0 ? (
               <tr>
-                <td colSpan="9" className="text-center py-8 text-[var(--muted)]">
+                <td colSpan="10" className="text-center py-8 text-[var(--muted)]">
                   <div className="flex flex-col items-center gap-2">
                     <FiCalendar className="text-3xl text-[var(--muted)]" />
                     <p>No leave requests found</p>
@@ -321,6 +481,12 @@ const Leaves = () => {
                 const days = leave.duration_days || calculateDays(leave.start_date, leave.end_date);
                 const colorClass = getLeaveTypeColor(leaveTypeName);
                 const iconClass = getLeaveTypeIcon(leaveTypeName);
+                const isPending = statusName === 'pending';
+                
+                // Format sessions for display
+                const session1 = leave.session1 || 'morning';
+                const session2 = leave.session2 || 'afternoon';
+                const sessionsDisplay = `${session1.charAt(0).toUpperCase() + session1.slice(1)} → ${session2.charAt(0).toUpperCase() + session2.slice(1)}`;
                 
                 return (
                   <tr key={leave.id || idx} className="hover:bg-[var(--surface2)] transition-colors">
@@ -333,6 +499,11 @@ const Leaves = () => {
                     </td>
                     <td className="py-3.5 px-4 border-b border-[var(--border)] text-[var(--text-secondary)]">{formatDate(leave.start_date)}</td>
                     <td className="py-3.5 px-4 border-b border-[var(--border)] text-[var(--text-secondary)]">{formatDate(leave.end_date)}</td>
+                    <td className="py-3.5 px-4 border-b border-[var(--border)] text-[var(--text-secondary)] text-xs">
+                      <span className="inline-block px-2 py-0.5 bg-gray-100 dark:bg-gray-700 rounded-full">
+                        {sessionsDisplay}
+                      </span>
+                    </td>
                     <td className="py-3.5 px-4 border-b border-[var(--border)] text-[var(--text-secondary)] font-semibold">{days}</td>
                     <td className="py-3.5 px-4 border-b border-[var(--border)]">
                       <span className={`inline-block px-2.5 py-1 rounded-full text-[11px] font-semibold ${
@@ -354,8 +525,27 @@ const Leaves = () => {
                     <td className="py-3.5 px-4 border-b border-[var(--border)]">
                       <StatusBadge status={statusName} />
                     </td>
-                    <td className="py-3.5 px-4 border-b border-[var(--border)] text-[var(--text-secondary)] max-w-[250px] truncate" title={leave.reason}>
-                      {leave.reason || '-'}
+                    <td className="py-3.5 px-4 border-b border-[var(--border)]">
+                      {isPending ? (
+                        <div className="flex items-center gap-1.5">
+                          <button
+                            onClick={() => handleEditClick(leave)}
+                            className="p-1.5 text-blue-500 hover:text-blue-600 hover:bg-blue-50 rounded-lg transition-colors"
+                            title="Edit leave request"
+                          >
+                            <FiEdit2 size={14} />
+                          </button>
+                          <button
+                            onClick={() => handleDeleteClick(leave)}
+                            className="p-1.5 text-red-500 hover:text-red-600 hover:bg-red-50 rounded-lg transition-colors"
+                            title="Delete leave request"
+                          >
+                            <FiTrash2 size={14} />
+                          </button>
+                        </div>
+                      ) : (
+                        <span className="text-xs text-[var(--muted)]">-</span>
+                      )}
                     </td>
                   </tr>
                 );
@@ -405,6 +595,214 @@ const Leaves = () => {
           </div>
         </div>
       )}
+
+      {/* Edit Modal with DateInput */}
+      {showEditModal && editingLeave && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 p-4">
+          <div className="bg-white dark:bg-gray-800 rounded-2xl max-w-2xl w-full max-h-[90vh] overflow-y-auto p-6">
+            <div className="flex justify-between items-center mb-6">
+              <h3 className="text-xl font-bold text-gray-800 dark:text-gray-200">
+                <FiEdit2 className="inline mr-2 text-green-500" />
+                Edit Leave Request
+              </h3>
+              <button
+                onClick={handleEditClose}
+                className="p-2 hover:bg-gray-100 dark:hover:bg-gray-700 rounded-lg transition-colors"
+              >
+                <FiX size={20} />
+              </button>
+            </div>
+
+            <form onSubmit={handleEditSubmit}>
+              <div className="space-y-4">
+                {/* Leave Type */}
+                <div>
+                  <label className="block text-sm font-semibold text-gray-700 dark:text-gray-300 mb-1">
+                    Leave Type <span className="text-red-500">*</span>
+                  </label>
+                  <select
+                    value={editFormData.leave_type_id}
+                    onChange={(e) => setEditFormData({ ...editFormData, leave_type_id: e.target.value })}
+                    className="w-full px-3 py-2 bg-gray-50 dark:bg-gray-900 border border-gray-200 dark:border-gray-700 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-green-500"
+                    required
+                  >
+                    <option value="">Select Leave Type</option>
+                    {leaveTypes.map((type) => (
+                      <option key={type.id} value={type.id}>
+                        {type.name}
+                      </option>
+                    ))}
+                  </select>
+                </div>
+
+                {/* Dates with DateInput */}
+                <div className="grid grid-cols-2 gap-4">
+                  <div>
+                    <label className="block text-sm font-semibold text-gray-700 dark:text-gray-300 mb-1">
+                      Start Date <span className="text-red-500">*</span>
+                    </label>
+                    <DateInput
+                      value={editFormData.start_date}
+                      onChange={handleStartDateChange}
+                      type="general"
+                      className="w-full"
+                      placeholder="dd/mm/yyyy"
+                      error={false}
+                    />
+                  </div>
+                  <div>
+                    <label className="block text-sm font-semibold text-gray-700 dark:text-gray-300 mb-1">
+                      End Date <span className="text-red-500">*</span>
+                    </label>
+                    <DateInput
+                      value={editFormData.end_date}
+                      onChange={handleEndDateChange}
+                      type="general"
+                      className="w-full"
+                      placeholder="dd/mm/yyyy"
+                      error={false}
+                      minDate={editFormData.start_date ? new Date(editFormData.start_date) : null}
+                    />
+                  </div>
+                </div>
+
+                {/* Sessions */}
+                <div className="grid grid-cols-2 gap-4">
+                  <div>
+                    <label className="block text-sm font-semibold text-gray-700 dark:text-gray-300 mb-1">
+                      Start Session <span className="text-red-500">*</span>
+                    </label>
+                    <select
+                      value={editFormData.session1}
+                      onChange={(e) => setEditFormData({ ...editFormData, session1: e.target.value })}
+                      className="w-full px-3 py-2 bg-gray-50 dark:bg-gray-900 border border-gray-200 dark:border-gray-700 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-green-500"
+                      required
+                    >
+                      <option value="morning">Morning</option>
+                      <option value="afternoon">Afternoon</option>
+                    </select>
+                  </div>
+                  <div>
+                    <label className="block text-sm font-semibold text-gray-700 dark:text-gray-300 mb-1">
+                      End Session <span className="text-red-500">*</span>
+                    </label>
+                    <select
+                      value={editFormData.session2}
+                      onChange={(e) => setEditFormData({ ...editFormData, session2: e.target.value })}
+                      className="w-full px-3 py-2 bg-gray-50 dark:bg-gray-900 border border-gray-200 dark:border-gray-700 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-green-500"
+                      required
+                    >
+                      <option value="morning">Morning</option>
+                      <option value="afternoon">Afternoon</option>
+                    </select>
+                  </div>
+                </div>
+
+                {/* Reason */}
+                <div>
+                  <label className="block text-sm font-semibold text-gray-700 dark:text-gray-300 mb-1">
+                    Reason <span className="text-red-500">*</span>
+                  </label>
+                  <textarea
+                    value={editFormData.reason}
+                    onChange={(e) => setEditFormData({ ...editFormData, reason: e.target.value })}
+                    rows="3"
+                    className="w-full px-3 py-2 bg-gray-50 dark:bg-gray-900 border border-gray-200 dark:border-gray-700 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-green-500"
+                    placeholder="Enter reason for leave (min 10 characters)"
+                    required
+                  />
+                </div>
+
+                {/* Claim Salary */}
+                <div>
+                  <label className="block text-sm font-semibold text-gray-700 dark:text-gray-300 mb-1">
+                    Claim Salary
+                  </label>
+                  <div className="flex gap-6">
+                    <label className="flex items-center gap-2">
+                      <input
+                        type="radio"
+                        value="1"
+                        checked={editFormData.claim_salary === '1'}
+                        onChange={() => setEditFormData({ ...editFormData, claim_salary: '1' })}
+                        className="text-green-500 focus:ring-green-500"
+                      />
+                      <span className="text-sm">Yes</span>
+                    </label>
+                    <label className="flex items-center gap-2">
+                      <input
+                        type="radio"
+                        value="0"
+                        checked={editFormData.claim_salary === '0'}
+                        onChange={() => setEditFormData({ ...editFormData, claim_salary: '0' })}
+                        className="text-green-500 focus:ring-green-500"
+                      />
+                      <span className="text-sm">No</span>
+                    </label>
+                  </div>
+                </div>
+
+                {/* Document Upload */}
+                <div>
+                  <label className="block text-sm font-semibold text-gray-700 dark:text-gray-300 mb-1">
+                    Upload Document <span className="text-gray-400 text-xs">(Optional)</span>
+                  </label>
+                  <input
+                    type="file"
+                    onChange={(e) => setEditFile(e.target.files[0])}
+                    accept=".pdf,.doc,.docx,.jpg,.png"
+                    className="w-full px-3 py-2 bg-gray-50 dark:bg-gray-900 border border-gray-200 dark:border-gray-700 rounded-lg text-sm file:mr-4 file:py-1.5 file:px-3 file:rounded-full file:border-0 file:text-xs file:font-semibold file:bg-green-500 file:text-white file:cursor-pointer hover:file:bg-green-600"
+                  />
+                  {editFile && (
+                    <p className="text-xs text-green-600 mt-1">File selected: {editFile.name}</p>
+                  )}
+                </div>
+              </div>
+
+              <div className="flex justify-end gap-3 mt-6 pt-4 border-t border-gray-200 dark:border-gray-700">
+                <button
+                  type="button"
+                  onClick={handleEditClose}
+                  className="px-4 py-2 rounded-lg font-semibold bg-gray-100 dark:bg-gray-700 text-gray-700 dark:text-gray-300 hover:bg-gray-200 dark:hover:bg-gray-600 transition-colors"
+                >
+                  Cancel
+                </button>
+                <button
+                  type="submit"
+                  disabled={submitting}
+                  className="px-4 py-2 rounded-lg font-semibold bg-green-500 text-white hover:bg-green-600 transition-colors disabled:opacity-50 flex items-center gap-2"
+                >
+                  {submitting ? (
+                    <>
+                      <div className="w-4 h-4 border-2 border-white border-t-transparent rounded-full animate-spin"></div>
+                      Updating...
+                    </>
+                  ) : (
+                    <>
+                      <FiEdit2 /> Update
+                    </>
+                  )}
+                </button>
+              </div>
+            </form>
+          </div>
+        </div>
+      )}
+
+      {/* Delete Confirmation Modal */}
+      <ConfirmModal
+        isOpen={deleteConfirmOpen}
+        onClose={() => {
+          setDeleteConfirmOpen(false);
+          setLeaveToDelete(null);
+        }}
+        onConfirm={handleDeleteConfirm}
+        title="Delete Leave Request"
+        message={`Are you sure you want to delete your "${leaveToDelete ? getLeaveTypeName(leaveToDelete.leave_type) : ''}" leave request? This action cannot be undone.`}
+        confirmText="Delete"
+        cancelText="Cancel"
+        loading={loading}
+      />
     </div>
   );
 };

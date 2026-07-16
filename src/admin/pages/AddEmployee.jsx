@@ -946,19 +946,41 @@ const AddEmployee = () => {
     });
 
     // Additional documents
+    // Additional documents - FIXED with correct field names and file paths
     if (additionalDocuments.length > 0) {
-      const additionalDocsData = additionalDocuments.map((doc) => ({
-        name: doc.name,
-        filename: doc.filename,
-      }));
-      formData.append(
-        "additional_documents",
-        JSON.stringify(additionalDocsData),
-      );
-
+      // Send each additional document as separate fields with indices
       additionalDocuments.forEach((doc, index) => {
+        // Send the file path (temp path from server)
+        if (doc.file_path) {
+          formData.append(
+            `additional_documents[${index}][file_path]`,
+            doc.file_path,
+          );
+        }
+        // Send the file (as backup)
         if (doc.file) {
-          formData.append(`additional_document_${index}`, doc.file);
+          formData.append(`additional_documents[${index}][file]`, doc.file);
+        }
+        // Send the document name
+        if (doc.document_name || doc.name) {
+          formData.append(
+            `additional_documents[${index}][document_name]`,
+            doc.document_name || doc.name,
+          );
+        }
+        // Send the filename
+        if (doc.filename) {
+          formData.append(
+            `additional_documents[${index}][filename]`,
+            doc.filename,
+          );
+        }
+        // Send expiry date if exists
+        if (doc.expiry_date) {
+          formData.append(
+            `additional_documents[${index}][expiry_date]`,
+            doc.expiry_date,
+          );
         }
       });
     }
@@ -1013,7 +1035,6 @@ const AddEmployee = () => {
         const filename = extractFilename(result.path);
 
         // Create preview for display
-        // eslint-disable-next-line no-unused-vars
         let preview = null;
         if (docData.file.type.startsWith("image/")) {
           const reader = new FileReader();
@@ -1021,10 +1042,14 @@ const AddEmployee = () => {
             setAdditionalDocuments((prev) => [
               ...prev,
               {
+                id: Date.now() + Math.random(), // unique id
                 name: docData.name,
+                document_name: docData.name, // for backend compatibility
                 filename: filename,
+                file_path: result.path, // IMPORTANT: Store the temp path
                 file: docData.file,
                 preview: e.target.result,
+                expiry_date: docData.expiry_date || null, // Add expiry date
               },
             ]);
           };
@@ -1033,10 +1058,14 @@ const AddEmployee = () => {
           setAdditionalDocuments((prev) => [
             ...prev,
             {
+              id: Date.now() + Math.random(),
               name: docData.name,
+              document_name: docData.name,
               filename: filename,
+              file_path: result.path, // IMPORTANT: Store the temp path
               file: docData.file,
               preview: "pdf",
+              expiry_date: docData.expiry_date || null,
             },
           ]);
         }
@@ -1052,7 +1081,6 @@ const AddEmployee = () => {
       setUploadingDoc(false);
     }
   };
-
   // Validation rules
   const validationRules = {
     first_name: {
@@ -2120,17 +2148,30 @@ const AddEmployee = () => {
                         <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-3 mt-3">
                           {additionalDocuments.map((doc, index) => (
                             <div
-                              key={index}
+                              key={doc.id || index}
                               className="border border-gray-200 rounded-lg p-3 bg-gray-50"
                             >
                               <div className="flex items-start justify-between">
                                 <div className="flex-1">
                                   <p className="text-sm font-semibold text-gray-700 truncate">
-                                    {doc.name}
+                                    {doc.document_name || doc.name}
                                   </p>
                                   <p className="text-xs text-gray-500 mt-1">
-                                    {doc.file?.name || "Document uploaded"}
+                                    {doc.filename ||
+                                      doc.file?.name ||
+                                      "Document uploaded"}
                                   </p>
+                                  {doc.expiry_date && (
+                                    <p className="text-xs text-red-500 mt-1">
+                                      <i className="fas fa-calendar-times mr-1"></i>
+                                      Expires: {doc.expiry_date}
+                                    </p>
+                                  )}
+                                  {doc.file_path && (
+                                    <p className="text-xs text-gray-400 mt-1 truncate">
+                                      Path: {doc.file_path}
+                                    </p>
+                                  )}
                                 </div>
                                 <button
                                   type="button"

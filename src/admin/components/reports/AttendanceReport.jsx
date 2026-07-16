@@ -13,6 +13,7 @@ import {
 } from "../../store/slices/reportSlice";
 import ExportModal from "../../../components/common/ExportModal";
 import DateInput from "../common/DateInput";
+import { useNavigate } from "react-router-dom";
 
 const AttendanceReport = () => {
   const dispatch = useDispatch();
@@ -24,6 +25,8 @@ const AttendanceReport = () => {
     exportLoading = false,
     employeesList = [],
   } = useSelector((state) => state.reports || {});
+
+  const navigate = useNavigate();
 
   // Local state for filters (these will be applied when "Apply" is clicked)
   const [currentPage, setCurrentPage] = useState(1);
@@ -155,6 +158,33 @@ const AttendanceReport = () => {
     appliedEndDate,
   ]);
 
+  const handleEmployeeClick = (record) => {
+    // Get the employee's string employee_id from the record
+    const employeeStringId = record.employee_id;
+
+    // Find the employee in the employeesList by matching the employee_id string
+    const matchedEmployee = employeesList.find(
+      (emp) => emp.employee_id === employeeStringId,
+    );
+
+    if (matchedEmployee) {
+      // Navigate to the employee attendance page with the numeric ID
+      navigate(`/admin/reports/attendance/employee/${matchedEmployee.id}`);
+    } else {
+      // Fallback: try to use the record's employee_id
+      console.warn("Employee not found in list, using record data:", record);
+      // Try to find by name or use the record's ID
+      const fallbackEmployee = employeesList.find(
+        (emp) => emp.name === (record.employeeName || record.name),
+      );
+      if (fallbackEmployee) {
+        navigate(`/admin/reports/attendance/employee/${fallbackEmployee.id}`);
+      } else {
+        showToast("Employee not found", "error");
+      }
+    }
+  };
+
   const handleDatePresetChange = (preset) => {
     setDatePreset(preset);
 
@@ -231,38 +261,38 @@ const AttendanceReport = () => {
     showToast("Filters applied successfully", "success");
   };
   const handleResetFilters = () => {
-  const firstDayOfMonth = new Date();
-  firstDayOfMonth.setDate(1);
-  const newStartDate = firstDayOfMonth.toISOString().split("T")[0];
-  const newEndDate = new Date().toISOString().split("T")[0];
+    const firstDayOfMonth = new Date();
+    firstDayOfMonth.setDate(1);
+    const newStartDate = firstDayOfMonth.toISOString().split("T")[0];
+    const newEndDate = new Date().toISOString().split("T")[0];
 
-  setStartDate(newStartDate);
-  setEndDate(newEndDate);
-  setEmployeeFilter("all");
-  setSearchTerm("");
-  setDatePreset("custom");
-  setCurrentPage(1);
+    setStartDate(newStartDate);
+    setEndDate(newEndDate);
+    setEmployeeFilter("all");
+    setSearchTerm("");
+    setDatePreset("custom");
+    setCurrentPage(1);
 
-  // Reset the applied filters
-  setAppliedEmployeeFilter("all");
-  setAppliedSearchTerm("");
-  setAppliedStartDate(newStartDate);
-  setAppliedEndDate(newEndDate);
+    // Reset the applied filters
+    setAppliedEmployeeFilter("all");
+    setAppliedSearchTerm("");
+    setAppliedStartDate(newStartDate);
+    setAppliedEndDate(newEndDate);
 
-  // Force a re-fetch with reset params
-  const params = {
-    page: 1,
-    per_page: perPage,
-    search: undefined,
-    start_date: newStartDate,
-    end_date: newEndDate,
+    // Force a re-fetch with reset params
+    const params = {
+      page: 1,
+      per_page: perPage,
+      search: undefined,
+      start_date: newStartDate,
+      end_date: newEndDate,
+    };
+
+    // Don't include employee_id when reset
+    dispatch(fetchAttendanceReport(params));
+
+    showToast("Filters reset successfully", "success");
   };
-
-  // Don't include employee_id when reset
-  dispatch(fetchAttendanceReport(params));
-
-  showToast("Filters reset successfully", "success");
-};
 
   const handleExport = async (format) => {
     showToast(`Preparing ${format.toUpperCase()} export...`, "success");
@@ -485,7 +515,7 @@ const AttendanceReport = () => {
         </div>
 
         {/* Stats Cards */}
-        <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-5 gap-4 mb-6">
+        <div className="grid grid-cols-3 sm:grid-cols-2 md:grid-cols-5 gap-4 mb-6">
           <div className="bg-white dark:bg-gray-800 rounded-xl p-4 border border-gray-200 dark:border-gray-700">
             <div className="flex items-center justify-between">
               <div>
@@ -728,7 +758,10 @@ const AttendanceReport = () => {
                         return (
                           <tr
                             key={record.id || idx}
-                            className={`border-b border-gray-200 dark:border-gray-700 hover:bg-gray-50 dark:hover:bg-gray-700/50 transition-colors dark:bg-emerald-900/5`}
+                            className={`border-b border-gray-200 dark:border-gray-700 hover:bg-gray-50 dark:hover:bg-gray-700/50 transition-colors cursor-pointer ${
+                              hasOvertime ? "dark:bg-emerald-900/5" : ""
+                            }`}
+                            onClick={() => handleEmployeeClick(record)}
                           >
                             <td className="px-3 md:px-4 py-2 md:py-3 text-xs md:text-sm text-gray-600 dark:text-gray-400 text-center">
                               {start + idx + 1}
@@ -773,7 +806,7 @@ const AttendanceReport = () => {
                                   })()
                                 : "-"}
                             </td>
-                            <td className="px-3 md:px-4 py-2 md:py-3 text-xs md:text-sm font-semibold text-gray-800 dark:text-gray-200">
+                            <td className="px-3 md:px-4 py-2 md:py-3 text-xs md:text-sm font-semibold text-blue-600 dark:text-blue-400">
                               {record.employeeName || record.name || "-"}
                               {hasOvertime && (
                                 <span className="ml-1 text-[8px] bg-emerald-500/20 text-emerald-600 dark:text-emerald-400 px-1.5 py-0.5 rounded-full font-bold">

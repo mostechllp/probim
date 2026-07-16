@@ -1,6 +1,5 @@
 // import UnderDevelopment from "../../components/common/UnderDevelopment";
 
-
 // const Leaves = () => {
 //   // Show under development temporarily
 //   return <UnderDevelopment pageName="Leave Management" />;
@@ -10,7 +9,7 @@
 
 import { useEffect, useState } from "react";
 import { useDispatch, useSelector } from "react-redux";
-import { Link } from "react-router-dom";
+import { Link, useLocation } from "react-router-dom";
 // Remove Sidebar and Header imports - they're now in AdminLayout
 // import Sidebar from '@admin/components/common/Sidebar';
 // import Header from '@admin/components/common/Header';
@@ -28,6 +27,16 @@ import ConfirmModal from "@admin/components/common/ConfirmModal";
 
 const Leaves = () => {
   const dispatch = useDispatch();
+  const location = useLocation();
+  
+  // Determine base path from current route
+  const getBasePath = () => {
+    if (location.pathname.startsWith('/admin')) return '/admin';
+    if (location.pathname.startsWith('/employee')) return '/employee';
+    return '';
+  };
+  const basePath = getBasePath();
+
   const { leaves = [], error = null } = useSelector((state) => {
     return state.leaves || { leaves: [] };
   });
@@ -305,7 +314,7 @@ const Leaves = () => {
             placeholder="Search by employee..."
           />
           <Link
-            to="/admin/leaves/allocations"
+            to={`${basePath}/leaves/allocations`}
             className="bg-blue-500 hover:bg-blue-600 text-white px-4 py-2 rounded-full text-sm font-semibold flex items-center justify-center gap-2 transition-all shadow-md hover:shadow-lg w-full sm:w-auto"
           >
             <i className="fas fa-chart-line"></i>
@@ -313,7 +322,7 @@ const Leaves = () => {
             <span className="sm:hidden">Allocations</span>
           </Link>
           <Link
-            to="/admin/leaves/leave-types"
+            to={`${basePath}/leaves/leave-types`}
             className="bg-green-500 hover:bg-green-600 text-white px-4 py-2 rounded-full text-sm font-semibold flex items-center justify-center gap-2 transition-all shadow-md hover:shadow-lg w-full sm:w-auto"
           >
             <i className="fas fa-briefcase"></i>
