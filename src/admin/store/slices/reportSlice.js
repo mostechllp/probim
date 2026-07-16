@@ -29,7 +29,6 @@ export const fetchAttendanceReport = createAsyncThunk(
       apiParams.search = params.search;
     }
 
-    console.log("API Params being sent:", apiParams);
 
     const response = await apiClient.get("/admin/reports/attendance", {
       params: apiParams,
@@ -40,8 +39,6 @@ export const fetchAttendanceReport = createAsyncThunk(
       },
     });
 
-    // Log to verify structure
-    console.log("API Response:", response.data);
 
     // Access the nested data structure
     const apiData = response.data?.data?.data || [];
@@ -277,6 +274,231 @@ export const fetchEmployeesForFilter = createAsyncThunk(
     }
   },
 );
+
+// ==================== Employee Attendance for Calendar ====================
+// reportSlice.js - Fix fetchEmployeeAttendanceForCalendar
+
+export const fetchEmployeeAttendanceForCalendar = createAsyncThunk(
+  "reports/fetchEmployeeAttendanceCalendar",
+  async ({ employeeId, year, month }, { rejectWithValue }) => {
+    try {
+      const startDate = new Date(year, month - 1, 1);
+      const endDate = new Date(year, month, 0);
+
+      const params = {
+        page: 1,
+        per_page: 31,
+        date_range: "custom",
+        from_date: startDate.toISOString().split("T")[0],
+        to_date: endDate.toISOString().split("T")[0],
+      };
+
+      if (employeeId) {
+        params.employee_id = employeeId;
+      }
+
+      const response = await apiClient.get("/admin/reports/attendance", {
+        params,
+        headers: {
+          "Cache-Control": "no-cache",
+          Pragma: "no-cache",
+          Expires: "0",
+        },
+      });
+
+      // Extract data from the nested structure
+      const apiData = response.data?.data?.data || [];
+      const meta = response.data?.data?.meta || {};
+
+      // Map the data to include all necessary fields
+      const mappedData = apiData.map((record) => ({
+        ...record,
+        employeeName: record.name,
+        punchIn: record.punch_in,
+        punchOut: record.punch_out,
+        workedHours: record.worked_hours,
+        attendance_status: record.status,
+        // Keep original fields for compatibility
+        id: record.employee_id,
+        name: record.name,
+        department: record.department,
+        company: record.company,
+        date: record.date,
+        punch_in: record.punch_in,
+        punch_out: record.punch_out,
+        working_hours: record.worked_hours,
+        status: record.status,
+      }));
+
+      return {
+        employeeId,
+        year,
+        month,
+        data: mappedData,
+        total: meta.total || 0,
+      };
+    } catch (error) {
+      console.error("❌ Error fetching employee calendar:", error);
+      return rejectWithValue(
+        error.response?.data?.message || "Failed to fetch employee attendance",
+      );
+    }
+  },
+);
+
+// ==================== Employee Daily Attendance ====================
+export const fetchEmployeeDailyAttendance = createAsyncThunk(
+  "reports/fetchEmployeeDailyAttendance",
+  async ({ employeeId, date }, { rejectWithValue }) => {
+    try {
+      const params = {
+        page: 1,
+        per_page: 1,
+        date_range: "custom",
+        from_date: date,
+        to_date: date,
+      };
+
+      // ✅ Use the numeric employee ID
+      if (employeeId) {
+        params.employee_id = employeeId;
+      }
+
+
+      const response = await apiClient.get("/admin/reports/attendance", {
+        params,
+        headers: {
+          "Cache-Control": "no-cache",
+          Pragma: "no-cache",
+          Expires: "0",
+        },
+      });
+
+      const apiData = response.data?.data?.data || [];
+      const record = apiData.length > 0 ? apiData[0] : null;
+
+      if (!record) {
+        return {
+          employeeId,
+          date,
+          data: null,
+        };
+      }
+
+      const mappedRecord = {
+        ...record,
+        employeeName: record.name,
+        punchIn: record.punch_in,
+        punchOut: record.punch_out,
+        workedHours: record.worked_hours,
+        attendance_status: record.status,
+        id: record.employee_id,
+        name: record.name,
+        department: record.department,
+        date: record.date,
+        punch_in: record.punch_in,
+        punch_out: record.punch_out,
+        working_hours: record.worked_hours,
+        status: record.status,
+      };
+
+      return {
+        employeeId,
+        date,
+        data: mappedRecord,
+      };
+    } catch (error) {
+      console.error("Error fetching daily attendance:", error);
+      return rejectWithValue(
+        error.response?.data?.message || "Failed to fetch daily attendance",
+      );
+    }
+  },
+);
+export const fetchEmployeeMonthlyProjectHours = createAsyncThunk(
+  "reports/fetchEmployeeMonthlyProjectHours",
+  async ({ employeeId, month, year }, { rejectWithValue }) => {
+    try {
+      const params = {
+        month: month,
+        year: year,
+        employee_id: employeeId,
+      };
+
+
+      const response = await apiClient.get(
+        "/admin/project-assignments/monthly-hours",
+        {
+          params,
+          headers: {
+            "Cache-Control": "no-cache",
+            Pragma: "no-cache",
+            Expires: "0",
+          },
+        },
+      );
+
+      // The API returns data in the format:
+      // { status: "success", message: "Success", data: { employees: [...] } }
+      const apiData = response.data?.data || response.data;
+
+      return {
+        employeeId,
+        month,
+        year,
+        data: apiData,
+      };
+    } catch (error) {
+      console.error("❌ Error fetching monthly project hours:", error);
+      return rejectWithValue(
+        error.response?.data?.message ||
+          "Failed to fetch monthly project hours",
+      );
+    }
+  },
+);
+
+// ==================== Employee Daily Project Hours ====================
+export const fetchEmployeeDailyProjectHours = createAsyncThunk(
+  "reports/fetchEmployeeDailyProjectHours",
+  async ({ employeeId, date, year, month }, { rejectWithValue }) => {
+    try {
+      const params = {
+        date: date, // e.g., "2026-09-01"
+        year: year,
+        employee_id: employeeId,
+      };
+
+      const response = await apiClient.get(
+        "/admin/project-assignments/monthly-hours",
+        {
+          params,
+          headers: {
+            "Cache-Control": "no-cache",
+            Pragma: "no-cache",
+            Expires: "0",
+          },
+        },
+      );
+
+      const apiData = response.data?.data || response.data;
+
+      return {
+        employeeId,
+        date,
+        year,
+        month,
+        data: apiData,
+      };
+    } catch (error) {
+      console.error("❌ Error fetching daily project hours:", error);
+      return rejectWithValue(
+        error.response?.data?.message || "Failed to fetch daily project hours",
+      );
+    }
+  },
+);
+
 // ==================== Leaves Report ====================
 export const fetchLeavesReport = createAsyncThunk(
   "reports/fetchLeaves",
@@ -522,6 +744,21 @@ const initialState = {
   attendancePerPage: 10,
   attendanceLastPage: 1,
 
+  employeeAttendanceCalendar: null,
+  employeeAttendanceCalendarLoading: false,
+  employeeAttendanceCalendarError: null,
+  employeeDailyAttendance: null,
+  employeeDailyAttendanceLoading: false,
+  employeeDailyAttendanceError: null,
+
+  employeeMonthlyProjectHours: null,
+  employeeMonthlyProjectHoursLoading: false,
+  employeeMonthlyProjectHoursError: null,
+
+  employeeDailyProjectHours: null,
+  employeeDailyProjectHoursLoading: false,
+  employeeDailyProjectHoursError: null,
+
   // Employees for filter
   employeesList: [],
   employeesLoading: false,
@@ -699,12 +936,70 @@ const reportSlice = createSlice({
       .addCase(fetchEmployeesForFilter.fulfilled, (state, action) => {
         state.employeesLoading = false;
         state.employeesList = action.payload || [];
-        console.log("Employees loaded:", state.employeesList); // Debug log
       })
       .addCase(fetchEmployeesForFilter.rejected, (state, action) => {
         state.employeesLoading = false;
         state.employeesError = action.payload;
       })
+
+      .addCase(fetchEmployeeAttendanceForCalendar.pending, (state) => {
+        state.employeeAttendanceCalendarLoading = true;
+        state.employeeAttendanceCalendarError = null;
+      })
+      .addCase(
+        fetchEmployeeAttendanceForCalendar.fulfilled,
+        (state, action) => {
+          state.employeeAttendanceCalendarLoading = false;
+          state.employeeAttendanceCalendar = action.payload;
+        },
+      )
+      .addCase(fetchEmployeeAttendanceForCalendar.rejected, (state, action) => {
+        state.employeeAttendanceCalendarLoading = false;
+        state.employeeAttendanceCalendarError = action.payload;
+      })
+
+      // Employee Daily Attendance
+      .addCase(fetchEmployeeDailyAttendance.pending, (state) => {
+        state.employeeDailyAttendanceLoading = true;
+        state.employeeDailyAttendanceError = null;
+      })
+      .addCase(fetchEmployeeDailyAttendance.fulfilled, (state, action) => {
+        state.employeeDailyAttendanceLoading = false;
+        state.employeeDailyAttendance = action.payload;
+      })
+      .addCase(fetchEmployeeDailyAttendance.rejected, (state, action) => {
+        state.employeeDailyAttendanceLoading = false;
+        state.employeeDailyAttendanceError = action.payload;
+      })
+
+      // Monthly Project Hours
+      .addCase(fetchEmployeeMonthlyProjectHours.pending, (state) => {
+        state.employeeMonthlyProjectHoursLoading = true;
+        state.employeeMonthlyProjectHoursError = null;
+      })
+      .addCase(fetchEmployeeMonthlyProjectHours.fulfilled, (state, action) => {
+        state.employeeMonthlyProjectHoursLoading = false;
+        state.employeeMonthlyProjectHours = action.payload;
+      })
+      .addCase(fetchEmployeeMonthlyProjectHours.rejected, (state, action) => {
+        state.employeeMonthlyProjectHoursLoading = false;
+        state.employeeMonthlyProjectHoursError = action.payload;
+      })
+
+      // Daily Project Hours
+      .addCase(fetchEmployeeDailyProjectHours.pending, (state) => {
+        state.employeeDailyProjectHoursLoading = true;
+        state.employeeDailyProjectHoursError = null;
+      })
+      .addCase(fetchEmployeeDailyProjectHours.fulfilled, (state, action) => {
+        state.employeeDailyProjectHoursLoading = false;
+        state.employeeDailyProjectHours = action.payload;
+      })
+      .addCase(fetchEmployeeDailyProjectHours.rejected, (state, action) => {
+        state.employeeDailyProjectHoursLoading = false;
+        state.employeeDailyProjectHoursError = action.payload;
+      })
+
       // ==================== Leaves Report ====================
       .addCase(fetchLeavesReport.pending, (state) => {
         state.leavesLoading = true;

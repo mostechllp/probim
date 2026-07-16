@@ -46,17 +46,81 @@ const Profile = () => {
   // Get employee data from auth
   const employee = authUser?.employee || authUser;
 
+  // Helper to get the correct phone number - handles both 'phone_number' and 'personal_number'
+  const getPhoneNumber = () => {
+    // Check employee object first (from auth response)
+    if (employee) {
+      // The backend uses 'phone_number' in the response
+      if (employee.phone_number) return employee.phone_number;
+      if (employee.personal_number) return employee.personal_number;
+      if (employee.phone) return employee.phone;
+    }
+    
+    // Check authUser directly
+    if (authUser) {
+      if (authUser.phone_number) return authUser.phone_number;
+      if (authUser.personal_number) return authUser.personal_number;
+      if (authUser.phone) return authUser.phone;
+    }
+    
+    // Check profile (from settings slice)
+    if (profile) {
+      if (profile.phone_number) return profile.phone_number;
+      if (profile.personal_number) return profile.personal_number;
+      if (profile.phone) return profile.phone;
+    }
+    
+    return "";
+  };
+
+  // Helper to get the correct address
+  const getAddress = () => {
+    if (employee?.address) return employee.address;
+    if (authUser?.address) return authUser.address;
+    if (profile?.address) return profile.address;
+    return "";
+  };
+
+  // Helper to get the correct name
+  const getFullName = () => {
+    if (employee?.name) return employee.name;
+    if (employee?.first_name && employee?.last_name) {
+      return `${employee.first_name} ${employee.last_name}`.trim();
+    }
+    if (authUser?.name) return authUser.name;
+    if (profile?.name) return profile.name;
+    return "";
+  };
+
+  // Helper to get the correct personal email
+  const getPersonalEmail = () => {
+    if (employee?.personal_email) return employee.personal_email;
+    if (authUser?.personal_email) return authUser.personal_email;
+    if (profile?.personal_email) return profile.personal_email;
+    if (employee?.email) return employee.email;
+    if (authUser?.email) return authUser.email;
+    return "";
+  };
+
   // Initialize form data from auth
   useEffect(() => {
-    if (employee) {
+    if (authUser || employee) {
+      const phoneNumber = getPhoneNumber();
+      const address = getAddress();
+      const fullName = getFullName();
+      const personalEmail = getPersonalEmail();
+      
+      console.log("📞 Setting phone number:", phoneNumber);
+      console.log("🏠 Setting address:", address);
+      
       setFormData({
-        fullName: employee.name || "",
-        personalEmail: employee.personal_email || employee.email || "",
-        personalNumber: employee.phone || employee.personal_number || "",
-        address: employee.address || "",
+        fullName: fullName,
+        personalEmail: personalEmail,
+        personalNumber: phoneNumber,
+        address: address,
       });
     }
-  }, [employee]);
+  }, [authUser, employee]);
 
   // Fetch fresh profile data on mount
   useEffect(() => {
@@ -65,13 +129,27 @@ const Profile = () => {
         const result = await dispatch(fetchUserProfile());
         console.log("✅ Profile fetched:", result.payload);
         if (result.payload) {
-          // Update form data with fresh profile data
           const userData = result.payload;
+          const empData = userData?.employee || userData;
+          
+          // Try to get phone from multiple possible field names
+          const phoneNumber = empData?.phone_number || 
+                             empData?.personal_number || 
+                             userData?.phone_number || 
+                             userData?.personal_number || 
+                             userData?.phone || 
+                             "";
+          
+          const address = empData?.address || userData?.address || "";
+          
+          console.log("📞 Phone from profile:", phoneNumber);
+          console.log("🏠 Address from profile:", address);
+          
           setFormData({
-            fullName: userData.name || userData.employee?.name || "",
-            personalEmail: userData.personal_email || userData.email || "",
-            personalNumber: userData.phone || userData.personal_number || "",
-            address: userData.address || "",
+            fullName: userData.name || empData?.name || `${empData?.first_name || ''} ${empData?.last_name || ''}`.trim() || "",
+            personalEmail: empData?.personal_email || userData.personal_email || userData.email || "",
+            personalNumber: phoneNumber,
+            address: address,
           });
         }
       } catch (error) {
@@ -93,11 +171,22 @@ const Profile = () => {
         const result = await dispatch(fetchUserProfile());
         if (result.payload) {
           const userData = result.payload;
+          const empData = userData?.employee || userData;
+          
+          const phoneNumber = empData?.phone_number || 
+                             empData?.personal_number || 
+                             userData?.phone_number || 
+                             userData?.personal_number || 
+                             userData?.phone || 
+                             "";
+          
+          const address = empData?.address || userData?.address || "";
+          
           setFormData({
-            fullName: userData.name || userData.employee?.name || "",
-            personalEmail: userData.personal_email || userData.email || "",
-            personalNumber: userData.phone || userData.personal_number || "",
-            address: userData.address || "",
+            fullName: userData.name || empData?.name || `${empData?.first_name || ''} ${empData?.last_name || ''}`.trim() || "",
+            personalEmail: empData?.personal_email || userData.personal_email || userData.email || "",
+            personalNumber: phoneNumber,
+            address: address,
           });
         }
       };
@@ -129,8 +218,14 @@ const Profile = () => {
     if (avatarError) return null;
     if (lastUpdatedAvatar) return lastUpdatedAvatar;
     
-    // Check auth user first, then profile
-    const avatar = authUser?.avatar || profile?.avatar;
+    let avatar = authUser?.avatar;
+    if (!avatar && profile?.avatar) {
+      avatar = profile.avatar;
+    }
+    if (!avatar && employee?.avatar) {
+      avatar = employee.avatar;
+    }
+    
     if (!avatar) return null;
     
     if (typeof avatar === 'string' && (avatar.startsWith('http://') || avatar.startsWith('https://'))) {
@@ -146,6 +241,7 @@ const Profile = () => {
     if (typeof avatar === "string") {
       if (avatar.startsWith("/storage/")) return `${baseUrl}${avatar}`;
       if (avatar.startsWith("storage/")) return `${baseUrl}/${avatar}`;
+      if (avatar.startsWith("avatars/")) return `${baseUrl}/storage/${avatar}`;
       return `${baseUrl}/storage/${avatar}`;
     }
     
@@ -168,7 +264,6 @@ const Profile = () => {
       return;
     }
 
-    // Preview the image
     const reader = new FileReader();
     reader.onload = (e) => {
       setAvatarPreview(e.target.result);
@@ -181,7 +276,7 @@ const Profile = () => {
       const uploadFormData = new FormData();
       uploadFormData.append("file", file);
 
-      const response = await apiClient.post("/employee/upload-temp", uploadFormData, {
+      const response = await apiClient.post("/admin/employees/upload-temp", uploadFormData, {
         headers: { "Content-Type": "multipart/form-data" },
       });
 
@@ -214,96 +309,90 @@ const Profile = () => {
   };
 
   const handleUpdateProfile = async (e) => {
-  e.preventDefault();
-  
-  // Validation
-  if (!formData.fullName.trim()) {
-    showToast("Full name is required", "error");
-    return;
-  }
-  
-  setUpdating(true);
-  
-  const profileFormData = new FormData();
-  
-  // Split name for first_name and last_name if needed by backend
-  const nameParts = formData.fullName.trim().split(" ");
-  const firstName = nameParts[0] || "";
-  const lastName = nameParts.slice(1).join(" ") || "";
-  
-  profileFormData.append("name", formData.fullName);
-  profileFormData.append("first_name", firstName);
-  profileFormData.append("last_name", lastName);
-  
-  // IMPORTANT: DO NOT send email at all since it's disabled/read-only
-  // The email field is disabled, so we should never try to update it
-  // Remove ALL email-related code from the update
-  
-  // ONLY send phone if it has changed
-  const originalPhone = employee?.phone || employee?.personal_number || "";
-  if (formData.personalNumber && formData.personalNumber !== originalPhone) {
-    console.log("📱 Phone changed from:", originalPhone, "to:", formData.personalNumber);
-    profileFormData.append("phone", formData.personalNumber);
-    profileFormData.append("personal_number", formData.personalNumber);
-  } else {
-    console.log("📱 Phone unchanged, skipping update");
-  }
-  
-  // ONLY send address if it has changed
-  const originalAddress = employee?.address || "";
-  if (formData.address && formData.address !== originalAddress) {
-    console.log("🏠 Address changed");
-    profileFormData.append("address", formData.address);
-  } else {
-    console.log("🏠 Address unchanged, skipping update");
-  }
-  
-  let constructedAvatarUrl = null;
-  
-  if (avatarTempPath) {
-    console.log("📤 Sending avatar temp path:", avatarTempPath);
-    profileFormData.append("avatar", avatarTempPath);
+    e.preventDefault();
     
-    // Construct the permanent avatar URL
-    const baseUrl = import.meta.env.VITE_API_URL?.replace("/api", "") || window.location.origin;
-    const avatarFileName = avatarTempPath.replace('temp/', '');
-    constructedAvatarUrl = `${baseUrl}/storage/avatars/${avatarFileName}`;
-    console.log("📸 Constructed avatar URL:", constructedAvatarUrl);
-    
-    // Store the constructed URL to display immediately
-    setLastUpdatedAvatar(constructedAvatarUrl);
-  }
-  
-  // Check if there's anything to update
-  const hasChanges = profileFormData.has('phone') || 
-                     profileFormData.has('personal_number') || 
-                     profileFormData.has('address') || 
-                     avatarTempPath;
-  
-  if (!hasChanges) {
-    showToast("No changes to update", "info");
-    setUpdating(false);
-    return;
-  }
-  
-  // Log the FormData contents for debugging
-  console.log("📤 Sending profile update with:");
-  for (let pair of profileFormData.entries()) {
-    console.log(pair[0] + ': ' + pair[1]);
-  }
-  
-  const result = await dispatch(updateProfile({ formData: profileFormData, constructedAvatarUrl }));
-  
-  if (!updateProfile.fulfilled.match(result)) {
-    setUpdating(false);
-    // Revert avatar preview if update failed
-    if (avatarTempPath) {
-      setAvatarPreview(null);
-      setAvatarTempPath(null);
-      setLastUpdatedAvatar(null);
+    if (!formData.fullName.trim()) {
+      showToast("Full name is required", "error");
+      return;
     }
-  }
-};
+    
+    setUpdating(true);
+    
+    const profileFormData = new FormData();
+    
+    const nameParts = formData.fullName.trim().split(" ");
+    const firstName = nameParts[0] || "";
+    const lastName = nameParts.slice(1).join(" ") || "";
+    
+    profileFormData.append("name", formData.fullName);
+    profileFormData.append("first_name", firstName);
+    profileFormData.append("last_name", lastName);
+    
+    const currentPhone = getPhoneNumber();
+    const currentAddress = getAddress();
+    
+    // Send phone if it has changed - use both field names for compatibility
+    if (formData.personalNumber && formData.personalNumber !== currentPhone) {
+      console.log("📱 Phone changed from:", currentPhone, "to:", formData.personalNumber);
+      profileFormData.append("phone_number", formData.personalNumber);
+      profileFormData.append("personal_number", formData.personalNumber);
+      profileFormData.append("phone", formData.personalNumber);
+    } else {
+      console.log("📱 Phone unchanged, skipping update");
+    }
+    
+    if (formData.address && formData.address !== currentAddress) {
+      console.log("🏠 Address changed from:", currentAddress, "to:", formData.address);
+      profileFormData.append("address", formData.address);
+    } else {
+      console.log("🏠 Address unchanged, skipping update");
+    }
+    
+    let constructedAvatarUrl = null;
+    
+    if (avatarTempPath) {
+      console.log("📤 Sending avatar temp path:", avatarTempPath);
+      profileFormData.append("avatar", avatarTempPath);
+      
+      const baseUrl = import.meta.env.VITE_API_URL?.replace("/api", "") || window.location.origin;
+      const avatarFileName = avatarTempPath.replace('temp/', '');
+      constructedAvatarUrl = `${baseUrl}/storage/avatars/${avatarFileName}`;
+      console.log("📸 Constructed avatar URL:", constructedAvatarUrl);
+      
+      setLastUpdatedAvatar(constructedAvatarUrl);
+    }
+    
+    const hasChanges = profileFormData.has('phone_number') || 
+                       profileFormData.has('personal_number') || 
+                       profileFormData.has('phone') || 
+                       profileFormData.has('address') || 
+                       avatarTempPath ||
+                       profileFormData.has('name') ||
+                       profileFormData.has('first_name') ||
+                       profileFormData.has('last_name');
+    
+    if (!hasChanges) {
+      showToast("No changes to update", "info");
+      setUpdating(false);
+      return;
+    }
+    
+    console.log("📤 Sending profile update with:");
+    for (let pair of profileFormData.entries()) {
+      console.log(pair[0] + ': ' + pair[1]);
+    }
+    
+    const result = await dispatch(updateProfile({ formData: profileFormData, constructedAvatarUrl }));
+    
+    if (!updateProfile.fulfilled.match(result)) {
+      setUpdating(false);
+      if (avatarTempPath) {
+        setAvatarPreview(null);
+        setAvatarTempPath(null);
+        setLastUpdatedAvatar(null);
+      }
+    }
+  };
 
   const handleChangePassword = async (e) => {
     e.preventDefault();
@@ -344,14 +433,12 @@ const Profile = () => {
   };
 
   const handleReset = () => {
-    if (employee) {
-      setFormData({
-        fullName: employee.name || "",
-        personalEmail: employee.personal_email || employee.email || "",
-        personalNumber: employee.phone || employee.personal_number || "",
-        address: employee.address || "",
-      });
-    }
+    setFormData({
+      fullName: getFullName(),
+      personalEmail: getPersonalEmail(),
+      personalNumber: getPhoneNumber(),
+      address: getAddress(),
+    });
     setPasswordData({
       currentPassword: "",
       newPassword: "",
@@ -364,9 +451,11 @@ const Profile = () => {
   const userInitials = (formData.fullName || employee?.name || "U").charAt(0).toUpperCase();
 
   console.log("Current avatar URL:", avatarUrl);
-  console.log("AuthUser avatar:", authUser?.avatar);
-  console.log("Profile avatar:", profile?.avatar);
-  console.log("Last updated avatar:", lastUpdatedAvatar);
+  console.log("AuthUser:", authUser);
+  console.log("Employee data:", employee);
+  console.log("Phone from employee:", employee?.phone_number || employee?.personal_number);
+  console.log("Address from employee:", employee?.address);
+  console.log("Form data:", formData);
 
   if (loading && !profile) {
     return (
@@ -531,7 +620,6 @@ const Profile = () => {
                 Update your personal details, email, and home address.
               </p>
 
-              {/* Avatar upload info */}
               {(avatarPreview || avatarTempPath) && (
                 <div className="mb-6 p-3 bg-blue-50 dark:bg-blue-900/20 rounded-xl flex items-center justify-between">
                   <span className="text-sm text-blue-600 dark:text-blue-400">
@@ -582,7 +670,7 @@ const Profile = () => {
                     </div>
                     <input
                       type="email"
-                      value={employee?.company_email || profile?.email || "your company email"}
+                      value={authUser?.email || profile?.email || "your company email"}
                       disabled
                       className="w-full pl-12 pr-4 py-3.5 bg-[var(--surface2)]/70 border border-[var(--border)] rounded-2xl text-sm font-semibold text-[var(--muted)] cursor-not-allowed"
                     />
@@ -590,28 +678,28 @@ const Profile = () => {
                 </div>
 
                 <div className="form-field flex flex-col gap-2">
-  <label className="text-xs font-extrabold text-[var(--text-secondary)] ml-1">
-    Personal Email{" "}
-    <span className="text-gray-400 font-medium">
-      (Cannot be changed)
-    </span>
-  </label>
-  <div className="relative">
-    <div className="absolute inset-y-0 left-0 pl-4 flex items-center pointer-events-none">
-      <FiMail className="text-gray-400 text-lg" />
-    </div>
-    <input
-      type="email"
-      value={formData.personalEmail}
-      disabled
-      className="w-full pl-12 pr-4 py-3.5 bg-[var(--surface2)]/70 border border-[var(--border)] rounded-2xl text-sm font-semibold text-[var(--muted)] cursor-not-allowed"
-    />
-  </div>
-  <p className="text-xs text-gray-400 mt-1">
-    <FiInfo className="inline mr-1" />
-    Personal email cannot be changed. Contact HR for updates.
-  </p>
-</div>
+                  <label className="text-xs font-extrabold text-[var(--text-secondary)] ml-1">
+                    Personal Email{" "}
+                    <span className="text-gray-400 font-medium">
+                      (Cannot be changed)
+                    </span>
+                  </label>
+                  <div className="relative">
+                    <div className="absolute inset-y-0 left-0 pl-4 flex items-center pointer-events-none">
+                      <FiMail className="text-gray-400 text-lg" />
+                    </div>
+                    <input
+                      type="email"
+                      value={formData.personalEmail}
+                      disabled
+                      className="w-full pl-12 pr-4 py-3.5 bg-[var(--surface2)]/70 border border-[var(--border)] rounded-2xl text-sm font-semibold text-[var(--muted)] cursor-not-allowed"
+                    />
+                  </div>
+                  <p className="text-xs text-gray-400 mt-1">
+                    <FiInfo className="inline mr-1" />
+                    Personal email cannot be changed. Contact HR for updates.
+                  </p>
+                </div>
 
                 <div className="form-field flex flex-col gap-2 md:col-span-2">
                   <label className="text-xs font-extrabold text-[var(--text-secondary)] ml-1">

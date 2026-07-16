@@ -13,6 +13,33 @@ import ErrorToast from "../../components/common/ErrorToast";
 import useErrorHandler from "../../hooks/useErrorHandler";
 import errorHandler from "../../utils/errorHandler";
 
+// Helper function to get avatar URL
+const getAvatarUrl = (avatarPath) => {
+  if (!avatarPath) return null;
+  
+  // If it's already a full URL
+  if (avatarPath.startsWith('http://') || avatarPath.startsWith('https://')) {
+    return avatarPath;
+  }
+  
+  // Get base URL from environment or use current origin
+  const baseUrl = import.meta.env.VITE_API_URL?.replace("/api", "") || window.location.origin;
+  
+  // If it starts with avatars/ or storage/ or /storage/
+  if (avatarPath.startsWith('avatars/')) {
+    return `${baseUrl}/storage/${avatarPath}`;
+  }
+  if (avatarPath.startsWith('storage/')) {
+    return `${baseUrl}/${avatarPath}`;
+  }
+  if (avatarPath.startsWith('/storage/')) {
+    return `${baseUrl}${avatarPath}`;
+  }
+  
+  // Default: assume it's in avatars folder
+  return `${baseUrl}/storage/${avatarPath}`;
+};
+
 const Dashboard = () => {
   const dispatch = useDispatch();
   const { user } = useSelector((state) => state.auth);
@@ -58,6 +85,36 @@ const Dashboard = () => {
   const showToastMessage = (message, type = "success", title = "") => {
     setToast({ message, type, title });
     setTimeout(() => setToast(null), 5000);
+  };
+
+  // Get employee avatar URL
+  const employeeAvatar = dashboardData?.employee?.avatar 
+    ? getAvatarUrl(dashboardData.employee.avatar) 
+    : null;
+
+  // Get employee name
+  const getEmployeeName = () => {
+    if (dashboardData?.employee) {
+      return `${dashboardData.employee.first_name} ${dashboardData.employee.last_name}`;
+    }
+    return user?.name || "User";
+  };
+
+  const getEmployeeRole = () => {
+    if (dashboardData?.employee) {
+      return `Employee ID: ${dashboardData.employee.employee_id}`;
+    }
+    return user?.role?.name || user?.role || "Employee";
+  };
+
+  // Get initials for fallback avatar
+  const getInitials = () => {
+    const name = getEmployeeName();
+    const parts = name.trim().split(' ');
+    if (parts.length >= 2) {
+      return `${parts[0].charAt(0)}${parts[1].charAt(0)}`.toUpperCase();
+    }
+    return name.charAt(0).toUpperCase();
   };
 
   // Fetch dashboard data and projects on component mount
@@ -186,7 +243,7 @@ const Dashboard = () => {
   const handlePunchOutSubmit = async (data) => {
     setPunchOutData({
     ...data,
-    punch_out_time: data.punch_out_time || null, // Make sure this is preserved
+    punch_out_time: data.punch_out_time || null,
   });
     setShowPunchOutModal(false);
     setPunchType(pendingPunchOutDate ? "punch-out-then-punchin" : "punch-out");
@@ -225,21 +282,6 @@ const Dashboard = () => {
     } catch (error) {
       return time;
     }
-  };
-
-  // Get employee name and role
-  const getEmployeeName = () => {
-    if (dashboardData?.employee) {
-      return `${dashboardData.employee.first_name} ${dashboardData.employee.last_name}`;
-    }
-    return user?.name || "User";
-  };
-
-  const getEmployeeRole = () => {
-    if (dashboardData?.employee) {
-      return `Employee ID: ${dashboardData.employee.employee_id}`;
-    }
-    return user?.role?.name || user?.role || "Employee";
   };
 
   const isButtonDisabled = () => {
@@ -448,11 +490,24 @@ const Dashboard = () => {
 
   return (
     <div>
-      {/* Welcome Banner */}
+      {/* Welcome Banner with Avatar */}
       <div className="welcome-banner bg-gradient-to-br from-green-600 to-green-500 rounded-xl p-5 md:p-7 mb-7 flex flex-col md:flex-row justify-between items-center gap-5">
         <div className="welcome-left flex items-center gap-5 flex-wrap">
           <div className="welcome-avatar w-16 h-16 rounded-xl overflow-hidden border-3 border-white shadow-lg bg-white flex items-center justify-center">
-            <i className="fas fa-user text-green-600 text-3xl"></i>
+            {employeeAvatar ? (
+              <img 
+                src={employeeAvatar} 
+                alt={getEmployeeName()}
+                className="w-full h-full object-cover"
+                onError={(e) => {
+                  // If image fails to load, show fallback
+                  e.target.style.display = 'none';
+                  e.target.parentElement.innerHTML = `<i class="fas fa-user text-green-600 text-3xl"></i>`;
+                }}
+              />
+            ) : (
+              <i className="fas fa-user text-green-600 text-3xl"></i>
+            )}
           </div>
           <div className="welcome-text">
             <h2 className="text-xl md:text-2xl font-bold text-white">
@@ -471,6 +526,7 @@ const Dashboard = () => {
         </div>
       </div>
 
+      {/* Rest of your component remains the same... */}
       {/* Location Info */}
       {renderLocationInfo()}
 

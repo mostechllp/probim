@@ -7,64 +7,173 @@ const NotesWidget = () => {
   const { notes } = useAppSelector((state) => state.notes);
   const [isOpen, setIsOpen] = useState(false);
   const [newNote, setNewNote] = useState('');
-  const [position, setPosition] = useState({ x: null, y: null });
+  const [iconPosition, setIconPosition] = useState({ x: 0, y: 0 });
+  const [widgetPosition, setWidgetPosition] = useState({ x: 0, y: 0 });
   const [isDragging, setIsDragging] = useState(false);
   const [dragStart, setDragStart] = useState({ x: 0, y: 0 });
+  const [isIconDragging, setIsIconDragging] = useState(false);
+  const iconRef = useRef(null);
   const widgetRef = useRef(null);
+  const [isFirstRender, setIsFirstRender] = useState(true);
 
+  // Load saved positions
   useEffect(() => {
-    // Load saved position
-    const savedPos = localStorage.getItem('notesWidgetPosition');
-    if (savedPos) {
-      const pos = JSON.parse(savedPos);
-      // eslint-disable-next-line react-hooks/set-state-in-effect
-      setPosition(pos);
+    const savedIconPos = localStorage.getItem('notesIconPosition');
+    const savedWidgetPos = localStorage.getItem('notesWidgetPosition');
+    
+    if (savedIconPos) {
+      const pos = JSON.parse(savedIconPos);
+      setIconPosition(pos);
     } else {
-      // Default position: bottom right, above task widget
-      setPosition({ x: window.innerWidth - 350, y: window.innerHeight - 250 });
+      // Default: bottom right
+      setIconPosition({ 
+        x: window.innerWidth - 80, 
+        y: window.innerHeight - 120 
+      });
     }
+    
+    if (savedWidgetPos) {
+      const pos = JSON.parse(savedWidgetPos);
+      setWidgetPosition(pos);
+    } else {
+      setWidgetPosition({ 
+        x: window.innerWidth - 360, 
+        y: window.innerHeight - 400 
+      });
+    }
+    setIsFirstRender(false);
   }, []);
 
-  const handleMouseDown = (e) => {
-    if (e.target.closest('.widget-actions')) return;
-    setIsDragging(true);
-    setDragStart({
-      x: e.clientX - (position.x || 0),
-      y: e.clientY - (position.y || 0)
-    });
-  };
+  // Save positions when they change
+  useEffect(() => {
+    if (!isFirstRender) {
+      localStorage.setItem('notesIconPosition', JSON.stringify(iconPosition));
+    }
+  }, [iconPosition, isFirstRender]);
 
-  const handleMouseMove = (e) => {
-    if (!isDragging) return;
-    const newX = e.clientX - dragStart.x;
-    const newY = e.clientY - dragStart.y;
-    
-    const maxX = window.innerWidth - (widgetRef.current?.offsetWidth || 320);
-    const maxY = window.innerHeight - (widgetRef.current?.offsetHeight || 400);
-    
-    setPosition({
-      x: Math.max(0, Math.min(newX, maxX)),
-      y: Math.max(0, Math.min(newY, maxY))
-    });
-  };
+  useEffect(() => {
+    if (!isFirstRender) {
+      localStorage.setItem('notesWidgetPosition', JSON.stringify(widgetPosition));
+    }
+  }, [widgetPosition, isFirstRender]);
 
-  const handleMouseUp = () => {
-    if (isDragging) {
-      setIsDragging(false);
-      localStorage.setItem('notesWidgetPosition', JSON.stringify(position));
+  // Keep icons in bounds on resize
+  useEffect(() => {
+    const handleResize = () => {
+      const iconSize = 56;
+      const maxX = window.innerWidth - iconSize;
+      const maxY = window.innerHeight - iconSize;
+      
+      setIconPosition(prev => ({
+        x: Math.min(prev.x, maxX),
+        y: Math.min(prev.y, maxY)
+      }));
+    };
+    
+    window.addEventListener('resize', handleResize);
+    return () => window.removeEventListener('resize', handleResize);
+  }, []);
+
+  // --- Icon Drag Handlers ---
+  const handleIconMouseDown = (e) => {
+    e.stopPropagation();
+    setIsIconDragging(true);
+    const rect = iconRef.current?.getBoundingClientRect();
+    if (rect) {
+      setDragStart({
+        x: e.clientX - rect.left,
+        y: e.clientY - rect.top
+      });
     }
   };
+
+  const handleIconMouseMove = (e) => {
+    if (!isIconDragging || !iconRef.current) return;
+    
+    const iconSize = 56;
+    let newX = e.clientX - dragStart.x;
+    let newY = e.clientY - dragStart.y;
+    
+    const maxX = window.innerWidth - iconSize;
+    const maxY = window.innerHeight - iconSize;
+    
+    newX = Math.max(0, Math.min(newX, maxX));
+    newY = Math.max(0, Math.min(newY, maxY));
+    
+    setIconPosition({
+      x: newX,
+      y: newY
+    });
+  };
+
+  const handleIconMouseUp = () => {
+    if (isIconDragging) {
+      setIsIconDragging(false);
+    }
+  };
+
+  // --- Widget Drag Handlers ---
+  const handleWidgetMouseDown = (e) => {
+    if (e.target.closest('.widget-actions')) return;
+    setIsDragging(true);
+    const rect = widgetRef.current?.getBoundingClientRect();
+    if (rect) {
+      setDragStart({
+        x: e.clientX - rect.left,
+        y: e.clientY - rect.top
+      });
+    }
+  };
+
+  const handleWidgetMouseMove = (e) => {
+    if (!isDragging || !widgetRef.current) return;
+    
+    const widgetWidth = widgetRef.current.offsetWidth;
+    const widgetHeight = widgetRef.current.offsetHeight;
+    
+    let newX = e.clientX - dragStart.x;
+    let newY = e.clientY - dragStart.y;
+    
+    const maxX = window.innerWidth - widgetWidth;
+    const maxY = window.innerHeight - widgetHeight;
+    
+    newX = Math.max(0, Math.min(newX, maxX));
+    newY = Math.max(0, Math.min(newY, maxY));
+    
+    setWidgetPosition({
+      x: newX,
+      y: newY
+    });
+  };
+
+  const handleWidgetMouseUp = () => {
+    if (isDragging) {
+      setIsDragging(false);
+    }
+  };
+
+  // Global event listeners for dragging
+  useEffect(() => {
+    if (isIconDragging) {
+      window.addEventListener('mousemove', handleIconMouseMove);
+      window.addEventListener('mouseup', handleIconMouseUp);
+      return () => {
+        window.removeEventListener('mousemove', handleIconMouseMove);
+        window.removeEventListener('mouseup', handleIconMouseUp);
+      };
+    }
+  }, [isIconDragging]);
 
   useEffect(() => {
     if (isDragging) {
-      window.addEventListener('mousemove', handleMouseMove);
-      window.addEventListener('mouseup', handleMouseUp);
+      window.addEventListener('mousemove', handleWidgetMouseMove);
+      window.addEventListener('mouseup', handleWidgetMouseUp);
       return () => {
-        window.removeEventListener('mousemove', handleMouseMove);
-        window.removeEventListener('mouseup', handleMouseUp);
+        window.removeEventListener('mousemove', handleWidgetMouseMove);
+        window.removeEventListener('mouseup', handleWidgetMouseUp);
       };
     }
-  }, [isDragging, position]);
+  }, [isDragging]);
 
   const handleAddNote = () => {
     if (newNote.trim()) {
@@ -73,39 +182,60 @@ const NotesWidget = () => {
     }
   };
 
+  const handleKeyPress = (e) => {
+    if (e.key === 'Enter' && !e.shiftKey) {
+      e.preventDefault();
+      handleAddNote();
+    }
+  };
+
+  const handleIconClick = () => {
+    if (!isIconDragging) {
+      setIsOpen(true);
+    }
+  };
+
   return (
     <>
-      {/* Floating Icon */}
+      {/* Draggable Floating Icon */}
       <div
-        onClick={() => setIsOpen(true)}
-        className="floating-icon fixed w-14 h-14 rounded-full bg-[#EEAD16] shadow-lg flex items-center justify-center cursor-pointer z-1000 transition-transform active:scale-95"
-        style={{ bottom: '30px', right: '20px' }}
+        ref={iconRef}
+        className={`floating-icon fixed w-14 h-14 rounded-full bg-[#EEAD16] shadow-lg flex items-center justify-center z-[1000] transition-transform active:scale-95 hover:scale-105 ${isIconDragging ? 'scale-110 shadow-2xl cursor-grabbing' : 'cursor-grab'}`}
+        style={{
+          left: `${iconPosition.x}px`,
+          top: `${iconPosition.y}px`,
+          transform: 'translate(-50%, -50%)',
+        }}
+        onMouseDown={handleIconMouseDown}
+        onClick={handleIconClick}
       >
-        <i className="fas fa-sticky-note text-white text-2xl"></i>
+        <i className="fas fa-sticky-note text-white text-2xl pointer-events-none"></i>
         {notes.length > 0 && (
-          <span className="floating-badge absolute -top-1 -right-1 bg-red-500 text-white text-[10px] font-bold rounded-full px-1.5 py-0.5 min-w-[20px] text-center border-2 border-white">
+          <span className="floating-badge absolute -top-1 -right-1 bg-red-500 text-white text-[10px] font-bold rounded-full px-1.5 py-0.5 min-w-[20px] text-center border-2 border-white pointer-events-none">
             {notes.length}
           </span>
         )}
+        {/* Drag handle indicator */}
+        <div className="absolute -bottom-1 -right-1 w-3 h-3 bg-yellow-300 dark:bg-yellow-600 rounded-full border-2 border-white dark:border-gray-800 opacity-60 pointer-events-none"></div>
       </div>
 
       {/* Widget Panel */}
       {isOpen && (
         <div
           ref={widgetRef}
-          className="widget-panel fixed bg-white dark:bg-gray-800 rounded-xl shadow-lg border border-gray-200 dark:border-gray-700 z-1001 flex flex-col overflow-hidden"
+          className={`widget-panel fixed bg-white dark:bg-gray-800 rounded-xl shadow-2xl border border-gray-200 dark:border-gray-700 z-[1001] flex flex-col overflow-hidden transition-shadow ${isDragging ? 'shadow-2xl scale-[1.01]' : 'shadow-lg'}`}
           style={{
-            left: position.x !== null ? `${position.x}px` : 'auto',
-            right: position.x === null ? '90px' : 'auto',
-            bottom: position.y === null ? '30px' : 'auto',
-            top: position.y !== null ? `${position.y}px` : 'auto',
+            left: `${widgetPosition.x}px`,
+            top: `${widgetPosition.y}px`,
             width: '320px',
-            maxWidth: 'calc(100vw - 32px)'
+            maxWidth: 'calc(100vw - 32px)',
+            maxHeight: 'calc(100vh - 32px)',
+            cursor: isDragging ? 'grabbing' : 'default'
           }}
         >
           <div
             className="widget-header bg-gradient-to-r from-yellow-400 to-yellow-500 dark:from-yellow-500 dark:to-orange-500 text-gray-800 dark:text-white p-3.5 flex justify-between items-center cursor-grab active:cursor-grabbing select-none"
-            onMouseDown={handleMouseDown}
+            onMouseDown={handleWidgetMouseDown}
           >
             <h3 className="text-sm font-semibold flex items-center gap-2">
               <i className="fas fa-sticky-note"></i> Sticky Notes
@@ -114,21 +244,22 @@ const NotesWidget = () => {
               <button
                 onClick={() => setIsOpen(false)}
                 className="bg-black/10 dark:bg-white/20 border-none text-gray-700 dark:text-white w-7 h-7 rounded-md text-xs cursor-pointer hover:bg-black/20 dark:hover:bg-white/30 transition-colors"
+                title="Minimize"
               >
                 <i className="fas fa-compress"></i>
               </button>
             </div>
           </div>
           
-          <div className="widget-content flex flex-col h-[300px] p-3">
-            <ul className="notes-list list-none flex-1 overflow-y-auto pr-1">
+          <div className="widget-content flex flex-col h-[300px] p-3 overflow-hidden">
+            <ul className="notes-list list-none flex-1 overflow-y-auto pr-1 custom-scrollbar">
               {notes.length === 0 ? (
                 <li className="text-center text-gray-400 dark:text-gray-500 text-xs py-4">
                   No notes yet. Add one below!
                 </li>
               ) : (
                 notes.map((note, idx) => (
-                  <li key={idx} className="note-item bg-yellow-50 dark:bg-gray-700 border-l-4 border-yellow-400 dark:border-yellow-500 rounded-lg p-3 mb-2.5 relative">
+                  <li key={idx} className="note-item bg-yellow-50 dark:bg-gray-700 border-l-4 border-yellow-400 dark:border-yellow-500 rounded-lg p-3 mb-2.5 relative group">
                     <div className="note-text text-sm text-gray-700 dark:text-gray-200 mb-2 pr-6">
                       {note.text}
                     </div>
@@ -137,7 +268,7 @@ const NotesWidget = () => {
                     </small>
                     <button
                       onClick={() => dispatch(deleteNote(idx))}
-                      className="note-delete absolute top-2 right-2 bg-none border-none text-red-400 dark:text-red-500 cursor-pointer hover:text-red-600 dark:hover:text-red-400 transition-colors"
+                      className="note-delete absolute top-2 right-2 bg-none border-none text-red-400 dark:text-red-500 cursor-pointer hover:text-red-600 dark:hover:text-red-400 transition-colors opacity-0 group-hover:opacity-100"
                     >
                       <i className="fas fa-times"></i>
                     </button>
@@ -150,9 +281,10 @@ const NotesWidget = () => {
               <textarea
                 value={newNote}
                 onChange={(e) => setNewNote(e.target.value)}
+                onKeyDown={handleKeyPress}
                 rows="2"
-                placeholder="Write a note..."
-                className="w-full bg-gray-50 dark:bg-gray-700 border border-gray-200 dark:border-gray-600 rounded-lg p-2.5 font-poppins text-sm text-gray-700 dark:text-gray-200 resize-y outline-none focus:border-yellow-400 dark:focus:border-yellow-500 focus:ring-1 focus:ring-yellow-400 dark:focus:ring-yellow-500"
+                placeholder="Write a note... (Enter to save)"
+                className="w-full bg-gray-50 dark:bg-gray-700 border border-gray-200 dark:border-gray-600 rounded-lg p-2.5 font-poppins text-sm text-gray-700 dark:text-gray-200 resize-y outline-none focus:border-yellow-400 dark:focus:border-yellow-500 focus:ring-1 focus:ring-yellow-400 dark:focus:ring-yellow-500 transition-all"
               />
               <button
                 onClick={handleAddNote}

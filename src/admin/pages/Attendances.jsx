@@ -1030,46 +1030,6 @@ const uniqueEmployees = Array.from(uniqueEmployeesMap.values());
       <div className="mt-3 grid grid-cols-1 md:grid-cols-2 gap-2">
         <div className="bg-white dark:bg-gray-800 rounded-xl border border-gray-200 dark:border-gray-700 p-2.5">
           <h4 className="text-[10px] font-semibold text-gray-700 dark:text-gray-300 mb-1.5">
-            <i className="fas fa-chart-pie text-green-500 mr-1"></i> Summary
-          </h4>
-          <div className="grid grid-cols-3 gap-1.5">
-            <div className="text-center p-1.5 bg-green-50 dark:bg-green-900/20 rounded-lg">
-              <div className="text-sm font-bold text-green-600 dark:text-green-400">
-                {
-                  records.filter((r) => {
-                    const status = getRecordStatus(r);
-                    return status === "Present";
-                  }).length
-                }
-              </div>
-              <div className="text-[8px] text-gray-500">Present</div>
-            </div>
-            <div className="text-center p-1.5 bg-red-50 dark:bg-red-900/20 rounded-lg">
-              <div className="text-sm font-bold text-red-600 dark:text-red-400">
-                {
-                  records.filter((r) => {
-                    const status = getRecordStatus(r);
-                    return status === "Absent";
-                  }).length
-                }
-              </div>
-              <div className="text-[8px] text-gray-500">Absent</div>
-            </div>
-            <div className="text-center p-1.5 bg-yellow-50 dark:bg-yellow-900/20 rounded-lg">
-              <div className="text-sm font-bold text-yellow-600 dark:text-yellow-400">
-                {
-                  records.filter((r) => {
-                    const status = getRecordStatus(r);
-                    return status === "Late";
-                  }).length
-                }
-              </div>
-              <div className="text-[8px] text-gray-500">Late</div>
-            </div>
-          </div>
-        </div>
-        <div className="bg-white dark:bg-gray-800 rounded-xl border border-gray-200 dark:border-gray-700 p-2.5">
-          <h4 className="text-[10px] font-semibold text-gray-700 dark:text-gray-300 mb-1.5">
             <i className="fas fa-info-circle text-blue-500 mr-1"></i> Tips
           </h4>
           <ul className="text-[8px] md:text-[9px] text-gray-600 dark:text-gray-400 space-y-0.5">

@@ -43,13 +43,13 @@ const EditEmployee = () => {
   const [departmentModalLoading, setDepartmentModalLoading] = useState(false);
   const [designationModalLoading, setDesignationModalLoading] = useState(false);
 
-  const [idGenerationMethod, setIdGenerationMethod] = useState("manual"); // manual, auto
-const [idPrefix, setIdPrefix] = useState("EMP");
-const [idFormat, setIdFormat] = useState("prefix+year+month+day+random");
-const [manualEmployeeId, setManualEmployeeId] = useState("");
-const [generatedPreview, setGeneratedPreview] = useState("");
+  const [idGenerationMethod, setIdGenerationMethod] = useState("manual");
+  const [idPrefix, setIdPrefix] = useState("EMP");
+  const [idFormat, setIdFormat] = useState("prefix+year+month+day+random");
+  const [manualEmployeeId, setManualEmployeeId] = useState("");
+  const [generatedPreview, setGeneratedPreview] = useState("");
 
-  // Document file states - matching AddEmployee structure
+  // Document file states
   const [documents, setDocuments] = useState({
     avatar: null,
     avatarFile: null,
@@ -71,6 +71,10 @@ const [generatedPreview, setGeneratedPreview] = useState("");
   const [documentPreviews, setDocumentPreviews] = useState({});
   const [existingDocuments, setExistingDocuments] = useState({});
   const [removedDocuments, setRemovedDocuments] = useState({});
+  
+  // Additional Documents states
+  const [additionalDocuments, setAdditionalDocuments] = useState([]);
+  const [existingAdditionalDocuments, setExistingAdditionalDocuments] = useState([]);
 
   // Fetch data from slices
   const { currentEmployee, loading: employeeLoading } = useSelector(
@@ -200,6 +204,8 @@ const [generatedPreview, setGeneratedPreview] = useState("");
     setDocumentPreviews({});
     setExistingDocuments({});
     setRemovedDocuments({});
+    setAdditionalDocuments([]);
+    setExistingAdditionalDocuments([]);
 
     // Clear selected company/organization details
     setSelectedOrgDetails(null);
@@ -220,185 +226,168 @@ const [generatedPreview, setGeneratedPreview] = useState("");
   }, [id, dispatch]);
 
   const formatOptions = [
-  {
-    value: "prefix+year+month+day+random",
-    label: "EMP20241225001",
-    description: "Prefix + Year + Month + Day + Random",
-  },
-  {
-    value: "prefix+year+dob_ddmm+random",
-    label: "EMP20242512001",
-    description: "Prefix + Year + DOB(DDMM) + Random",
-  },
-  {
-    value: "prefix+timestamp",
-    label: "EMP170351234567",
-    description: "Prefix + Timestamp",
-  },
-  {
-    value: "prefix+year+sequence",
-    label: "EMP2024001",
-    description: "Prefix + Year + Sequence",
-  },
-  {
-    value: "year+month+day+random",
-    label: "20241225001",
-    description: "Year + Month + Day + Random (No Prefix)",
-  },
-  {
-    value: "custom",
-    label: "Custom Format",
-    description: "Create your own format",
-  },
-];
+    {
+      value: "prefix+year+month+day+random",
+      label: "EMP20241225001",
+      description: "Prefix + Year + Month + Day + Random",
+    },
+    {
+      value: "prefix+year+dob_ddmm+random",
+      label: "EMP20242512001",
+      description: "Prefix + Year + DOB(DDMM) + Random",
+    },
+    {
+      value: "prefix+timestamp",
+      label: "EMP170351234567",
+      description: "Prefix + Timestamp",
+    },
+    {
+      value: "prefix+year+sequence",
+      label: "EMP2024001",
+      description: "Prefix + Year + Sequence",
+    },
+    {
+      value: "year+month+day+random",
+      label: "20241225001",
+      description: "Year + Month + Day + Random (No Prefix)",
+    },
+    {
+      value: "custom",
+      label: "Custom Format",
+      description: "Create your own format",
+    },
+  ];
 
-// Add custom format state
-const [customFormat, setCustomFormat] = useState("prefix+year+month+day+timestamp");
+  const [customFormat, setCustomFormat] = useState("prefix+year+month+day+timestamp");
 
-// Add the generateEmployeeIdWithOptions function
-const generateEmployeeIdWithOptions = (dob, joiningDate, prefix, format) => {
-  if (
-    (format !== "manual" && (!dob || !joiningDate)) ||
-    format === "manual"
-  ) {
-    return "";
-  }
-
-  // Parse dates
-  let dobFormatted = dob;
-  let joiningFormatted = joiningDate;
-
-  if (dob && dob.match(/^\d{2}\/\d{2}\/\d{4}$/)) {
-    const [day, month, year] = dob.split("/");
-    dobFormatted = `${year}-${month}-${day}`;
-  }
-
-  if (joiningDate && joiningDate.match(/^\d{2}\/\d{2}\/\d{4}$/)) {
-    const [day, month, year] = joiningDate.split("/");
-    joiningFormatted = `${year}-${month}-${day}`;
-  }
-
-  const dobDate = dob ? new Date(dobFormatted) : null;
-  const joiningDateObj = joiningDate ? new Date(joiningFormatted) : null;
-
-  // Get current timestamp for uniqueness
-  const timestamp = Date.now().toString().slice(-4);
-  const random = Math.random().toString(36).substring(2, 6).toUpperCase();
-
-  // Replace placeholders in format
-  let generatedId = format;
-
-  // Replace prefix
-  generatedId = generatedId.replace(/prefix/g, prefix || "EMP");
-
-  // Replace year (joining or current)
-  if (generatedId.includes("year")) {
-    const year = joiningDateObj
-      ? joiningDateObj.getFullYear()
-      : new Date().getFullYear();
-    generatedId = generatedId.replace(/year/g, year);
-  }
-
-  // Replace month (from joining date or DOB or current)
-  if (generatedId.includes("month")) {
-    let month;
-    if (generatedId.includes("dob_month") && dobDate) {
-      month = String(dobDate.getMonth() + 1).padStart(2, "0");
-      generatedId = generatedId.replace(/dob_month/g, month);
-    } else if (generatedId.includes("joining_month") && joiningDateObj) {
-      month = String(joiningDateObj.getMonth() + 1).padStart(2, "0");
-      generatedId = generatedId.replace(/joining_month/g, month);
-    } else {
-      month = String(new Date().getMonth() + 1).padStart(2, "0");
-      generatedId = generatedId.replace(/month/g, month);
+  const generateEmployeeIdWithOptions = (dob, joiningDate, prefix, format) => {
+    if (
+      (format !== "manual" && (!dob || !joiningDate)) ||
+      format === "manual"
+    ) {
+      return "";
     }
-  }
 
-  // Replace day (from DOB or joining date or current)
-  if (generatedId.includes("day")) {
-    let day;
-    if (generatedId.includes("dob_day") && dobDate) {
-      day = String(dobDate.getDate()).padStart(2, "0");
-      generatedId = generatedId.replace(/dob_day/g, day);
-    } else if (generatedId.includes("joining_day") && joiningDateObj) {
-      day = String(joiningDateObj.getDate()).padStart(2, "0");
-      generatedId = generatedId.replace(/joining_day/g, day);
-    } else {
-      day = String(new Date().getDate()).padStart(2, "0");
-      generatedId = generatedId.replace(/day/g, day);
+    let dobFormatted = dob;
+    let joiningFormatted = joiningDate;
+
+    if (dob && dob.match(/^\d{2}\/\d{2}\/\d{4}$/)) {
+      const [day, month, year] = dob.split("/");
+      dobFormatted = `${year}-${month}-${day}`;
     }
-  }
 
-  // Replace DOB day+month (DDMM)
-  if (generatedId.includes("dob_ddmm") && dobDate) {
-    const dobDay = String(dobDate.getDate()).padStart(2, "0");
-    const dobMonth = String(dobDate.getMonth() + 1).padStart(2, "0");
-    generatedId = generatedId.replace(/dob_ddmm/g, `${dobDay}${dobMonth}`);
-  }
-
-  // Replace timestamp
-  if (generatedId.includes("timestamp")) {
-    generatedId = generatedId.replace(/timestamp/g, timestamp);
-  }
-
-  // Replace random
-  if (generatedId.includes("random")) {
-    generatedId = generatedId.replace(/random/g, random);
-  }
-
-  // Replace sequence (you can implement DB check for uniqueness)
-  if (generatedId.includes("sequence")) {
-    generatedId = generatedId.replace(/sequence/g, "001");
-  }
-
-  generatedId = generatedId.replace(/\+/g, "-");
-
-  return generatedId;
-};
-
-// Add useEffect for preview generation
-useEffect(() => {
-  if (idGenerationMethod === "auto" && watchDob && watchJoiningDate) {
-    const preview = generateEmployeeIdWithOptions(
-      watchDob,
-      watchJoiningDate,
-      idPrefix,
-      idFormat === "custom" ? customFormat : idFormat,
-    );
-    setGeneratedPreview(preview);
-    setValue("employee_id", preview);
-  } else if (idGenerationMethod === "manual") {
-    setValue("employee_id", manualEmployeeId);
-  }
-}, [
-  idGenerationMethod,
-  idPrefix,
-  idFormat,
-  customFormat,
-  watchDob,
-  watchJoiningDate,
-  manualEmployeeId,
-  setValue,
-]);
-
-// When manual ID changes
-useEffect(() => {
-  if (idGenerationMethod === "manual") {
-    setValue("employee_id", manualEmployeeId);
-  }
-}, [manualEmployeeId, idGenerationMethod, setValue]);
-
-// Initialize the manualEmployeeId with current employee_id when editing
-useEffect(() => {
-  if (currentEmployee && formInitialized) {
-    if (currentEmployee.employee_id) {
-      setManualEmployeeId(currentEmployee.employee_id);
-      setValue("employee_id", currentEmployee.employee_id);
+    if (joiningDate && joiningDate.match(/^\d{2}\/\d{2}\/\d{4}$/)) {
+      const [day, month, year] = joiningDate.split("/");
+      joiningFormatted = `${year}-${month}-${day}`;
     }
-  }
-}, [currentEmployee, formInitialized, setValue]);
 
-  // Add these handler functions after the existing handlers
+    const dobDate = dob ? new Date(dobFormatted) : null;
+    const joiningDateObj = joiningDate ? new Date(joiningFormatted) : null;
+
+    const timestamp = Date.now().toString().slice(-4);
+    const random = Math.random().toString(36).substring(2, 6).toUpperCase();
+
+    let generatedId = format;
+
+    generatedId = generatedId.replace(/prefix/g, prefix || "EMP");
+
+    if (generatedId.includes("year")) {
+      const year = joiningDateObj
+        ? joiningDateObj.getFullYear()
+        : new Date().getFullYear();
+      generatedId = generatedId.replace(/year/g, year);
+    }
+
+    if (generatedId.includes("month")) {
+      let month;
+      if (generatedId.includes("dob_month") && dobDate) {
+        month = String(dobDate.getMonth() + 1).padStart(2, "0");
+        generatedId = generatedId.replace(/dob_month/g, month);
+      } else if (generatedId.includes("joining_month") && joiningDateObj) {
+        month = String(joiningDateObj.getMonth() + 1).padStart(2, "0");
+        generatedId = generatedId.replace(/joining_month/g, month);
+      } else {
+        month = String(new Date().getMonth() + 1).padStart(2, "0");
+        generatedId = generatedId.replace(/month/g, month);
+      }
+    }
+
+    if (generatedId.includes("day")) {
+      let day;
+      if (generatedId.includes("dob_day") && dobDate) {
+        day = String(dobDate.getDate()).padStart(2, "0");
+        generatedId = generatedId.replace(/dob_day/g, day);
+      } else if (generatedId.includes("joining_day") && joiningDateObj) {
+        day = String(joiningDateObj.getDate()).padStart(2, "0");
+        generatedId = generatedId.replace(/joining_day/g, day);
+      } else {
+        day = String(new Date().getDate()).padStart(2, "0");
+        generatedId = generatedId.replace(/day/g, day);
+      }
+    }
+
+    if (generatedId.includes("dob_ddmm") && dobDate) {
+      const dobDay = String(dobDate.getDate()).padStart(2, "0");
+      const dobMonth = String(dobDate.getMonth() + 1).padStart(2, "0");
+      generatedId = generatedId.replace(/dob_ddmm/g, `${dobDay}${dobMonth}`);
+    }
+
+    if (generatedId.includes("timestamp")) {
+      generatedId = generatedId.replace(/timestamp/g, timestamp);
+    }
+
+    if (generatedId.includes("random")) {
+      generatedId = generatedId.replace(/random/g, random);
+    }
+
+    if (generatedId.includes("sequence")) {
+      generatedId = generatedId.replace(/sequence/g, "001");
+    }
+
+    generatedId = generatedId.replace(/\+/g, "-");
+
+    return generatedId;
+  };
+
+  useEffect(() => {
+    if (idGenerationMethod === "auto" && watchDob && watchJoiningDate) {
+      const preview = generateEmployeeIdWithOptions(
+        watchDob,
+        watchJoiningDate,
+        idPrefix,
+        idFormat === "custom" ? customFormat : idFormat,
+      );
+      setGeneratedPreview(preview);
+      setValue("employee_id", preview);
+    } else if (idGenerationMethod === "manual") {
+      setValue("employee_id", manualEmployeeId);
+    }
+  }, [
+    idGenerationMethod,
+    idPrefix,
+    idFormat,
+    customFormat,
+    watchDob,
+    watchJoiningDate,
+    manualEmployeeId,
+    setValue,
+  ]);
+
+  useEffect(() => {
+    if (idGenerationMethod === "manual") {
+      setValue("employee_id", manualEmployeeId);
+    }
+  }, [manualEmployeeId, idGenerationMethod, setValue]);
+
+  useEffect(() => {
+    if (currentEmployee && formInitialized) {
+      if (currentEmployee.employee_id) {
+        setManualEmployeeId(currentEmployee.employee_id);
+        setValue("employee_id", currentEmployee.employee_id);
+      }
+    }
+  }, [currentEmployee, formInitialized, setValue]);
+
   const handleAddDepartment = async (data) => {
     setDepartmentModalLoading(true);
     try {
@@ -406,9 +395,7 @@ useEffect(() => {
       if (addDepartment.fulfilled.match(result)) {
         showToast("Department added successfully", "success");
         setIsDepartmentModalOpen(false);
-        // Refresh departments list
         await dispatch(fetchDepartments());
-        // Auto-select the newly created department
         if (result.payload?.id) {
           setValue("department_id", String(result.payload.id));
         }
@@ -429,9 +416,7 @@ useEffect(() => {
       if (addDesignation.fulfilled.match(result)) {
         showToast("Designation added successfully", "success");
         setIsDesignationModalOpen(false);
-        // Refresh designations list
         await dispatch(fetchDesignations());
-        // Auto-select the newly created designation
         if (result.payload?.id) {
           setValue("designation_id", String(result.payload.id));
         }
@@ -445,7 +430,6 @@ useEffect(() => {
     }
   };
 
-  // Fetch companies when organization changes
   useEffect(() => {
     if (watchOrganizationId) {
       const org = organizations.find(
@@ -465,8 +449,6 @@ useEffect(() => {
     }
   }, [watchOrganizationId, organizations, dispatch, setValue]);
 
-  // Get company details when company_id changes
-  // Get company details when company_id changes or when companies are loaded
   useEffect(() => {
     if (watchCompanyId && companies.length > 0) {
       const company = companies.find(
@@ -475,14 +457,12 @@ useEffect(() => {
       console.log("Company details from watch:", company);
       setSelectedCompanyDetails(company || null);
 
-      // Clear labor fields if company has freezone trade license
       if (company && company.raw?.trade_license === "freezone") {
         setValue("labor_number", "");
         setValue("labor_issued_date", "");
         setValue("labor_expiry_date", "");
       }
     } else if (watchCompanyId && companies.length === 0) {
-      // If companies not loaded yet but we have a company ID, set it from existing data
       if (currentEmployee?.user?.company) {
         console.log(
           "Setting company from currentEmployee:",
@@ -495,7 +475,6 @@ useEffect(() => {
     }
   }, [watchCompanyId, companies, setValue, currentEmployee]);
 
-  // After companies are loaded, set the selected company details from currentEmployee
   useEffect(() => {
     if (
       companies.length > 0 &&
@@ -520,7 +499,6 @@ useEffect(() => {
     }
   }, [companies, currentEmployee, selectedCompanyDetails, formInitialized]);
 
-  // Fetch employee data
   useEffect(() => {
     if (id && !formInitialized) {
       dispatch(fetchEmployeeById(id)).then(() => {
@@ -529,7 +507,6 @@ useEffect(() => {
     }
   }, [dispatch, id, formInitialized]);
 
-  // Convert date from YYYY-MM-DD to DD/MM/YYYY for display
   const convertToDisplayDate = (dateString) => {
     if (!dateString) return "";
     if (dateString === "0000-00-00") return "";
@@ -540,20 +517,17 @@ useEffect(() => {
     return dateString;
   };
 
-  // Set form values when employee data is loaded
   useEffect(() => {
     if (currentEmployee && !formInitialized) {
       setIsInitializing(true);
       console.log("Initializing form with employee data:", currentEmployee);
 
-      // Basic Info
       setValue("first_name", currentEmployee.first_name || "");
       setValue("last_name", currentEmployee.last_name || "");
 
       const orgId = currentEmployee.user?.organization_id || "";
       setValue("organization_id", orgId);
 
-      // Get company ID from user object
       const companyId =
         currentEmployee.user?.company?.id ||
         currentEmployee.user?.company_id ||
@@ -579,7 +553,6 @@ useEffect(() => {
         currentEmployee.is_skilled === 1 || currentEmployee.is_skilled === true,
       );
 
-      // Handle special days
       try {
         let parsedSpecialDays = [];
         if (currentEmployee.special_days) {
@@ -606,7 +579,6 @@ useEffect(() => {
         setValue("special_days", [{ name: "", date: "" }]);
       }
 
-      // Passport details
       setValue("passport_full_name", currentEmployee.passport_full_name || "");
       setValue("passport_number", currentEmployee.passport_number || "");
       setValue(
@@ -626,7 +598,6 @@ useEffect(() => {
       );
       setValue("place_of_birth", currentEmployee.place_of_birth || "");
 
-      // Visa & Labor & EID
       setValue("visa_number", currentEmployee.visa_number || "");
       setValue("visa_type", currentEmployee.visa_type || "");
       setValue(
@@ -656,7 +627,6 @@ useEffect(() => {
         convertToDisplayDate(currentEmployee.eid_expiry_date),
       );
 
-      // Contact & Others
       setValue("dependents", currentEmployee.dependents || 0);
       setValue("company_email", currentEmployee.company_email || "");
       setValue(
@@ -672,7 +642,6 @@ useEffect(() => {
       );
       setValue("role", currentEmployee.user?.role_id || "");
 
-      // Set selected company details for trade license display
       if (companyId && companies.length > 0) {
         const company = companies.find(
           (comp) => comp.id === parseInt(companyId),
@@ -683,7 +652,6 @@ useEffect(() => {
         }
       }
 
-      // Set existing documents
       const docs = {};
       const docFields = [
         "avatar",
@@ -708,6 +676,18 @@ useEffect(() => {
       });
       setExistingDocuments(docs);
 
+      // Handle additional documents
+      if (currentEmployee.additional_documents && Array.isArray(currentEmployee.additional_documents)) {
+        setExistingAdditionalDocuments(currentEmployee.additional_documents);
+        setAdditionalDocuments(currentEmployee.additional_documents.map(doc => ({
+          name: doc.document_name,
+          filename: doc.filename || doc.document_name,
+          isExisting: true,
+          preview: null,
+          file: null
+        })));
+      }
+
       setFormInitialized(true);
       setTimeout(() => {
         setIsInitializing(false);
@@ -715,7 +695,6 @@ useEffect(() => {
     }
   }, [currentEmployee, setValue, formInitialized, companies]);
 
-  // Updated steps to match AddEmployee (4 steps)
   const steps = [
     { number: 1, title: "Basic Info", icon: "fas fa-user-circle" },
     { number: 2, title: "Passport", icon: "fas fa-passport" },
@@ -724,12 +703,12 @@ useEffect(() => {
   ];
 
   const userTypeOptions = [
-  { value: "employee", label: "Employee" },
-  { value: "admin", label: "Admin" },
-  { value: "hr", label: "HR" },
-  { value: "manager", label: "Manager" },
-  { value: "team-lead", label: "Team Lead" },
-];
+    { value: "employee", label: "Employee" },
+    { value: "admin", label: "Admin" },
+    { value: "hr", label: "HR" },
+    { value: "manager", label: "Manager" },
+    { value: "team-lead", label: "Team Lead" },
+  ];
   const genderOptions = [
     { value: "male", label: "Male" },
     { value: "female", label: "Female" },
@@ -763,7 +742,6 @@ useEffect(() => {
           "dob",
           "joining_date",
         ];
-        // Only add company_id to validation if multi_company is "Yes"
         if (selectedOrgDetails?.multi_company === "Yes") {
           fields.push("company_id");
         }
@@ -774,7 +752,6 @@ useEffect(() => {
       case 2: {
         const laborFields = [];
 
-        // Only require labor fields if company trade license is "mainland"
         if (selectedCompanyDetails?.raw?.trade_license === "mainland") {
           laborFields.push(
             "labor_number",
@@ -801,7 +778,6 @@ useEffect(() => {
     }
   };
 
-  // Handle file change - matching AddEmployee pattern
   const handleFileChange = async (fieldKey, file) => {
     if (!file) return;
 
@@ -812,7 +788,6 @@ useEffect(() => {
       return;
     }
 
-    // Create preview
     if (file.type.startsWith("image/")) {
       const reader = new FileReader();
       reader.onload = (e) => {
@@ -826,7 +801,6 @@ useEffect(() => {
       setDocumentPreviews((prev) => ({ ...prev, [fieldKey]: "pdf" }));
     }
 
-    // Upload to temp storage
     setUploadingFiles((prev) => ({ ...prev, [fieldKey]: true }));
     try {
       const formData = new FormData();
@@ -871,6 +845,57 @@ useEffect(() => {
     setRemovedDocuments({ ...removedDocuments, [fieldKey]: false });
   };
 
+  const handleAdditionalDocumentUpload = async (file) => {
+    if (!file) return;
+
+    const fileSize = file.size / 1024 / 1024;
+    if (fileSize > 5) {
+      showToast("File must be less than 5MB", "error");
+      return;
+    }
+
+    // Create preview
+    if (file.type.startsWith("image/")) {
+      const reader = new FileReader();
+      reader.onload = (e) => {
+        setAdditionalDocuments(prev => [...prev, {
+          name: file.name,
+          file: file,
+          preview: e.target.result,
+          isExisting: false,
+          filename: file.name
+        }]);
+      };
+      reader.readAsDataURL(file);
+    } else {
+      setAdditionalDocuments(prev => [...prev, {
+        name: file.name,
+        file: file,
+        preview: "pdf",
+        isExisting: false,
+        filename: file.name
+      }]);
+    }
+
+    showToast(`Document "${file.name}" added`, "success");
+  };
+
+  const handleRemoveAdditionalDocument = (index, isExisting) => {
+    if (isExisting) {
+      // Remove from existing list and track for removal
+      const docToRemove = existingAdditionalDocuments[index];
+      setExistingAdditionalDocuments(prev => prev.filter((_, i) => i !== index));
+      setAdditionalDocuments(prev => prev.filter((_, i) => i !== index));
+      setRemovedDocuments(prev => ({
+        ...prev,
+        [`additional_document_${docToRemove.document_name || index}`]: true
+      }));
+    } else {
+      // Remove from new documents list
+      setAdditionalDocuments(prev => prev.filter((_, i) => i !== index));
+    }
+  };
+
   const handleNext = async () => {
     const fieldsToValidate = getStepFields(currentStep);
     const isValid = await trigger(fieldsToValidate);
@@ -911,7 +936,6 @@ useEffect(() => {
     }
   };
 
-  // Convert date from DD/MM/YYYY to YYYY-MM-DD for backend
   const convertDateToBackend = (dateString) => {
     if (!dateString) return "";
     if (/^\d{4}-\d{2}-\d{2}$/.test(dateString)) return dateString;
@@ -923,235 +947,256 @@ useEffect(() => {
   };
 
   const onSubmit = async (data) => {
-  setLoading(true);
+    setLoading(true);
 
-  // IMPORTANT: Get the employee_id from the form data
-  // The employee_id might be in data.employee_id or from manualEmployeeId state
-  const employeeIdValue = data.employee_id || manualEmployeeId;
-  
-  if (!employeeIdValue) {
-    showToast("Employee ID is required", "error");
-    setLoading(false);
-    return;
-  }
-
-  const formData = new FormData();
-
-  // Basic fields - MAKE SURE employee_id is included
-  formData.append("first_name", data.first_name);
-  formData.append("last_name", data.last_name || "");
-  formData.append("employee_id", employeeIdValue); // <-- THIS IS THE KEY FIX
-  formData.append("organization_id", parseInt(data.organization_id));
-
-  // Handle company based on multi_company setting
-  if (selectedOrgDetails?.multi_company === "Yes") {
-    if (!data.company_id) {
-      showToast("Please select a company", "error");
+    const employeeIdValue = data.employee_id || manualEmployeeId;
+    
+    if (!employeeIdValue) {
+      showToast("Employee ID is required", "error");
       setLoading(false);
       return;
     }
-    formData.append("company_id", parseInt(data.company_id));
-  } else {
-    formData.append("company_id", "");
-  }
 
-  formData.append("type", data.type);
-  formData.append("gender", data.gender || "");
-  formData.append("nationality", data.nationality || "");
-  formData.append("marital_status", data.marital_status || "");
-  if (data.is_skilled !== undefined) {
-    formData.append("is_skilled", data.is_skilled ? 1 : 0);
-  }
+    const formData = new FormData();
 
-  if (data.designation_id)
-    formData.append("designation_id", parseInt(data.designation_id));
-  if (data.department_id)
-    formData.append("department_id", parseInt(data.department_id));
+    // Basic fields
+    formData.append("first_name", data.first_name);
+    formData.append("last_name", data.last_name || "");
+    formData.append("employee_id", employeeIdValue);
+    formData.append("organization_id", parseInt(data.organization_id));
 
-  // Convert dates to backend format
-  const dob = convertDateToBackend(data.dob);
-  const joiningDate = convertDateToBackend(data.joining_date);
-  if (dob) formData.append("dob", dob);
-  if (joiningDate) formData.append("joining_date", joiningDate);
-
-  // Special days - Send as arrays
-  if (data.special_days && data.special_days.length > 0) {
-    const validSpecialDays = data.special_days.filter(
-      (day) => day.name && day.name.trim() !== "" && day.date,
-    );
-    if (validSpecialDays.length > 0) {
-      const specialDaysName = validSpecialDays.map((day) => day.name.trim());
-      const specialDaysDate = validSpecialDays.map((day) =>
-        convertDateToBackend(day.date),
-      );
-
-      specialDaysName.forEach((name) =>
-        formData.append("special_days_name[]", name),
-      );
-      specialDaysDate.forEach((date) =>
-        formData.append("special_days_date[]", date),
-      );
-    }
-  }
-
-  // Passport fields with date conversion
-  if (data.passport_full_name)
-    formData.append("passport_full_name", data.passport_full_name);
-  if (data.passport_number)
-    formData.append("passport_number", data.passport_number);
-  if (data.passport_issued_date)
-    formData.append(
-      "passport_issued_date",
-      convertDateToBackend(data.passport_issued_date),
-    );
-  if (data.passport_expiry_date)
-    formData.append(
-      "passport_expiry_date",
-      convertDateToBackend(data.passport_expiry_date),
-    );
-  if (data.passport_issued_from)
-    formData.append("passport_issued_from", data.passport_issued_from);
-  if (data.place_of_birth)
-    formData.append("place_of_birth", data.place_of_birth);
-  if (data.father_name) formData.append("father_name", data.father_name);
-  if (data.mother_name) formData.append("mother_name", data.mother_name);
-  if (data.address) formData.append("address", data.address);
-
-  // Visa & Labor & EID with date conversion
-  if (data.visa_number) formData.append("visa_number", data.visa_number);
-  if (data.visa_type) formData.append("visa_type", data.visa_type);
-  if (data.visa_issued_date)
-    formData.append(
-      "visa_issued_date",
-      convertDateToBackend(data.visa_issued_date),
-    );
-  if (data.visa_expiry_date)
-    formData.append(
-      "visa_expiry_date",
-      convertDateToBackend(data.visa_expiry_date),
-    );
-
-  // Only send labor data if company trade license is "mainland"
-  if (selectedCompanyDetails?.raw?.trade_license === "mainland") {
-    if (data.labor_number) formData.append("labor_number", data.labor_number);
-    if (data.labor_issued_date)
-      formData.append(
-        "labor_issued_date",
-        convertDateToBackend(data.labor_issued_date),
-      );
-    if (data.labor_expiry_date)
-      formData.append(
-        "labor_expiry_date",
-        convertDateToBackend(data.labor_expiry_date),
-      );
-  } else {
-    formData.append("labor_number", "");
-    formData.append("labor_issued_date", "");
-    formData.append("labor_expiry_date", "");
-  }
-
-  if (data.eid_number) formData.append("eid_number", data.eid_number);
-  if (data.eid_issued_date)
-    formData.append(
-      "eid_issued_date",
-      convertDateToBackend(data.eid_issued_date),
-    );
-  if (data.eid_expiry_date)
-    formData.append(
-      "eid_expiry_date",
-      convertDateToBackend(data.eid_expiry_date),
-    );
-
-  // Contact
-  if (data.dependents) formData.append("dependents", String(data.dependents));
-  if (data.company_email)
-    formData.append("company_email", data.company_email);
-  if (data.company_mobile_number)
-    formData.append("company_mobile_number", data.company_mobile_number);
-  if (data.personal_number)
-    formData.append("personal_number", data.personal_number);
-  if (data.personal_email)
-    formData.append("personal_email", data.personal_email);
-  if (data.other_number) formData.append("other_number", data.other_number);
-  if (data.home_country_number)
-    formData.append("home_country_number", data.home_country_number);
-  if (data.role) formData.append("role_id", data.role);
-
-  // Avatar - send temp path if new file uploaded
-  if (documents.avatar) {
-    formData.append("avatar", documents.avatar);
-  }
-  if (removedDocuments.avatar && existingDocuments.avatar) {
-    formData.append("remove_avatar", "true");
-  }
-
-  // Document fields - send temp paths
-  const documentFields = [
-    "passport_1st_page",
-    "passport_2nd_page",
-    "passport_outer_page",
-    "passport_id_page",
-    "visa_page",
-    "labor_card",
-    "labor_contract",
-    "eid_1st_page",
-    "eid_2nd_page",
-    "educational_1st_page",
-    "educational_2nd_page",
-    "home_country_id_proof",
-  ];
-
-  documentFields.forEach((field) => {
-    if (documents[field]) {
-      formData.append(field, documents[field]);
-    }
-    if (removedDocuments[field] && existingDocuments[field]) {
-      formData.append(`remove_${field}`, "true");
-    }
-  });
-
-  // Add _method for PUT
-  formData.append("_method", "PUT");
-
-  // Debug log - verify employee_id is included
-  console.log("=== FINAL FORM DATA TO BE SENT ===");
-  for (let pair of formData.entries()) {
-    console.log(`${pair[0]}: ${pair[1]}`);
-  }
-
-  // Make sure employee_id is in the form data before submitting
-  if (!formData.has("employee_id")) {
-    console.error("ERROR: employee_id is missing from form data!");
-    showToast("Employee ID is required", "error");
-    setLoading(false);
-    return;
-  }
-
-  const result = await dispatch(
-    updateEmployee({ id: parseInt(id), data: formData }),
-  );
-  setLoading(false);
-
-  if (updateEmployee.fulfilled.match(result)) {
-    showToast(`✓ Employee updated successfully!`, "success");
-    setTimeout(() => navigate("/admin/employees"), 1200);
-  } else {
-    const errorPayload = result.payload;
-    if (errorPayload && errorPayload.errors) {
-      const errorMessages = Object.entries(errorPayload.errors).map(
-        ([field, messages]) =>
-          `${field}: ${Array.isArray(messages) ? messages[0] : messages}`,
-      );
-      showToast(errorMessages.join("\n"), "error");
-    } else if (typeof errorPayload === "string") {
-      showToast(errorPayload, "error");
+    if (selectedOrgDetails?.multi_company === "Yes") {
+      if (!data.company_id) {
+        showToast("Please select a company", "error");
+        setLoading(false);
+        return;
+      }
+      formData.append("company_id", parseInt(data.company_id));
     } else {
-      showToast("Failed to update employee", "error");
+      formData.append("company_id", "");
     }
-  }
-};
 
-  // Validation rules
+    formData.append("type", data.type);
+    formData.append("gender", data.gender || "");
+    formData.append("nationality", data.nationality || "");
+    formData.append("marital_status", data.marital_status || "");
+    if (data.is_skilled !== undefined) {
+      formData.append("is_skilled", data.is_skilled ? 1 : 0);
+    }
+
+    if (data.designation_id)
+      formData.append("designation_id", parseInt(data.designation_id));
+    if (data.department_id)
+      formData.append("department_id", parseInt(data.department_id));
+
+    const dob = convertDateToBackend(data.dob);
+    const joiningDate = convertDateToBackend(data.joining_date);
+    if (dob) formData.append("dob", dob);
+    if (joiningDate) formData.append("joining_date", joiningDate);
+
+    // Special days
+    if (data.special_days && data.special_days.length > 0) {
+      const validSpecialDays = data.special_days.filter(
+        (day) => day.name && day.name.trim() !== "" && day.date,
+      );
+      if (validSpecialDays.length > 0) {
+        const specialDaysName = validSpecialDays.map((day) => day.name.trim());
+        const specialDaysDate = validSpecialDays.map((day) =>
+          convertDateToBackend(day.date),
+        );
+
+        specialDaysName.forEach((name) =>
+          formData.append("special_days_name[]", name),
+        );
+        specialDaysDate.forEach((date) =>
+          formData.append("special_days_date[]", date),
+        );
+      }
+    }
+
+    // Passport fields
+    if (data.passport_full_name)
+      formData.append("passport_full_name", data.passport_full_name);
+    if (data.passport_number)
+      formData.append("passport_number", data.passport_number);
+    if (data.passport_issued_date)
+      formData.append(
+        "passport_issued_date",
+        convertDateToBackend(data.passport_issued_date),
+      );
+    if (data.passport_expiry_date)
+      formData.append(
+        "passport_expiry_date",
+        convertDateToBackend(data.passport_expiry_date),
+      );
+    if (data.passport_issued_from)
+      formData.append("passport_issued_from", data.passport_issued_from);
+    if (data.place_of_birth)
+      formData.append("place_of_birth", data.place_of_birth);
+    if (data.father_name) formData.append("father_name", data.father_name);
+    if (data.mother_name) formData.append("mother_name", data.mother_name);
+    if (data.address) formData.append("address", data.address);
+
+    // Visa & Labor & EID
+    if (data.visa_number) formData.append("visa_number", data.visa_number);
+    if (data.visa_type) formData.append("visa_type", data.visa_type);
+    if (data.visa_issued_date)
+      formData.append(
+        "visa_issued_date",
+        convertDateToBackend(data.visa_issued_date),
+      );
+    if (data.visa_expiry_date)
+      formData.append(
+        "visa_expiry_date",
+        convertDateToBackend(data.visa_expiry_date),
+      );
+
+    if (selectedCompanyDetails?.raw?.trade_license === "mainland") {
+      if (data.labor_number) formData.append("labor_number", data.labor_number);
+      if (data.labor_issued_date)
+        formData.append(
+          "labor_issued_date",
+          convertDateToBackend(data.labor_issued_date),
+        );
+      if (data.labor_expiry_date)
+        formData.append(
+          "labor_expiry_date",
+          convertDateToBackend(data.labor_expiry_date),
+        );
+    } else {
+      formData.append("labor_number", "");
+      formData.append("labor_issued_date", "");
+      formData.append("labor_expiry_date", "");
+    }
+
+    if (data.eid_number) formData.append("eid_number", data.eid_number);
+    if (data.eid_issued_date)
+      formData.append(
+        "eid_issued_date",
+        convertDateToBackend(data.eid_issued_date),
+      );
+    if (data.eid_expiry_date)
+      formData.append(
+        "eid_expiry_date",
+        convertDateToBackend(data.eid_expiry_date),
+      );
+
+    // Contact
+    if (data.dependents) formData.append("dependents", String(data.dependents));
+    if (data.company_email)
+      formData.append("company_email", data.company_email);
+    if (data.company_mobile_number)
+      formData.append("company_mobile_number", data.company_mobile_number);
+    if (data.personal_number)
+      formData.append("personal_number", data.personal_number);
+    if (data.personal_email)
+      formData.append("personal_email", data.personal_email);
+    if (data.other_number) formData.append("other_number", data.other_number);
+    if (data.home_country_number)
+      formData.append("home_country_number", data.home_country_number);
+    if (data.role) formData.append("role_id", data.role);
+
+    // Avatar
+    if (documents.avatar) {
+      formData.append("avatar", documents.avatar);
+    }
+    if (removedDocuments.avatar && existingDocuments.avatar) {
+      formData.append("remove_avatar", "true");
+    }
+
+    // Document fields
+    const documentFields = [
+      "passport_1st_page",
+      "passport_2nd_page",
+      "passport_outer_page",
+      "passport_id_page",
+      "visa_page",
+      "labor_card",
+      "labor_contract",
+      "eid_1st_page",
+      "eid_2nd_page",
+      "educational_1st_page",
+      "educational_2nd_page",
+      "home_country_id_proof",
+    ];
+
+    documentFields.forEach((field) => {
+      if (documents[field]) {
+        formData.append(field, documents[field]);
+      }
+      if (removedDocuments[field] && existingDocuments[field]) {
+        formData.append(`remove_${field}`, "true");
+      }
+    });
+
+    // ============ ADDITIONAL DOCUMENTS ============
+    // First, track removed existing additional documents
+    const removedAdditionalDocKeys = Object.keys(removedDocuments).filter(key => 
+      key.startsWith('additional_document_') && removedDocuments[key]
+    );
+    removedAdditionalDocKeys.forEach((key, index) => {
+      formData.append(`remove_additional_document_${index}`, 'true');
+    });
+
+    // Then send new additional documents
+    const newAdditionalDocs = additionalDocuments.filter(doc => !doc.isExisting);
+    if (newAdditionalDocs.length > 0) {
+      newAdditionalDocs.forEach((doc, index) => {
+        if (doc.file) {
+          formData.append(`additional_documents[${index}][file]`, doc.file);
+        }
+        if (doc.name) {
+          formData.append(`additional_documents[${index}][document_name]`, doc.name);
+        }
+        if (doc.filename) {
+          formData.append(`additional_documents[${index}][filename]`, doc.filename);
+        }
+      });
+    }
+
+    // Add _method for PUT
+    formData.append("_method", "PUT");
+
+    console.log("=== FINAL FORM DATA TO BE SENT ===");
+    for (let pair of formData.entries()) {
+      if (pair[1] instanceof File) {
+        console.log(`${pair[0]}: [FILE] ${pair[1].name} (${(pair[1].size / 1024).toFixed(2)} KB)`);
+      } else {
+        console.log(`${pair[0]}: ${pair[1]}`);
+      }
+    }
+
+    if (!formData.has("employee_id")) {
+      console.error("ERROR: employee_id is missing from form data!");
+      showToast("Employee ID is required", "error");
+      setLoading(false);
+      return;
+    }
+
+    const result = await dispatch(
+      updateEmployee({ id: parseInt(id), data: formData }),
+    );
+    setLoading(false);
+
+    if (updateEmployee.fulfilled.match(result)) {
+      showToast(`✓ Employee updated successfully!`, "success");
+      setTimeout(() => navigate("/admin/employees"), 1200);
+    } else {
+      const errorPayload = result.payload;
+      if (errorPayload && errorPayload.errors) {
+        const errorMessages = Object.entries(errorPayload.errors).map(
+          ([field, messages]) =>
+            `${field}: ${Array.isArray(messages) ? messages[0] : messages}`,
+        );
+        showToast(errorMessages.join("\n"), "error");
+      } else if (typeof errorPayload === "string") {
+        showToast(errorPayload, "error");
+      } else {
+        showToast("Failed to update employee", "error");
+      }
+    }
+  };
+
   const validationRules = {
     first_name: {
       required: "First name is required",
@@ -1179,17 +1224,12 @@ useEffect(() => {
     },
   };
 
-  // Date validation functions
   const validateIssueDate = (issueDate, expiryDate, fieldName) => {
-    // Skip validation during initial form load
     if (isInitializing) return true;
-
     if (!issueDate) return true;
 
-    // Parse the date string correctly
     let issue;
     try {
-      // Handle DD/MM/YYYY format
       if (
         typeof issueDate === "string" &&
         issueDate.match(/^\d{2}\/\d{2}\/\d{4}$/)
@@ -1200,10 +1240,9 @@ useEffect(() => {
         issue = new Date(issueDate);
       }
 
-      // Check if date is valid
       if (isNaN(issue.getTime())) {
         console.warn(`Invalid issue date: ${issueDate}`);
-        return true; // Skip validation for invalid dates during initialization
+        return true;
       }
     } catch (e) {
       console.warn(`Error parsing issue date: ${issueDate}`, e);
@@ -1244,20 +1283,11 @@ useEffect(() => {
   };
 
   const validateExpiryDate = (expiryDate, issueDate, fieldName) => {
-    console.log(`Validating ${fieldName}:`, {
-      expiryDate,
-      issueDate,
-      isInitializing,
-    });
-    // Skip validation during initial form load
     if (isInitializing) return true;
-
     if (!expiryDate) return true;
 
-    // Parse the date string correctly
     let expiry;
     try {
-      // Handle DD/MM/YYYY format
       if (
         typeof expiryDate === "string" &&
         expiryDate.match(/^\d{2}\/\d{2}\/\d{4}$/)
@@ -1268,10 +1298,9 @@ useEffect(() => {
         expiry = new Date(expiryDate);
       }
 
-      // Check if date is valid
       if (isNaN(expiry.getTime())) {
         console.warn(`Invalid expiry date: ${expiryDate}`);
-        return true; // Skip validation for invalid dates during initialization
+        return true;
       }
     } catch (e) {
       console.warn(`Error parsing expiry date: ${expiryDate}`, e);
@@ -1280,11 +1309,8 @@ useEffect(() => {
 
     const today = new Date();
     today.setHours(0, 0, 0, 0);
-
-    // Compare dates (reset time part for accurate comparison)
     expiry.setHours(0, 0, 0, 0);
 
-    // Parse issue date if provided
     if (issueDate) {
       let issue;
       try {
@@ -1337,7 +1363,6 @@ useEffect(() => {
           <span className="text-xs text-gray-400 ml-2">(Optional)</span>
         </label>
 
-        {/* Existing document */}
         {existingDoc && !isRemoved && !newFile && (
           <div className="mb-3 p-2 bg-gray-100 rounded-lg flex justify-between items-center">
             <span className="text-sm text-gray-600">
@@ -1363,7 +1388,6 @@ useEffect(() => {
           </div>
         )}
 
-        {/* File upload */}
         <div className="flex items-center gap-3 flex-wrap">
           <input
             type="file"
@@ -1400,7 +1424,6 @@ useEffect(() => {
           </span>
         </div>
 
-        {/* Preview */}
         {newFile && preview && preview !== "pdf" && (
           <div className="mt-3">
             <img
@@ -1472,7 +1495,7 @@ useEffect(() => {
         </p>
       </div>
 
-      {/* Step Indicator - 4 steps */}
+      {/* Step Indicator */}
       <div className="overflow-x-auto pb-2 mb-4 md:mb-8 -mx-4 px-4">
         <div className="flex gap-2 min-w-max">
           {steps.map((step, index) => (
@@ -1662,7 +1685,7 @@ useEffect(() => {
                     />
                   </div>
 
-                  {/* Show trade license info when company is selected */}
+                  {/* Show trade license info */}
                   {selectedCompanyDetails &&
                     selectedCompanyDetails.raw?.trade_license && (
                       <div className="md:col-span-2">
@@ -1790,6 +1813,7 @@ useEffect(() => {
                       )}
                     />
                   </div>
+
                   {/* User Type */}
                   <div>
                     <label className="block text-xs md:text-sm font-semibold text-gray-700 mb-1 md:mb-2">
@@ -1805,7 +1829,7 @@ useEffect(() => {
                           className="w-full px-3 md:px-4 py-2 md:py-3 bg-gray-50 border border-gray-200 rounded-lg"
                         >
                           {userTypeOptions.map((type) => (
-                            <option key={type} value={type}>
+                            <option key={type.value} value={type.value}>
                               {type.label}
                             </option>
                           ))}
@@ -1886,6 +1910,7 @@ useEffect(() => {
                     />
                   </div>
 
+                  {/* Role */}
                   <div>
                     <label className="block text-xs md:text-sm font-semibold text-gray-700 mb-1 md:mb-2">
                       Role <span className="text-red-500">*</span>
@@ -2000,198 +2025,154 @@ useEffect(() => {
                     </div>
                   </div>
 
-                  {/* Enhanced Employee ID Generation - Editable */}
-<div className="md:col-span-2">
-  <label className="block text-xs md:text-sm font-semibold text-gray-700 mb-2">
-    <i className="fas fa-id-card text-green-500 mr-1"></i>
-    Employee ID Generation{" "}
-    <span className="text-red-500">*</span>
-  </label>
+                  {/* Employee ID Generation */}
+                  <div className="md:col-span-2">
+                    <label className="block text-xs md:text-sm font-semibold text-gray-700 mb-2">
+                      <i className="fas fa-id-card text-green-500 mr-1"></i>
+                      Employee ID Generation{" "}
+                      <span className="text-red-500">*</span>
+                    </label>
 
-  {/* Generation Method Toggle */}
-  <div className="flex gap-4 mb-4">
-    <label className="flex items-center">
-      <input
-        type="radio"
-        checked={idGenerationMethod === "manual"}
-        onChange={() => setIdGenerationMethod("manual")}
-        className="mr-2 text-green-500 focus:ring-green-500"
-      />
-      <span className="text-sm text-gray-700">
-        Manual Entry
-      </span>
-    </label>
-    <label className="flex items-center">
-      <input
-        type="radio"
-        checked={idGenerationMethod === "auto"}
-        onChange={() => setIdGenerationMethod("auto")}
-        className="mr-2 text-green-500 focus:ring-green-500"
-      />
-      <span className="text-sm text-gray-700">
-        Auto-Generate
-      </span>
-    </label>
-  </div>
+                    <div className="flex gap-4 mb-4">
+                      <label className="flex items-center">
+                        <input
+                          type="radio"
+                          checked={idGenerationMethod === "manual"}
+                          onChange={() => setIdGenerationMethod("manual")}
+                          className="mr-2 text-green-500 focus:ring-green-500"
+                        />
+                        <span className="text-sm text-gray-700">
+                          Manual Entry
+                        </span>
+                      </label>
+                      <label className="flex items-center">
+                        <input
+                          type="radio"
+                          checked={idGenerationMethod === "auto"}
+                          onChange={() => setIdGenerationMethod("auto")}
+                          className="mr-2 text-green-500 focus:ring-green-500"
+                        />
+                        <span className="text-sm text-gray-700">
+                          Auto-Generate
+                        </span>
+                      </label>
+                    </div>
 
-  {idGenerationMethod === "manual" ? (
-    // Manual Entry
-    <div>
-      <input
-        type="text"
-        value={manualEmployeeId}
-        onChange={(e) => setManualEmployeeId(e.target.value.toUpperCase())}
-        placeholder="Enter Employee ID (e.g., EMP001, STAFF-001)"
-        className="w-full px-3 md:px-4 py-2 md:py-3 bg-gray-50 border border-gray-200 rounded-lg text-sm md:text-base text-gray-800 focus:outline-none focus:border-green-500 focus:ring-2 focus:ring-green-500/20"
-      />
-      <p className="text-xs text-gray-400 mt-1">
-        <i className="fas fa-info-circle mr-1"></i>
-        You can enter any unique ID format (e.g., EMP001, STAFF-2024-001)
-      </p>
-    </div>
-  ) : (
-    // Auto-Generation Options
-    <div className="space-y-4">
-      {/* Prefix */}
-      <div>
-        <label className="block text-xs font-semibold text-gray-700 mb-1">
-          Prefix
-        </label>
-        <input
-          type="text"
-          value={idPrefix}
-          onChange={(e) => setIdPrefix(e.target.value.toUpperCase())}
-          placeholder="e.g., EMP, STAFF, ENG"
-          className="w-full px-3 py-2 bg-gray-50 border border-gray-200 rounded-lg text-sm focus:outline-none focus:border-green-500"
-        />
-      </div>
+                    {idGenerationMethod === "manual" ? (
+                      <div>
+                        <input
+                          type="text"
+                          value={manualEmployeeId}
+                          onChange={(e) => setManualEmployeeId(e.target.value.toUpperCase())}
+                          placeholder="Enter Employee ID (e.g., EMP001, STAFF-001)"
+                          className="w-full px-3 md:px-4 py-2 md:py-3 bg-gray-50 border border-gray-200 rounded-lg text-sm md:text-base text-gray-800 focus:outline-none focus:border-green-500 focus:ring-2 focus:ring-green-500/20"
+                        />
+                        <p className="text-xs text-gray-400 mt-1">
+                          <i className="fas fa-info-circle mr-1"></i>
+                          You can enter any unique ID format (e.g., EMP001, STAFF-2024-001)
+                        </p>
+                      </div>
+                    ) : (
+                      <div className="space-y-4">
+                        <div>
+                          <label className="block text-xs font-semibold text-gray-700 mb-1">
+                            Prefix
+                          </label>
+                          <input
+                            type="text"
+                            value={idPrefix}
+                            onChange={(e) => setIdPrefix(e.target.value.toUpperCase())}
+                            placeholder="e.g., EMP, STAFF, ENG"
+                            className="w-full px-3 py-2 bg-gray-50 border border-gray-200 rounded-lg text-sm focus:outline-none focus:border-green-500"
+                          />
+                        </div>
 
-      {/* Format Selection */}
-      <div>
-        <label className="block text-xs font-semibold text-gray-700 mb-1">
-          ID Format
-        </label>
-        <select
-          value={idFormat}
-          onChange={(e) => setIdFormat(e.target.value)}
-          className="w-full px-3 py-2 bg-gray-50 border border-gray-200 rounded-lg text-sm focus:outline-none focus:border-green-500"
-        >
-          {formatOptions.map((option) => (
-            <option key={option.value} value={option.value}>
-              {option.label} - {option.description}
-            </option>
-          ))}
-        </select>
-      </div>
+                        <div>
+                          <label className="block text-xs font-semibold text-gray-700 mb-1">
+                            ID Format
+                          </label>
+                          <select
+                            value={idFormat}
+                            onChange={(e) => setIdFormat(e.target.value)}
+                            className="w-full px-3 py-2 bg-gray-50 border border-gray-200 rounded-lg text-sm focus:outline-none focus:border-green-500"
+                          >
+                            {formatOptions.map((option) => (
+                              <option key={option.value} value={option.value}>
+                                {option.label} - {option.description}
+                              </option>
+                            ))}
+                          </select>
+                        </div>
 
-      {/* Custom Format Builder */}
-      {idFormat === "custom" && (
-        <div>
-          <label className="block text-xs font-semibold text-gray-700 mb-1">
-            Custom Format Pattern
-          </label>
-          <input
-            type="text"
-            value={customFormat}
-            onChange={(e) => setCustomFormat(e.target.value)}
-            placeholder="e.g., prefix+year+month+day+random"
-            className="w-full px-3 py-2 bg-gray-50 border border-gray-200 rounded-lg text-sm font-mono focus:outline-none focus:border-green-500"
-          />
-          <div className="mt-2 text-xs text-gray-500">
-            <p className="font-semibold mb-1">
-              Available placeholders:
-            </p>
-            <div className="grid grid-cols-2 gap-1">
-              <span>
-                <code className="bg-gray-100 px-1">
-                  prefix
-                </code>{" "}
-                - Your prefix
-              </span>
-              <span>
-                <code className="bg-gray-100 px-1">year</code>{" "}
-                - Joining year
-              </span>
-              <span>
-                <code className="bg-gray-100 px-1">
-                  month
-                </code>{" "}
-                - Joining month
-              </span>
-              <span>
-                <code className="bg-gray-100 px-1">day</code>{" "}
-                - Joining day
-              </span>
-              <span>
-                <code className="bg-gray-100 px-1">
-                  dob_ddmm
-                </code>{" "}
-                - DOB (DDMM)
-              </span>
-              <span>
-                <code className="bg-gray-100 px-1">
-                  timestamp
-                </code>{" "}
-                - Unix timestamp
-              </span>
-              <span>
-                <code className="bg-gray-100 px-1">
-                  random
-                </code>{" "}
-                - Random string
-              </span>
-              <span>
-                <code className="bg-gray-100 px-1">
-                  sequence
-                </code>{" "}
-                - Sequence number
-              </span>
-            </div>
-          </div>
-        </div>
-      )}
+                        {idFormat === "custom" && (
+                          <div>
+                            <label className="block text-xs font-semibold text-gray-700 mb-1">
+                              Custom Format Pattern
+                            </label>
+                            <input
+                              type="text"
+                              value={customFormat}
+                              onChange={(e) => setCustomFormat(e.target.value)}
+                              placeholder="e.g., prefix+year+month+day+random"
+                              className="w-full px-3 py-2 bg-gray-50 border border-gray-200 rounded-lg text-sm font-mono focus:outline-none focus:border-green-500"
+                            />
+                            <div className="mt-2 text-xs text-gray-500">
+                              <p className="font-semibold mb-1">
+                                Available placeholders:
+                              </p>
+                              <div className="grid grid-cols-2 gap-1">
+                                <span><code className="bg-gray-100 px-1">prefix</code> - Your prefix</span>
+                                <span><code className="bg-gray-100 px-1">year</code> - Joining year</span>
+                                <span><code className="bg-gray-100 px-1">month</code> - Joining month</span>
+                                <span><code className="bg-gray-100 px-1">day</code> - Joining day</span>
+                                <span><code className="bg-gray-100 px-1">dob_ddmm</code> - DOB (DDMM)</span>
+                                <span><code className="bg-gray-100 px-1">timestamp</code> - Unix timestamp</span>
+                                <span><code className="bg-gray-100 px-1">random</code> - Random string</span>
+                                <span><code className="bg-gray-100 px-1">sequence</code> - Sequence number</span>
+                              </div>
+                            </div>
+                          </div>
+                        )}
 
-      {/* Preview Section */}
-      {watchDob && watchJoiningDate && generatedPreview && (
-        <div className="mt-3 p-3 bg-green-50 border border-green-200 rounded-lg">
-          <p className="text-xs text-green-700 font-semibold mb-1">
-            Preview:
-          </p>
-          <p className="text-sm font-mono font-bold text-green-800">
-            {generatedPreview}
-          </p>
-          <p className="text-xs text-green-600 mt-1">
-            <i className="fas fa-check-circle mr-1"></i>
-            ID will be generated based on DOB and Joining Date
-          </p>
-        </div>
-      )}
+                        {watchDob && watchJoiningDate && generatedPreview && (
+                          <div className="mt-3 p-3 bg-green-50 border border-green-200 rounded-lg">
+                            <p className="text-xs text-green-700 font-semibold mb-1">
+                              Preview:
+                            </p>
+                            <p className="text-sm font-mono font-bold text-green-800">
+                              {generatedPreview}
+                            </p>
+                            <p className="text-xs text-green-600 mt-1">
+                              <i className="fas fa-check-circle mr-1"></i>
+                              ID will be generated based on DOB and Joining Date
+                            </p>
+                          </div>
+                        )}
 
-      {(!watchDob || !watchJoiningDate) && (
-        <div className="p-3 bg-yellow-50 border border-yellow-200 rounded-lg">
-          <p className="text-xs text-yellow-700">
-            <i className="fas fa-info-circle mr-1"></i>
-            Please enter DOB and Joining Date to see ID preview
-          </p>
-        </div>
-      )}
-    </div>
-  )}
+                        {(!watchDob || !watchJoiningDate) && (
+                          <div className="p-3 bg-yellow-50 border border-yellow-200 rounded-lg">
+                            <p className="text-xs text-yellow-700">
+                              <i className="fas fa-info-circle mr-1"></i>
+                              Please enter DOB and Joining Date to see ID preview
+                            </p>
+                          </div>
+                        )}
+                      </div>
+                    )}
 
-  {/* Hidden Employee ID Field for form submission */}
-  <Controller
-    name="employee_id"
-    control={control}
-    rules={{ required: "Employee ID is required" }}
-    render={({ field }) => <input {...field} type="hidden" />}
-  />
+                    <Controller
+                      name="employee_id"
+                      control={control}
+                      rules={{ required: "Employee ID is required" }}
+                      render={({ field }) => <input {...field} type="hidden" />}
+                    />
 
-  {errors.employee_id && (
-    <p className="mt-1 text-xs text-red-500">
-      {errors.employee_id.message}
-    </p>
-  )}
-</div>
+                    {errors.employee_id && (
+                      <p className="mt-1 text-xs text-red-500">
+                        {errors.employee_id.message}
+                      </p>
+                    )}
+                  </div>
 
                   {/* Date of Birth */}
                   <div>
@@ -2261,7 +2242,7 @@ useEffect(() => {
                     </div>
                   </div>
 
-                  {/* Skilled/Unskilled Dropdown */}
+                  {/* Skilled/Unskilled */}
                   <div className="md:col-span-2">
                     <label className="block text-xs md:text-sm font-semibold text-gray-700 mb-2">
                       <i className="fas fa-graduation-cap text-green-500 mr-1"></i>
@@ -2301,7 +2282,7 @@ useEffect(() => {
                     />
                   </div>
 
-                  {/* Educational Documents - Only show if Skilled is true */}
+                  {/* Educational Documents */}
                   {watch("is_skilled") === true && (
                     <>
                       <div className="md:col-span-2">
@@ -2324,7 +2305,6 @@ useEffect(() => {
                         </div>
                       </div>
 
-                      {/* Home Country ID */}
                       <div className="md:col-span-2">
                         <DocumentUpload
                           fieldKey="home_country_id_proof"
@@ -2334,6 +2314,109 @@ useEffect(() => {
                       </div>
                     </>
                   )}
+
+                  {/* Additional Documents Section */}
+                  <div className="md:col-span-2">
+                    <div className="border-t border-gray-200 pt-4 mt-4">
+                      <div className="flex justify-between items-center mb-3">
+                        <h4 className="text-sm font-semibold text-gray-700 flex items-center">
+                          <i className="fas fa-folder-open text-green-500 mr-2"></i>
+                          Additional Documents
+                        </h4>
+                        <button
+                          type="button"
+                          onClick={() => {
+                            const input = document.createElement('input');
+                            input.type = 'file';
+                            input.accept = 'image/*,.pdf';
+                            input.onchange = (e) => {
+                              const file = e.target.files[0];
+                              if (file) {
+                                handleAdditionalDocumentUpload(file);
+                              }
+                            };
+                            input.click();
+                          }}
+                          className="px-4 py-2 bg-green-500 text-white rounded-lg text-sm font-semibold hover:bg-green-600 transition-colors flex items-center gap-2"
+                        >
+                          <i className="fas fa-plus-circle"></i>
+                          Add Document
+                        </button>
+                      </div>
+
+                      {/* Display existing additional documents */}
+                      {existingAdditionalDocuments.length > 0 && (
+                        <div className="mb-4">
+                          <p className="text-xs font-semibold text-gray-600 mb-2">Existing Documents:</p>
+                          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-3">
+                            {existingAdditionalDocuments.map((doc, index) => (
+                              <div key={`existing-${index}`} className="border border-gray-200 rounded-lg p-3 bg-gray-50">
+                                <div className="flex items-start justify-between">
+                                  <div className="flex-1">
+                                    <p className="text-sm font-semibold text-gray-700 truncate">
+                                      {doc.document_name}
+                                    </p>
+                                    <p className="text-xs text-gray-500 mt-1">
+                                      {doc.filename || 'Document'}
+                                    </p>
+                                  </div>
+                                  <button
+                                    type="button"
+                                    onClick={() => handleRemoveAdditionalDocument(index, true)}
+                                    className="text-red-500 hover:text-red-600 ml-2"
+                                  >
+                                    <i className="fas fa-trash"></i>
+                                  </button>
+                                </div>
+                              </div>
+                            ))}
+                          </div>
+                        </div>
+                      )}
+
+                      {/* Display new additional documents */}
+                      {additionalDocuments.filter(doc => !doc.isExisting).length > 0 && (
+                        <div className="mt-4">
+                          <p className="text-xs font-semibold text-gray-600 mb-2">New Documents:</p>
+                          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-3">
+                            {additionalDocuments.filter(doc => !doc.isExisting).map((doc, index) => {
+                              // Find the actual index in the full array
+                              const actualIndex = additionalDocuments.findIndex(d => d === doc);
+                              return (
+                                <div key={`new-${index}`} className="border border-gray-200 rounded-lg p-3 bg-green-50">
+                                  <div className="flex items-start justify-between">
+                                    <div className="flex-1">
+                                      <p className="text-sm font-semibold text-gray-700 truncate">
+                                        {doc.name || 'Untitled'}
+                                      </p>
+                                      <p className="text-xs text-gray-500 mt-1">
+                                        {doc.file?.name || 'New document'}
+                                      </p>
+                                    </div>
+                                    <button
+                                      type="button"
+                                      onClick={() => handleRemoveAdditionalDocument(actualIndex, false)}
+                                      className="text-red-500 hover:text-red-600 ml-2"
+                                    >
+                                      <i className="fas fa-trash"></i>
+                                    </button>
+                                  </div>
+                                  {doc.preview && doc.preview !== "pdf" && (
+                                    <img src={doc.preview} alt={doc.name} className="mt-2 h-16 w-16 object-cover rounded-lg" />
+                                  )}
+                                  {doc.preview === "pdf" && (
+                                    <div className="mt-2 h-16 w-16 bg-red-100 rounded-lg flex items-center justify-center">
+                                      <i className="fas fa-file-pdf text-red-500 text-2xl"></i>
+                                    </div>
+                                  )}
+                                </div>
+                              );
+                            })}
+                          </div>
+                        </div>
+                      )}
+                    </div>
+                  </div>
                 </div>
               </div>
             )}
@@ -2411,9 +2494,7 @@ useEffect(() => {
                       control={control}
                       rules={{
                         validate: (value) => {
-                          // Skip validation if no value
                           if (!value) return true;
-                          // Skip validation during initialization
                           if (isInitializing) return true;
                           return validateIssueDate(
                             value,
@@ -2441,9 +2522,7 @@ useEffect(() => {
                       control={control}
                       rules={{
                         validate: (value) => {
-                          // Skip validation if no value
                           if (!value) return true;
-                          // Skip validation during initialization
                           if (isInitializing) return true;
                           return validateExpiryDate(
                             value,
@@ -2568,7 +2647,7 @@ useEffect(() => {
               </div>
             )}
 
-            {/* Step 2 - Visa, Labor & EID (Merged) */}
+            {/* Step 2 - Visa, Labor & EID */}
             {currentStep === 2 && (
               <div>
                 <div className="form-section-title mb-4 md:mb-6">
@@ -2578,9 +2657,8 @@ useEffect(() => {
                   </h3>
                 </div>
                 <div className="space-y-6">
-                  {/* Labor Section - Only show for Mainland companies */}
-                  {selectedCompanyDetails?.raw?.trade_license ===
-                    "mainland" && (
+                  {/* Labor Section */}
+                  {selectedCompanyDetails?.raw?.trade_license === "mainland" && (
                     <div className="border border-gray-200 rounded-lg p-4">
                       <h4 className="text-sm font-semibold text-gray-700 mb-4">
                         Labor Details
@@ -2874,9 +2952,7 @@ useEffect(() => {
                           label="Visa Page Copy"
                           icon="fas fa-file-contract"
                         />
-                        {/* Only show labor documents for Mainland companies */}
-                        {selectedCompanyDetails?.raw?.trade_license ===
-                          "mainland" && (
+                        {selectedCompanyDetails?.raw?.trade_license === "mainland" && (
                           <>
                             <DocumentUpload
                               fieldKey="labor_card"
@@ -3105,6 +3181,7 @@ useEffect(() => {
           </div>
         </form>
       </div>
+
       {/* Department Modal */}
       <DepartmentModal
         isOpen={isDepartmentModalOpen}

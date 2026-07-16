@@ -14,23 +14,6 @@ import {
 import { fetchAssignments } from "../store/slices/projectAssignmentSlice";
 import { StatsCard } from "../components/dashboard/StatsCard";
 import WelcomeBanner from "../components/dashboard/WelcomeBanner";
-import {
-  BarChart,
-  Bar,
-  XAxis,
-  YAxis,
-  CartesianGrid,
-  Tooltip,
-  Legend,
-  ResponsiveContainer,
-  Cell,
-  PieChart,
-  Pie,
-  LineChart,
-  Line,
-  Area,
-  ComposedChart,
-} from "recharts";
 import { showToast } from "../../components/common/Toast";
 import { ProjectAllocationChart } from "../components/dashboard/ProjectAllocationChart";
 import { ProjectHoursChart } from "../components/dashboard/ProjectHoursChart";

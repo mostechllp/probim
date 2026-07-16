@@ -76,6 +76,9 @@ const OrgNearestExpiryReport = lazy(
 const OrgUpcomingRenewalReport = lazy(
   () => import("./admin/components/reports/CompanyUpcomingRenewalsReport"),
 );
+const EmployeeAttendancePage = lazy(
+  () => import("./admin/components/reports/EmployeeAttendancePage"),
+);
 const AdminWFH = lazy(() => import("./admin/pages/WFH"));
 const Settings = lazy(() => import("./admin/pages/Settings"));
 const RoleManagement = lazy(() => import("./admin/pages/RoleManagement"));
@@ -288,6 +291,10 @@ function App() {
             path="reports/organization-upcoming-renewals"
             element={<OrgUpcomingRenewalReport />}
           />
+          <Route 
+  path="reports/attendance/employee/:employeeId" 
+  element={<EmployeeAttendancePage />} 
+/>
           <Route path="leaves" element={<Leaves />} />
           <Route path="leaves/leave-types" element={<LeaveTypeManagement />} />
           <Route path="leaves/allocations" element={<LeaveAllocations />} />
@@ -351,6 +358,7 @@ function App() {
             path="employees/letters-and-clearance"
             element={<LettersAndClearance />}
           />
+          
         </Route>
 
         {/* Employee Routes - Layout wrapper */}
@@ -453,6 +461,10 @@ function App() {
             path="reports/organization-upcoming-renewals"
             element={<OrgUpcomingRenewalReport />}
           />
+          <Route 
+  path="reports/attendance/employee/:employeeId" 
+  element={<EmployeeAttendancePage />} 
+/>
           <Route path="leave-management" element={<Leaves />} />
           <Route path="leaves/leave-types" element={<LeaveTypeManagement />} />
           <Route path="leaves/allocations" element={<LeaveAllocations />} />
@@ -656,6 +668,26 @@ function App() {
                 ) : (
                   <Navigate
                     to="/admin/reports/organization-upcoming-renewals"
+                    replace
+                  />
+                )}
+              </LazyWrapper>
+            </ProtectedRoute>
+          }
+        />
+        <Route
+          path="/admin/reports/attendance/employee/:employeeId"
+          element={
+            <ProtectedRoute>
+              <LazyWrapper>
+                {user?.type === "employee" ? (
+                  <Navigate
+                    to="/employee/reports/attendance/employee/:employeeId"
+                    replace
+                  />
+                ) : (
+                  <Navigate
+                    to="/admin/reports/attendance/employee/:employeeId"
                     replace
                   />
                 )}

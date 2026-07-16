@@ -3,6 +3,7 @@ import { showToast } from "./Toast";
 
 const DocumentModal = ({ isOpen, onClose, onSave, uploading }) => {
   const [documentName, setDocumentName] = useState("");
+  const [expiryDate, setExpiryDate] = useState("");
   const [selectedFile, setSelectedFile] = useState(null);
   const [preview, setPreview] = useState(null);
 
@@ -38,14 +39,23 @@ const DocumentModal = ({ isOpen, onClose, onSave, uploading }) => {
       showToast("Please select a file", "error");
       return;
     }
-    onSave({ name: documentName, file: selectedFile });
+    
+    // Pass expiry date along with other data
+    onSave({ 
+      name: documentName, 
+      file: selectedFile,
+      expiry_date: expiryDate || null 
+    });
+    
     setDocumentName("");
+    setExpiryDate("");
     setSelectedFile(null);
     setPreview(null);
   };
 
   const handleClose = () => {
     setDocumentName("");
+    setExpiryDate("");
     setSelectedFile(null);
     setPreview(null);
     onClose();
@@ -81,6 +91,23 @@ const DocumentModal = ({ isOpen, onClose, onSave, uploading }) => {
                     placeholder="e.g., CV, Degree Certificate, Experience Letter"
                     className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-green-500 focus:border-green-500"
                   />
+                </div>
+
+                {/* Expiry Date Input - NEW */}
+                <div className="mb-4">
+                  <label className="block text-sm font-medium text-gray-700 mb-2">
+                    Expiry Date <span className="text-gray-400 text-xs">(Optional)</span>
+                  </label>
+                  <input
+                    type="date"
+                    value={expiryDate}
+                    onChange={(e) => setExpiryDate(e.target.value)}
+                    className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-green-500 focus:border-green-500"
+                  />
+                  <p className="mt-1 text-xs text-gray-400">
+                    <i className="fas fa-info-circle mr-1"></i>
+                    Set an expiry date if this document has one (e.g., Passport, Visa, License)
+                  </p>
                 </div>
 
                 {/* File Upload */}

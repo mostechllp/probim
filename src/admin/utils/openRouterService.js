@@ -12,6 +12,38 @@ export const isOpenRouterConfigured = () => {
 };
 
 /**
+ * Gets available free models from OpenRouter
+ */
+const getAvailableFreeModels = async (openRouter) => {
+  try {
+    // This is a lightweight call to check available models
+    const response = await openRouter.models.list();
+    const models = response?.data || [];
+    
+    // Filter for free models that are likely good for text extraction
+    const freeModelPatterns = [
+      'llama-3.2-3b-instruct:free',
+      'gemma-2-2b-it:free',
+      'phi-3-mini-4k-instruct:free'
+    ];
+    
+    const available = models
+      .filter(m => m.id && freeModelPatterns.some(pattern => m.id.includes(pattern)))
+      .map(m => m.id);
+    
+    console.log('📋 Available free models:', available);
+    return available;
+  } catch (error) {
+    console.warn('Could not fetch model list, using fallback list:', error.message);
+    return [
+      'meta-llama/llama-3.2-3b-instruct:free',
+      'google/gemma-2-2b-it:free',
+      'microsoft/phi-3-mini-4k-instruct:free'
+    ];
+  }
+};
+
+/**
  * Calls OpenRouter to parse raw resume text into structured employee details JSON.
  * @param {string} resumeText 
  * @returns {Promise<object>}
@@ -57,59 +89,127 @@ Candidate Resume Text:
 ${resumeText}
 ----------------------------------------`;
 
-  try {
-    const completion = await openRouter.chat.send({
-      chatRequest: {
-        model: 'openai/gpt-oss-120b:free',
-        messages: [
-          {
-            role: 'user',
-            content: prompt,
-          },
-        ],
-      }
-    });
-
-    const content = completion?.choices?.[0]?.message?.content;
-    if (!content) {
-      throw new Error("No response content received from OpenRouter.");
-    }
-
-    // Clean response (strip potential markdown wrapping, if any)
-    let cleanJson = content.trim();
-    if (cleanJson.startsWith("```")) {
-      // Find the first newline after ```
-      const firstNewLine = cleanJson.indexOf("\n");
-      const lastTickIndex = cleanJson.lastIndexOf("```");
-      cleanJson = cleanJson.substring(
-        firstNewLine !== -1 ? firstNewLine + 1 : 3,
-        lastTickIndex !== -1 ? lastTickIndex : cleanJson.length
-      ).trim();
-    }
-
+  // Try free models first (max 2 attempts total)
+  const freeModels = await getAvailableFreeModels(openRouter);
+  const timeoutMs = 15000; // 15 second timeout per attempt
+  
+  // Try each free model (max 2)
+  let attempts = 0;
+  const maxFreeAttempts = 2;
+  
+  for (const model of freeModels) {
+    if (attempts >= maxFreeAttempts) break;
+    attempts++;
+    
     try {
-      const parsedData = JSON.parse(cleanJson);
+      console.log(`🔍 Trying free model: ${model} (Attempt ${attempts}/${maxFreeAttempts})`);
       
-      // Ensure all fields exist in the returned object, default to empty string if missing
-      const requiredFields = [
-        "fullName", "email", "phone", "nationality", "address",
-        "designation", "department", "skills", "experience", "education", "joiningDate"
-      ];
+      const result = await Promise.race([
+        openRouter.chat.send({
+          chatRequest: {
+            model: model,
+            messages: [{ role: 'user', content: prompt }],
+          }
+        }),
+        new Promise((_, reject) => 
+          setTimeout(() => reject(new Error(`Timeout after ${timeoutMs}ms`)), timeoutMs)
+        )
+      ]);
       
-      const sanitizedData = {};
-      requiredFields.forEach(field => {
-        sanitizedData[field] = parsedData[field] || "";
-      });
+      const content = result?.choices?.[0]?.message?.content;
+      if (content) {
+        const parsed = parseAIResponse(content);
+        console.log(`✅ Successfully parsed with free model: ${model}`);
+        return parsed;
+      }
+    } catch (error) {
+      console.warn(`⚠️ Free model ${model} failed:`, error.message);
       
-      return sanitizedData;
-    // eslint-disable-next-line no-unused-vars
-    } catch (parseErr) {
-      console.error("Failed to parse AI response as JSON. Raw response was:", content);
-      throw new Error("The AI response could not be parsed as structured JSON. Please try again.");
+      // If rate limited, wait a bit
+      if (error.code === 429 || error.message?.includes('rate-limited')) {
+        const waitTime = error?.metadata?.retry_after_seconds || 3;
+        console.log(`⏳ Rate limited, waiting ${waitTime}s...`);
+        await new Promise(resolve => setTimeout(resolve, waitTime * 1000));
+      }
     }
+  }
 
+  // If free models fail, use the reliable paid model
+  console.log('🔄 Falling back to paid model...');
+  try {
+    const result = await Promise.race([
+      openRouter.chat.send({
+        chatRequest: {
+          model: 'openai/gpt-4o-mini', // Reliable and affordable
+          messages: [{ role: 'user', content: prompt }],
+        }
+      }),
+      new Promise((_, reject) => 
+        setTimeout(() => reject(new Error('Timeout after 20s')), 20000)
+      )
+    ]);
+    
+    const content = result?.choices?.[0]?.message?.content;
+    if (content) {
+      const parsed = parseAIResponse(content);
+      console.log('✅ Successfully parsed with paid model: openai/gpt-4o-mini');
+      return parsed;
+    }
   } catch (error) {
-    console.error("OpenRouter API Error:", error);
-    throw new Error(error.message || "Failed to communicate with OpenRouter API.");
+    console.error('❌ Paid model also failed:', error.message);
+  }
+
+  // If all models fail, return empty data with a flag
+  console.warn('⚠️ All models failed, returning empty data');
+  return {
+    fullName: "",
+    email: "",
+    phone: "",
+    nationality: "",
+    address: "",
+    designation: "",
+    department: "",
+    skills: "",
+    experience: "",
+    education: "",
+    joiningDate: new Date().toISOString().split('T')[0],
+    _parsingFailed: true,
+    _errorMessage: "AI parsing failed, please enter details manually"
+  };
+};
+
+/**
+ * Parse and validate AI response
+ */
+const parseAIResponse = (content) => {
+  if (!content) throw new Error("No response content received");
+  
+  let cleanJson = content.trim();
+  if (cleanJson.startsWith("```")) {
+    const firstNewLine = cleanJson.indexOf("\n");
+    const lastTickIndex = cleanJson.lastIndexOf("```");
+    cleanJson = cleanJson.substring(
+      firstNewLine !== -1 ? firstNewLine + 1 : 3,
+      lastTickIndex !== -1 ? lastTickIndex : cleanJson.length
+    ).trim();
+  }
+
+  try {
+    const parsedData = JSON.parse(cleanJson);
+    
+    const requiredFields = [
+      "fullName", "email", "phone", "nationality", "address",
+      "designation", "department", "skills", "experience", "education", "joiningDate"
+    ];
+    
+    const sanitizedData = {};
+    requiredFields.forEach(field => {
+      sanitizedData[field] = parsedData[field] || "";
+    });
+    
+    return sanitizedData;
+  } catch (parseErr) {
+    console.error("Failed to parse AI response as JSON:", content);
+    throw new Error("The AI response could not be parsed as structured JSON");
   }
 };

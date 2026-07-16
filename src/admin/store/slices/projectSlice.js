@@ -2,17 +2,16 @@ import { createSlice, createAsyncThunk } from "@reduxjs/toolkit";
 import projectService from "../../services/projectService";
 
 // Helper to map backend format to frontend model
+
 const mapProjectFromApi = (apiProj) => {
   if (!apiProj) return null;
   
   const projectData = apiProj.data || apiProj;
   
-  // Helper to extract ID from either a number/string or an object
   const extractId = (value) => {
     if (!value) return null;
     if (typeof value === 'number' || typeof value === 'string') return value;
     if (typeof value === 'object' && value !== null) {
-      // If it's an object with id or user_id
       return value.id || value.user_id || null;
     }
     return null;
@@ -21,14 +20,14 @@ const mapProjectFromApi = (apiProj) => {
   console.log("=== MAPPING PROJECT FROM API ===");
   console.log("Raw project_manager_id:", projectData.project_manager_id);
   console.log("Raw team_lead_id:", projectData.team_lead_id);
+  console.log("Raw total_hours:", projectData.total_hours);
+  console.log("Raw total_cost:", projectData.total_cost);
+  console.log("Raw currency:", projectData.currency);
   
   const managerId = extractId(projectData.project_manager_id) || 
                      extractId(projectData.managerId) || null;
   const teamLeadId = extractId(projectData.team_lead_id) || 
                      extractId(projectData.teamLeadId) || null;
-  
-  console.log("Extracted managerId:", managerId);
-  console.log("Extracted teamLeadId:", teamLeadId);
   
   return {
     id: projectData.id,
@@ -47,6 +46,9 @@ const mapProjectFromApi = (apiProj) => {
     teamLeadId: teamLeadId,
     project_manager_id: managerId,
     team_lead_id: teamLeadId,
+    totalHours: projectData.total_hours || projectData.totalHours || 0,
+    totalCost: projectData.total_cost || projectData.totalCost || 0,
+    currency: projectData.currency || "AED",
     raw: projectData,
   };
 };
