@@ -1,31 +1,130 @@
 import { useEffect, useState } from "react";
 import { useDispatch, useSelector } from "react-redux";
+import { useNavigate } from "react-router-dom";
 import {
   punchIn,
   punchOut,
   fetchDashboardData,
 } from "../store/slices/attendanceSlice";
 import { fetchMyProjects } from "../store/slices/employeeProjectSlice";
+import { fetchEmployees } from "../../admin/store/slices/employeeSlice";
+import { fetchProjects } from "../../admin/store/slices/projectSlice";
+import {
+  fetchDashboard,
+  fetchMonthlyHoursByProject,
+  clearMonthlyHours,
+} from "../../admin/store/slices/dashboardSlice";
+import { fetchAssignments } from "../../admin/store/slices/projectAssignmentSlice";
 import PunchOutModal from "../components/modals/PunchOutModal";
 import MapView from "../components/common/MapView";
 import LocationModal from "../components/modals/LocationModal";
 import ErrorToast from "../../components/common/ErrorToast";
 import useErrorHandler from "../../hooks/useErrorHandler";
-import errorHandler from "../../utils/errorHandler";
+
+// Admin Dashboard Components
+import { StatsCard } from "../../admin/components/dashboard/StatsCard";
+import { ProjectAllocationChart } from "../../admin/components/dashboard/ProjectAllocationChart";
+import { ProjectHoursChart } from "../../admin/components/dashboard/ProjectHoursChart";
+import { WeeklyAttendanceChart } from "../../admin/components/dashboard/WeeklyAttendanceChart";
+import { TodayStatusChart } from "../../admin/components/dashboard/TodayStatsChart";
+import { AvgPunchTimeCard } from "../../admin/components/dashboard/AvgPunchTimeCrd";
+import { RecentPunchesList } from "../../admin/components/dashboard/RecentPunchesList";
+import { PunchDistributionChart } from "../../admin/components/dashboard/PunchDistributionChart";
+import { ProjectHoursModal } from "../../admin/components/dashboard/ProjectHoursModal";
+import { showToast } from "../../components/common/Toast";
+
+// ─── COLOR PALETTE ──────────────────────────────────────────────────────
+export const COLORS = {
+  blue: "#2a78d6",
+  aqua: "#1baf7a",
+  yellow: "#eda100",
+  violet: "#4a3aa7",
+  red: "#e34948",
+  green: "#008300",
+  orange: "#f97316",
+  purple: "#8b5cf6",
+  pink: "#ec4899",
+  cyan: "#06b6d4",
+};
+
+export const STATUS_COLORS = {
+  "On time": "#2a78d6",
+  Late: "#eda100",
+  Absent: "#e34948",
+  WFH: "#1baf7a",
+  Leave: "#4a3aa7",
+};
+
+export const CHART_COLORS = [
+  "#2a78d6",
+  "#1baf7a",
+  "#eda100",
+  "#e34948",
+  "#4a3aa7",
+  "#f97316",
+  "#8b5cf6",
+  "#ec4899",
+  "#06b6d4",
+  "#14b8a6",
+];
+
+// ─── HELPERS ──────────────────────────────────────────────────────────────
+const formatTime = (minutes) => {
+  if (!minutes || minutes === 0) return "0h";
+  const hours = Math.floor(minutes / 60);
+  const mins = minutes % 60;
+  if (hours === 0) return `${mins}m`;
+  if (mins === 0) return `${hours}h`;
+  return `${hours}h ${mins}m`;
+};
+
+export const getInitials = (name) => {
+  if (!name) return "?";
+  return name
+    .split(" ")
+    .map((n) => n[0])
+    .join("")
+    .toUpperCase()
+    .slice(0, 2);
+};
+
+export const getStatusBadge = (status) => {
+  const statusMap = {
+    on_time: { label: "On time", className: "badge-success" },
+    "on-time": { label: "On time", className: "badge-success" },
+    ontime: { label: "On time", className: "badge-success" },
+    late: { label: "Late", className: "badge-warn" },
+    absent: { label: "Absent", className: "badge-danger" },
+    wfh: { label: "WFH", className: "badge-blue" },
+    leave: { label: "Leave", className: "badge-violet" },
+  };
+  return statusMap[status] || { label: status, className: "badge-gray" };
+};
+
+export const formatDateDisplay = (dateString) => {
+  if (!dateString) return "-";
+  try {
+    const date = new Date(dateString);
+    return date.toLocaleDateString("en-GB", {
+      day: "2-digit",
+      month: "short",
+      year: "numeric",
+    });
+  } catch {
+    return dateString;
+  }
+};
 
 // Helper function to get avatar URL
 const getAvatarUrl = (avatarPath) => {
   if (!avatarPath) return null;
   
-  // If it's already a full URL
   if (avatarPath.startsWith('http://') || avatarPath.startsWith('https://')) {
     return avatarPath;
   }
   
-  // Get base URL from environment or use current origin
   const baseUrl = import.meta.env.VITE_API_URL?.replace("/api", "") || window.location.origin;
   
-  // If it starts with avatars/ or storage/ or /storage/
   if (avatarPath.startsWith('avatars/')) {
     return `${baseUrl}/storage/${avatarPath}`;
   }
@@ -36,18 +135,18 @@ const getAvatarUrl = (avatarPath) => {
     return `${baseUrl}${avatarPath}`;
   }
   
-  // Default: assume it's in avatars folder
   return `${baseUrl}/storage/${avatarPath}`;
 };
 
 const Dashboard = () => {
   const dispatch = useDispatch();
+  const navigate = useNavigate();
   const { user } = useSelector((state) => state.auth);
   const { loading: attendanceLoading, dashboardData } = useSelector(
     (state) => state.EmpAttendance,
   );
   const {
-    projects,
+    projects: employeeProjects,
     stats,
     loading: projectsLoading,
   } = useSelector(
@@ -55,8 +154,27 @@ const Dashboard = () => {
       state.employeeProjects || { projects: [], stats: {}, loading: false },
   );
 
+  // Admin dashboard data
+  const { employees } = useSelector((state) => state.employees || {});
+  const { stats: adminStats, charts, loading: adminLoading } = useSelector(
+    (state) => state.dashboard || { stats: {}, charts: {}, loading: false },
+  );
+  const { projects: allProjects, loading: allProjectsLoading } = useSelector(
+    (state) => state.projects || { projects: [], loading: false },
+  );
+  const { assignments } = useSelector(
+    (state) => state.projectAssignments || { assignments: [], loading: false },
+  );
+
   // Use custom error handler
   const { error, handleError, clearError, withErrorHandling } = useErrorHandler();
+
+  // Check if user is HR or HR Manager
+  const isHR = user?.role?.name === "HR Manager" || user?.role?.name === "HR" || user?.type === "hr";
+  const isAdmin = user?.type === "admin";
+
+  // Show admin graphs if user is HR or Admin
+  const showAdminGraphs = isHR || isAdmin;
 
   // Use dashboard data as source of truth (not Redux isPunchedIn)
   const todayAttendance = dashboardData?.today_attendance || {};
@@ -80,6 +198,12 @@ const Dashboard = () => {
 
   const [showPendingErrorModal, setShowPendingErrorModal] = useState(false);
   const [pendingPunchOutDate, setPendingPunchOutDate] = useState("");
+
+  // Admin graphs states
+  const [showProjectHoursModal, setShowProjectHoursModal] = useState(false);
+  const [selectedProjectForModal, setSelectedProjectForModal] = useState(null);
+  const [modalMonth, setModalMonth] = useState(new Date().getMonth() + 1);
+  const [modalYear, setModalYear] = useState(new Date().getFullYear());
 
   // Show toast notification
   const showToastMessage = (message, type = "success", title = "") => {
@@ -131,6 +255,16 @@ const Dashboard = () => {
     };
     fetchData();
   }, [dispatch]);
+
+  // Fetch admin dashboard data if user is HR
+  useEffect(() => {
+    if (showAdminGraphs) {
+      dispatch(fetchDashboard());
+      dispatch(fetchProjects());
+      dispatch(fetchAssignments());
+      dispatch(fetchEmployees());
+    }
+  }, [dispatch, showAdminGraphs]);
 
   // Separate useEffect to fetch projects when dashboard data loads
   useEffect(() => {
@@ -368,6 +502,71 @@ const Dashboard = () => {
     return null;
   };
 
+  // Admin graphs handlers
+  const handleNavigate = (route) => {
+    const basePath = "/employee";
+    navigate(`${basePath}${route}`);
+  };
+
+  const handleBarClick = (data) => {
+    if (data && data.activePayload && data.activePayload.length > 0) {
+      const projectData = data.activePayload[0].payload;
+      const projectName =
+        projectData.fullName || projectData.name || projectData.displayName;
+      const matchedProject = allProjects.find((p) => p.name === projectName);
+      const projectId =
+        matchedProject?.id || projectData.id || projectData.projectId;
+
+      if (projectId) {
+        setSelectedProjectForModal({
+          id: projectId,
+          name: projectName,
+          projectId: projectId,
+        });
+        setModalMonth(new Date().getMonth() + 1);
+        setModalYear(new Date().getFullYear());
+        setShowProjectHoursModal(true);
+      } else {
+        showToast("Project ID not found", "error");
+      }
+    }
+  };
+
+  // Admin dashboard calculations
+  const totalEmployees = employees?.length || 0;
+  const activeProjects = allProjects.filter((p) => p.status === "Active").length;
+  const totalAssignments = assignments.length;
+  const totalTaggedEmployees = assignments.reduce(
+    (sum, a) => sum + (a.projectIds?.length || 0),
+    0,
+  );
+
+  const onTimeCount = charts?.today_status?.["On time"] || 0;
+  const lateCount = charts?.today_status?.Late || 0;
+  const absentCount = charts?.today_status?.Absent || 0;
+  const totalPresent = onTimeCount + lateCount;
+  const attendanceRate =
+    totalEmployees > 0 ? Math.round((totalPresent / totalEmployees) * 100) : 0;
+
+  const todayStatus = charts?.today_status || {};
+  const punchedInToday =
+    Object.values(todayStatus).reduce((a, b) => a + b, 0) ||
+    adminStats?.today?.punched_in ||
+    0;
+  const lateArrivals = todayStatus.Late || adminStats?.today?.late || 0;
+  const absentToday = todayStatus.Absent || adminStats?.today?.absent || 0;
+
+  const projectStats = charts?.project_stats || {};
+  const totalProjects = projectStats.total_projects || allProjects.length;
+  const activeProjectsCount = projectStats.active_projects || activeProjects;
+  const totalAssignmentsCount =
+    projectStats.total_assignments || totalAssignments;
+  const employeesAssigned =
+    projectStats.employees_assigned || totalTaggedEmployees;
+
+  const allocationData = charts?.project_allocation || [];
+  const hoursData = charts?.project_hours || [];
+
   // Render location info
   const renderLocationInfo = () => {
     const punchInLocation = normalizeLocation(
@@ -500,7 +699,6 @@ const Dashboard = () => {
                 alt={getEmployeeName()}
                 className="w-full h-full object-cover"
                 onError={(e) => {
-                  // If image fails to load, show fallback
                   e.target.style.display = 'none';
                   e.target.parentElement.innerHTML = `<i class="fas fa-user text-green-600 text-3xl"></i>`;
                 }}
@@ -526,7 +724,6 @@ const Dashboard = () => {
         </div>
       </div>
 
-      {/* Rest of your component remains the same... */}
       {/* Location Info */}
       {renderLocationInfo()}
 
@@ -575,32 +772,162 @@ const Dashboard = () => {
         </button>
       </div>
 
-      <div className="stats-grid grid grid-cols-2 gap-5 mb-7">
-        <div className="stat-card bg-[var(--surface)] border border-[var(--border)] rounded-xl p-5 text-center hover:-translate-y-0.5 hover:shadow-md transition-all">
-          <div className="stat-icon w-12 h-12 rounded-xl bg-green-500/10 text-green-500 flex items-center justify-center text-2xl mx-auto mb-3">
-            <i className="fas fa-project-diagram"></i>
+      {/* ─── EMPLOYEE STATS (Only 2 cards for regular employees) ─────────── */}
+      {!showAdminGraphs && (
+        <div className="stats-grid grid grid-cols-2 gap-5 mb-7">
+          <div className="stat-card bg-[var(--surface)] border border-[var(--border)] rounded-xl p-5 text-center hover:-translate-y-0.5 hover:shadow-md transition-all">
+            <div className="stat-icon w-12 h-12 rounded-xl bg-green-500/10 text-green-500 flex items-center justify-center text-2xl mx-auto mb-3">
+              <i className="fas fa-project-diagram"></i>
+            </div>
+            <div className="stat-number text-3xl font-extrabold text-green-600">
+              {stats.totalProjects || 0}
+            </div>
+            <div className="stat-label text-xs text-[var(--muted)]">
+              Total Projects
+            </div>
           </div>
-          <div className="stat-number text-3xl font-extrabold text-green-600">
-            {stats.totalProjects || 0}
-          </div>
-          <div className="stat-label text-xs text-[var(--muted)]">
-            Total Projects
+          <div className="stat-card bg-[var(--surface)] border border-[var(--border)] rounded-xl p-5 text-center hover:-translate-y-0.5 hover:shadow-md transition-all">
+            <div className="stat-icon w-12 h-12 rounded-xl bg-blue-500/10 text-blue-500 flex items-center justify-center text-2xl mx-auto mb-3">
+              <i className="fas fa-check-circle"></i>
+            </div>
+            <div className="stat-number text-3xl font-extrabold text-blue-500">
+              {stats.activeProjects || 0}
+            </div>
+            <div className="stat-label text-xs text-[var(--muted)]">
+              Active Projects
+            </div>
           </div>
         </div>
-        <div className="stat-card bg-[var(--surface)] border border-[var(--border)] rounded-xl p-5 text-center hover:-translate-y-0.5 hover:shadow-md transition-all">
-          <div className="stat-icon w-12 h-12 rounded-xl bg-blue-500/10 text-blue-500 flex items-center justify-center text-2xl mx-auto mb-3">
-            <i className="fas fa-check-circle"></i>
+      )}
+
+      {/* ─── ADMIN/HR GRAPHS ──────────────────────────────────────────────── */}
+      {showAdminGraphs && (
+        <>
+          {/* ─── ROW 1: Overview (8 cards in a single row) ────────────────────── */}
+          <div className="section-label text-xs font-medium uppercase tracking-wider text-gray-400 dark:text-gray-500 mt-4 mb-2">
+            Overview
           </div>
-          <div className="stat-number text-3xl font-extrabold text-blue-500">
-            {stats.activeProjects || 0}
+          <div className="stats-grid grid grid-cols-2 sm:grid-cols-4 lg:grid-cols-8 gap-3 md:gap-4 mb-6">
+            <StatsCard
+              title="Total Employees"
+              value={totalEmployees}
+              icon="fas fa-users"
+              color="green"
+              route="/employees"
+              onClick={() => handleNavigate("/employees")}
+            />
+            <StatsCard
+              title="Punched In Today"
+              value={punchedInToday}
+              icon="fas fa-fingerprint"
+              color="blue"
+              route="/attendances"
+              onClick={() => handleNavigate("/attendances")}
+            />
+            <StatsCard
+              title="Late Arrivals"
+              value={lateArrivals}
+              icon="fas fa-clock"
+              color="amber"
+              route="/attendances"
+              onClick={() => handleNavigate("/attendances")}
+            />
+            <StatsCard
+              title="Absent Today"
+              value={absentToday}
+              icon="fas fa-user-slash"
+              color="red"
+              route="/attendances"
+              onClick={() => handleNavigate("/attendances")}
+            />
+            <StatsCard
+              title="Total Projects"
+              value={totalProjects}
+              icon="fas fa-project-diagram"
+              color="purple"
+              route="/projects"
+              onClick={() => handleNavigate("/projects")}
+            />
+            <StatsCard
+              title="Active Projects"
+              value={activeProjectsCount}
+              icon="fas fa-play-circle"
+              color="green"
+              route="/projects"
+              onClick={() => handleNavigate("/projects")}
+            />
+            <StatsCard
+              title="Total Assignments"
+              value={totalAssignmentsCount}
+              icon="fas fa-link"
+              color="orange"
+              route="/project-assignments"
+              onClick={() => handleNavigate("/project-assignments")}
+            />
+            <StatsCard
+              title="Employees Assigned"
+              value={employeesAssigned}
+              icon="fas fa-user-check"
+              color="blue"
+              route="/project-assignments"
+              onClick={() => handleNavigate("/project-assignments")}
+            />
           </div>
-          <div className="stat-label text-xs text-[var(--muted)]">
-            Active Projects
+
+          {/* ─── ROW 3: Project Allocation & Hours ────────────────────────── */}
+          <div className="section-label text-xs font-medium uppercase tracking-wider text-gray-400 dark:text-gray-500 mt-4 mb-2">
+            Project Allocation & Hours
           </div>
-        </div>
-      </div>
-      
-      {/* Projects Section - Keep your existing code */}
+          <div className="grid grid-cols-1 lg:grid-cols-2 gap-4 mb-6">
+            <ProjectAllocationChart data={allocationData} />
+            <ProjectHoursChart data={hoursData} onBarClick={handleBarClick} />
+          </div>
+
+          {/* ─── ROW 4: Attendance Analytics (3 equal height cards) ────────── */}
+          <div className="section-label text-xs font-medium uppercase tracking-wider text-gray-400 dark:text-gray-500 mt-4 mb-2">
+            Attendance Analytics
+          </div>
+          <div className="grid grid-cols-1 lg:grid-cols-3 gap-4 mb-6">
+            <div className="h-[220px]">
+              <WeeklyAttendanceChart data={charts?.weekly_attendance} />
+            </div>
+            <div className="h-[220px]">
+              <TodayStatusChart data={charts?.today_status} />
+            </div>
+            <div className="h-[220px]">
+              <AvgPunchTimeCard data={charts?.avg_punch_time} />
+            </div>
+          </div>
+
+          {/* ─── ROW 5: Today's Punch-in Activity ──────────────────────────── */}
+          <div className="section-label text-xs font-medium uppercase tracking-wider text-gray-400 dark:text-gray-500 mt-4 mb-2">
+            Today's Punch-in Activity
+          </div>
+          <div className="grid grid-cols-1 lg:grid-cols-2 gap-4 mb-6">
+            <RecentPunchesList
+              punches={charts?.recent_punches || []}
+              employees={employees}
+            />
+            <PunchDistributionChart data={charts?.punch_distribution || []} />
+          </div>
+
+          {/* ─── PROJECT HOURS DETAIL MODAL ───────────────────────────────── */}
+          <ProjectHoursModal
+            isOpen={showProjectHoursModal}
+            onClose={() => {
+              setShowProjectHoursModal(false);
+              setSelectedProjectForModal(null);
+              dispatch(clearMonthlyHours());
+            }}
+            project={selectedProjectForModal}
+            month={modalMonth}
+            year={modalYear}
+            employees={employees}
+          />
+        </>
+      )}
+
+      {/* ─── EMPLOYEE PROJECTS SECTION (Always visible) ───────────────────── */}
       <div className="projects-section bg-[var(--surface)] border border-[var(--border)] rounded-xl p-5 mb-7">
         <h3 className="text-base font-semibold text-[var(--text)] mb-5 flex items-center gap-2">
           <i className="fas fa-project-diagram text-green-500"></i>
@@ -611,7 +938,7 @@ const Dashboard = () => {
           <div className="flex justify-center items-center py-12">
             <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-green-500"></div>
           </div>
-        ) : projects.length === 0 ? (
+        ) : employeeProjects.length === 0 ? (
           <div className="text-center py-12">
             <i className="fas fa-folder-open text-5xl text-[var(--muted)] mb-3"></i>
             <p className="text-[var(--text-secondary)]">
@@ -620,7 +947,7 @@ const Dashboard = () => {
           </div>
         ) : (
           <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-5">
-            {projects.map((project) => (
+            {employeeProjects.map((project) => (
               <div
                 key={project.id}
                 className="project-card bg-[var(--surface2)] border border-[var(--border)] rounded-xl p-5 hover:shadow-md transition-all cursor-pointer"
@@ -766,70 +1093,80 @@ const Dashboard = () => {
         </div>
       )}
 
-      {/* Recent Activity Section */}
+      {/* Recent Activity Section - Scrollable with vertical scroll */}
       {dashboardData?.attendance_history &&
         dashboardData.attendance_history.length > 0 && (
           <div className="recent-activity bg-[var(--surface)] border border-[var(--border)] rounded-xl p-5">
             <h3 className="text-base font-semibold text-[var(--text)] mb-5 flex items-center gap-2">
               <i className="fas fa-history"></i> Recent Activity
             </h3>
-            <div className="overflow-x-auto">
-              <table className="w-full text-sm">
-                <thead>
-                  <tr className="border-b border-[var(--border)]">
-                    <th className="text-left py-3 px-4 text-[var(--muted)] font-semibold">
-                      Date
-                    </th>
-                    <th className="text-left py-3 px-4 text-[var(--muted)] font-semibold">
-                      Punch In
-                    </th>
-                    <th className="text-left py-3 px-4 text-[var(--muted)] font-semibold">
-                      Location
-                    </th>
-                    <th className="text-left py-3 px-4 text-[var(--muted)] font-semibold">
-                      Punch Out
-                    </th>
-                  </tr>
-                </thead>
-                <tbody>
-                  {dashboardData.attendance_history
-                    .slice(0, 5)
-                    .map((attendance, index) => {
-                    
-                      const locationAddress = attendance.punch_in_address;
+            
+            <div className="w-full overflow-auto max-h-[300px]">
+              <div className="min-w-[700px]">
+                <table className="w-full text-sm">
+                  <thead className="sticky top-0 bg-[var(--surface)] z-10">
+                    <tr className="border-b border-[var(--border)]">
+                      <th className="text-left py-3 px-4 text-[var(--muted)] font-semibold w-[100px]">
+                        Date
+                      </th>
+                      <th className="text-left py-3 px-4 text-[var(--muted)] font-semibold w-[120px]">
+                        Punch In
+                      </th>
+                      <th className="text-left py-3 px-4 text-[var(--muted)] font-semibold min-w-[250px]">
+                        Location
+                      </th>
+                      <th className="text-left py-3 px-4 text-[var(--muted)] font-semibold w-[120px]">
+                        Punch Out
+                      </th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {dashboardData.attendance_history
+                      .map((attendance, index) => {
+                        const locationAddress = attendance.punch_in_address;
 
-                      return (
-                        <tr
-                          key={index}
-                          className="border-b border-[var(--border)] hover:bg-[var(--surface2)] transition-colors"
-                        >
-                          <td className="py-3 px-4 text-[var(--text)]">
-                            {attendance.log_date}
-                          </td>
-                          <td className="py-3 px-4 text-[var(--text)]">
-                            {attendance.punch_in
-                              ? formatPunchTime(attendance.punch_in)
-                              : "-"}
-                          </td>
-                          <td className="py-3 px-4">
-                            {locationAddress && (
-                              <div className="text-xs text-[var(--muted)]">
-                                <i className="fas fa-map-marker-alt text-green-500 text-xs mr-1"></i>
-                                {locationAddress.substring(0, 40)}
-                                {locationAddress.length > 40 ? "..." : ""}
-                              </div>
-                            )}
-                          </td>
-                          <td className="py-3 px-4 text-[var(--text)]">
-                            {attendance.punch_out
-                              ? formatPunchTime(attendance.punch_out)
-                              : "-"}
-                          </td>
-                        </tr>
-                      );
-                    })}
-                </tbody>
-              </table>
+                        return (
+                          <tr
+                            key={index}
+                            className="border-b border-[var(--border)] hover:bg-[var(--surface2)] transition-colors"
+                          >
+                            <td className="py-3 px-4 text-[var(--text)] whitespace-nowrap">
+                              {attendance.log_date}
+                            </td>
+                            <td className="py-3 px-4 text-[var(--text)] whitespace-nowrap">
+                              {attendance.punch_in
+                                ? formatPunchTime(attendance.punch_in)
+                                : "-"}
+                            </td>
+                            <td className="py-3 px-4">
+                              {locationAddress ? (
+                                <div className="text-xs text-[var(--muted)] flex items-start gap-1.5">
+                                  <i className="fas fa-map-marker-alt text-green-500 text-xs mt-0.5 flex-shrink-0"></i>
+                                  <span className="break-words">
+                                    {locationAddress.length > 60 
+                                      ? locationAddress.substring(0, 60) + "..." 
+                                      : locationAddress}
+                                  </span>
+                                </div>
+                              ) : (
+                                <span className="text-xs text-[var(--muted)]">-</span>
+                              )}
+                            </td>
+                            <td className="py-3 px-4 text-[var(--text)] whitespace-nowrap">
+                              {attendance.punch_out
+                                ? formatPunchTime(attendance.punch_out)
+                                : "-"}
+                            </td>
+                          </tr>
+                        );
+                      })}
+                  </tbody>
+                </table>
+              </div>
+            </div>
+            
+            <div className="mt-3 text-xs text-[var(--muted)] text-right">
+              Showing {dashboardData.attendance_history.length} records
             </div>
           </div>
         )}
