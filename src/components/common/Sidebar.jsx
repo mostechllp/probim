@@ -24,7 +24,7 @@ const ADMIN_ROUTE_MAP = {
   organizations: "/admin/organizations",
   agreements: "/admin/agreements",
   "role-management": "/admin/role-management",
-  "my-wfh-requests": "/employee/wfh",
+  // "my-wfh-requests" is NOT in admin route map - it's employee only
 };
 
 const EMPLOYEE_ROUTE_MAP = {
@@ -103,7 +103,7 @@ const PARENT_MENU_CONFIG = {
 const ALL_CHILDREN = Object.values(PARENT_MENU_CONFIG).flatMap(config => config.children);
 
 // Define modules that should be hidden (aliases/duplicates)
-const HIDDEN_MODULES = ["role-management", "agreements", "wfh"]; // Added "wfh" to hide duplicate
+const HIDDEN_MODULES = ["role-management", "agreements", "wfh"];
 
 // Define order of standalone modules
 const MODULE_ORDER = {
@@ -247,8 +247,8 @@ const Sidebar = ({ isOpen, setIsOpen }) => {
           return allModules.includes(child) && hasReadPermission(child);
         });
         
-        // Only show parent menu if at least one child is available
-        if (availableChildren.length > 0) {
+        // If there are 2 or more children, show as parent menu
+        if (availableChildren.length >= 2) {
           const children = availableChildren.map(childSlug => {
             const module = user?.sidebar_modules?.find(m => m.slug === childSlug);
             return {
@@ -272,6 +272,26 @@ const Sidebar = ({ isOpen, setIsOpen }) => {
           });
 
           children.forEach(child => processedSlugs.add(child.slug));
+        } 
+        // If there's only 1 child, add it as a standalone item
+        else if (availableChildren.length === 1) {
+          const childSlug = availableChildren[0];
+          const module = user?.sidebar_modules?.find(m => m.slug === childSlug);
+          
+          // Use the child's name and icon
+          const childLabel = module?.name || childSlug;
+          const childIcon = ICON_MAP[childSlug] || "fas fa-circle";
+          
+          standaloneItems.push({
+            type: "single",
+            slug: childSlug,
+            label: childLabel,
+            path: activeRouteMap[childSlug],
+            icon: childIcon,
+            order: (config.order || 500) - 1, // Slightly before the parent would be
+          });
+          
+          processedSlugs.add(childSlug);
         }
       });
     }
