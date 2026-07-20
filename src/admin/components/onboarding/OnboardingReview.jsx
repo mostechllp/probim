@@ -125,18 +125,15 @@ const OnboardingReview = () => {
 
   // ─── Step 1: Save employee details ──────────────────────────────────────
   const saveEmployeeDetails = async (data) => {
-    console.log("[Onboarding] Step 1: Saving employee details...");
     const response = await apiClient.post(
       "/admin/employees/onboard/details",
       data,
     );
-    console.log("[Onboarding] Employee details saved:", response.data);
     return response.data;
   };
 
   // ─── Step 2: Save salary details with packages ──────────────────────────
   const saveSalaryDetails = async (userId, salaryData) => {
-    console.log("[Onboarding] Step 2: Saving salary details for user:", userId);
 
     const packages = salaryData.packages || {};
     const packagesArray = [];
@@ -179,17 +176,11 @@ const OnboardingReview = () => {
       packages: packagesArray,
     };
 
-    console.log(
-      "[Onboarding] Salary payload:",
-      JSON.stringify(payload, null, 2),
-    );
-
     try {
       const response = await apiClient.post(
         "/admin/employees/onboard/salary",
         payload,
       );
-      console.log("[Onboarding] Salary details saved:", response.data);
       return response.data;
     } catch (error) {
       console.error("[Onboarding] Error saving salary:", error);
@@ -199,12 +190,10 @@ const OnboardingReview = () => {
 
   // ─── Step 3: Save bank details ──────────────────────────────────────────
   const saveBankDetails = async (userId, bankData) => {
-    console.log("[Onboarding] Step 3: Saving bank details for user:", userId);
 
     const bankAccounts = bankData.bankAccounts || [];
 
     if (bankAccounts.length === 0) {
-      console.log("[Onboarding] No bank accounts to save");
       return { success: true, message: "No bank accounts provided" };
     }
 
@@ -221,14 +210,12 @@ const OnboardingReview = () => {
       })),
     };
 
-    console.log("[Onboarding] Bank payload:", JSON.stringify(payload, null, 2));
 
     try {
       const response = await apiClient.post(
         "/admin/employees/onboard/banks",
         payload,
       );
-      console.log("[Onboarding] Bank details saved response:", response.data);
       return response.data;
     } catch (error) {
       console.error("[Onboarding] Failed to save bank details:", error);
@@ -239,14 +226,9 @@ const OnboardingReview = () => {
 
   // ─── Step 4: Complete onboarding ────────────────────────────────────────
   const completeOnboardingProcess = async (employeeId) => {
-    console.log(
-      "[Onboarding] Step 4: Completing onboarding for employee:",
-      employeeId,
-    );
     const response = await apiClient.post("/admin/employees/onboard/complete", {
       user_id: employeeId,
     });
-    console.log("[Onboarding] Onboarding completed:", response.data);
     return response.data;
   };
 

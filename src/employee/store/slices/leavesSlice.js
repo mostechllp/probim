@@ -28,6 +28,66 @@ export const fetchEmployeeLeaves = createAsyncThunk(
   },
 );
 
+// Fetch all employees (for HR to request leave on behalf)
+// Fetch all employees (for HR to request leave on behalf)
+export const fetchEmployeesForLeave = createAsyncThunk(
+  "leaves/fetchEmployeesForLeave",
+  async (_, { rejectWithValue }) => {
+    try {
+      const response = await apiClient.get("/admin/employees");
+      console.log("Fetched employees for leave:", response.data);
+
+      if (response.data && response.data.status === "success") {
+        // The employees array is inside data.data
+        const employeesData = response.data.data?.data || [];
+        console.log("Employees data extracted:", employeesData);
+        return employeesData;
+      } else {
+        return rejectWithValue(
+          response.data?.message || "Failed to fetch employees",
+        );
+      }
+    } catch (error) {
+      console.error("Fetch employees error:", error);
+      return rejectWithValue(
+        error.response?.data?.message || "Failed to fetch employees",
+      );
+    }
+  },
+);
+
+// Store Leave Request for Employee (HR can request on behalf)
+export const addLeaveRequestForEmployee = createAsyncThunk(
+  "leaves/addLeaveRequestForEmployee",
+  async (formData, { rejectWithValue }) => {
+    try {
+      const response = await apiClient.post("/employee/leaves", formData, {
+        headers: { "Content-Type": "multipart/form-data" },
+      });
+      console.log("Add leave for employee response:", response.data);
+
+      if (response.data && response.data.status === "success") {
+        return response.data.data;
+      } else {
+        return rejectWithValue(
+          response.data?.message || "Failed to submit leave request",
+        );
+      }
+    } catch (error) {
+      console.error("Add leave for employee error:", error);
+      if (error.response?.data?.errors) {
+        const errorMessages = Object.values(error.response.data.errors)
+          .flat()
+          .join(", ");
+        return rejectWithValue(errorMessages);
+      }
+      return rejectWithValue(
+        error.response?.data?.message || "Failed to submit leave request",
+      );
+    }
+  },
+);
+
 // Fetch Leave Types
 export const fetchLeaveTypes = createAsyncThunk(
   "leaves/fetchLeaveTypes",
@@ -384,6 +444,7 @@ export const deleteLeaveRequest = createAsyncThunk(
 const initialState = {
   leaves: [],
   leaveTypes: [],
+  employeesList: [],
   leaveBalances: {
     total: {
       allocated: 0,
@@ -484,6 +545,20 @@ const leavesSlice = createSlice({
       })
       .addCase(addLeaveRequest.rejected, (state, action) => {
         state.submitting = false;
+        state.error = action.payload;
+      })
+
+      .addCase(fetchEmployeesForLeave.pending, (state) => {
+        state.loading = true;
+        state.error = null;
+      })
+      .addCase(fetchEmployeesForLeave.fulfilled, (state, action) => {
+        state.loading = false;
+        state.employeesList = action.payload; // Now this will be an array
+        state.error = null;
+      })
+      .addCase(fetchEmployeesForLeave.rejected, (state, action) => {
+        state.loading = false;
         state.error = action.payload;
       })
 

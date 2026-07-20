@@ -141,6 +141,7 @@ const EmployeeTaskReports = lazy(() => import("./employee/pages/TaskReports"));
 const AttendanceRequests = lazy(
   () => import("./employee/pages/AttendanceRequests"),
 );
+const RequestLeaveForEmployee = lazy(() => import("./employee/pages/RequestLeaveForEmployees"));
 
 // Custom wrapper for lazy-loaded components
 const LazyWrapper = ({ children }) => {
@@ -172,25 +173,6 @@ function App() {
     }, 500);
     return () => clearTimeout(timer);
   }, []);
-
-  // Check if user has payroll permissions
-  const hasPayrollAccess = () => {
-    const permissions = user?.permissions || {};
-    return permissions?.payroll?.read || false;
-  };
-
-  // Check if user is admin or has payroll edit permission
-  const hasPayrollEdit = () => {
-    const permissions = user?.permissions || {};
-    const isAdmin = user?.type === "admin" || user?.role?.name === "admin" || user?.role?.name === "Admin";
-    return isAdmin || permissions?.payroll?.edit || false;
-  };
-
-  // Get the appropriate base path for payroll
-  const getPayrollBasePath = () => {
-    const isAdmin = user?.type === "admin" || user?.role?.name === "admin" || user?.role?.name === "Admin";
-    return isAdmin ? "/admin" : "/employee";
-  };
 
   // Show only one loader during initial auth check
   if (authLoading && initialLoad) {
@@ -486,6 +468,7 @@ function App() {
           <Route path="payroll/add" element={<AddPayroll />} />
           <Route path="payroll/:id" element={<PayrollDetails />} /> 
           <Route path="payroll/edit/:id" element={<EditPayroll />} /> 
+          <Route path="request-leave-for-employee" element={<RequestLeaveForEmployee />} />
         </Route>
 
         {/* ============ REDIRECT ROUTES ============ */}

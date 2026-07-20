@@ -106,15 +106,12 @@ const EmployeeDetailsForm = () => {
         // Include fileName if available from resume upload
         fileName: data.fileName || onboardingState.resumeData?.fileName || null,
       };
-
-      console.log('[EmployeeDetailsForm] Sending payload:', payload);
       
       // First, update local Redux state
       dispatch(updateEmployeeDetails(data));
       
       // ─── CALL API TO SAVE EMPLOYEE DETAILS ─────────────────────────────
       const result = await dispatch(saveOnboardingDetails(payload)).unwrap();
-      console.log('[EmployeeDetailsForm] API Response:', result);
       
       // Extract IDs from the response
       const employeeId = result?.data?.id || result?.id;
@@ -126,7 +123,6 @@ const EmployeeDetailsForm = () => {
       if (employeeId) {
         updates.id = employeeId;
         localStorage.setItem('employeeId', employeeId);
-        console.log('[EmployeeDetailsForm] Employee ID stored:', employeeId);
       }
       
       if (userId) {
@@ -135,7 +131,6 @@ const EmployeeDetailsForm = () => {
         updates.user_id = userId;
         localStorage.setItem('employeeUserId', userId);
         localStorage.setItem('onboardingEmployeeUserId', userId);
-        console.log('[EmployeeDetailsForm] Employee User ID stored:', userId);
       }
       
       // Update Redux with the IDs

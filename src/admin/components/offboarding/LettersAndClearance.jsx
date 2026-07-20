@@ -372,8 +372,6 @@ const LettersAndClearance = () => {
         id: offboardingId || localStorage.getItem("offboarding_id"), 
         lettersData: payload 
       })).unwrap();
-
-      console.log("Offboarding completed:", result);
       
       await dispatch(fetchOffboardingProgress(offboardingId || localStorage.getItem("offboarding_id")));
       

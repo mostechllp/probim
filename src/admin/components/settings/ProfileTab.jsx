@@ -145,7 +145,6 @@ const ProfileTab = () => {
       const result = response.data;
       
       if (result.status && result.path) {
-        console.log("✅ Avatar uploaded! Temp path:", result.path);
         setAvatarTempPath(result.path);
         setAvatarFile(file);
         showToast("Avatar uploaded successfully", "success");
@@ -198,14 +197,12 @@ const ProfileTab = () => {
     let constructedAvatarUrl = null;
     
     if (avatarTempPath) {
-      console.log("📤 Sending avatar temp path:", avatarTempPath);
       formData.append("avatar", avatarTempPath);
       
       // Construct the permanent avatar URL based on your backend pattern
       const baseUrl = import.meta.env.VITE_API_URL?.replace("/api", "") || window.location.origin;
       const avatarFileName = avatarTempPath.replace('temp/', '');
       constructedAvatarUrl = `${baseUrl}/storage/avatars/${avatarFileName}`;
-      console.log("📸 Constructed avatar URL:", constructedAvatarUrl);
       
       // Store the constructed URL to display immediately
       setLastUpdatedAvatar(constructedAvatarUrl);
@@ -244,7 +241,6 @@ const ProfileTab = () => {
                 console.error("❌ Image failed to load:", avatarUrl);
                 setAvatarError(true);
               }}
-              onLoad={() => console.log("✅ Avatar loaded successfully:", avatarUrl)}
             />
           ) : (
             <div className="w-32 h-32 rounded-full bg-gradient-to-r from-green-500 to-green-600 flex items-center justify-center text-white text-5xl font-bold shadow-md">

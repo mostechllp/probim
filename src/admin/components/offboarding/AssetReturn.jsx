@@ -82,7 +82,6 @@ const AssetReturn = () => {
   // Filter assets assigned to this employee
   useEffect(() => {
     if (employeeAssets.length > 0) {
-      console.log("Employee assets:", employeeAssets);
       
       // Format assets for display
       const formattedAssets = employeeAssets.map(item => ({
@@ -158,7 +157,6 @@ const AssetReturn = () => {
         assetsData 
       })).unwrap();
 
-      console.log("Assets updated:", result);
       
       // Refresh progress after updating assets
       await dispatch(fetchOffboardingProgress(offboardingId || localStorage.getItem("offboarding_id")));

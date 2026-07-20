@@ -138,6 +138,14 @@ const getAvatarUrl = (avatarPath) => {
   return `${baseUrl}/storage/${avatarPath}`;
 };
 
+// ─── THEME AWARE GRADIENT ──────────────────────────────────────────────
+const getWelcomeBannerGradient = (isDark) => {
+  if (isDark) {
+    return "bg-gradient-to-br from-gray-800 via-gray-900 to-gray-950 border border-gray-700";
+  }
+  return "bg-gradient-to-br from-green-600 to-green-500";
+};
+
 const Dashboard = () => {
   const dispatch = useDispatch();
   const navigate = useNavigate();
@@ -204,6 +212,31 @@ const Dashboard = () => {
   const [selectedProjectForModal, setSelectedProjectForModal] = useState(null);
   const [modalMonth, setModalMonth] = useState(new Date().getMonth() + 1);
   const [modalYear, setModalYear] = useState(new Date().getFullYear());
+
+  // Theme state - check if dark mode is active
+  const [isDarkMode, setIsDarkMode] = useState(false);
+
+  // Check for dark mode
+  useEffect(() => {
+    const checkDarkMode = () => {
+      const isDark = document.documentElement.classList.contains('dark');
+      setIsDarkMode(isDark);
+    };
+    
+    checkDarkMode();
+    
+    // Observe changes to dark mode class
+    const observer = new MutationObserver(() => {
+      checkDarkMode();
+    });
+    
+    observer.observe(document.documentElement, {
+      attributes: true,
+      attributeFilter: ['class'],
+    });
+    
+    return () => observer.disconnect();
+  }, []);
 
   // Show toast notification
   const showToastMessage = (message, type = "success", title = "") => {
@@ -689,8 +722,8 @@ const Dashboard = () => {
 
   return (
     <div>
-      {/* Welcome Banner with Avatar */}
-      <div className="welcome-banner bg-gradient-to-br from-green-600 to-green-500 rounded-xl p-5 md:p-7 mb-7 flex flex-col md:flex-row justify-between items-center gap-5">
+      {/* Welcome Banner with Avatar - Theme Aware */}
+      <div className={`welcome-banner rounded-xl p-5 md:p-7 mb-7 flex flex-col md:flex-row justify-between items-center gap-5 shadow-lg ${getWelcomeBannerGradient(isDarkMode)}`}>
         <div className="welcome-left flex items-center gap-5 flex-wrap">
           <div className="welcome-avatar w-16 h-16 rounded-xl overflow-hidden border-3 border-white shadow-lg bg-white flex items-center justify-center">
             {employeeAvatar ? (
@@ -708,19 +741,21 @@ const Dashboard = () => {
             )}
           </div>
           <div className="welcome-text">
-            <h2 className="text-xl md:text-2xl font-bold text-white">
+            <h2 className={`text-xl md:text-2xl font-bold ${isDarkMode ? 'text-white' : 'text-white'}`}>
               Welcome, {getEmployeeName()}! 👋
             </h2>
-            <p className="text-white/90 text-xs md:text-sm">
+            <p className={`${isDarkMode ? 'text-gray-300' : 'text-white/90'} text-xs md:text-sm`}>
               {getEmployeeRole()}
             </p>
           </div>
         </div>
-        <div className="datetime-info text-center md:text-right text-white">
-          <div className="time text-2xl md:text-3xl font-bold">
+        <div className="datetime-info text-center md:text-right">
+          <div className={`text-2xl md:text-3xl font-bold ${isDarkMode ? 'text-white' : 'text-white'}`}>
             {currentTime}
           </div>
-          <div className="date text-xs opacity-90">{currentDate}</div>
+          <div className={`text-xs ${isDarkMode ? 'text-gray-400' : 'text-white/80'}`}>
+            {currentDate}
+          </div>
         </div>
       </div>
 
