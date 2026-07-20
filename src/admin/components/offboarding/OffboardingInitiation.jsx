@@ -190,7 +190,6 @@ const OffboardingInitiation = () => {
           const result = await dispatch(
             fetchOffboardingById(offboardingId),
           ).unwrap();
-          console.log("Fetched offboarding data:", result);
           if (result) {
             populateFormWithData(result);
             // Fetch progress to show current step info
@@ -215,7 +214,6 @@ const OffboardingInitiation = () => {
   // Helper function to populate form with existing data
   // Helper function to populate form with existing data
   const populateFormWithData = (data) => {
-    console.log("Populating form with data:", data);
 
     // Extract employee info from nested object
     const employeeData = data.employee || {};

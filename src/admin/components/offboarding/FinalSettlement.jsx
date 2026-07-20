@@ -336,7 +336,6 @@ const FinalSettlement = () => {
         settlementData: settlementPayload 
       })).unwrap();
 
-      console.log("Settlement approved:", result);
       
       // Refresh progress after approving settlement
       await dispatch(fetchOffboardingProgress(offboardingId || localStorage.getItem("offboarding_id")));

@@ -110,8 +110,6 @@ const Profile = () => {
       const fullName = getFullName();
       const personalEmail = getPersonalEmail();
       
-      console.log("📞 Setting phone number:", phoneNumber);
-      console.log("🏠 Setting address:", address);
       
       setFormData({
         fullName: fullName,
@@ -127,7 +125,6 @@ const Profile = () => {
     const fetchUser = async () => {
       try {
         const result = await dispatch(fetchUserProfile());
-        console.log("✅ Profile fetched:", result.payload);
         if (result.payload) {
           const userData = result.payload;
           const empData = userData?.employee || userData;
@@ -141,9 +138,6 @@ const Profile = () => {
                              "";
           
           const address = empData?.address || userData?.address || "";
-          
-          console.log("📞 Phone from profile:", phoneNumber);
-          console.log("🏠 Address from profile:", address);
           
           setFormData({
             fullName: userData.name || empData?.name || `${empData?.first_name || ''} ${empData?.last_name || ''}`.trim() || "",
@@ -282,7 +276,6 @@ const Profile = () => {
 
       const result = response.data;
       if (result.status && result.path) {
-        console.log("✅ Avatar uploaded! Temp path:", result.path);
         setAvatarTempPath(result.path);
         showToast("Avatar uploaded successfully", "success");
       } else {
@@ -333,31 +326,23 @@ const Profile = () => {
     
     // Send phone if it has changed - use both field names for compatibility
     if (formData.personalNumber && formData.personalNumber !== currentPhone) {
-      console.log("📱 Phone changed from:", currentPhone, "to:", formData.personalNumber);
       profileFormData.append("phone_number", formData.personalNumber);
       profileFormData.append("personal_number", formData.personalNumber);
       profileFormData.append("phone", formData.personalNumber);
-    } else {
-      console.log("📱 Phone unchanged, skipping update");
-    }
+    } 
     
     if (formData.address && formData.address !== currentAddress) {
-      console.log("🏠 Address changed from:", currentAddress, "to:", formData.address);
       profileFormData.append("address", formData.address);
-    } else {
-      console.log("🏠 Address unchanged, skipping update");
-    }
+    } 
     
     let constructedAvatarUrl = null;
     
     if (avatarTempPath) {
-      console.log("📤 Sending avatar temp path:", avatarTempPath);
       profileFormData.append("avatar", avatarTempPath);
       
       const baseUrl = import.meta.env.VITE_API_URL?.replace("/api", "") || window.location.origin;
       const avatarFileName = avatarTempPath.replace('temp/', '');
       constructedAvatarUrl = `${baseUrl}/storage/avatars/${avatarFileName}`;
-      console.log("📸 Constructed avatar URL:", constructedAvatarUrl);
       
       setLastUpdatedAvatar(constructedAvatarUrl);
     }
@@ -375,11 +360,6 @@ const Profile = () => {
       showToast("No changes to update", "info");
       setUpdating(false);
       return;
-    }
-    
-    console.log("📤 Sending profile update with:");
-    for (let pair of profileFormData.entries()) {
-      console.log(pair[0] + ': ' + pair[1]);
     }
     
     const result = await dispatch(updateProfile({ formData: profileFormData, constructedAvatarUrl }));
@@ -487,7 +467,6 @@ const Profile = () => {
                       console.error("❌ Image failed to load:", avatarUrl);
                       setAvatarError(true);
                     }}
-                    onLoad={() => console.log("✅ Avatar loaded successfully:", avatarUrl)}
                   />
                 ) : (
                   <div className="w-full h-full bg-gradient-to-r from-green-500 to-green-600 flex items-center justify-center text-white text-5xl font-bold">

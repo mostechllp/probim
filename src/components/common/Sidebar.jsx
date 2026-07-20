@@ -33,7 +33,7 @@ const EMPLOYEE_ROUTE_MAP = {
   employees: "/employee/employees",
   attendance: "/employee/attendance",
   "attendance-requests": "/employee/attendance-requests",
-  documents: "/employee/documents",
+  documents: "/employee/agreements",
   "task-reports": "/employee/task-reports",
   reports: "/employee/reports",
   projects: "/employee/projects",

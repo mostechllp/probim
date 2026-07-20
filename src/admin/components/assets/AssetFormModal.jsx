@@ -28,7 +28,6 @@ export const AssetFormModal = ({ isOpen, onClose, onSubmit, formData, setFormDat
     setIsAddingType(true);
     try {
       const result = await dispatch(createAssetType({ name: newTypeData.name })).unwrap();
-      console.log("Asset type created:", result);
       showToast("Asset type added successfully", "success");
       setShowAssetTypeModal(false);
       setNewTypeData({ name: "" });

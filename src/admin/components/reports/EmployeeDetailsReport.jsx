@@ -1,6 +1,6 @@
 import { useEffect, useState } from "react";
 import { useDispatch, useSelector } from "react-redux";
-import { Link } from "react-router-dom";
+import { Link, useLocation } from "react-router-dom";
 import SearchBar from "../common/SearchBar";
 import EntriesSelector from "../common/EntriesSelector";
 import { showToast } from "../../../components/common/Toast";
@@ -12,6 +12,15 @@ import ExportModal from "../../../components/common/ExportModal";
 
 const EmployeeDetailsReport = () => {
   const dispatch = useDispatch();
+const location = useLocation();
+
+// Determine base path based on current route
+const getBasePath = () => {
+  if (location.pathname.startsWith('/admin')) return '/admin';
+  if (location.pathname.startsWith('/employee')) return '/employee';
+  return '';
+};
+const basePath = getBasePath();
   const { employees = [], loading } = useSelector(
     (state) => state.employees || {},
   );
@@ -255,11 +264,11 @@ const EmployeeDetailsReport = () => {
         <div className="mb-6">
           <div className="flex items-center gap-2 text-xs md:text-sm mb-4 md:mb-6 flex-wrap">
             <Link
-              to="/admin/reports"
-              className="text-green-500 hover:text-green-600 font-medium"
-            >
-              Reports
-            </Link>
+  to={`${basePath}/reports`}
+  className="text-green-500 hover:text-green-600 font-medium"
+>
+  Reports
+</Link>
             <i className="fas fa-chevron-right text-gray-400 text-[10px] md:text-xs"></i>
             <span className="text-gray-500">Employee details report</span>
           </div>

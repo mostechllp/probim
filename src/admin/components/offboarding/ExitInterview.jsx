@@ -134,8 +134,6 @@ const ExitInterview = () => {
         id: offboardingId || localStorage.getItem("offboarding_id"), 
         interviewData: interviewPayload 
       })).unwrap();
-
-      console.log("Interview submitted:", result);
       
       // Refresh progress after submitting interview
       await dispatch(fetchOffboardingProgress(offboardingId || localStorage.getItem("offboarding_id")));

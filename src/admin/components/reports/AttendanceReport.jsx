@@ -1,6 +1,6 @@
 import { useEffect, useState } from "react";
 import { useDispatch, useSelector } from "react-redux";
-import { Link } from "react-router-dom";
+import { Link, useLocation } from "react-router-dom";
 import SearchBar from "../common/SearchBar";
 import EntriesSelector from "../common/EntriesSelector";
 import { showToast } from "../../../components/common/Toast";
@@ -17,6 +17,17 @@ import { useNavigate } from "react-router-dom";
 
 const AttendanceReport = () => {
   const dispatch = useDispatch();
+  const location = useLocation();
+  const navigate = useNavigate();
+  
+  // Determine base path based on current route
+  const getBasePath = () => {
+    if (location.pathname.startsWith('/admin')) return '/admin';
+    if (location.pathname.startsWith('/employee')) return '/employee';
+    return '';
+  };
+  const basePath = getBasePath();
+
   const {
     attendanceRecords: records = [],
     attendanceLoading: loading = false,
@@ -25,8 +36,6 @@ const AttendanceReport = () => {
     exportLoading = false,
     employeesList = [],
   } = useSelector((state) => state.reports || {});
-
-  const navigate = useNavigate();
 
   // Local state for filters (these will be applied when "Apply" is clicked)
   const [currentPage, setCurrentPage] = useState(1);
@@ -169,7 +178,7 @@ const AttendanceReport = () => {
 
     if (matchedEmployee) {
       // Navigate to the employee attendance page with the numeric ID
-      navigate(`/admin/reports/attendance/employee/${matchedEmployee.id}`);
+      navigate(`${basePath}/reports/attendance/employee/${matchedEmployee.id}`);
     } else {
       // Fallback: try to use the record's employee_id
       console.warn("Employee not found in list, using record data:", record);
@@ -178,7 +187,7 @@ const AttendanceReport = () => {
         (emp) => emp.name === (record.employeeName || record.name),
       );
       if (fallbackEmployee) {
-        navigate(`/admin/reports/attendance/employee/${fallbackEmployee.id}`);
+        navigate(`${basePath}/reports/attendance/employee/${fallbackEmployee.id}`);
       } else {
         showToast("Employee not found", "error");
       }
@@ -493,11 +502,11 @@ const AttendanceReport = () => {
   return (
     <div className="w-full overflow-x-hidden">
       <main className="content px-4 py-4 md:px-6 md:py-6 w-full overflow-x-hidden">
-        {/* Page Header with Breadcrumb */}
+        {/* Page Header with Breadcrumb - Dynamic */}
         <div className="mb-6">
           <div className="flex items-center gap-2 text-xs md:text-sm mb-4 md:mb-6 flex-wrap">
             <Link
-              to="/admin/reports"
+              to={`${basePath}/reports`}
               className="text-green-500 hover:text-green-600 font-medium"
             >
               Reports

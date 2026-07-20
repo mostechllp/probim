@@ -24,12 +24,6 @@ const ProjectDetailsModal = ({ isOpen, onClose, project, employees = [] }) => {
       emp = employees.find((e) => String(e.employee_id) === String(empId));
     }
 
-    if (emp) {
-      console.log(`✅ Found employee details: ${emp.name}`);
-    } else {
-      console.log(`❌ No employee found with ID: ${empId}`);
-    }
-
     return emp
       ? {
           name: emp.name,
