@@ -4,7 +4,8 @@ import projectService from "../../services/projectService";
 
 // src/admin/store/slices/projectAssignmentSlice.js
 
-// Update the mapAssignmentFromApi function in projectAssignmentSlice.js
+// projectAssignmentSlice.js
+// projectAssignmentSlice.js
 const mapAssignmentFromApi = (
   apiAssign,
   fallbackEmployeeId = null,
@@ -12,52 +13,30 @@ const mapAssignmentFromApi = (
 ) => {
   if (!apiAssign) return null;
 
-  // Try to find employee ID - but now also handle if the employee ID is the same as user_id
-  // For employee assignments, the employeeId might be the employee record ID, not the user_id
+  // IMPORTANT: Use apiAssign.id as the primary employee ID
   let employeeId = null;
-  let userId = null;
   
-  // First try to get user_id
-  if (apiAssign.user_id) {
-    userId = Number(apiAssign.user_id);
-  } else if (apiAssign.user?.id) {
-    userId = Number(apiAssign.user.id);
+  // Primary: Use the employee record ID (apiAssign.id)
+  if (apiAssign.id) {
+    employeeId = Number(apiAssign.id);
   }
-  
-  // Get employee ID from various sources
-  const idCandidates = [
-    apiAssign.employee_id, // This is the employee ID from the API
-    apiAssign.id,
-    apiAssign.employeeId,
-    apiAssign.employee?.id,
-    userId, // Fallback to user_id if no employee_id found
-    fallbackEmployeeId,
-  ];
-
-  for (const candidate of idCandidates) {
-    if (
-      candidate !== null &&
-      candidate !== undefined &&
-      candidate !== "" &&
-      !isNaN(Number(candidate))
-    ) {
-      employeeId = Number(candidate);
-      break;
-    }
+  // Fallback: If no id, try user_id
+  else if (apiAssign.user_id) {
+    employeeId = Number(apiAssign.user_id);
+  }
+  // Fallback: Use provided fallback
+  else if (fallbackEmployeeId) {
+    employeeId = Number(fallbackEmployeeId);
   }
 
   if (!employeeId || isNaN(employeeId)) {
     return null;
   }
 
-  // Get project IDs
+  // Get project IDs from the projects array
   let projectIds = [];
-  if (apiAssign.project_ids) {
-    projectIds = apiAssign.project_ids;
-  } else if (apiAssign.projectIds) {
-    projectIds = apiAssign.projectIds;
-  } else if (Array.isArray(apiAssign.projects)) {
-    projectIds = apiAssign.projects.map((p) => String(p.id || p));
+  if (apiAssign.projects && Array.isArray(apiAssign.projects)) {
+    projectIds = apiAssign.projects.map((p) => String(p.id));
   }
 
   // If includeEmpty is false, filter out empty assignments
@@ -66,9 +45,9 @@ const mapAssignmentFromApi = (
   }
 
   return {
-    employeeId, // This should be the employee record ID
-    userId: userId || null,
-    employeeCode: apiAssign.employee_id || `EMP-${employeeId}`, // Store the employee_id from API
+    employeeId: employeeId, // This is the employee record ID from apiAssign.id
+    userId: apiAssign.user_id ? Number(apiAssign.user_id) : null,
+    employeeCode: apiAssign.employee_id || `EMP-${employeeId}`,
     firstName: apiAssign.first_name || null,
     lastName: apiAssign.last_name || null,
     projectIds: projectIds.map(String),
@@ -115,8 +94,7 @@ export const fetchAssignments = createAsyncThunk(
   },
 );
 
-// src/admin/store/slices/projectAssignmentSlice.js
-
+// projectAssignmentSlice.js
 export const saveAssignment = createAsyncThunk(
   "projectAssignments/saveAssignment",
   async (
@@ -135,21 +113,29 @@ export const saveAssignment = createAsyncThunk(
       // Get the updated projects from the response
       let updatedProjectIds = [];
       let userId = null;
+      let employeeRecordId = Number(employeeId); // Use the passed employeeId as the primary
 
       if (response?.data) {
         const data = response.data;
-        userId = data.user_id || null;
+        userId = data.user_id ? Number(data.user_id) : null;
 
         if (data.projects && Array.isArray(data.projects)) {
           updatedProjectIds = data.projects.map((p) => String(p.id));
         }
+
+        // Only use data.id if it exists and is a number
+        // DO NOT use data.employee_id as it's a string code
+        if (data.id && !isNaN(Number(data.id))) {
+          employeeRecordId = Number(data.id);
+        }
       }
 
       console.log("Updated project IDs:", updatedProjectIds);
+      console.log("Employee record ID:", employeeRecordId);
 
       // Create the updated assignment object
       const updatedAssignment = {
-        employeeId: Number(employeeId),
+        employeeId: employeeRecordId,
         userId: userId,
         projectIds: updatedProjectIds,
         lastUpdated: new Date().toISOString().split("T")[0],
@@ -158,11 +144,10 @@ export const saveAssignment = createAsyncThunk(
 
       // If there are no projects, we need to remove the assignment from the list
       if (updatedProjectIds.length === 0) {
-        // Return empty assignment to indicate removal
         return {
           ...updatedAssignment,
           projectIds: [],
-          _remove: true, // Flag to indicate this should be removed
+          _remove: true,
         };
       }
 

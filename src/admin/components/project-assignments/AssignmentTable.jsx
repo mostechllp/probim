@@ -439,25 +439,17 @@ const AssignmentTable = ({
   const [drawerOpen, setDrawerOpen] = useState(false);
   const [drawerEmployee, setDrawerEmployee] = useState(null);
 
-  // Map assignments to include employee information for quick searches and sorts
-  // Map assignments to include employee information for quick searches and sorts
+  // In AssignmentTable.jsx - fullAssignments mapping
 const fullAssignments = useMemo(() => {
   if (!assignments || !Array.isArray(assignments)) {
     return [];
   }
 
   return assignments.map((assign) => {
-    // Try to find the employee for additional info (name, avatar, etc.)
-    const emp =
-      employees && Array.isArray(employees)
-        ? employees.find((e) => {
-            const empId = Number(e.id);
-            const userId = Number(e.user_id);
-            const assignId = Number(assign.employeeId);
-            // Also check by employee_id string
-            return empId === assignId || userId === assignId || e.employee_id === assign.employeeCode;
-          })
-        : undefined;
+    // Find employee by ID (primary key)
+    const emp = employees && Array.isArray(employees)
+      ? employees.find((e) => Number(e.id) === Number(assign.employeeId))
+      : undefined;
     
     let employeeName = emp?.name || "";
     if (!employeeName && (assign.firstName || assign.lastName)) {
@@ -475,15 +467,14 @@ const fullAssignments = useMemo(() => {
     }
     if (!employeeName) employeeName = `Employee #${assign.employeeId}`;
 
-    // IMPORTANT: Use the employeeCode from the assignment data directly
-    // This is the actual employee_id from the API like "EMP-MCS2HX"
-    // Only fallback to emp?.employee_id if assign.employeeCode is not available
-    const employeeCode = assign.employeeCode || emp?.employee_id || `EMP-${assign.employeeId}`;
+    // IMPORTANT: Use emp?.employee_id (from the employee data) as the primary source
+    // Only fallback to assign.employeeCode if emp doesn't have it
+    const employeeCode = emp?.employee_id || assign.employeeCode || `EMP-${assign.employeeId}`;
 
     return {
       ...assign,
       employeeName,
-      employeeCode, // Use the employeeCode from the assignment
+      employeeCode, // Use the employee's employee_id
       userId: assign.userId || emp?.user_id || emp?.user?.id || null,
       designation: emp?.designation || emp?.user?.designation?.name || "-",
       department: emp?.department || emp?.user?.department?.name || "-",
