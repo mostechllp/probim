@@ -10,9 +10,6 @@
 import { useEffect, useState } from "react";
 import { useDispatch, useSelector } from "react-redux";
 import { Link, useLocation } from "react-router-dom";
-// Remove Sidebar and Header imports - they're now in AdminLayout
-// import Sidebar from '@admin/components/common/Sidebar';
-// import Header from '@admin/components/common/Header';
 import SearchBar from "@admin/components/common/SearchBar";
 import EntriesSelector from "@admin/components/common/EntriesSelector";
 import LeaveModal from "@admin/components/leaves/LeaveModal";
@@ -48,26 +45,13 @@ const Leaves = () => {
   const [perPage, setPerPage] = useState(10);
   const [selectedLeave, setSelectedLeave] = useState(null);
   const [showModal, setShowModal] = useState(false);
-  // Remove sidebar related state
-  // const [sidebarOpen, setSidebarOpen] = useState(false);
-  // const [isMobile, setIsMobile] = useState(false);
 
   // Confirm modal states
   const [confirmOpen, setConfirmOpen] = useState(false);
-  const [actionType, setActionType] = useState(null); // 'approve' or 'reject'
+  const [actionType, setActionType] = useState(null);
   const [selectedLeaveId, setSelectedLeaveId] = useState(null);
   const [rejectionReason, setRejectionReason] = useState("");
   const [actionLoading, setActionLoading] = useState(false);
-
-  // Remove mobile check useEffect - handled by AdminLayout
-  // useEffect(() => {
-  //   const checkMobile = () => {
-  //     setIsMobile(window.innerWidth < 768);
-  //   };
-  //   checkMobile();
-  //   window.addEventListener('resize', checkMobile);
-  //   return () => window.removeEventListener('resize', checkMobile);
-  // }, []);
 
   useEffect(() => {
     dispatch(fetchLeaves());
@@ -81,8 +65,75 @@ const Leaves = () => {
     }
   }, [error, dispatch]);
 
+  // Helper to get employee name from different possible structures
+  const getEmployeeName = (leave) => {
+    if (leave.employee_name) return leave.employee_name;
+    if (leave.employee?.name) return leave.employee.name;
+    if (leave.employee?.first_name && leave.employee?.last_name) {
+      return `${leave.employee.first_name} ${leave.employee.last_name}`;
+    }
+    if (leave.employee?.first_name) return leave.employee.first_name;
+    return "-";
+  };
+
+  // Helper to get applied by user name
+  const getAppliedByName = (leave) => {
+    // Check if applied_by exists and get the user info
+    const appliedById = leave.applied_by;
+    if (!appliedById) return "-";
+    
+    // Try to get the user from the applied_by_user if it exists in the response
+    // For now, we'll use a placeholder since the API might not return the full user
+    // We can fetch the user details separately or display the ID with a note
+    if (leave.applied_by_user) {
+      const user = leave.applied_by_user;
+      if (user.name) return user.name;
+      if (user.first_name && user.last_name) {
+        return `${user.first_name} ${user.last_name}`;
+      }
+      if (user.username) return user.username;
+    }
+    
+    // If we have employee data for the applied_by
+    if (leave.applied_by_employee) {
+      const emp = leave.applied_by_employee;
+      if (emp.name) return emp.name;
+      if (emp.first_name && emp.last_name) {
+        return `${emp.first_name} ${emp.last_name}`;
+      }
+    }
+    
+    // If we have the employee object and it matches the applied_by ID
+    if (leave.employee && leave.employee.id === appliedById) {
+      const emp = leave.employee;
+      if (emp.name) return emp.name;
+      if (emp.first_name && emp.last_name) {
+        return `${emp.first_name} ${emp.last_name}`;
+      }
+    }
+    
+    // Fallback: show the user ID
+    return `User ID: ${appliedById}`;
+  };
+
+  // Helper to get applied by role
+  const getAppliedByRole = (leave) => {
+    const appliedById = leave.applied_by;
+    if (!appliedById) return "-";
+    
+    if (leave.applied_by_user && leave.applied_by_user.role) {
+      return leave.applied_by_user.role.name || "-";
+    }
+    
+    // If the applied_by is the same as the employee, they applied for themselves
+    if (leave.employee && leave.employee.id === appliedById) {
+      return "Self";
+    }
+    
+    return "-";
+  };
+
   const getFilteredLeaves = () => {
-    // Ensure leaves is an array
     const leavesArray = Array.isArray(leaves) ? leaves : [];
     let filtered = leavesArray;
 
@@ -100,10 +151,14 @@ const Leaves = () => {
           (leave.employee?.first_name || "")
             .toLowerCase()
             .includes(searchLower) ||
+          (leave.employee?.name || "")
+            .toLowerCase()
+            .includes(searchLower) ||
           (leave.leave_type?.name || leave.type || "")
             .toLowerCase()
             .includes(searchLower) ||
-          (leave.reason || "").toLowerCase().includes(searchLower),
+          (leave.reason || "").toLowerCase().includes(searchLower) ||
+          (getAppliedByName(leave) || "").toLowerCase().includes(searchLower)
       );
     }
     return filtered;
@@ -150,7 +205,6 @@ const Leaves = () => {
       setSelectedLeaveId(null);
       setRejectionReason("");
       setActionType(null);
-      // Refresh the list
       dispatch(fetchLeaves());
     } else {
       showToast(
@@ -175,7 +229,7 @@ const Leaves = () => {
     }
   };
 
-  // Calculate stats - ensure leaves is an array
+  // Calculate stats
   const leavesArray = Array.isArray(leaves) ? leaves : [];
   const total = leavesArray.length;
   const pending = leavesArray.filter(
@@ -198,23 +252,38 @@ const Leaves = () => {
       case "rejected":
         return "bg-red-100 text-red-600 dark:bg-red-900/30 dark:text-red-400";
       default:
-        return "bg-gray-100 text-gray-600";
+        return "bg-gray-100 text-gray-600 dark:bg-gray-700 dark:text-gray-400";
     }
   };
 
   const formatDate = (dateString) => {
     if (!dateString) return "-";
-    const date = new Date(dateString);
-    return date.toLocaleDateString("en-GB", {
-      day: "2-digit",
-      month: "short",
-      year: "numeric",
-    });
+    try {
+      // If it's in YYYY-MM-DD format
+      if (typeof dateString === 'string' && dateString.match(/^\d{4}-\d{2}-\d{2}$/)) {
+        const [year, month, day] = dateString.split('-');
+        const date = new Date(year, month - 1, day);
+        return date.toLocaleDateString('en-GB', {
+          day: '2-digit',
+          month: 'short',
+          year: 'numeric'
+        });
+      }
+      const date = new Date(dateString);
+      if (!isNaN(date.getTime())) {
+        return date.toLocaleDateString('en-GB', {
+          day: '2-digit',
+          month: 'short',
+          year: 'numeric'
+        });
+      }
+      return dateString;
+    } catch (error) {
+      return dateString || "-";
+    }
   };
 
   return (
-    // Remove the outer div with Sidebar and flex layout
-    // Just return the main content directly
     <div className="w-full overflow-x-hidden">
       {/* Stats Cards */}
       <div className="stats-grid grid grid-cols-2 md:grid-cols-4 gap-3 md:gap-4 mb-6">
@@ -334,7 +403,7 @@ const Leaves = () => {
 
       {/* Leave Table */}
       <div className="bg-white dark:bg-gray-800 rounded-xl border border-gray-200 dark:border-gray-700 overflow-x-auto shadow-soft">
-        <div className="min-w-[1000px] lg:min-w-0">
+        <div className="min-w-[1100px] lg:min-w-0">
           <table className="w-full border-collapse">
             <thead>
               <tr className="bg-gray-50 dark:bg-gray-700/50 border-b border-gray-200 dark:border-gray-700">
@@ -343,6 +412,9 @@ const Leaves = () => {
                 </th>
                 <th className="px-3 md:px-4 py-2 md:py-3 text-left text-[10px] md:text-xs font-semibold text-gray-500 dark:text-gray-400">
                   Employee
+                </th>
+                <th className="px-3 md:px-4 py-2 md:py-3 text-left text-[10px] md:text-xs font-semibold text-gray-500 dark:text-gray-400">
+                  Applied By
                 </th>
                 <th className="px-3 md:px-4 py-2 md:py-3 text-left text-[10px] md:text-xs font-semibold text-gray-500 dark:text-gray-400">
                   Type
@@ -378,110 +450,139 @@ const Leaves = () => {
             </thead>
             <tbody>
               {pageLeaves.length > 0 ? (
-                pageLeaves.map((leave, idx) => (
-                  <tr
-                    key={leave.id}
-                    className="border-b border-gray-200 dark:border-gray-700 hover:bg-gray-50 dark:hover:bg-gray-700/50 transition-colors"
-                  >
-                    <td className="px-3 md:px-4 py-2 md:py-3 text-xs md:text-sm text-gray-600 dark:text-gray-400 text-center">
-                      {start + idx + 1}
-                    </td>
-                    <td className="px-3 md:px-4 py-2 md:py-3 text-xs md:text-sm font-semibold text-gray-800 dark:text-gray-200 whitespace-nowrap">
-                      {leave.employee_name || leave.employee?.name || "-"}
-                    </td>
-                    <td className="px-3 md:px-4 py-2 md:py-3 text-xs md:text-sm text-gray-600 dark:text-gray-400 whitespace-nowrap">
-                      {leave.leave_type?.name || leave.type || "-"}
-                    </td>
-                    <td className="px-3 md:px-4 py-2 md:py-3 text-xs md:text-sm text-gray-600 dark:text-gray-400 whitespace-nowrap">
-                      {formatDate(leave.from_date || leave.fromDate)}
-                    </td>
-                    <td className="px-3 md:px-4 py-2 md:py-3 text-xs md:text-sm text-gray-600 dark:text-gray-400 whitespace-nowrap">
-                      {formatDate(leave.to_date || leave.toDate)}
-                    </td>
-                    <td className="px-3 md:px-4 py-2 md:py-3 text-xs md:text-sm text-gray-600 dark:text-gray-400 text-center">
-                      {leave.number_of_days || leave.days || "-"}
-                    </td>
-                    <td className="px-3 md:px-4 py-2 md:py-3">
-                      <span
-                        className={`inline-block px-1.5 md:px-2 py-0.5 rounded-full text-[9px] md:text-xs font-semibold whitespace-nowrap ${
-                          leave.claim_salary === 1 ||
-                          leave.claimSalary === "Yes"
-                            ? "bg-green-100 text-green-600 dark:bg-green-900/30 dark:text-green-400"
-                            : "bg-gray-100 text-gray-600 dark:bg-gray-700 dark:text-gray-400"
-                        }`}
-                      >
-                        {leave.claim_salary === 1 || leave.claimSalary === "Yes"
-                          ? "Yes"
-                          : "No"}
-                      </span>
-                    </td>
-                    <td className="px-3 md:px-4 py-2 md:py-3">
-                      {leave.document_path || leave.doc ? (
-                        <button
-                          onClick={() =>
-                            handleViewDocument(leave.document_path || leave.doc)
-                          }
-                          className="text-blue-500 hover:text-blue-600 text-xs md:text-sm flex items-center gap-1"
-                        >
-                          <i className="fas fa-file-pdf text-xs md:text-sm"></i>
-                          <span className="hidden sm:inline">View</span>
-                        </button>
-                      ) : (
-                        "-"
-                      )}
-                    </td>
-                    <td
-                      className="px-3 md:px-4 py-2 md:py-3 text-xs md:text-sm text-gray-600 dark:text-gray-400 max-w-[120px] md:max-w-[150px] truncate"
-                      title={leave.reason}
+                pageLeaves.map((leave, idx) => {
+                  const appliedByName = getAppliedByName(leave);
+                  const appliedByRole = getAppliedByRole(leave);
+                  const isSelfApplied = appliedByName === getEmployeeName(leave) || leave.applied_by === leave.employee_id;
+                  
+                  return (
+                    <tr
+                      key={leave.id}
+                      className="border-b border-gray-200 dark:border-gray-700 hover:bg-gray-50 dark:hover:bg-gray-700/50 transition-colors"
                     >
-                      {leave.reason || "-"}
-                    </td>
-                    <td className="px-3 md:px-4 py-2 md:py-3">
-                      <span
-                        className={`inline-block px-2 md:px-3 py-0.5 md:py-1 rounded-full text-[9px] md:text-xs font-semibold whitespace-nowrap capitalize ${getStatusClass(leave.status)}`}
-                      >
-                        {leave.status || "pending"}
-                      </span>
-                    </td>
-                    <td className="px-3 md:px-4 py-2 md:py-3 text-xs md:text-sm text-gray-600 dark:text-gray-400 whitespace-nowrap">
-                      {leave.processed_by || leave.processedBy || "-"}
-                    </td>
-                    <td className="px-3 md:px-4 py-2 md:py-3">
-                      <div className="flex gap-1 md:gap-2">
-                        <button
-                          onClick={() => handleView(leave)}
-                          className="p-1.5 rounded-lg hover:bg-gray-100 dark:hover:bg-gray-700 text-blue-500 transition-colors"
-                          title="View Details"
+                      <td className="px-3 md:px-4 py-2 md:py-3 text-xs md:text-sm text-gray-600 dark:text-gray-400 text-center">
+                        {start + idx + 1}
+                      </td>
+                      <td className="px-3 md:px-4 py-2 md:py-3 text-xs md:text-sm font-semibold text-gray-800 dark:text-gray-200 whitespace-nowrap">
+                        {getEmployeeName(leave)}
+                      </td>
+                      <td className="px-3 md:px-4 py-2 md:py-3">
+                        <div className="flex flex-col">
+                          <span className="text-xs md:text-sm font-semibold text-blue-600 dark:text-blue-400">
+                            {appliedByName}
+                          </span>
+                          {!isSelfApplied && appliedByRole !== "-" && (
+                            <span className="text-[10px] text-gray-500 dark:text-gray-400">
+                              {appliedByRole}
+                            </span>
+                          )}
+                          {isSelfApplied && (
+                            <span className="text-[10px] text-green-500 dark:text-green-400">
+                              Self
+                            </span>
+                          )}
+                          {!isSelfApplied && appliedByRole === "-" && leave.applied_by && (
+                            <span className="text-[10px] text-gray-400 dark:text-gray-500">
+                              ID: {leave.applied_by}
+                            </span>
+                          )}
+                        </div>
+                      </td>
+                      <td className="px-3 md:px-4 py-2 md:py-3 text-xs md:text-sm text-gray-600 dark:text-gray-400 whitespace-nowrap">
+                        {leave.leave_type?.name || leave.type || "-"}
+                      </td>
+                      <td className="px-3 md:px-4 py-2 md:py-3 text-xs md:text-sm text-gray-600 dark:text-gray-400 whitespace-nowrap">
+                        {formatDate(leave.start_date || leave.from_date)}
+                      </td>
+                      <td className="px-3 md:px-4 py-2 md:py-3 text-xs md:text-sm text-gray-600 dark:text-gray-400 whitespace-nowrap">
+                        {formatDate(leave.end_date || leave.to_date)}
+                      </td>
+                      <td className="px-3 md:px-4 py-2 md:py-3 text-xs md:text-sm text-gray-600 dark:text-gray-400 text-center">
+                        {leave.duration_days || leave.number_of_days || leave.days || "-"}
+                      </td>
+                      <td className="px-3 md:px-4 py-2 md:py-3">
+                        <span
+                          className={`inline-block px-1.5 md:px-2 py-0.5 rounded-full text-[9px] md:text-xs font-semibold whitespace-nowrap ${
+                            leave.claim_salary === 1 ||
+                            leave.claim_salary === "1" ||
+                            leave.claimSalary === "Yes"
+                              ? "bg-green-100 text-green-600 dark:bg-green-900/30 dark:text-green-400"
+                              : "bg-gray-100 text-gray-600 dark:bg-gray-700 dark:text-gray-400"
+                          }`}
                         >
-                          <i className="fas fa-eye text-xs md:text-sm"></i>
-                        </button>
-                        {(leave.status === "pending" ||
-                          leave.status === "Pending") && (
-                          <>
-                            <button
-                              onClick={() => handleApproveClick(leave.id)}
-                              className="p-1.5 rounded-lg hover:bg-gray-100 dark:hover:bg-gray-700 text-green-500 transition-colors"
-                              title="Approve"
-                            >
-                              <i className="fas fa-check-circle text-xs md:text-sm"></i>
-                            </button>
-                            <button
-                              onClick={() => handleRejectClick(leave.id)}
-                              className="p-1.5 rounded-lg hover:bg-gray-100 dark:hover:bg-gray-700 text-red-500 transition-colors"
-                              title="Reject"
-                            >
-                              <i className="fas fa-times-circle text-xs md:text-sm"></i>
-                            </button>
-                          </>
+                          {leave.claim_salary === 1 || leave.claim_salary === "1" || leave.claimSalary === "Yes"
+                            ? "Yes"
+                            : "No"}
+                        </span>
+                      </td>
+                      <td className="px-3 md:px-4 py-2 md:py-3">
+                        {leave.document_path || leave.document || leave.doc ? (
+                          <button
+                            onClick={() =>
+                              handleViewDocument(leave.document_path || leave.document || leave.doc)
+                            }
+                            className="text-blue-500 hover:text-blue-600 text-xs md:text-sm flex items-center gap-1"
+                          >
+                            <i className="fas fa-file-pdf text-xs md:text-sm"></i>
+                            <span className="hidden sm:inline">View</span>
+                          </button>
+                        ) : (
+                          "-"
                         )}
-                      </div>
-                    </td>
-                  </tr>
-                ))
+                      </td>
+                      <td
+                        className="px-3 md:px-4 py-2 md:py-3 text-xs md:text-sm text-gray-600 dark:text-gray-400 max-w-[120px] md:max-w-[150px] truncate"
+                        title={leave.reason}
+                      >
+                        {leave.reason || "-"}
+                      </td>
+                      <td className="px-3 md:px-4 py-2 md:py-3">
+                        <span
+                          className={`inline-block px-2 md:px-3 py-0.5 md:py-1 rounded-full text-[9px] md:text-xs font-semibold whitespace-nowrap capitalize ${getStatusClass(leave.status)}`}
+                        >
+                          {leave.status || "pending"}
+                        </span>
+                      </td>
+                      <td className="px-3 md:px-4 py-2 md:py-3 text-xs md:text-sm text-gray-600 dark:text-gray-400 whitespace-nowrap">
+                        {leave.processed_by || leave.processedBy || leave.approver?.username || "-"}
+                      </td>
+                      <td className="px-3 md:px-4 py-2 md:py-3">
+                        <div className="flex gap-1 md:gap-2">
+                          <button
+                            onClick={() => handleView(leave)}
+                            className="p-1.5 rounded-lg hover:bg-gray-100 dark:hover:bg-gray-700 text-blue-500 transition-colors"
+                            title="View Details"
+                          >
+                            <i className="fas fa-eye text-xs md:text-sm"></i>
+                          </button>
+                          {(leave.status === "pending" ||
+                            leave.status === "Pending") && (
+                            <>
+                              <button
+                                onClick={() => handleApproveClick(leave.id)}
+                                className="p-1.5 rounded-lg hover:bg-gray-100 dark:hover:bg-gray-700 text-green-500 transition-colors"
+                                title="Approve"
+                              >
+                                <i className="fas fa-check-circle text-xs md:text-sm"></i>
+                              </button>
+                              <button
+                                onClick={() => handleRejectClick(leave.id)}
+                                className="p-1.5 rounded-lg hover:bg-gray-100 dark:hover:bg-gray-700 text-red-500 transition-colors"
+                                title="Reject"
+                              >
+                                <i className="fas fa-times-circle text-xs md:text-sm"></i>
+                              </button>
+                            </>
+                          )}
+                        </div>
+                      </td>
+                    </tr>
+                  );
+                })
               ) : (
                 <tr>
                   <td
-                    colSpan="12"
+                    colSpan="13"
                     className="px-4 py-8 text-center text-gray-500 dark:text-gray-400"
                   >
                     No leave requests found
@@ -533,6 +634,11 @@ const Leaves = () => {
         }
         confirmText={actionType === "approve" ? "Approve" : "Reject"}
         loading={actionLoading}
+        variant={
+          actionType === "approve"
+          ? "success"
+          : "danger"
+        }
       >
         {actionType === "reject" && (
           <div className="mt-4">

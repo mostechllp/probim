@@ -1,4 +1,4 @@
-import { useState, useEffect } from "react";
+import { useState, useEffect, useRef } from "react";
 import { useNavigate, Link } from "react-router-dom";
 import { useDispatch, useSelector } from "react-redux";
 import {
@@ -26,6 +26,7 @@ import { showToast } from "../../components/common/Toast";
 const RequestLeaveForEmployee = () => {
   const navigate = useNavigate();
   const dispatch = useDispatch();
+  const dropdownRef = useRef(null);
 
   const leavesState = useSelector((state) => state.EmpLeaves);
   const leaveTypes = leavesState?.leaveTypes || [];
@@ -51,6 +52,20 @@ const RequestLeaveForEmployee = () => {
   const [localError, setLocalError] = useState("");
   const [searchEmployee, setSearchEmployee] = useState("");
   const [showDropdown, setShowDropdown] = useState(false);
+
+  // Click outside handler for dropdown
+  useEffect(() => {
+    const handleClickOutside = (event) => {
+      if (dropdownRef.current && !dropdownRef.current.contains(event.target)) {
+        setShowDropdown(false);
+      }
+    };
+
+    document.addEventListener("mousedown", handleClickOutside);
+    return () => {
+      document.removeEventListener("mousedown", handleClickOutside);
+    };
+  }, []);
 
   // Fetch leave types and employees on mount
   useEffect(() => {
@@ -157,10 +172,11 @@ const RequestLeaveForEmployee = () => {
   };
 
   const handleEmployeeSelect = (employee) => {
+    const fullName = employee.first_name && employee.last_name 
+      ? `${employee.first_name} ${employee.last_name}` 
+      : employee.name || '';
     setFormData({ ...formData, employee_id: employee.id });
-    setSearchEmployee(
-      employee.name || `${employee.first_name} ${employee.last_name}`,
-    );
+    setSearchEmployee(fullName);
     setShowDropdown(false);
   };
 
@@ -226,7 +242,7 @@ const RequestLeaveForEmployee = () => {
 
     if (addLeaveRequestForEmployee.fulfilled.match(result)) {
       showToast("Leave request submitted successfully!", "success");
-      navigate("/admin/leaves");
+      navigate("/employee/leaves");
     }
   };
 
@@ -245,10 +261,17 @@ const RequestLeaveForEmployee = () => {
       {/* Breadcrumbs */}
       <div className="flex items-center gap-2 text-xs md:text-sm mb-4 md:mb-6 flex-wrap">
         <Link
-          to="/admin/leaves"
+          to="/employee/dashboard"
           className="text-green-500 hover:text-green-600 font-medium"
         >
-          Leave Requests
+          Dashboard
+        </Link>
+        <i className="fas fa-chevron-right text-gray-400 text-[10px] md:text-xs"></i>
+        <Link
+          to="/employee/leaves"
+          className="text-green-500 hover:text-green-600 font-medium"
+        >
+          My Leaves
         </Link>
         <i className="fas fa-chevron-right text-gray-400 text-[10px] md:text-xs"></i>
         <span className="text-gray-500 dark:text-gray-400">
@@ -289,7 +312,7 @@ const RequestLeaveForEmployee = () => {
                 <FiUser className="text-green-500" /> Select Employee{" "}
                 <span className="text-red-500 ml-1">*</span>
               </label>
-              <div className="relative">
+              <div className="relative" ref={dropdownRef}>
                 <div className="relative">
                   <FiSearch className="absolute left-3 top-1/2 -translate-y-1/2 text-gray-400" />
                   <input
@@ -309,28 +332,31 @@ const RequestLeaveForEmployee = () => {
                 </div>
                 {showDropdown && filteredEmployees.length > 0 && (
                   <div className="absolute z-10 w-full mt-1 bg-white dark:bg-gray-800 border border-gray-200 dark:border-gray-700 rounded-lg shadow-lg max-h-60 overflow-y-auto">
-                    {filteredEmployees.map((emp) => (
-                      <div
-                        key={emp.id}
-                        onClick={() => handleEmployeeSelect(emp)}
-                        className="px-4 py-2 hover:bg-gray-50 dark:hover:bg-gray-700 cursor-pointer transition-colors flex items-center gap-3"
-                      >
-                        <div className="w-8 h-8 rounded-full bg-gradient-to-br from-green-500 to-green-600 flex items-center justify-center text-white text-xs font-bold">
-                          {(emp.name || emp.first_name || "U")
-                            .charAt(0)
-                            .toUpperCase()}
+                    {filteredEmployees.map((emp) => {
+                      const fullName = emp.first_name && emp.last_name 
+                        ? `${emp.first_name} ${emp.last_name}` 
+                        : emp.name || '';
+                      return (
+                        <div
+                          key={emp.id}
+                          onClick={() => handleEmployeeSelect(emp)}
+                          className="px-4 py-2 hover:bg-gray-50 dark:hover:bg-gray-700 cursor-pointer transition-colors flex items-center gap-3"
+                        >
+                          <div className="w-8 h-8 rounded-full bg-gradient-to-br from-green-500 to-green-600 flex items-center justify-center text-white text-xs font-bold">
+                            {(emp.first_name || "U").charAt(0).toUpperCase()}
+                          </div>
+                          <div className="flex-1">
+                            <p className="text-sm font-medium text-gray-800 dark:text-gray-200">
+                              {fullName}
+                            </p>
+                            <p className="text-xs text-gray-500 dark:text-gray-400">
+                              ID: {emp.employee_id} •{" "}
+                              {emp.email || emp.company_email}
+                            </p>
+                          </div>
                         </div>
-                        <div className="flex-1">
-                          <p className="text-sm font-medium text-gray-800 dark:text-gray-200">
-                            {emp.name || `${emp.first_name} ${emp.last_name}`}
-                          </p>
-                          <p className="text-xs text-gray-500 dark:text-gray-400">
-                            ID: {emp.employee_id} •{" "}
-                            {emp.email || emp.company_email}
-                          </p>
-                        </div>
-                      </div>
-                    ))}
+                      );
+                    })}
                   </div>
                 )}
                 {showDropdown &&
@@ -534,7 +560,7 @@ const RequestLeaveForEmployee = () => {
 
             <div className="form-actions flex flex-col sm:flex-row justify-end gap-4 mt-8 pt-6 border-t border-gray-200 dark:border-gray-700">
               <Link
-                to="/admin/leaves"
+                to="/employee/leaves"
                 className="px-4 py-2 rounded-full text-xs font-semibold bg-gray-100 dark:bg-gray-700 text-gray-700 dark:text-gray-300 hover:bg-gray-200 dark:hover:bg-gray-600 transition-all flex items-center gap-2"
               >
                 <FiX /> Cancel

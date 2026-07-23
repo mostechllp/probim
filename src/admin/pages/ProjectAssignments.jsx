@@ -8,7 +8,7 @@ import {
   fetchAssignments,
   saveAssignment,
   deleteAllEmployeeProjects,
-  clearAssignmentError
+  clearAssignmentError,
 } from "../store/slices/projectAssignmentSlice";
 import { fetchEmployees } from "../store/slices/employeeSlice";
 import { fetchProjects } from "../store/slices/projectSlice";
@@ -18,26 +18,22 @@ import AssignmentTable from "../components/project-assignments/AssignmentTable";
 import AssignmentModal from "../components/project-assignments/AssignmentModal";
 import ConfirmModal from "../components/common/ConfirmModal";
 
-// Helper function to get employee by ID - updated to handle both id and user_id
+// ProjectAssignments.jsx
 const getEmployeeById = (employees, employeeId) => {
   if (!employees || !Array.isArray(employees)) return undefined;
   
-  // Convert to number for comparison
   const searchId = Number(employeeId);
+  if (isNaN(searchId)) return undefined;
   
-  return employees.find(emp => {
-    const empId = Number(emp.id);
-    const empUserId = Number(emp.user_id);
-    // Check if the search ID matches either the employee id or user_id
-    return empId === searchId || empUserId === searchId;
-  });
+  // Only match on the employee record ID (primary key)
+  return employees.find(emp => Number(emp.id) === searchId);
 };
 const ProjectAssignments = () => {
   const dispatch = useDispatch();
 
   // Redux States
   const { assignments, loading, actionLoading, error } = useSelector(
-    (state) => state.projectAssignments
+    (state) => state.projectAssignments,
   );
   const { employees } = useSelector((state) => state.employees);
   const { projects } = useSelector((state) => state.projects);
@@ -84,19 +80,24 @@ const ProjectAssignments = () => {
 
   // Submit operations
   const handleSaveForm = async ({ employeeId, projectIds }) => {
-    try {
-      await dispatch(saveAssignment({ employeeId, projectIds })).unwrap();
-      showToast("Project assignments saved successfully!", "success");
-      handleCloseModal();
-    } catch (e) {
-      // Handled by error listener
-    }
-  };
+  try {
+    console.log('Saving assignment for employee:', employeeId, 'with projects:', projectIds);
+    const result = await dispatch(saveAssignment({ employeeId, projectIds })).unwrap();
+    console.log('Save result:', result);
+    
+    showToast("Project assignments saved successfully!", "success");
+    handleCloseModal();
+  } catch (e) {
+    console.error('Save error:', e);
+  }
+};
 
   const handleConfirmDelete = async () => {
     if (!selectedAssignment) return;
     try {
-      await dispatch(deleteAllEmployeeProjects(selectedAssignment.employeeId)).unwrap();
+      await dispatch(
+        deleteAllEmployeeProjects(selectedAssignment.employeeId),
+      ).unwrap();
       showToast("Employee project mappings removed successfully!", "success");
       setIsDeleteOpen(false);
       setSelectedAssignment(null);
@@ -105,31 +106,42 @@ const ProjectAssignments = () => {
     }
   };
 
- // Enrich assignments with employee data (including employee_id)
-const enrichedAssignments = assignments.map(assign => {
-  const employee = getEmployeeById(employees, assign.employeeId);
-  
-  // Log for debugging
-  console.log('Assignment:', assign);
-  console.log('Found employee:', employee);
-  
-  return {
-    ...assign,
-    // Use employee_id from the employee object, fallback to assign.employeeCode or generate one
-    employeeCode: employee?.employee_id || assign.employeeCode || `EMP-${assign.employeeId}`,
-    employeeName: employee ? 
-      (employee.name || `${employee.first_name || ''} ${employee.last_name || ''}`.trim() || `Employee #${employee.id}`) :
-      `Employee #${assign.employeeId}`,
-    department: employee?.department?.name || employee?.user?.department?.name || '-',
-    designation: employee?.designation?.name || employee?.user?.designation?.name || '-',
-    avatar: employee?.avatar || null,
-    userId: employee?.user_id || assign.userId || null,
-  };
-});
+  // Enrich assignments with employee data (including employee_id)
+  // In ProjectAssignments.js, before enriching assignments
+  console.log("Raw assignments from Redux:", assignments);
+  console.log("Employees from Redux:", employees);
 
+  // In the enrichedAssignments mapping
+  const enrichedAssignments = assignments.map((assign) => {
+    const employee = getEmployeeById(employees, assign.employeeId);
+    console.log(
+      "Mapping assignment:",
+      assign.employeeId,
+      "Found employee:",
+      employee,
+    );
+
+    return {
+      ...assign,
+      employeeCode:
+        employee?.employee_id ||
+        assign.employeeCode ||
+        `EMP-${assign.employeeId}`,
+      employeeName: employee
+        ? employee.name ||
+          `${employee.first_name || ""} ${employee.last_name || ""}`.trim() ||
+          `Employee #${employee.id}`
+        : `Employee #${assign.employeeId}`,
+      department:
+        employee?.department?.name || employee?.user?.department?.name || "-",
+      designation:
+        employee?.designation?.name || employee?.user?.designation?.name || "-",
+      avatar: employee?.avatar || null,
+      userId: employee?.user_id || assign.userId || null,
+    };
+  });
   return (
     <div className="p-4 md:p-6 space-y-6 max-w-[1600px] mx-auto animate-fadeIn">
-
       {/* Header section */}
       <div className="flex flex-col md:flex-row md:items-center justify-between gap-4 mb-2">
         <div>
@@ -137,7 +149,8 @@ const enrichedAssignments = assignments.map(assign => {
             Project Assignments
           </h2>
           <p className="text-xs text-gray-500 dark:text-gray-400 mt-1 font-medium">
-            Map and coordinate multiple corporate {PROJECT_MODULE_NAME}s to employees in your organization.
+            Map and coordinate multiple corporate {PROJECT_MODULE_NAME}s to
+            employees in your organization.
           </p>
         </div>
 
