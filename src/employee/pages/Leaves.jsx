@@ -24,11 +24,13 @@ import {
   FiX,
   FiUser,
   FiLoader,
+  FiEye,
 } from "react-icons/fi";
 import StatusBadge from "../components/common/StatusBadge";
 import ConfirmModal from "../../admin/components/common/ConfirmModal";
 import { showToast } from "../components/common/Toast";
 import DateInput from "../../admin/components/common/DateInput";
+import LeaveViewModal from "../components/leaves/LeaveViewModal";
 
 // ✅ Get API base URL from environment
 const getBaseUrl = () => {
@@ -161,7 +163,6 @@ const Leaves = () => {
   const pagination = leavesState?.pagination || { currentPage: 1, perPage: 10 };
   const loading = leavesState?.loading || false;
   const submitting = leavesState?.submitting || false;
-  const editingLeaveData = leavesState?.editingLeave || null;
 
   // Edit/Delete states
   const [editingLeave, setEditingLeave] = useState(null);
@@ -180,6 +181,11 @@ const Leaves = () => {
   const [editFile, setEditFile] = useState(null);
   const [fetchingLeave, setFetchingLeave] = useState(false);
 
+  // View states
+  const [viewingLeave, setViewingLeave] = useState(null);
+  const [showViewModal, setShowViewModal] = useState(false);
+  const [viewLoading, setViewLoading] = useState(false);
+
   // ✅ Document view handler
   const handleViewDocument = (docPath) => {
     if (!docPath) {
@@ -190,6 +196,30 @@ const Leaves = () => {
     const fullUrl = getDocumentUrl(docPath);
     console.log("Opening document URL:", fullUrl);
     window.open(fullUrl, "_blank");
+  };
+
+  // ✅ View handler - fetches leave by ID
+  const handleViewClick = async (leave) => {
+    setViewLoading(true);
+    setShowViewModal(true);
+
+    try {
+      const result = await dispatch(fetchLeaveById(leave.id)).unwrap();
+      console.log("Fetched leave for viewing:", result);
+      setViewingLeave(result);
+    } catch (error) {
+      console.error("Failed to fetch leave details:", error);
+      showToast("Failed to load leave details", "error");
+      setShowViewModal(false);
+    } finally {
+      setViewLoading(false);
+    }
+  };
+
+  const handleCloseViewModal = () => {
+    setShowViewModal(false);
+    setViewingLeave(null);
+    setViewLoading(false);
   };
 
   const filteredLeaves = useMemo(() => {
@@ -361,22 +391,17 @@ const Leaves = () => {
     setShowEditModal(true);
 
     try {
-      // ✅ Fetch the complete leave data by ID
       const result = await dispatch(fetchLeaveById(leave.id)).unwrap();
-
       console.log("Fetched leave data for editing:", result);
 
-      // Get the leave type ID from the leave_type object or direct field
       const leaveTypeId =
         typeof result.leave_type === "object"
           ? result.leave_type.id
           : result.leave_type_id;
 
-      // Format dates for input fields (YYYY-MM-DD)
       const startDateFormatted = formatDateForInput(result.start_date);
       const endDateFormatted = formatDateForInput(result.end_date);
 
-      // Get session values (fallback to 'morning' if not set)
       const session1 = result.session1 || "morning";
       const session2 = result.session2 || "afternoon";
 
@@ -622,7 +647,7 @@ const Leaves = () => {
 
       {/* Table */}
       <div className="leave-table-wrapper bg-[var(--surface)] rounded-xl border border-[var(--border)] overflow-x-auto shadow-sm">
-        <table className="leave-table w-full border-collapse text-xs min-w-[1200px]">
+        <table className="leave-table w-full border-collapse text-xs min-w-[1300px]">
           <thead>
             <tr className="bg-[var(--surface2)]">
               <th className="text-left py-3 px-4 text-xs font-semibold text-[var(--muted)] border-b border-[var(--border)] w-16">
@@ -655,7 +680,7 @@ const Leaves = () => {
               <th className="text-left py-3 px-4 text-xs font-semibold text-[var(--muted)] border-b border-[var(--border)]">
                 Status
               </th>
-              <th className="text-left py-3 px-4 text-xs font-semibold text-[var(--muted)] border-b border-[var(--border)] w-24">
+              <th className="text-left py-3 px-4 text-xs font-semibold text-[var(--muted)] border-b border-[var(--border)] w-32">
                 Actions
               </th>
             </tr>
@@ -771,26 +796,36 @@ const Leaves = () => {
                       <StatusBadge status={statusName} />
                     </td>
                     <td className="py-3.5 px-4 border-b border-[var(--border)]">
-                      {isPending ? (
-                        <div className="flex items-center gap-1.5">
-                          <button
-                            onClick={() => handleEditClick(leave)}
-                            className="p-1.5 text-blue-500 hover:text-blue-600 hover:bg-blue-50 rounded-lg transition-colors"
-                            title="Edit leave request"
-                          >
-                            <FiEdit2 size={14} />
-                          </button>
-                          <button
-                            onClick={() => handleDeleteClick(leave)}
-                            className="p-1.5 text-red-500 hover:text-red-600 hover:bg-red-50 rounded-lg transition-colors"
-                            title="Delete leave request"
-                          >
-                            <FiTrash2 size={14} />
-                          </button>
-                        </div>
-                      ) : (
-                        <span className="text-xs text-[var(--muted)]">-</span>
-                      )}
+                      <div className="flex items-center gap-1.5">
+                        {/* View button - always visible */}
+                        <button
+                          onClick={() => handleViewClick(leave)}
+                          className="p-1.5 text-blue-500 hover:text-blue-600 hover:bg-blue-50 rounded-lg transition-colors"
+                          title="View leave details"
+                        >
+                          <FiEye size={14} />
+                        </button>
+
+                        {/* Edit and Delete - only for pending */}
+                        {isPending && (
+                          <>
+                            <button
+                              onClick={() => handleEditClick(leave)}
+                              className="p-1.5 text-blue-500 hover:text-blue-600 hover:bg-blue-50 rounded-lg transition-colors"
+                              title="Edit leave request"
+                            >
+                              <FiEdit2 size={14} />
+                            </button>
+                            <button
+                              onClick={() => handleDeleteClick(leave)}
+                              className="p-1.5 text-red-500 hover:text-red-600 hover:bg-red-50 rounded-lg transition-colors"
+                              title="Delete leave request"
+                            >
+                              <FiTrash2 size={14} />
+                            </button>
+                          </>
+                        )}
+                      </div>
                     </td>
                   </tr>
                 );
@@ -843,7 +878,16 @@ const Leaves = () => {
         </div>
       )}
 
-      {/* Edit Modal with DateInput */}
+      {/* View Modal */}
+      <LeaveViewModal
+        isOpen={showViewModal}
+        leave={viewingLeave}
+        loading={viewLoading}
+        onClose={handleCloseViewModal}
+        onViewDocument={handleViewDocument}
+      />
+
+      {/* Edit Modal */}
       {showEditModal && (
         <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 p-4">
           <div className="bg-white dark:bg-gray-800 rounded-2xl max-w-2xl w-full max-h-[90vh] overflow-y-auto p-6">
@@ -1040,7 +1084,6 @@ const Leaves = () => {
                       <span className="text-gray-400 text-xs">(Optional)</span>
                     </label>
 
-                    {/* Show current document if it exists */}
                     {editingLeave?.document && !editFile && (
                       <div className="mb-3 p-3 bg-gray-50 dark:bg-gray-900 rounded-lg border border-gray-200 dark:border-gray-700">
                         <p className="text-xs text-gray-600 dark:text-gray-400 mb-1">
