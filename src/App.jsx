@@ -58,6 +58,9 @@ const EmployeeDetailsReport = lazy(
 const AttendanceReport = lazy(
   () => import("./admin/components/reports/AttendanceReport"),
 );
+const ProjectReport = lazy(
+  () => import("./admin/components/reports/ProjectReport"),
+);
 const LeaveRequestReport = lazy(
   () => import("./admin/components/reports/LeaveRequestsReports"),
 );
@@ -91,12 +94,8 @@ const ProjectWorkingHours = lazy(
 const AdminAttendanceRequests = lazy(
   () => import("./admin/pages/AttendanceRequests"),
 );
-const PayrollDetails = lazy(
-  () => import("./admin/pages/PayrollDetails"),
-);
-const EditPayroll = lazy(
-  () => import("./admin/pages/EditPayroll"),
-);
+const PayrollDetails = lazy(() => import("./admin/pages/PayrollDetails"));
+const EditPayroll = lazy(() => import("./admin/pages/EditPayroll"));
 
 const Offboarding = lazy(() => import("./admin/pages/Offboarding"));
 const OffboardingInitiation = lazy(
@@ -141,7 +140,9 @@ const EmployeeTaskReports = lazy(() => import("./employee/pages/TaskReports"));
 const AttendanceRequests = lazy(
   () => import("./employee/pages/AttendanceRequests"),
 );
-const RequestLeaveForEmployee = lazy(() => import("./employee/pages/RequestLeaveForEmployees"));
+const RequestLeaveForEmployee = lazy(
+  () => import("./employee/pages/RequestLeaveForEmployees"),
+);
 
 // Custom wrapper for lazy-loaded components
 const LazyWrapper = ({ children }) => {
@@ -249,6 +250,7 @@ function App() {
             path="reports/attendance-reports"
             element={<AttendanceReport />}
           />
+          <Route path="reports/project-report" element={<ProjectReport />} />
           <Route
             path="reports/leave-requests-reports"
             element={<LeaveRequestReport />}
@@ -273,10 +275,10 @@ function App() {
             path="reports/organization-upcoming-renewals"
             element={<OrgUpcomingRenewalReport />}
           />
-          <Route 
-  path="reports/attendance/employee/:employeeId" 
-  element={<EmployeeAttendancePage />} 
-/>
+          <Route
+            path="reports/attendance/employee/:employeeId"
+            element={<EmployeeAttendancePage />}
+          />
           <Route path="leaves" element={<Leaves />} />
           <Route path="leaves/leave-types" element={<LeaveTypeManagement />} />
           <Route path="leaves/allocations" element={<LeaveAllocations />} />
@@ -290,7 +292,7 @@ function App() {
           <Route path="settings" element={<Settings />} />
           <Route path="roles" element={<RoleManagement />} />
           <Route path="modules" element={<ModuleManagement />} />
-          <Route path="payroll/:id" element={<PayrollDetails />} /> 
+          <Route path="payroll/:id" element={<PayrollDetails />} />
           <Route path="payroll/edit/:id" element={<EditPayroll />} />
           <Route
             path="project-working-hours"
@@ -340,7 +342,11 @@ function App() {
             path="employees/letters-and-clearance"
             element={<LettersAndClearance />}
           />
-          
+
+          <Route
+            path="request-leave-for-employee"
+            element={<RequestLeaveForEmployee />}
+          />
         </Route>
 
         {/* Employee Routes - Layout wrapper */}
@@ -419,6 +425,7 @@ function App() {
             path="reports/attendance-reports"
             element={<AttendanceReport />}
           />
+          <Route path="reports/project-report" element={<ProjectReport />} />
           <Route
             path="reports/leave-requests-reports"
             element={<LeaveRequestReport />}
@@ -443,10 +450,10 @@ function App() {
             path="reports/organization-upcoming-renewals"
             element={<OrgUpcomingRenewalReport />}
           />
-          <Route 
-  path="reports/attendance/employee/:employeeId" 
-  element={<EmployeeAttendancePage />} 
-/>
+          <Route
+            path="reports/attendance/employee/:employeeId"
+            element={<EmployeeAttendancePage />}
+          />
           <Route path="leave-management" element={<Leaves />} />
           <Route path="leaves/leave-types" element={<LeaveTypeManagement />} />
           <Route path="leaves/allocations" element={<LeaveAllocations />} />
@@ -466,9 +473,12 @@ function App() {
           />
           <Route path="payroll" element={<Payroll />} />
           <Route path="payroll/add" element={<AddPayroll />} />
-          <Route path="payroll/:id" element={<PayrollDetails />} /> 
-          <Route path="payroll/edit/:id" element={<EditPayroll />} /> 
-          <Route path="request-leave-for-employee" element={<RequestLeaveForEmployee />} />
+          <Route path="payroll/:id" element={<PayrollDetails />} />
+          <Route path="payroll/edit/:id" element={<EditPayroll />} />
+          <Route
+            path="request-leave-for-employee"
+            element={<RequestLeaveForEmployee />}
+          />
         </Route>
 
         {/* ============ REDIRECT ROUTES ============ */}
@@ -719,7 +729,8 @@ function App() {
           element={
             <ProtectedRoute>
               <LazyWrapper>
-                {user?.type === "employee" || user?.role?.name === "HR Manager" ? (
+                {user?.type === "employee" ||
+                user?.role?.name === "HR Manager" ? (
                   <Navigate to="/employee/payroll" replace />
                 ) : (
                   <Navigate to="/admin/payroll" replace />
@@ -735,7 +746,8 @@ function App() {
           element={
             <ProtectedRoute>
               <LazyWrapper>
-                {user?.type === "employee" || user?.role?.name === "HR Manager" ? (
+                {user?.type === "employee" ||
+                user?.role?.name === "HR Manager" ? (
                   <Navigate to="/employee/payroll/add" replace />
                 ) : (
                   <Navigate to="/admin/payroll/add" replace />
@@ -751,10 +763,17 @@ function App() {
           element={
             <ProtectedRoute>
               <LazyWrapper>
-                {user?.type === "employee" || user?.role?.name === "HR Manager" ? (
-                  <Navigate to={`/employee/payroll/${window.location.pathname.split('/').pop()}`} replace />
+                {user?.type === "employee" ||
+                user?.role?.name === "HR Manager" ? (
+                  <Navigate
+                    to={`/employee/payroll/${window.location.pathname.split("/").pop()}`}
+                    replace
+                  />
                 ) : (
-                  <Navigate to={`/admin/payroll/${window.location.pathname.split('/').pop()}`} replace />
+                  <Navigate
+                    to={`/admin/payroll/${window.location.pathname.split("/").pop()}`}
+                    replace
+                  />
                 )}
               </LazyWrapper>
             </ProtectedRoute>
@@ -767,10 +786,17 @@ function App() {
           element={
             <ProtectedRoute>
               <LazyWrapper>
-                {user?.type === "employee" || user?.role?.name === "HR Manager" ? (
-                  <Navigate to={`/employee/payroll/edit/${window.location.pathname.split('/').pop()}`} replace />
+                {user?.type === "employee" ||
+                user?.role?.name === "HR Manager" ? (
+                  <Navigate
+                    to={`/employee/payroll/edit/${window.location.pathname.split("/").pop()}`}
+                    replace
+                  />
                 ) : (
-                  <Navigate to={`/admin/payroll/edit/${window.location.pathname.split('/').pop()}`} replace />
+                  <Navigate
+                    to={`/admin/payroll/edit/${window.location.pathname.split("/").pop()}`}
+                    replace
+                  />
                 )}
               </LazyWrapper>
             </ProtectedRoute>

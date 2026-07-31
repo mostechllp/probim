@@ -162,7 +162,7 @@ const Sidebar = ({ isOpen, setIsOpen }) => {
   
   // Check if user has specific role
   const userRole = user?.role?.name;
-  const isHR = userRole && ["HR Manager", "hr manager", "HR"].includes(userRole);
+  const isHR = user?.type === 'hr' || user?.role?.name === 'HR Manager' || user?.role?.name === 'HR';
   
   // Check if user has all permissions (Super Admin or Admin with all permissions)
   const hasAllPermissions = user?.permissions?.all === true;

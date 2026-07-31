@@ -5,6 +5,7 @@ import {
   setLeaveFilter,
   setLeavePagination,
   fetchEmployeeLeaves,
+  fetchLeaveById,
   deleteLeaveRequest,
   updateLeaveRequest,
   fetchLeaveBalance,
@@ -21,11 +22,44 @@ import {
   FiEdit2,
   FiTrash2,
   FiX,
+  FiUser,
+  FiLoader,
 } from "react-icons/fi";
 import StatusBadge from "../components/common/StatusBadge";
 import ConfirmModal from "../../admin/components/common/ConfirmModal";
 import { showToast } from "../components/common/Toast";
 import DateInput from "../../admin/components/common/DateInput";
+
+// ✅ Get API base URL from environment
+const getBaseUrl = () => {
+  const apiUrl = import.meta.env.VITE_API_URL;
+  if (apiUrl) {
+    return apiUrl.replace(/\/api$/, "");
+  }
+  return window.location.origin;
+};
+
+// ✅ Helper to get full document URL
+const getDocumentUrl = (docPath) => {
+  if (!docPath) return null;
+
+  if (docPath.startsWith("http://") || docPath.startsWith("https://")) {
+    return docPath;
+  }
+
+  const baseUrl = getBaseUrl();
+  const cleanPath = docPath.replace(/^\/+/, "");
+
+  if (cleanPath.startsWith("storage/")) {
+    return `${baseUrl}/${cleanPath}`;
+  }
+
+  if (cleanPath.startsWith("leaves/documents/")) {
+    return `${baseUrl}/storage/${cleanPath}`;
+  }
+
+  return `${baseUrl}/storage/${cleanPath}`;
+};
 
 // Color mapping for leave types
 const getLeaveTypeColor = (typeName) => {
@@ -74,10 +108,52 @@ const getLeaveTypeIcon = (typeName) => {
   return "fa-calendar-alt";
 };
 
+// ✅ Helper to get applied by info
+const getAppliedByInfo = (leave) => {
+  if (!leave.applied_by) {
+    return {
+      name: "Self",
+      email: "-",
+      role: "Employee",
+    };
+  }
+
+  const appliedBy = leave.applied_by;
+
+  let name =
+    appliedBy.employee_name ||
+    appliedBy.name ||
+    appliedBy.username ||
+    appliedBy.email ||
+    "Unknown";
+
+  let role = "Employee";
+  if (appliedBy.type) {
+    role = appliedBy.type.charAt(0).toUpperCase() + appliedBy.type.slice(1);
+  }
+  if (appliedBy.role) {
+    role =
+      typeof appliedBy.role === "object" ? appliedBy.role.name : appliedBy.role;
+  }
+
+  return {
+    name: name,
+    email: appliedBy.email || "-",
+    role: role,
+    userId: appliedBy.id || null,
+  };
+};
+
+// ✅ Helper to check if document exists
+const hasDocument = (leave) => {
+  const doc = leave.document || leave.document_path || leave.doc;
+  return !!(doc && doc !== "null" && doc !== "undefined" && doc.trim() !== "");
+};
+
 const Leaves = () => {
   const dispatch = useDispatch();
   const leavesState = useSelector((state) => state.EmpLeaves);
-  const {user} = useSelector((state) => state.auth);
+  const { user } = useSelector((state) => state.auth);
   const leaveTypes = useSelector((state) => state.EmpLeaves?.leaveTypes || []);
 
   const leaves = leavesState?.leaves || [];
@@ -85,6 +161,7 @@ const Leaves = () => {
   const pagination = leavesState?.pagination || { currentPage: 1, perPage: 10 };
   const loading = leavesState?.loading || false;
   const submitting = leavesState?.submitting || false;
+  const editingLeaveData = leavesState?.editingLeave || null;
 
   // Edit/Delete states
   const [editingLeave, setEditingLeave] = useState(null);
@@ -101,6 +178,19 @@ const Leaves = () => {
     session2: "morning",
   });
   const [editFile, setEditFile] = useState(null);
+  const [fetchingLeave, setFetchingLeave] = useState(false);
+
+  // ✅ Document view handler
+  const handleViewDocument = (docPath) => {
+    if (!docPath) {
+      showToast("No document attached", "warning");
+      return;
+    }
+
+    const fullUrl = getDocumentUrl(docPath);
+    console.log("Opening document URL:", fullUrl);
+    window.open(fullUrl, "_blank");
+  };
 
   const filteredLeaves = useMemo(() => {
     let filtered = [...leaves];
@@ -121,6 +211,7 @@ const Leaves = () => {
           typeof l.leave_type === "object" ? l.leave_type?.name : l.leave_type;
         const leaveStatus =
           typeof l.status === "object" ? l.status?.name : l.status;
+        const appliedBy = getAppliedByInfo(l);
 
         return (
           (leaveType?.toLowerCase() || "").includes(
@@ -129,7 +220,12 @@ const Leaves = () => {
           (leaveStatus?.toLowerCase() || "").includes(
             filter.search.toLowerCase(),
           ) ||
-          (l.reason?.toLowerCase() || "").includes(filter.search.toLowerCase())
+          (l.reason?.toLowerCase() || "").includes(
+            filter.search.toLowerCase(),
+          ) ||
+          (appliedBy.name?.toLowerCase() || "").includes(
+            filter.search.toLowerCase(),
+          )
         );
       });
     }
@@ -171,10 +267,6 @@ const Leaves = () => {
     if (claimSalary === 1 || claimSalary === "1" || claimSalary === "Yes")
       return "Yes";
     return "No";
-  };
-
-  const hasDocument = (document) => {
-    return document !== null && document !== undefined && document !== "";
   };
 
   const stats = useMemo(
@@ -258,40 +350,55 @@ const Leaves = () => {
   };
 
   // --- Edit Handlers ---
-  const handleEditClick = (leave) => {
+  const handleEditClick = async (leave) => {
     // Only allow editing if status is pending
     if (getStatus(leave.status) !== "pending") {
       showToast("Only pending leave requests can be edited", "warning");
       return;
     }
 
-    // Get the leave type ID from the leave_type object or direct field
-    const leaveTypeId =
-      typeof leave.leave_type === "object"
-        ? leave.leave_type.id
-        : leave.leave_type_id;
-
-    // Format dates for input fields (YYYY-MM-DD)
-    const startDateFormatted = formatDateForInput(leave.start_date);
-    const endDateFormatted = formatDateForInput(leave.end_date);
-
-    // Get session values (fallback to 'morning' if not set)
-    const session1 = leave.session1 || "morning";
-    const session2 = leave.session2 || "afternoon";
-
-    setEditingLeave(leave);
-    setEditFormData({
-      leave_type_id: leaveTypeId || "",
-      start_date: startDateFormatted,
-      end_date: endDateFormatted,
-      reason: leave.reason || "",
-      claim_salary:
-        leave.claim_salary === 1 || leave.claim_salary === "1" ? "1" : "0",
-      session1: session1,
-      session2: session2,
-    });
-    setEditFile(null);
+    setFetchingLeave(true);
     setShowEditModal(true);
+
+    try {
+      // ✅ Fetch the complete leave data by ID
+      const result = await dispatch(fetchLeaveById(leave.id)).unwrap();
+
+      console.log("Fetched leave data for editing:", result);
+
+      // Get the leave type ID from the leave_type object or direct field
+      const leaveTypeId =
+        typeof result.leave_type === "object"
+          ? result.leave_type.id
+          : result.leave_type_id;
+
+      // Format dates for input fields (YYYY-MM-DD)
+      const startDateFormatted = formatDateForInput(result.start_date);
+      const endDateFormatted = formatDateForInput(result.end_date);
+
+      // Get session values (fallback to 'morning' if not set)
+      const session1 = result.session1 || "morning";
+      const session2 = result.session2 || "afternoon";
+
+      setEditingLeave(result);
+      setEditFormData({
+        leave_type_id: leaveTypeId || "",
+        start_date: startDateFormatted,
+        end_date: endDateFormatted,
+        reason: result.reason || "",
+        claim_salary:
+          result.claim_salary === 1 || result.claim_salary === "1" ? "1" : "0",
+        session1: session1,
+        session2: session2,
+      });
+      setEditFile(null);
+    } catch (error) {
+      console.error("Failed to fetch leave details:", error);
+      showToast("Failed to load leave details for editing", "error");
+      setShowEditModal(false);
+    } finally {
+      setFetchingLeave(false);
+    }
   };
 
   const handleEditSubmit = async (e) => {
@@ -372,6 +479,7 @@ const Leaves = () => {
     setShowEditModal(false);
     setEditingLeave(null);
     setEditFile(null);
+    setFetchingLeave(false);
   };
 
   // Handle date changes from DateInput
@@ -462,16 +570,6 @@ const Leaves = () => {
           >
             <FiPlus /> Request Leave
           </Link>
-          {user?.role?.name === "HR Manager" ||
-          user?.type === "hr" ||
-          user?.type === "admin" ? (
-            <Link
-              to="/employee/request-leave-for-employee"
-              className="request-btn bg-blue-500 text-white py-2.5 px-6 rounded-full font-semibold text-sm flex items-center gap-2 hover:bg-blue-600 hover:-translate-y-0.5 transition-all shadow-md"
-            >
-              <FiPlus /> Request Leave for Employee
-            </Link>
-          ) : null}
         </div>
       </div>
 
@@ -524,7 +622,7 @@ const Leaves = () => {
 
       {/* Table */}
       <div className="leave-table-wrapper bg-[var(--surface)] rounded-xl border border-[var(--border)] overflow-x-auto shadow-sm">
-        <table className="leave-table w-full border-collapse text-xs min-w-[1100px]">
+        <table className="leave-table w-full border-collapse text-xs min-w-[1200px]">
           <thead>
             <tr className="bg-[var(--surface2)]">
               <th className="text-left py-3 px-4 text-xs font-semibold text-[var(--muted)] border-b border-[var(--border)] w-16">
@@ -552,6 +650,9 @@ const Leaves = () => {
                 Document
               </th>
               <th className="text-left py-3 px-4 text-xs font-semibold text-[var(--muted)] border-b border-[var(--border)]">
+                Applied By
+              </th>
+              <th className="text-left py-3 px-4 text-xs font-semibold text-[var(--muted)] border-b border-[var(--border)]">
                 Status
               </th>
               <th className="text-left py-3 px-4 text-xs font-semibold text-[var(--muted)] border-b border-[var(--border)] w-24">
@@ -563,7 +664,7 @@ const Leaves = () => {
             {currentLeaves.length === 0 ? (
               <tr>
                 <td
-                  colSpan="10"
+                  colSpan="11"
                   className="text-center py-8 text-[var(--muted)]"
                 >
                   <div className="flex flex-col items-center gap-2">
@@ -583,13 +684,16 @@ const Leaves = () => {
                 const leaveTypeName = getLeaveTypeName(leave.leave_type);
                 const statusName = getStatus(leave.status);
                 const claimSalary = getClaimSalary(leave.claim_salary);
-                const hasDoc = hasDocument(leave.document);
+                const hasDoc = hasDocument(leave);
+                const docPath =
+                  leave.document || leave.document_path || leave.doc;
                 const days =
                   leave.duration_days ||
                   calculateDays(leave.start_date, leave.end_date);
                 const colorClass = getLeaveTypeColor(leaveTypeName);
                 const iconClass = getLeaveTypeIcon(leaveTypeName);
                 const isPending = statusName === "pending";
+                const appliedByInfo = getAppliedByInfo(leave);
 
                 // Format sessions for display
                 const session1 = leave.session1 || "morning";
@@ -639,16 +743,29 @@ const Leaves = () => {
                     </td>
                     <td className="py-3.5 px-4 border-b border-[var(--border)]">
                       {hasDoc ? (
-                        <a
-                          href="#"
-                          className="text-blue-500 cursor-pointer hover:underline flex items-center gap-1"
+                        <button
+                          onClick={() => handleViewDocument(docPath)}
+                          className="text-blue-500 hover:text-blue-600 hover:underline flex items-center gap-1 text-xs"
                         >
                           <i className="fas fa-file-pdf"></i>
                           View
-                        </a>
+                        </button>
                       ) : (
-                        "-"
+                        <span className="text-[var(--muted)]">-</span>
                       )}
+                    </td>
+                    <td className="py-3.5 px-4 border-b border-[var(--border)]">
+                      <div className="flex items-center gap-1.5">
+                        <FiUser size={12} className="text-[var(--muted)]" />
+                        <span className="text-xs font-medium text-blue-600 dark:text-blue-400">
+                          {appliedByInfo.name}
+                        </span>
+                        {appliedByInfo.role !== "Employee" && (
+                          <span className="text-[10px] text-[var(--muted)] bg-[var(--surface2)] px-1.5 py-0.5 rounded">
+                            {appliedByInfo.role}
+                          </span>
+                        )}
+                      </div>
                     </td>
                     <td className="py-3.5 px-4 border-b border-[var(--border)]">
                       <StatusBadge status={statusName} />
@@ -727,7 +844,7 @@ const Leaves = () => {
       )}
 
       {/* Edit Modal with DateInput */}
-      {showEditModal && editingLeave && (
+      {showEditModal && (
         <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 p-4">
           <div className="bg-white dark:bg-gray-800 rounded-2xl max-w-2xl w-full max-h-[90vh] overflow-y-auto p-6">
             <div className="flex justify-between items-center mb-6">
@@ -743,215 +860,256 @@ const Leaves = () => {
               </button>
             </div>
 
-            <form onSubmit={handleEditSubmit}>
-              <div className="space-y-4">
-                {/* Leave Type */}
-                <div>
-                  <label className="block text-sm font-semibold text-gray-700 dark:text-gray-300 mb-1">
-                    Leave Type <span className="text-red-500">*</span>
-                  </label>
-                  <select
-                    value={editFormData.leave_type_id}
-                    onChange={(e) =>
-                      setEditFormData({
-                        ...editFormData,
-                        leave_type_id: e.target.value,
-                      })
-                    }
-                    className="w-full px-3 py-2 bg-gray-50 dark:bg-gray-900 border border-gray-200 dark:border-gray-700 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-green-500"
-                    required
+            {fetchingLeave ? (
+              <div className="flex items-center justify-center py-12">
+                <div className="text-center">
+                  <FiLoader className="w-10 h-10 text-green-500 animate-spin mx-auto mb-4" />
+                  <p className="text-[var(--muted)]">
+                    Loading leave details...
+                  </p>
+                </div>
+              </div>
+            ) : (
+              <form onSubmit={handleEditSubmit}>
+                <div className="space-y-4">
+                  {/* Leave Type */}
+                  <div>
+                    <label className="block text-sm font-semibold text-gray-700 dark:text-gray-300 mb-1">
+                      Leave Type <span className="text-red-500">*</span>
+                    </label>
+                    <select
+                      value={editFormData.leave_type_id}
+                      onChange={(e) =>
+                        setEditFormData({
+                          ...editFormData,
+                          leave_type_id: e.target.value,
+                        })
+                      }
+                      className="w-full px-3 py-2 bg-gray-50 dark:bg-gray-900 border border-gray-200 dark:border-gray-700 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-green-500"
+                      required
+                    >
+                      <option value="">Select Leave Type</option>
+                      {leaveTypes.map((type) => (
+                        <option key={type.id} value={type.id}>
+                          {type.name}
+                        </option>
+                      ))}
+                    </select>
+                  </div>
+
+                  {/* Dates with DateInput */}
+                  <div className="grid grid-cols-2 gap-4">
+                    <div>
+                      <label className="block text-sm font-semibold text-gray-700 dark:text-gray-300 mb-1">
+                        Start Date <span className="text-red-500">*</span>
+                      </label>
+                      <DateInput
+                        value={editFormData.start_date}
+                        onChange={handleStartDateChange}
+                        type="general"
+                        className="w-full"
+                        placeholder="dd/mm/yyyy"
+                        error={false}
+                      />
+                    </div>
+                    <div>
+                      <label className="block text-sm font-semibold text-gray-700 dark:text-gray-300 mb-1">
+                        End Date <span className="text-red-500">*</span>
+                      </label>
+                      <DateInput
+                        value={editFormData.end_date}
+                        onChange={handleEndDateChange}
+                        type="general"
+                        className="w-full"
+                        placeholder="dd/mm/yyyy"
+                        error={false}
+                        minDate={
+                          editFormData.start_date
+                            ? new Date(editFormData.start_date)
+                            : null
+                        }
+                      />
+                    </div>
+                  </div>
+
+                  {/* Sessions */}
+                  <div className="grid grid-cols-2 gap-4">
+                    <div>
+                      <label className="block text-sm font-semibold text-gray-700 dark:text-gray-300 mb-1">
+                        Start Session <span className="text-red-500">*</span>
+                      </label>
+                      <select
+                        value={editFormData.session1}
+                        onChange={(e) =>
+                          setEditFormData({
+                            ...editFormData,
+                            session1: e.target.value,
+                          })
+                        }
+                        className="w-full px-3 py-2 bg-gray-50 dark:bg-gray-900 border border-gray-200 dark:border-gray-700 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-green-500"
+                        required
+                      >
+                        <option value="morning">Morning</option>
+                        <option value="afternoon">Afternoon</option>
+                      </select>
+                    </div>
+                    <div>
+                      <label className="block text-sm font-semibold text-gray-700 dark:text-gray-300 mb-1">
+                        End Session <span className="text-red-500">*</span>
+                      </label>
+                      <select
+                        value={editFormData.session2}
+                        onChange={(e) =>
+                          setEditFormData({
+                            ...editFormData,
+                            session2: e.target.value,
+                          })
+                        }
+                        className="w-full px-3 py-2 bg-gray-50 dark:bg-gray-900 border border-gray-200 dark:border-gray-700 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-green-500"
+                        required
+                      >
+                        <option value="morning">Morning</option>
+                        <option value="afternoon">Afternoon</option>
+                      </select>
+                    </div>
+                  </div>
+
+                  {/* Reason */}
+                  <div>
+                    <label className="block text-sm font-semibold text-gray-700 dark:text-gray-300 mb-1">
+                      Reason <span className="text-red-500">*</span>
+                    </label>
+                    <textarea
+                      value={editFormData.reason}
+                      onChange={(e) =>
+                        setEditFormData({
+                          ...editFormData,
+                          reason: e.target.value,
+                        })
+                      }
+                      rows="3"
+                      className="w-full px-3 py-2 bg-gray-50 dark:bg-gray-900 border border-gray-200 dark:border-gray-700 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-green-500"
+                      placeholder="Enter reason for leave (min 10 characters)"
+                      required
+                    />
+                  </div>
+
+                  {/* Claim Salary */}
+                  <div>
+                    <label className="block text-sm font-semibold text-gray-700 dark:text-gray-300 mb-1">
+                      Claim Salary
+                    </label>
+                    <div className="flex gap-6">
+                      <label className="flex items-center gap-2">
+                        <input
+                          type="radio"
+                          value="1"
+                          checked={editFormData.claim_salary === "1"}
+                          onChange={() =>
+                            setEditFormData({
+                              ...editFormData,
+                              claim_salary: "1",
+                            })
+                          }
+                          className="text-green-500 focus:ring-green-500"
+                        />
+                        <span className="text-sm">Yes</span>
+                      </label>
+                      <label className="flex items-center gap-2">
+                        <input
+                          type="radio"
+                          value="0"
+                          checked={editFormData.claim_salary === "0"}
+                          onChange={() =>
+                            setEditFormData({
+                              ...editFormData,
+                              claim_salary: "0",
+                            })
+                          }
+                          className="text-green-500 focus:ring-green-500"
+                        />
+                        <span className="text-sm">No</span>
+                      </label>
+                    </div>
+                  </div>
+
+                  {/* Document Upload */}
+                  <div>
+                    <label className="block text-sm font-semibold text-gray-700 dark:text-gray-300 mb-1">
+                      Upload Document{" "}
+                      <span className="text-gray-400 text-xs">(Optional)</span>
+                    </label>
+
+                    {/* Show current document if it exists */}
+                    {editingLeave?.document && !editFile && (
+                      <div className="mb-3 p-3 bg-gray-50 dark:bg-gray-900 rounded-lg border border-gray-200 dark:border-gray-700">
+                        <p className="text-xs text-gray-600 dark:text-gray-400 mb-1">
+                          Current Document:
+                        </p>
+                        <div className="flex items-center gap-2">
+                          <i className="fas fa-file-pdf text-red-500"></i>
+                          <button
+                            type="button"
+                            onClick={() =>
+                              handleViewDocument(editingLeave.document)
+                            }
+                            className="text-blue-500 hover:text-blue-600 hover:underline text-sm font-medium"
+                          >
+                            {editingLeave.document.split("/").pop()}
+                          </button>
+                          <span className="text-xs text-gray-400">
+                            (Click to view)
+                          </span>
+                        </div>
+                      </div>
+                    )}
+
+                    <input
+                      type="file"
+                      onChange={(e) => setEditFile(e.target.files[0])}
+                      accept=".pdf,.doc,.docx,.jpg,.png"
+                      className="w-full px-3 py-2 bg-gray-50 dark:bg-gray-900 border border-gray-200 dark:border-gray-700 rounded-lg text-sm file:mr-4 file:py-1.5 file:px-3 file:rounded-full file:border-0 file:text-xs file:font-semibold file:bg-green-500 file:text-white file:cursor-pointer hover:file:bg-green-600"
+                    />
+                    {editFile && (
+                      <p className="text-xs text-green-600 mt-1">
+                        File selected: {editFile.name}
+                      </p>
+                    )}
+                    {editingLeave?.document && !editFile && (
+                      <p className="text-xs text-gray-500 mt-1">
+                        Upload a new file to replace the current document
+                      </p>
+                    )}
+                  </div>
+                </div>
+
+                <div className="flex justify-end gap-3 mt-6 pt-4 border-t border-gray-200 dark:border-gray-700">
+                  <button
+                    type="button"
+                    onClick={handleEditClose}
+                    className="px-4 py-2 rounded-lg font-semibold bg-gray-100 dark:bg-gray-700 text-gray-700 dark:text-gray-300 hover:bg-gray-200 dark:hover:bg-gray-600 transition-colors"
                   >
-                    <option value="">Select Leave Type</option>
-                    {leaveTypes.map((type) => (
-                      <option key={type.id} value={type.id}>
-                        {type.name}
-                      </option>
-                    ))}
-                  </select>
+                    Cancel
+                  </button>
+                  <button
+                    type="submit"
+                    disabled={submitting}
+                    className="px-4 py-2 rounded-lg font-semibold bg-green-500 text-white hover:bg-green-600 transition-colors disabled:opacity-50 flex items-center gap-2"
+                  >
+                    {submitting ? (
+                      <>
+                        <div className="w-4 h-4 border-2 border-white border-t-transparent rounded-full animate-spin"></div>
+                        Updating...
+                      </>
+                    ) : (
+                      <>
+                        <FiEdit2 /> Update
+                      </>
+                    )}
+                  </button>
                 </div>
-
-                {/* Dates with DateInput */}
-                <div className="grid grid-cols-2 gap-4">
-                  <div>
-                    <label className="block text-sm font-semibold text-gray-700 dark:text-gray-300 mb-1">
-                      Start Date <span className="text-red-500">*</span>
-                    </label>
-                    <DateInput
-                      value={editFormData.start_date}
-                      onChange={handleStartDateChange}
-                      type="general"
-                      className="w-full"
-                      placeholder="dd/mm/yyyy"
-                      error={false}
-                    />
-                  </div>
-                  <div>
-                    <label className="block text-sm font-semibold text-gray-700 dark:text-gray-300 mb-1">
-                      End Date <span className="text-red-500">*</span>
-                    </label>
-                    <DateInput
-                      value={editFormData.end_date}
-                      onChange={handleEndDateChange}
-                      type="general"
-                      className="w-full"
-                      placeholder="dd/mm/yyyy"
-                      error={false}
-                      minDate={
-                        editFormData.start_date
-                          ? new Date(editFormData.start_date)
-                          : null
-                      }
-                    />
-                  </div>
-                </div>
-
-                {/* Sessions */}
-                <div className="grid grid-cols-2 gap-4">
-                  <div>
-                    <label className="block text-sm font-semibold text-gray-700 dark:text-gray-300 mb-1">
-                      Start Session <span className="text-red-500">*</span>
-                    </label>
-                    <select
-                      value={editFormData.session1}
-                      onChange={(e) =>
-                        setEditFormData({
-                          ...editFormData,
-                          session1: e.target.value,
-                        })
-                      }
-                      className="w-full px-3 py-2 bg-gray-50 dark:bg-gray-900 border border-gray-200 dark:border-gray-700 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-green-500"
-                      required
-                    >
-                      <option value="morning">Morning</option>
-                      <option value="afternoon">Afternoon</option>
-                    </select>
-                  </div>
-                  <div>
-                    <label className="block text-sm font-semibold text-gray-700 dark:text-gray-300 mb-1">
-                      End Session <span className="text-red-500">*</span>
-                    </label>
-                    <select
-                      value={editFormData.session2}
-                      onChange={(e) =>
-                        setEditFormData({
-                          ...editFormData,
-                          session2: e.target.value,
-                        })
-                      }
-                      className="w-full px-3 py-2 bg-gray-50 dark:bg-gray-900 border border-gray-200 dark:border-gray-700 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-green-500"
-                      required
-                    >
-                      <option value="morning">Morning</option>
-                      <option value="afternoon">Afternoon</option>
-                    </select>
-                  </div>
-                </div>
-
-                {/* Reason */}
-                <div>
-                  <label className="block text-sm font-semibold text-gray-700 dark:text-gray-300 mb-1">
-                    Reason <span className="text-red-500">*</span>
-                  </label>
-                  <textarea
-                    value={editFormData.reason}
-                    onChange={(e) =>
-                      setEditFormData({
-                        ...editFormData,
-                        reason: e.target.value,
-                      })
-                    }
-                    rows="3"
-                    className="w-full px-3 py-2 bg-gray-50 dark:bg-gray-900 border border-gray-200 dark:border-gray-700 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-green-500"
-                    placeholder="Enter reason for leave (min 10 characters)"
-                    required
-                  />
-                </div>
-
-                {/* Claim Salary */}
-                <div>
-                  <label className="block text-sm font-semibold text-gray-700 dark:text-gray-300 mb-1">
-                    Claim Salary
-                  </label>
-                  <div className="flex gap-6">
-                    <label className="flex items-center gap-2">
-                      <input
-                        type="radio"
-                        value="1"
-                        checked={editFormData.claim_salary === "1"}
-                        onChange={() =>
-                          setEditFormData({
-                            ...editFormData,
-                            claim_salary: "1",
-                          })
-                        }
-                        className="text-green-500 focus:ring-green-500"
-                      />
-                      <span className="text-sm">Yes</span>
-                    </label>
-                    <label className="flex items-center gap-2">
-                      <input
-                        type="radio"
-                        value="0"
-                        checked={editFormData.claim_salary === "0"}
-                        onChange={() =>
-                          setEditFormData({
-                            ...editFormData,
-                            claim_salary: "0",
-                          })
-                        }
-                        className="text-green-500 focus:ring-green-500"
-                      />
-                      <span className="text-sm">No</span>
-                    </label>
-                  </div>
-                </div>
-
-                {/* Document Upload */}
-                <div>
-                  <label className="block text-sm font-semibold text-gray-700 dark:text-gray-300 mb-1">
-                    Upload Document{" "}
-                    <span className="text-gray-400 text-xs">(Optional)</span>
-                  </label>
-                  <input
-                    type="file"
-                    onChange={(e) => setEditFile(e.target.files[0])}
-                    accept=".pdf,.doc,.docx,.jpg,.png"
-                    className="w-full px-3 py-2 bg-gray-50 dark:bg-gray-900 border border-gray-200 dark:border-gray-700 rounded-lg text-sm file:mr-4 file:py-1.5 file:px-3 file:rounded-full file:border-0 file:text-xs file:font-semibold file:bg-green-500 file:text-white file:cursor-pointer hover:file:bg-green-600"
-                  />
-                  {editFile && (
-                    <p className="text-xs text-green-600 mt-1">
-                      File selected: {editFile.name}
-                    </p>
-                  )}
-                </div>
-              </div>
-
-              <div className="flex justify-end gap-3 mt-6 pt-4 border-t border-gray-200 dark:border-gray-700">
-                <button
-                  type="button"
-                  onClick={handleEditClose}
-                  className="px-4 py-2 rounded-lg font-semibold bg-gray-100 dark:bg-gray-700 text-gray-700 dark:text-gray-300 hover:bg-gray-200 dark:hover:bg-gray-600 transition-colors"
-                >
-                  Cancel
-                </button>
-                <button
-                  type="submit"
-                  disabled={submitting}
-                  className="px-4 py-2 rounded-lg font-semibold bg-green-500 text-white hover:bg-green-600 transition-colors disabled:opacity-50 flex items-center gap-2"
-                >
-                  {submitting ? (
-                    <>
-                      <div className="w-4 h-4 border-2 border-white border-t-transparent rounded-full animate-spin"></div>
-                      Updating...
-                    </>
-                  ) : (
-                    <>
-                      <FiEdit2 /> Update
-                    </>
-                  )}
-                </button>
-              </div>
-            </form>
+              </form>
+            )}
           </div>
         </div>
       )}

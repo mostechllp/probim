@@ -5,6 +5,7 @@ import { fetchEmployees } from "../store/slices/employeeSlice";
 import { fetchOrganizations } from "../store/slices/organizationSlice";
 import { fetchAttendanceRecords } from "../store/slices/attendanceSlice";
 import { fetchLeaves } from "../store/slices/LeaveSlice";
+import { fetchProjects } from "../store/slices/projectSlice";
 
 const Reports = () => {
   const dispatch = useDispatch();
@@ -19,19 +20,21 @@ const Reports = () => {
   const { leaves: leaveRecords = [] } = useSelector(
     (state) => state.leaves || {},
   );
-  
+  const { projects = [] } = useSelector((state) => state.projects || {});
+
   // Get user role from auth
   const { user } = useSelector((state) => state.auth);
-  const userRole = user?.type || 'admin';
-  
+  const userRole = user?.type || "admin";
+
   // Determine the base path based on user role
-  const basePath = userRole === 'admin' ? '/admin' : '/employee';
+  const basePath = userRole === "admin" ? "/admin" : "/employee";
 
   useEffect(() => {
     dispatch(fetchOrganizations());
     dispatch(fetchEmployees());
     dispatch(fetchAttendanceRecords());
     dispatch(fetchLeaves());
+    dispatch(fetchProjects());
   }, [dispatch]);
 
   // Calculate statistics for cards
@@ -98,6 +101,16 @@ const Reports = () => {
       iconColor: "text-green-600 dark:text-green-400",
       link: `${basePath}/reports/attendance-reports`,
       count: attendanceRecords.length,
+    },
+    {
+      id: "project-report",
+      title: "Project Reports",
+      description: "Project-wise hours & employee details",
+      icon: "fas fa-project-diagram",
+      iconBg: "bg-indigo-100 dark:bg-indigo-900/30",
+      iconColor: "text-indigo-600 dark:text-indigo-400",
+      link: `${basePath}/reports/project-report`,
+      count: projects.length,
     },
     {
       id: "leave-requests",

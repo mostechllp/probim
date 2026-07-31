@@ -1,11 +1,4 @@
-// import UnderDevelopment from "../../components/common/UnderDevelopment";
-
-// const Leaves = () => {
-//   // Show under development temporarily
-//   return <UnderDevelopment pageName="Leave Management" />;
-// };
-
-// export default Leaves;
+// src/admin/pages/Leaves.js
 
 import { useEffect, useState } from "react";
 import { useDispatch, useSelector } from "react-redux";
@@ -16,16 +9,23 @@ import LeaveModal from "@admin/components/leaves/LeaveModal";
 import { showToast } from "../../components/common/Toast";
 import {
   fetchLeaves,
+  fetchLeaveById,
   updateLeaveStatus,
+  updateLeaveRequest,
+  deleteLeaveRequest,
   clearError,
+  fetchLeaveTypes,
 } from "@admin/store/slices/LeaveSlice";
 import Pagination from "@admin/components/common/Paginations";
 import ConfirmModal from "@admin/components/common/ConfirmModal";
+import { FiPlus, FiEdit2, FiTrash2, FiX, FiLoader } from "react-icons/fi";
+import DateInput from "../../admin/components/common/DateInput";
 
 const Leaves = () => {
   const dispatch = useDispatch();
   const location = useLocation();
-  
+  const { user } = useSelector((state) => state.auth);
+
   // Determine base path from current route
   const getBasePath = () => {
     if (location.pathname.startsWith('/admin')) return '/admin';
@@ -34,7 +34,7 @@ const Leaves = () => {
   };
   const basePath = getBasePath();
 
-  const { leaves = [], error = null } = useSelector((state) => {
+  const { leaves = [], error = null, loading = false, leaveTypes = [] } = useSelector((state) => {
     return state.leaves || { leaves: [] };
   });
   console.log(leaves);
@@ -46,6 +46,22 @@ const Leaves = () => {
   const [selectedLeave, setSelectedLeave] = useState(null);
   const [showModal, setShowModal] = useState(false);
 
+  // Edit states
+  const [editingLeave, setEditingLeave] = useState(null);
+  const [showEditModal, setShowEditModal] = useState(false);
+  const [editFormData, setEditFormData] = useState({
+    leave_type_id: "",
+    start_date: "",
+    end_date: "",
+    reason: "",
+    claim_salary: "0",
+    session1: "morning",
+    session2: "morning",
+  });
+  const [editFile, setEditFile] = useState(null);
+  const [submitting, setSubmitting] = useState(false);
+  const [fetchingLeave, setFetchingLeave] = useState(false);
+
   // Confirm modal states
   const [confirmOpen, setConfirmOpen] = useState(false);
   const [actionType, setActionType] = useState(null);
@@ -53,8 +69,44 @@ const Leaves = () => {
   const [rejectionReason, setRejectionReason] = useState("");
   const [actionLoading, setActionLoading] = useState(false);
 
+  // Delete confirm states
+  const [deleteConfirmOpen, setDeleteConfirmOpen] = useState(false);
+  const [leaveToDelete, setLeaveToDelete] = useState(null);
+
+  // ✅ Get API base URL from environment
+  const getBaseUrl = () => {
+    const apiUrl = import.meta.env.VITE_API_URL;
+    if (apiUrl) {
+      return apiUrl.replace(/\/api$/, "");
+    }
+    return window.location.origin;
+  };
+
+  // ✅ Helper to get full document URL
+  const getDocumentUrl = (docPath) => {
+    if (!docPath) return null;
+    
+    if (docPath.startsWith('http://') || docPath.startsWith('https://')) {
+      return docPath;
+    }
+    
+    const baseUrl = getBaseUrl();
+    const cleanPath = docPath.replace(/^\/+/, '');
+    
+    if (cleanPath.startsWith('storage/')) {
+      return `${baseUrl}/${cleanPath}`;
+    }
+    
+    if (cleanPath.startsWith('leaves/documents/')) {
+      return `${baseUrl}/storage/${cleanPath}`;
+    }
+    
+    return `${baseUrl}/storage/${cleanPath}`;
+  };
+
   useEffect(() => {
     dispatch(fetchLeaves());
+    dispatch(fetchLeaveTypes());
   }, [dispatch]);
 
   // Handle errors
@@ -65,7 +117,33 @@ const Leaves = () => {
     }
   }, [error, dispatch]);
 
-  // Helper to get employee name from different possible structures
+  // ✅ Helper to get applied by user info
+  const getAppliedByInfo = (leave) => {
+    if (!leave.applied_by) {
+      return {
+        name: "-",
+        role: "-",
+        userId: null,
+      };
+    }
+
+    const appliedBy = leave.applied_by;
+    
+    let name = appliedBy.employee_name || appliedBy.name || "-";
+    
+    let role = "-";
+    if (appliedBy.role) {
+      role = appliedBy.role.name || appliedBy.role || "-";
+    }
+
+    return {
+      name: name,
+      role: role,
+      userId: appliedBy.user_id || null,
+    };
+  };
+
+  // Helper to get employee name
   const getEmployeeName = (leave) => {
     if (leave.employee_name) return leave.employee_name;
     if (leave.employee?.name) return leave.employee.name;
@@ -73,63 +151,6 @@ const Leaves = () => {
       return `${leave.employee.first_name} ${leave.employee.last_name}`;
     }
     if (leave.employee?.first_name) return leave.employee.first_name;
-    return "-";
-  };
-
-  // Helper to get applied by user name
-  const getAppliedByName = (leave) => {
-    // Check if applied_by exists and get the user info
-    const appliedById = leave.applied_by;
-    if (!appliedById) return "-";
-    
-    // Try to get the user from the applied_by_user if it exists in the response
-    // For now, we'll use a placeholder since the API might not return the full user
-    // We can fetch the user details separately or display the ID with a note
-    if (leave.applied_by_user) {
-      const user = leave.applied_by_user;
-      if (user.name) return user.name;
-      if (user.first_name && user.last_name) {
-        return `${user.first_name} ${user.last_name}`;
-      }
-      if (user.username) return user.username;
-    }
-    
-    // If we have employee data for the applied_by
-    if (leave.applied_by_employee) {
-      const emp = leave.applied_by_employee;
-      if (emp.name) return emp.name;
-      if (emp.first_name && emp.last_name) {
-        return `${emp.first_name} ${emp.last_name}`;
-      }
-    }
-    
-    // If we have the employee object and it matches the applied_by ID
-    if (leave.employee && leave.employee.id === appliedById) {
-      const emp = leave.employee;
-      if (emp.name) return emp.name;
-      if (emp.first_name && emp.last_name) {
-        return `${emp.first_name} ${emp.last_name}`;
-      }
-    }
-    
-    // Fallback: show the user ID
-    return `User ID: ${appliedById}`;
-  };
-
-  // Helper to get applied by role
-  const getAppliedByRole = (leave) => {
-    const appliedById = leave.applied_by;
-    if (!appliedById) return "-";
-    
-    if (leave.applied_by_user && leave.applied_by_user.role) {
-      return leave.applied_by_user.role.name || "-";
-    }
-    
-    // If the applied_by is the same as the employee, they applied for themselves
-    if (leave.employee && leave.employee.id === appliedById) {
-      return "Self";
-    }
-    
     return "-";
   };
 
@@ -158,7 +179,9 @@ const Leaves = () => {
             .toLowerCase()
             .includes(searchLower) ||
           (leave.reason || "").toLowerCase().includes(searchLower) ||
-          (getAppliedByName(leave) || "").toLowerCase().includes(searchLower)
+          (getAppliedByInfo(leave).name || "")
+            .toLowerCase()
+            .includes(searchLower)
       );
     }
     return filtered;
@@ -191,7 +214,7 @@ const Leaves = () => {
       updateLeaveStatus({
         id: selectedLeaveId,
         status: actionType === "approve" ? "approved" : "rejected",
-        processedBy: "HR Admin",
+        processedBy: user?.username || "HR Admin",
         rejection_reason: actionType === "reject" ? rejectionReason : null,
       }),
     );
@@ -221,12 +244,204 @@ const Leaves = () => {
     setShowModal(true);
   };
 
-  const handleViewDocument = (docUrl) => {
-    if (docUrl) {
-      window.open(docUrl, "_blank");
-    } else {
-      showToast("No document available", "info");
+  // ✅ Handle document view
+  const handleViewDocument = (docPath) => {
+    if (docPath) {
+      const fullUrl = getDocumentUrl(docPath);
+      window.open(fullUrl, "_blank");
     }
+  };
+
+  // ✅ Helper to check if document exists
+  const hasDocument = (leave) => {
+    const doc = leave.document_path || leave.document || leave.doc;
+    return !!(doc && doc !== 'null' && doc !== 'undefined' && doc.trim() !== '');
+  };
+
+  // ✅ Helper to format date for input
+  const formatDateForInput = (dateString) => {
+    if (!dateString) return "";
+    try {
+      // If it's already in YYYY-MM-DD format
+      if (typeof dateString === 'string' && dateString.match(/^\d{4}-\d{2}-\d{2}$/)) {
+        return dateString;
+      }
+      const date = new Date(dateString);
+      if (isNaN(date.getTime())) return "";
+      const year = date.getFullYear();
+      const month = String(date.getMonth() + 1).padStart(2, "0");
+      const day = String(date.getDate()).padStart(2, "0");
+      return `${year}-${month}-${day}`;
+    } catch (error) {
+      return "";
+    }
+  };
+
+  // ✅ Edit Handlers - Updated to fetch by ID
+  const handleEditClick = async (leave) => {
+    // Only allow editing if status is pending
+    if ((leave.status || "").toLowerCase() !== "pending") {
+      showToast("Only pending leave requests can be edited", "warning");
+      return;
+    }
+
+    setFetchingLeave(true);
+    setShowEditModal(true);
+
+    try {
+      // ✅ Fetch the complete leave data by ID
+      const result = await dispatch(fetchLeaveById(leave.id)).unwrap();
+      
+      console.log("Fetched leave data for editing:", result);
+
+      const leaveTypeId = result.leave_type_id || result.leave_type?.id;
+      
+      // Format dates for input
+      const startDate = result.start_date || result.from_date;
+      const endDate = result.end_date || result.to_date;
+      
+      const startDateFormatted = startDate ? formatDateForInput(startDate) : "";
+      const endDateFormatted = endDate ? formatDateForInput(endDate) : "";
+
+      const session1 = result.session1 || "morning";
+      const session2 = result.session2 || "afternoon";
+
+      setEditingLeave(result);
+      setEditFormData({
+        leave_type_id: leaveTypeId || "",
+        start_date: startDateFormatted,
+        end_date: endDateFormatted,
+        reason: result.reason || "",
+        claim_salary: result.claim_salary === 1 || result.claim_salary === "Yes" ? "1" : "0",
+        session1: session1,
+        session2: session2,
+      });
+      setEditFile(null);
+    } catch (error) {
+      console.error("Failed to fetch leave details:", error);
+      showToast("Failed to load leave details for editing", "error");
+      setShowEditModal(false);
+    } finally {
+      setFetchingLeave(false);
+    }
+  };
+
+  const handleEditSubmit = async (e) => {
+    e.preventDefault();
+
+    console.log("Submitting edit form with data:", editFormData);
+
+    // Validate form data
+    if (!editFormData.leave_type_id) {
+      showToast("Please select a leave type", "error");
+      return;
+    }
+    if (!editFormData.start_date || editFormData.start_date === "") {
+      showToast("Please select a start date", "error");
+      return;
+    }
+    if (!editFormData.end_date || editFormData.end_date === "") {
+      showToast("Please select an end date", "error");
+      return;
+    }
+    if (editFormData.reason.length < 10) {
+      showToast("Reason must be at least 10 characters", "error");
+      return;
+    }
+
+    setSubmitting(true);
+
+    try {
+      // Create FormData
+      const formDataToSend = new FormData();
+      formDataToSend.append("leave_type_id", editFormData.leave_type_id);
+      formDataToSend.append("start_date", editFormData.start_date);
+      formDataToSend.append("end_date", editFormData.end_date);
+      formDataToSend.append("reason", editFormData.reason);
+      formDataToSend.append("claim_salary", editFormData.claim_salary);
+      formDataToSend.append("session1", editFormData.session1);
+      formDataToSend.append("session2", editFormData.session2);
+
+      if (editFile) {
+        formDataToSend.append("document", editFile);
+      }
+
+      // Log FormData contents for debugging
+      console.log("FormData contents:");
+      for (let [key, value] of formDataToSend.entries()) {
+        console.log(`${key}: ${value}`);
+      }
+
+      const result = await dispatch(
+        updateLeaveRequest({
+          id: editingLeave.id,
+          formData: formDataToSend,
+        })
+      );
+
+      if (updateLeaveRequest.fulfilled.match(result)) {
+        showToast("Leave request updated successfully!", "success");
+        setShowEditModal(false);
+        setEditingLeave(null);
+        setEditFile(null);
+        dispatch(fetchLeaves());
+      } else {
+        console.error("Update failed:", result.payload);
+        showToast(result.payload || "Failed to update leave request", "error");
+      }
+    } catch (error) {
+      console.error("Error submitting form:", error);
+      showToast("An error occurred while updating", "error");
+    } finally {
+      setSubmitting(false);
+    }
+  };
+
+  const handleEditClose = () => {
+    setShowEditModal(false);
+    setEditingLeave(null);
+    setEditFile(null);
+    setFetchingLeave(false);
+  };
+
+  // Handle date changes from DateInput
+  const handleStartDateChange = (dateValue) => {
+    console.log("Start date changed:", dateValue);
+    setEditFormData({ ...editFormData, start_date: dateValue || "" });
+  };
+
+  const handleEndDateChange = (dateValue) => {
+    console.log("End date changed:", dateValue);
+    setEditFormData({ ...editFormData, end_date: dateValue || "" });
+  };
+
+  // ✅ Delete Handlers
+  const handleDeleteClick = (leave) => {
+    if ((leave.status || "").toLowerCase() !== "pending") {
+      showToast("Only pending leave requests can be deleted", "warning");
+      return;
+    }
+    setLeaveToDelete(leave);
+    setDeleteConfirmOpen(true);
+  };
+
+  const handleDeleteConfirm = async () => {
+    if (!leaveToDelete) return;
+
+    setActionLoading(true);
+
+    const result = await dispatch(deleteLeaveRequest(leaveToDelete.id));
+
+    if (deleteLeaveRequest.fulfilled.match(result)) {
+      showToast("Leave request deleted successfully!", "success");
+      setDeleteConfirmOpen(false);
+      setLeaveToDelete(null);
+      dispatch(fetchLeaves());
+    } else {
+      showToast(result.payload || "Failed to delete leave request", "error");
+    }
+
+    setActionLoading(false);
   };
 
   // Calculate stats
@@ -259,7 +474,6 @@ const Leaves = () => {
   const formatDate = (dateString) => {
     if (!dateString) return "-";
     try {
-      // If it's in YYYY-MM-DD format
       if (typeof dateString === 'string' && dateString.match(/^\d{4}-\d{2}-\d{2}$/)) {
         const [year, month, day] = dateString.split('-');
         const date = new Date(year, month - 1, day);
@@ -382,6 +596,16 @@ const Leaves = () => {
             onChange={setSearchTerm}
             placeholder="Search by employee..."
           />
+          {user?.role?.name === "HR Manager" ||
+          user?.type === "hr" ||
+          user?.type === "admin" ? (
+            <Link
+              to={`${basePath}/request-leave-for-employee`}
+              className="request-btn bg-emerald-700 text-white py-2.5 px-6 rounded-full font-semibold text-sm flex items-center gap-2 hover:bg-emerald-600 hover:-translate-y-0.5 transition-all shadow-md"
+            >
+              <FiPlus /> Request Leave for Employee
+            </Link>
+          ) : null}
           <Link
             to={`${basePath}/leaves/allocations`}
             className="bg-blue-500 hover:bg-blue-600 text-white px-4 py-2 rounded-full text-sm font-semibold flex items-center justify-center gap-2 transition-all shadow-md hover:shadow-lg w-full sm:w-auto"
@@ -451,9 +675,10 @@ const Leaves = () => {
             <tbody>
               {pageLeaves.length > 0 ? (
                 pageLeaves.map((leave, idx) => {
-                  const appliedByName = getAppliedByName(leave);
-                  const appliedByRole = getAppliedByRole(leave);
-                  const isSelfApplied = appliedByName === getEmployeeName(leave) || leave.applied_by === leave.employee_id;
+                  const appliedByInfo = getAppliedByInfo(leave);
+                  const hasDoc = hasDocument(leave);
+                  const docPath = leave.document_path || leave.document || leave.doc;
+                  const isPending = (leave.status || "").toLowerCase() === "pending";
                   
                   return (
                     <tr
@@ -469,23 +694,8 @@ const Leaves = () => {
                       <td className="px-3 md:px-4 py-2 md:py-3">
                         <div className="flex flex-col">
                           <span className="text-xs md:text-sm font-semibold text-blue-600 dark:text-blue-400">
-                            {appliedByName}
+                            {appliedByInfo.name}
                           </span>
-                          {!isSelfApplied && appliedByRole !== "-" && (
-                            <span className="text-[10px] text-gray-500 dark:text-gray-400">
-                              {appliedByRole}
-                            </span>
-                          )}
-                          {isSelfApplied && (
-                            <span className="text-[10px] text-green-500 dark:text-green-400">
-                              Self
-                            </span>
-                          )}
-                          {!isSelfApplied && appliedByRole === "-" && leave.applied_by && (
-                            <span className="text-[10px] text-gray-400 dark:text-gray-500">
-                              ID: {leave.applied_by}
-                            </span>
-                          )}
                         </div>
                       </td>
                       <td className="px-3 md:px-4 py-2 md:py-3 text-xs md:text-sm text-gray-600 dark:text-gray-400 whitespace-nowrap">
@@ -505,29 +715,27 @@ const Leaves = () => {
                           className={`inline-block px-1.5 md:px-2 py-0.5 rounded-full text-[9px] md:text-xs font-semibold whitespace-nowrap ${
                             leave.claim_salary === 1 ||
                             leave.claim_salary === "1" ||
-                            leave.claimSalary === "Yes"
+                            leave.claim_salary === "Yes"
                               ? "bg-green-100 text-green-600 dark:bg-green-900/30 dark:text-green-400"
                               : "bg-gray-100 text-gray-600 dark:bg-gray-700 dark:text-gray-400"
                           }`}
                         >
-                          {leave.claim_salary === 1 || leave.claim_salary === "1" || leave.claimSalary === "Yes"
+                          {leave.claim_salary === 1 || leave.claim_salary === "1" || leave.claim_salary === "Yes"
                             ? "Yes"
                             : "No"}
                         </span>
                       </td>
                       <td className="px-3 md:px-4 py-2 md:py-3">
-                        {leave.document_path || leave.document || leave.doc ? (
+                        {hasDoc ? (
                           <button
-                            onClick={() =>
-                              handleViewDocument(leave.document_path || leave.document || leave.doc)
-                            }
+                            onClick={() => handleViewDocument(docPath)}
                             className="text-blue-500 hover:text-blue-600 text-xs md:text-sm flex items-center gap-1"
                           >
                             <i className="fas fa-file-pdf text-xs md:text-sm"></i>
                             <span className="hidden sm:inline">View</span>
                           </button>
                         ) : (
-                          "-"
+                          <span className="text-gray-400 dark:text-gray-500 text-xs">-</span>
                         )}
                       </td>
                       <td
@@ -555,9 +763,22 @@ const Leaves = () => {
                           >
                             <i className="fas fa-eye text-xs md:text-sm"></i>
                           </button>
-                          {(leave.status === "pending" ||
-                            leave.status === "Pending") && (
+                          {isPending && (
                             <>
+                              <button
+                                onClick={() => handleEditClick(leave)}
+                                className="p-1.5 rounded-lg hover:bg-gray-100 dark:hover:bg-gray-700 text-amber-500 transition-colors"
+                                title="Edit Leave Request"
+                              >
+                                <FiEdit2 size={14} />
+                              </button>
+                              <button
+                                onClick={() => handleDeleteClick(leave)}
+                                className="p-1.5 rounded-lg hover:bg-gray-100 dark:hover:bg-gray-700 text-red-500 transition-colors"
+                                title="Delete Leave Request"
+                              >
+                                <FiTrash2 size={14} />
+                              </button>
                               <button
                                 onClick={() => handleApproveClick(leave.id)}
                                 className="p-1.5 rounded-lg hover:bg-gray-100 dark:hover:bg-gray-700 text-green-500 transition-colors"
@@ -612,6 +833,270 @@ const Leaves = () => {
         onViewDocument={handleViewDocument}
       />
 
+      {/* Edit Modal */}
+      {showEditModal && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 p-4">
+          <div className="bg-white dark:bg-gray-800 rounded-2xl max-w-2xl w-full max-h-[90vh] overflow-y-auto p-6">
+            <div className="flex justify-between items-center mb-6">
+              <h3 className="text-xl font-bold text-gray-800 dark:text-gray-200">
+                <FiEdit2 className="inline mr-2 text-amber-500" />
+                Edit Leave Request
+              </h3>
+              <button
+                onClick={handleEditClose}
+                className="p-2 hover:bg-gray-100 dark:hover:bg-gray-700 rounded-lg transition-colors"
+              >
+                <FiX size={20} />
+              </button>
+            </div>
+
+            {fetchingLeave ? (
+              <div className="flex items-center justify-center py-12">
+                <div className="text-center">
+                  <FiLoader className="w-10 h-10 text-amber-500 animate-spin mx-auto mb-4" />
+                  <p className="text-[var(--muted)]">Loading leave details...</p>
+                </div>
+              </div>
+            ) : (
+              <form onSubmit={handleEditSubmit}>
+                <div className="space-y-4">
+                  {/* Leave Type */}
+                  <div>
+                    <label className="block text-sm font-semibold text-gray-700 dark:text-gray-300 mb-1">
+                      Leave Type <span className="text-red-500">*</span>
+                    </label>
+                    <select
+                      value={editFormData.leave_type_id}
+                      onChange={(e) => {
+                        console.log("Leave type selected:", e.target.value);
+                        setEditFormData({
+                          ...editFormData,
+                          leave_type_id: e.target.value,
+                        });
+                      }}
+                      className="w-full px-3 py-2 bg-gray-50 dark:bg-gray-900 border border-gray-200 dark:border-gray-700 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-amber-500"
+                      required
+                    >
+                      <option value="">Select Leave Type</option>
+                      {leaveTypes.map((type) => (
+                        <option key={type.id} value={type.id}>
+                          {type.name}
+                        </option>
+                      ))}
+                    </select>
+                  </div>
+
+                  {/* Dates */}
+                  <div className="grid grid-cols-2 gap-4">
+                    <div>
+                      <label className="block text-sm font-semibold text-gray-700 dark:text-gray-300 mb-1">
+                        Start Date <span className="text-red-500">*</span>
+                      </label>
+                      <DateInput
+                        value={editFormData.start_date}
+                        onChange={handleStartDateChange}
+                        type="general"
+                        className="w-full"
+                        placeholder="dd/mm/yyyy"
+                        error={false}
+                      />
+                    </div>
+                    <div>
+                      <label className="block text-sm font-semibold text-gray-700 dark:text-gray-300 mb-1">
+                        End Date <span className="text-red-500">*</span>
+                      </label>
+                      <DateInput
+                        value={editFormData.end_date}
+                        onChange={handleEndDateChange}
+                        type="general"
+                        className="w-full"
+                        placeholder="dd/mm/yyyy"
+                        error={false}
+                        minDate={
+                          editFormData.start_date
+                            ? new Date(editFormData.start_date)
+                            : null
+                        }
+                      />
+                    </div>
+                  </div>
+
+                  {/* Sessions */}
+                  <div className="grid grid-cols-2 gap-4">
+                    <div>
+                      <label className="block text-sm font-semibold text-gray-700 dark:text-gray-300 mb-1">
+                        Start Session <span className="text-red-500">*</span>
+                      </label>
+                      <select
+                        value={editFormData.session1}
+                        onChange={(e) =>
+                          setEditFormData({
+                            ...editFormData,
+                            session1: e.target.value,
+                          })
+                        }
+                        className="w-full px-3 py-2 bg-gray-50 dark:bg-gray-900 border border-gray-200 dark:border-gray-700 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-amber-500"
+                        required
+                      >
+                        <option value="morning">Morning</option>
+                        <option value="afternoon">Afternoon</option>
+                      </select>
+                    </div>
+                    <div>
+                      <label className="block text-sm font-semibold text-gray-700 dark:text-gray-300 mb-1">
+                        End Session <span className="text-red-500">*</span>
+                      </label>
+                      <select
+                        value={editFormData.session2}
+                        onChange={(e) =>
+                          setEditFormData({
+                            ...editFormData,
+                            session2: e.target.value,
+                          })
+                        }
+                        className="w-full px-3 py-2 bg-gray-50 dark:bg-gray-900 border border-gray-200 dark:border-gray-700 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-amber-500"
+                        required
+                      >
+                        <option value="morning">Morning</option>
+                        <option value="afternoon">Afternoon</option>
+                      </select>
+                    </div>
+                  </div>
+
+                  {/* Reason */}
+                  <div>
+                    <label className="block text-sm font-semibold text-gray-700 dark:text-gray-300 mb-1">
+                      Reason <span className="text-red-500">*</span>
+                    </label>
+                    <textarea
+                      value={editFormData.reason}
+                      onChange={(e) =>
+                        setEditFormData({
+                          ...editFormData,
+                          reason: e.target.value,
+                        })
+                      }
+                      rows="3"
+                      className="w-full px-3 py-2 bg-gray-50 dark:bg-gray-900 border border-gray-200 dark:border-gray-700 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-amber-500"
+                      placeholder="Enter reason for leave (min 10 characters)"
+                      required
+                    />
+                  </div>
+
+                  {/* Claim Salary */}
+                  <div>
+                    <label className="block text-sm font-semibold text-gray-700 dark:text-gray-300 mb-1">
+                      Claim Salary
+                    </label>
+                    <div className="flex gap-6">
+                      <label className="flex items-center gap-2">
+                        <input
+                          type="radio"
+                          value="1"
+                          checked={editFormData.claim_salary === "1"}
+                          onChange={() =>
+                            setEditFormData({
+                              ...editFormData,
+                              claim_salary: "1",
+                            })
+                          }
+                          className="text-amber-500 focus:ring-amber-500"
+                        />
+                        <span className="text-sm">Yes</span>
+                      </label>
+                      <label className="flex items-center gap-2">
+                        <input
+                          type="radio"
+                          value="0"
+                          checked={editFormData.claim_salary === "0"}
+                          onChange={() =>
+                            setEditFormData({
+                              ...editFormData,
+                              claim_salary: "0",
+                            })
+                          }
+                          className="text-amber-500 focus:ring-amber-500"
+                        />
+                        <span className="text-sm">No</span>
+                      </label>
+                    </div>
+                  </div>
+
+                  {/* Document Upload */}
+                  <div>
+                    <label className="block text-sm font-semibold text-gray-700 dark:text-gray-300 mb-1">
+                      Upload Document{" "}
+                      <span className="text-gray-400 text-xs">(Optional)</span>
+                    </label>
+                    
+                    {/* Show current document if it exists */}
+                    {editingLeave?.document && !editFile && (
+                      <div className="mb-3 p-3 bg-gray-50 dark:bg-gray-900 rounded-lg border border-gray-200 dark:border-gray-700">
+                        <p className="text-xs text-gray-600 dark:text-gray-400 mb-1">Current Document:</p>
+                        <div className="flex items-center gap-2">
+                          <i className="fas fa-file-pdf text-red-500"></i>
+                          <button
+                            type="button"
+                            onClick={() => handleViewDocument(editingLeave.document)}
+                            className="text-blue-500 hover:text-blue-600 hover:underline text-sm font-medium"
+                          >
+                            {editingLeave.document.split('/').pop()}
+                          </button>
+                          <span className="text-xs text-gray-400">(Click to view)</span>
+                        </div>
+                      </div>
+                    )}
+                    
+                    <input
+                      type="file"
+                      onChange={(e) => setEditFile(e.target.files[0])}
+                      accept=".pdf,.doc,.docx,.jpg,.png"
+                      className="w-full px-3 py-2 bg-gray-50 dark:bg-gray-900 border border-gray-200 dark:border-gray-700 rounded-lg text-sm file:mr-4 file:py-1.5 file:px-3 file:rounded-full file:border-0 file:text-xs file:font-semibold file:bg-amber-500 file:text-white file:cursor-pointer hover:file:bg-amber-600"
+                    />
+                    {editFile && (
+                      <p className="text-xs text-amber-600 mt-1">
+                        File selected: {editFile.name}
+                      </p>
+                    )}
+                    {editingLeave?.document && !editFile && (
+                      <p className="text-xs text-gray-500 mt-1">
+                        Upload a new file to replace the current document
+                      </p>
+                    )}
+                  </div>
+                </div>
+
+                <div className="flex justify-end gap-3 mt-6 pt-4 border-t border-gray-200 dark:border-gray-700">
+                  <button
+                    type="button"
+                    onClick={handleEditClose}
+                    className="px-4 py-2 rounded-lg font-semibold bg-gray-100 dark:bg-gray-700 text-gray-700 dark:text-gray-300 hover:bg-gray-200 dark:hover:bg-gray-600 transition-colors"
+                  >
+                    Cancel
+                  </button>
+                  <button
+                    type="submit"
+                    disabled={submitting}
+                    className="px-4 py-2 rounded-lg font-semibold bg-amber-500 text-white hover:bg-amber-600 transition-colors disabled:opacity-50 flex items-center gap-2"
+                  >
+                    {submitting ? (
+                      <>
+                        <div className="w-4 h-4 border-2 border-white border-t-transparent rounded-full animate-spin"></div>
+                        Updating...
+                      </>
+                    ) : (
+                      <>
+                        <FiEdit2 /> Update
+                      </>
+                    )}
+                  </button>
+                </div>
+              </form>
+            )}
+          </div>
+        </div>
+      )}
+
       {/* Confirm Modal for Approve/Reject */}
       <ConfirmModal
         isOpen={confirmOpen}
@@ -655,6 +1140,22 @@ const Leaves = () => {
           </div>
         )}
       </ConfirmModal>
+
+      {/* Delete Confirmation Modal */}
+      <ConfirmModal
+        isOpen={deleteConfirmOpen}
+        onClose={() => {
+          setDeleteConfirmOpen(false);
+          setLeaveToDelete(null);
+        }}
+        onConfirm={handleDeleteConfirm}
+        title="Delete Leave Request"
+        message={`Are you sure you want to delete the leave request for "${leaveToDelete ? getEmployeeName(leaveToDelete) : ""}"? This action cannot be undone.`}
+        confirmText="Delete"
+        cancelText="Cancel"
+        loading={actionLoading}
+        variant="danger"
+      />
     </div>
   );
 };

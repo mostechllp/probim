@@ -418,7 +418,7 @@ const Dashboard = () => {
   };
 
   const formatPunchTime = (time) => {
-    if (!time) return "—";
+    if (!time) return "00:00";
     try {
       let date;
       if (typeof time === "string" && time.match(/^\d{2}:\d{2}:\d{2}$/)) {

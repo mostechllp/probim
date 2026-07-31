@@ -970,3 +970,27 @@ i.text-green-600 {
   height: 16px;
   cursor: nwse-resize;
 }
+
+/* Leaflet CSS */
+@import 'leaflet/dist/leaflet.css';
+
+/* Fix for Leaflet icons in production */
+.leaflet-control-attribution {
+  font-size: 9px !important;
+}
+
+.leaflet-popup-content-wrapper {
+  border-radius: 8px !important;
+}
+
+.leaflet-container {
+  height: 100%;
+  width: 100%;
+  border-radius: 8px;
+  z-index: 1;
+}
+
+/* Marker icon fix */
+.leaflet-default-icon-path {
+  background-image: url(https://unpkg.com/leaflet@1.9.4/dist/images/marker-icon.png);
+}

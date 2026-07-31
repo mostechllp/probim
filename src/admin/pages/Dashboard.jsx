@@ -144,28 +144,31 @@ const Dashboard = () => {
     0,
   );
 
-  const onTimeCount = charts?.today_status?.["On time"] || 0;
-  const lateCount = charts?.today_status?.Late || 0;
-  const absentCount = charts?.today_status?.Absent || 0;
-  const totalPresent = onTimeCount + lateCount;
-  const attendanceRate =
-    totalEmployees > 0 ? Math.round((totalPresent / totalEmployees) * 100) : 0;
-
+  // ✅ Get stats from the correct location
   const todayStatus = charts?.today_status || {};
-  const punchedInToday =
-    Object.values(todayStatus).reduce((a, b) => a + b, 0) ||
-    stats?.today?.punched_in ||
-    0;
-  const lateArrivals = todayStatus.Late || stats?.today?.late || 0;
-  const absentToday = todayStatus.Absent || stats?.today?.absent || 0;
+  
+  // ✅ Correctly map the stats from the API response
+  const onTimeCount = todayStatus["On time"] || 0;
+  const lateCount = todayStatus.Late || 0;
+  const absentCount = todayStatus.Absent || 0;
+  const wfhCount = todayStatus.WFH || 0;
+  const leaveCount = todayStatus.Leave || 0;
+  
+  // ✅ Punched in total = On time + Late (people who punched in)
+  const punchedInToday = todayStatus.punched_in || (onTimeCount + lateCount);
+  
+  const totalPresent = onTimeCount + lateCount;
+  const attendanceRate = totalEmployees > 0 ? Math.round((totalPresent / totalEmployees) * 100) : 0;
 
+  const lateArrivals = lateCount;
+  const absentToday = absentCount;
+
+  // ✅ Project stats from the API response
   const projectStats = charts?.project_stats || {};
   const totalProjects = projectStats.total_projects || projects.length;
   const activeProjectsCount = projectStats.active_projects || activeProjects;
-  const totalAssignmentsCount =
-    projectStats.total_assignments || totalAssignments;
-  const employeesAssigned =
-    projectStats.employees_assigned || totalTaggedEmployees;
+  const totalAssignmentsCount = projectStats.total_assignments || totalAssignments;
+  const employeesAssigned = projectStats.employees_assigned || totalTaggedEmployees;
 
   const allocationData = charts?.project_allocation || [];
   const hoursData = charts?.project_hours || [];
@@ -198,14 +201,21 @@ const Dashboard = () => {
     }
   };
 
+  if (loading) {
+    return (
+      <div className="flex justify-center items-center h-64">
+        <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-green-500"></div>
+      </div>
+    );
+  }
+
   return (
     <div className="dashboard-container">
       <WelcomeBanner
         stats={{
-          punchedInToday: punchedInToday, // Use punchedInToday instead of present
+          punchedInToday: punchedInToday,
           attendanceRate: attendanceRate,
           late: lateCount,
-          // If you have these additional stats from attendance slice
           totalEmployees: totalEmployees,
           absent: absentCount,
         }}

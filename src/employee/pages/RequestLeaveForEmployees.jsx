@@ -27,6 +27,15 @@ const RequestLeaveForEmployee = () => {
   const navigate = useNavigate();
   const dispatch = useDispatch();
   const dropdownRef = useRef(null);
+  const {user} = useSelector((state) => state.auth);
+  
+  // Determine base path from current route
+  const getBasePath = () => {
+    if (location.pathname.startsWith('/admin')) return '/admin';
+    if (location.pathname.startsWith('/employee')) return '/employee';
+    return '';
+  };
+  const basePath = getBasePath();
 
   const leavesState = useSelector((state) => state.EmpLeaves);
   const leaveTypes = leavesState?.leaveTypes || [];
@@ -242,7 +251,7 @@ const RequestLeaveForEmployee = () => {
 
     if (addLeaveRequestForEmployee.fulfilled.match(result)) {
       showToast("Leave request submitted successfully!", "success");
-      navigate("/employee/leaves");
+      navigate(`${basePath}/leaves`);
     }
   };
 
@@ -261,17 +270,17 @@ const RequestLeaveForEmployee = () => {
       {/* Breadcrumbs */}
       <div className="flex items-center gap-2 text-xs md:text-sm mb-4 md:mb-6 flex-wrap">
         <Link
-          to="/employee/dashboard"
+          to={`${basePath}/dashboard`}
           className="text-green-500 hover:text-green-600 font-medium"
         >
           Dashboard
         </Link>
         <i className="fas fa-chevron-right text-gray-400 text-[10px] md:text-xs"></i>
         <Link
-          to="/employee/leaves"
+          to={`${basePath}/leaves`}
           className="text-green-500 hover:text-green-600 font-medium"
         >
-          My Leaves
+          Leaves
         </Link>
         <i className="fas fa-chevron-right text-gray-400 text-[10px] md:text-xs"></i>
         <span className="text-gray-500 dark:text-gray-400">
@@ -560,7 +569,7 @@ const RequestLeaveForEmployee = () => {
 
             <div className="form-actions flex flex-col sm:flex-row justify-end gap-4 mt-8 pt-6 border-t border-gray-200 dark:border-gray-700">
               <Link
-                to="/employee/leaves"
+                to={`${basePath}/leaves`}
                 className="px-4 py-2 rounded-full text-xs font-semibold bg-gray-100 dark:bg-gray-700 text-gray-700 dark:text-gray-300 hover:bg-gray-200 dark:hover:bg-gray-600 transition-all flex items-center gap-2"
               >
                 <FiX /> Cancel

@@ -10,23 +10,34 @@ export const fetchDashboard = createAsyncThunk(
       const res = await apiClient.get("/admin/dashboard");
       console.log("Dashboard API Response:", res.data);
       
-      const data = res.data?.data?.data || res.data?.data || res.data;
+      // ✅ Extract data from the correct nested structure
+      const responseData = res.data?.data?.data || res.data?.data || res.data || {};
       
+      // ✅ Map the data to match the component's expected structure
       return {
-        stats: data.stats || null,
-        charts: {
-          punch_chart: data.charts?.punch_chart || null,
-          weekly_attendance: data.weekly_attendance || null,
-          today_status: data.today_status || null,
-          avg_punch_time: data.avg_punch_time || null,
-          recent_punches: data.recent_punches || null,
-          punch_distribution: data.punch_distribution || null,
-          project_allocation: data.project_allocation || null,
-          project_hours: data.project_hours || null,
-          project_stats: data.project_stats || null,
+        stats: {
+          today: {
+            punched_in: responseData.today_status?.punched_in || 0,
+            on_time: responseData.today_status?.["On time"] || 0,
+            late: responseData.today_status?.Late || 0,
+            absent: responseData.today_status?.Absent || 0,
+            wfh: responseData.today_status?.WFH || 0,
+            leave: responseData.today_status?.Leave || 0,
+          },
+          project_stats: responseData.project_stats || null,
         },
-        recent_data: data.recent_data || null,
-        metadata: data.metadata || null,
+        charts: {
+          today_status: responseData.today_status || null,
+          weekly_attendance: responseData.weekly_attendance || null,
+          avg_punch_time: responseData.avg_punch_time || null,
+          recent_punches: responseData.recent_punches || null,
+          punch_distribution: responseData.punch_distribution || null,
+          project_allocation: responseData.project_allocation || null,
+          project_hours: responseData.project_hours || null,
+          project_stats: responseData.project_stats || null,
+        },
+        recent_data: responseData.recent_data || null,
+        metadata: responseData.metadata || null,
       };
     } catch (err) {
       console.error("Dashboard fetch error:", err);
@@ -35,7 +46,6 @@ export const fetchDashboard = createAsyncThunk(
   }
 );
 
-// ─── Fetch Monthly Hours by Project ──────────────────────────────────
 // ─── Fetch Monthly Hours by Project ──────────────────────────────────
 export const fetchMonthlyHoursByProject = createAsyncThunk(
   "dashboard/fetchMonthlyHoursByProject",
@@ -50,7 +60,6 @@ export const fetchMonthlyHoursByProject = createAsyncThunk(
       const res = await apiClient.get(url);
       console.log("Monthly hours response:", res.data);
       
-      // Return the entire data object which contains employees array
       return res.data?.data || res.data || [];
     } catch (err) {
       console.error("Fetch monthly hours error:", err);
@@ -77,9 +86,8 @@ const dashboardSlice = createSlice({
   initialState: {
     stats: null,
     charts: {
-      punch_chart: null,
-      weekly_attendance: null,
       today_status: null,
+      weekly_attendance: null,
       avg_punch_time: null,
       recent_punches: null,
       punch_distribution: null,
