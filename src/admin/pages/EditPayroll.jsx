@@ -274,10 +274,26 @@ function EditPayroll() {
     };
   }, [dispatch, id]);
 
+  // Debug effect to check selectedUserId
+useEffect(() => {
+  console.log("selectedUserId:", selectedUserId);
+  console.log("currentPayroll:", currentPayroll);
+  console.log("isDataLoaded:", isDataLoaded);
+}, [selectedUserId, currentPayroll, isDataLoaded]);
+
   // ─── Populate form with payroll data when loaded ────────────────────
   useEffect(() => {
     if (currentPayroll && !isDataLoaded) {
       const stepData = currentPayroll.step_data || {};
+
+      // ✅ FIX: Set selectedUserId from payroll data
+      if (currentPayroll.employee_id) {
+        const userId = parseInt(currentPayroll.employee_id);
+        setSelectedUserId(userId.toString());
+      } else if (currentPayroll.user_id) {
+      // Fallback: try user_id if employee_id is not available
+      setSelectedUserId(currentPayroll.user_id.toString());
+    }
 
       // Set employee info
       if (currentPayroll.employee_name) {
@@ -353,20 +369,22 @@ function EditPayroll() {
           }),
         );
         setCountries(mappedCountries);
-        
+
         // Set available packages and selected package IDs
-        const packages = mappedCountries.map(c => ({
+        const packages = mappedCountries.map((c) => ({
           id: c.packageId || c.id,
           name: c.name,
           currency: c.currency,
         }));
         setAvailablePackages(packages);
-        setSelectedPackageIds(packages.map(p => p.id));
-        
+        setSelectedPackageIds(packages.map((p) => p.id));
+
         setTotalEarnings(stepData.step_2?.total_earnings || 0);
         setTotalDeductions(stepData.step_2?.total_deductions || 0);
         setGrossSalary(stepData.step_2?.gross_salary || 0);
         setNetSalary(stepData.step_2?.net_salary || 0);
+
+        // ✅ FIX: Set isStep2Saved to true since data is already saved
         setIsStep2Saved(true);
       }
 
@@ -849,7 +867,7 @@ function EditPayroll() {
       case 2:
         // Filter countries to only include selected packages
         const selectedCountriesForStep = countries.filter((c) =>
-          selectedPackageIds.includes(c.packageId || c.id)
+          selectedPackageIds.includes(c.packageId || c.id),
         );
 
         const step2TotalEarnings = selectedCountriesForStep.reduce(
@@ -935,7 +953,7 @@ function EditPayroll() {
 
         // Build location breakdown from saved step 2 data
         const selectedCountries = countries.filter((c) =>
-          selectedPackageIds.includes(c.packageId || c.id)
+          selectedPackageIds.includes(c.packageId || c.id),
         );
 
         data = {
@@ -1572,20 +1590,20 @@ function EditPayroll() {
           is_saved: true,
         }));
         setCountries(updatedCountries);
-        
+
         // Update available packages
-        const packages = updatedCountries.map(c => ({
+        const packages = updatedCountries.map((c) => ({
           id: c.packageId || c.id,
           name: c.name,
           currency: c.currency,
         }));
         setAvailablePackages(packages);
-        
+
         // If no packages selected yet, select all
         if (selectedPackageIds.length === 0) {
-          setSelectedPackageIds(packages.map(p => p.id));
+          setSelectedPackageIds(packages.map((p) => p.id));
         }
-        
+
         setTotalEarnings(data.total_earnings || 0);
         setTotalDeductions(data.total_deductions || 0);
         setGrossSalary(data.gross_salary || 0);
@@ -1735,21 +1753,21 @@ function EditPayroll() {
       {/* Stepper */}
       <div className="flex flex-wrap gap-2 mb-6">
         {steps.map((step) => (
-          <button
-            key={step.id}
-            onClick={() => handleStepChange(step.id)}
-            disabled={isLoading || isSubmitting || !selectedUserId}
-            className={`px-4 py-2 rounded-full text-xs md:text-sm font-semibold transition-all ${
-              reduxCurrentStep === step.id
-                ? "bg-green-500 text-white shadow-md"
-                : reduxCurrentStep > step.id
-                  ? "bg-green-100 dark:bg-green-900/30 text-green-600 dark:text-green-400"
-                  : "bg-gray-100 dark:bg-gray-700 text-gray-600 dark:text-gray-400 hover:bg-gray-200 dark:hover:bg-gray-600"
-            } ${isLoading || isSubmitting || !selectedUserId ? "opacity-50 cursor-not-allowed" : ""}`}
-          >
-            {step.id}. {step.label}
-          </button>
-        ))}
+  <button
+    key={step.id}
+    onClick={() => handleStepChange(step.id)}
+    disabled={isLoading || isSubmitting || (!selectedUserId && !currentPayroll?.employee_id)}
+    className={`px-4 py-2 rounded-full text-xs md:text-sm font-semibold transition-all ${
+      reduxCurrentStep === step.id
+        ? "bg-green-500 text-white shadow-md"
+        : reduxCurrentStep > step.id
+          ? "bg-green-100 dark:bg-green-900/30 text-green-600 dark:text-green-400"
+          : "bg-gray-100 dark:bg-gray-700 text-gray-600 dark:text-gray-400 hover:bg-gray-200 dark:hover:bg-gray-600"
+    } ${isLoading || isSubmitting || (!selectedUserId && !currentPayroll?.employee_id) ? "opacity-50 cursor-not-allowed" : ""}`}
+  >
+    {step.id}. {step.label}
+  </button>
+))}
       </div>
 
       {/* Form Container */}
@@ -2157,7 +2175,9 @@ function EditPayroll() {
                         <div
                           key={country.id}
                           onClick={() =>
-                            handlePackageSelection(country.packageId || country.id)
+                            handlePackageSelection(
+                              country.packageId || country.id,
+                            )
                           }
                           className={`bg-white dark:bg-gray-800 border-2 rounded-xl overflow-hidden shadow-sm hover:shadow-md transition-all cursor-pointer ${
                             isSelected
@@ -2178,7 +2198,9 @@ function EditPayroll() {
                                 type="checkbox"
                                 checked={isSelected}
                                 onChange={() =>
-                                  handlePackageSelection(country.packageId || country.id)
+                                  handlePackageSelection(
+                                    country.packageId || country.id,
+                                  )
                                 }
                                 className="w-5 h-5 text-green-500 focus:ring-green-500 rounded border-gray-300 dark:border-gray-600 cursor-pointer"
                               />
@@ -2187,12 +2209,15 @@ function EditPayroll() {
                                   {country.name || "Location"}
                                 </h4>
                                 <div className="flex items-center gap-2 text-xs text-gray-500 dark:text-gray-400">
-                                  <span>{country.packageId ? "Saved" : "Unsaved"}</span>
+                                  <span>
+                                    {country.packageId ? "Saved" : "Unsaved"}
+                                  </span>
                                   <span className="w-1 h-1 rounded-full bg-gray-400"></span>
                                   <span>{country.currency}</span>
                                   {isSelected && (
                                     <span className="text-green-600 dark:text-green-400">
-                                      <i className="fas fa-check-circle"></i> Selected
+                                      <i className="fas fa-check-circle"></i>{" "}
+                                      Selected
                                     </span>
                                   )}
                                 </div>
@@ -2214,7 +2239,10 @@ function EditPayroll() {
                             country.salary_components.length > 0 ? (
                               <div className="space-y-2">
                                 {country.salary_components.map((comp, idx) => (
-                                  <div key={idx} className="flex items-center gap-2">
+                                  <div
+                                    key={idx}
+                                    className="flex items-center gap-2"
+                                  >
                                     <span className="text-sm text-gray-600 dark:text-gray-400 w-32 flex-shrink-0">
                                       {comp.name}
                                     </span>
@@ -2235,7 +2263,10 @@ function EditPayroll() {
                                                 c.salary_components.map(
                                                   (c2, i) =>
                                                     i === idx
-                                                      ? { ...c2, amount: newAmount }
+                                                      ? {
+                                                          ...c2,
+                                                          amount: newAmount,
+                                                        }
                                                       : c2,
                                                 );
                                               const newSubtotal =
@@ -2259,7 +2290,8 @@ function EditPayroll() {
                                       onClick={(e) => e.stopPropagation()}
                                       className="flex-1 px-2 py-1 text-sm rounded border border-gray-200 dark:border-gray-600 bg-white dark:bg-gray-800 text-gray-700 dark:text-gray-300 focus:outline-none focus:border-green-500"
                                       disabled={
-                                        currentPayroll?.status === "completed" ||
+                                        currentPayroll?.status ===
+                                          "completed" ||
                                         currentPayroll?.status === "paid"
                                       }
                                     />
@@ -2270,7 +2302,8 @@ function EditPayroll() {
                                     Subtotal
                                   </span>
                                   <span className="text-green-600 dark:text-green-400">
-                                    {country.currency} {country.subtotal.toFixed(2)}
+                                    {country.currency}{" "}
+                                    {country.subtotal.toFixed(2)}
                                   </span>
                                 </div>
                               </div>
@@ -2310,7 +2343,10 @@ function EditPayroll() {
                 <button
                   onClick={async () => {
                     if (selectedPackageIds.length === 0) {
-                      showToast("Please select at least one package", "warning");
+                      showToast(
+                        "Please select at least one package",
+                        "warning",
+                      );
                       return;
                     }
 
@@ -2320,7 +2356,7 @@ function EditPayroll() {
                       parseInt(payPeriodYear) || new Date().getFullYear();
 
                     const selectedCountries = countries.filter((c) =>
-                      selectedPackageIds.includes(c.packageId || c.id)
+                      selectedPackageIds.includes(c.packageId || c.id),
                     );
 
                     const selectedTotalEarnings = selectedCountries.reduce(
@@ -2368,7 +2404,8 @@ function EditPayroll() {
                   className="px-6 py-2.5 rounded-full font-semibold bg-green-500 text-white hover:bg-green-600 transition-all flex items-center gap-2 text-sm shadow-md hover:shadow-lg disabled:opacity-50 disabled:cursor-not-allowed"
                   disabled={selectedPackageIds.length === 0}
                 >
-                  <i className="fas fa-save"></i> Save Packages ({selectedPackageIds.length} selected)
+                  <i className="fas fa-save"></i> Save Packages (
+                  {selectedPackageIds.length} selected)
                 </button>
               </div>
 
@@ -2825,9 +2862,15 @@ function EditPayroll() {
                                 rate: 1,
                               })),
                             ]);
-                            showToast(`Added ${availableCurrencies.length} currency conversion rates`, "success");
+                            showToast(
+                              `Added ${availableCurrencies.length} currency conversion rates`,
+                              "success",
+                            );
                           } else {
-                            showToast("All available currencies have been added", "info");
+                            showToast(
+                              "All available currencies have been added",
+                              "info",
+                            );
                           }
                         }}
                         className="px-2 py-1 text-xs bg-green-500 text-white rounded-lg hover:bg-green-600 transition-colors flex items-center gap-1"
@@ -2886,14 +2929,27 @@ function EditPayroll() {
                               }
                             >
                               {currencies
-                                .filter((c) => c !== targetCurrency && !conversionRatesList.some((i) => i.id !== item.id && i.currency === c))
+                                .filter(
+                                  (c) =>
+                                    c !== targetCurrency &&
+                                    !conversionRatesList.some(
+                                      (i) =>
+                                        i.id !== item.id && i.currency === c,
+                                    ),
+                                )
                                 .map((curr) => (
                                   <option key={curr} value={curr}>
                                     {curr}
                                   </option>
                                 ))}
-                              {conversionRatesList.some((i) => i.id === item.id && !currencies.includes(i.currency)) && (
-                                <option value={item.currency}>{item.currency}</option>
+                              {conversionRatesList.some(
+                                (i) =>
+                                  i.id === item.id &&
+                                  !currencies.includes(i.currency),
+                              ) && (
+                                <option value={item.currency}>
+                                  {item.currency}
+                                </option>
                               )}
                             </select>
                             <span className="text-xs text-gray-400">→</span>
@@ -3024,7 +3080,9 @@ function EditPayroll() {
                           Currency Breakdown:
                         </div>
                         {countries
-                          .filter((c) => selectedPackageIds.includes(c.packageId || c.id))
+                          .filter((c) =>
+                            selectedPackageIds.includes(c.packageId || c.id),
+                          )
                           .map((country, idx) => {
                             const subtotal = country.subtotal || 0;
                             if (subtotal > 0) {
@@ -3051,7 +3109,12 @@ function EditPayroll() {
                           </span>
                           <span className="text-blue-600 dark:text-blue-400">
                             {countries
-                              .filter((c) => selectedPackageIds.includes(c.packageId || c.id) && (c.subtotal || 0) > 0)
+                              .filter(
+                                (c) =>
+                                  selectedPackageIds.includes(
+                                    c.packageId || c.id,
+                                  ) && (c.subtotal || 0) > 0,
+                              )
                               .map(
                                 (c) =>
                                   `${c.currency} ${(c.subtotal || 0).toFixed(2)}`,
@@ -3203,7 +3266,12 @@ function EditPayroll() {
                           <span>Gross Salary:</span>
                           <span>
                             {countries
-                              .filter((c) => selectedPackageIds.includes(c.packageId || c.id) && (c.subtotal || 0) > 0)
+                              .filter(
+                                (c) =>
+                                  selectedPackageIds.includes(
+                                    c.packageId || c.id,
+                                  ) && (c.subtotal || 0) > 0,
+                              )
                               .map(
                                 (c) =>
                                   `${c.currency} ${(c.subtotal || 0).toFixed(2)}`,
@@ -3249,7 +3317,11 @@ function EditPayroll() {
                               const netPayByCurrency = {};
 
                               countries
-                                .filter((c) => selectedPackageIds.includes(c.packageId || c.id))
+                                .filter((c) =>
+                                  selectedPackageIds.includes(
+                                    c.packageId || c.id,
+                                  ),
+                                )
                                 .forEach((c) => {
                                   const subtotal = c.subtotal || 0;
                                   if (subtotal > 0) {
@@ -3592,39 +3664,34 @@ function EditPayroll() {
               )}
 
               {reduxCurrentStep < 5 ? (
-                <button
-                  onClick={handleNextStep}
-                  disabled={
-                    isLoading ||
-                    isSubmitting ||
-                    !selectedUserId ||
-                    (reduxCurrentStep === 2 && !isStep2Saved) ||
-                    currentPayroll?.status === "completed" ||
-                    currentPayroll?.status === "paid"
-                  }
-                  className={`px-4 md:px-6 py-2 md:py-2.5 rounded-full font-semibold bg-green-500 text-white hover:bg-green-600 transition-all flex items-center justify-center gap-2 text-sm md:text-base disabled:opacity-50 disabled:cursor-not-allowed`}
-                >
-                  <span>Next Step</span>
-                  <i className="fas fa-arrow-right text-xs md:text-sm"></i>
-                </button>
-              ) : (
-                <button
-                  onClick={handleUpdatePayroll}
-                  disabled={
-                    isSubmitting ||
-                    !selectedUserId ||
-                    !isConverted ||
-                    currentPayroll?.status === "completed" ||
-                    currentPayroll?.status === "paid"
-                  }
-                  className="px-4 md:px-6 py-2 md:py-2.5 rounded-full font-semibold bg-green-500 text-white hover:bg-green-600 transition-all flex items-center justify-center gap-2 text-sm md:text-base disabled:opacity-50 disabled:cursor-not-allowed"
-                >
-                  <i
-                    className={`fas ${isSubmitting ? "fa-spinner fa-spin" : "fa-save"} text-xs md:text-sm`}
-                  ></i>
-                  <span>{isSubmitting ? "Updating..." : "Update Payroll"}</span>
-                </button>
-              )}
+  <button
+    onClick={handleNextStep}
+    disabled={
+      isLoading ||
+      isSubmitting ||
+      (!selectedUserId && !currentPayroll?.employee_id)
+    }
+    className={`px-4 md:px-6 py-2 md:py-2.5 rounded-full font-semibold bg-green-500 text-white hover:bg-green-600 transition-all flex items-center justify-center gap-2 text-sm md:text-base disabled:opacity-50 disabled:cursor-not-allowed`}
+  >
+    <span>Next Step</span>
+    <i className="fas fa-arrow-right text-xs md:text-sm"></i>
+  </button>
+) : (
+  <button
+    onClick={handleUpdatePayroll}
+    disabled={
+      isSubmitting ||
+      (!selectedUserId && !currentPayroll?.employee_id) ||
+      !isConverted
+    }
+    className="px-4 md:px-6 py-2 md:py-2.5 rounded-full font-semibold bg-green-500 text-white hover:bg-green-600 transition-all flex items-center justify-center gap-2 text-sm md:text-base disabled:opacity-50 disabled:cursor-not-allowed"
+  >
+    <i
+      className={`fas ${isSubmitting ? "fa-spinner fa-spin" : "fa-save"} text-xs md:text-sm`}
+    ></i>
+    <span>{isSubmitting ? "Updating..." : "Update Payroll"}</span>
+  </button>
+)}
             </div>
           </div>
         </div>

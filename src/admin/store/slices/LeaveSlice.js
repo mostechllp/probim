@@ -1,3 +1,5 @@
+// src/admin/store/slices/LeaveSlice.js
+
 import { createSlice, createAsyncThunk } from "@reduxjs/toolkit";
 import apiClient from "../../../utils/apiClient";
 
@@ -13,20 +15,33 @@ const transformAdminLeaveData = (leave) => {
       leave.employee_name ||
       "-",
     employee_id: leave.employee_id || leave.employee?.id,
+    employee: leave.employee || null, // ✅ Keep full employee object
     type: leave.leave_type?.name || leave.leave_type || leave.type || "-",
     leave_type_id: leave.leave_type_id || leave.leave_type?.id,
+    leave_type: leave.leave_type || null, // ✅ Keep full leave_type object
     from_date: leave.start_date || leave.from_date || leave.fromDate,
     to_date: leave.end_date || leave.to_date || leave.toDate,
+    start_date: leave.start_date || leave.from_date || leave.fromDate,
+    end_date: leave.end_date || leave.to_date || leave.toDate,
     days: leave.duration_days || leave.number_of_days || leave.days || 0,
+    duration_days:
+      leave.duration_days || leave.number_of_days || leave.days || 0,
     claim_salary:
       leave.claim_salary === 1 || leave.claim_salary === "Yes" ? "Yes" : "No",
+    claim_salary_raw: leave.claim_salary,
     document: leave.document_path || leave.document || leave.doc,
+    document_path: leave.document_path || leave.document || leave.doc,
     reason: leave.reason || "-",
     status: (leave.status || "pending").toLowerCase(),
     processed_by: leave.processed_by || leave.processedBy || "-",
+    approver: leave.approver || null, // ✅ Keep approver object
     created_at: leave.created_at,
     updated_at: leave.updated_at,
     rejection_reason: leave.rejection_reason || null,
+    // ✅ IMPORTANT: Preserve the applied_by data
+    applied_by: leave.applied_by || null,
+    // Keep raw data for debugging
+    raw: leave,
   };
 };
 
@@ -52,8 +67,12 @@ export const fetchLeaves = createAsyncThunk(
         leavesData = [];
       }
 
+      console.log("Raw leaves data:", leavesData); // Debug log
+
       // Transform each leave to a consistent format
       const transformedLeaves = leavesData.map(transformAdminLeaveData);
+
+      console.log("Transformed leaves:", transformedLeaves); // Debug log
 
       return transformedLeaves;
     } catch (error) {
@@ -127,7 +146,6 @@ export const fetchLeaveAllocations = createAsyncThunk(
       const response = await apiClient.get("/admin/leave-allocations");
       console.log("Leave allocations response:", response.data);
 
-      // The response has data.employees with allocations
       if (response.data?.data?.employees) {
         return response.data.data.employees;
       }
@@ -145,7 +163,6 @@ export const updateLeaveAllocation = createAsyncThunk(
   "leaves/updateAllocation",
   async ({ employee_id, allocations }, { rejectWithValue }) => {
     try {
-      // Pass employee_id as URL parameter: /admin/leave-allocations/{employee_id}
       const response = await apiClient.post(
         `/admin/leave-allocations/${employee_id}`,
         {
@@ -198,7 +215,6 @@ export const addLeaveType = createAsyncThunk(
       const res = await apiClient.post("/admin/leave-types", data);
       return res.data.data || res.data;
     } catch (err) {
-      // Return the full error for debugging
       return rejectWithValue({
         message: err.response?.data?.message || "Failed to add leave type",
         data: err.response?.data,
@@ -262,6 +278,81 @@ export const toggleLeaveTypeStatus = createAsyncThunk(
       return response.data.data || response.data;
     } catch (err) {
       return rejectWithValue(err.response?.data);
+    }
+  },
+);
+
+export const updateLeaveRequest = createAsyncThunk(
+  "leaves/updateRequest",
+  async ({ id, formData }, { rejectWithValue, dispatch }) => {
+    try {
+      // Check if formData is FormData or plain object
+      let payload;
+      let headers = {};
+
+      if (formData instanceof FormData) {
+        payload = formData;
+        headers = { "Content-Type": "multipart/form-data" };
+      } else {
+        payload = formData;
+        headers = { "Content-Type": "application/json" };
+      }
+
+      console.log(`Admin updating leave request ${id} with payload:`, payload);
+
+      const response = await apiClient.post(`/admin/leaves/${id}`, payload, {
+        headers,
+      });
+      console.log("Admin update leave response:", response.data);
+
+      if (response.data && response.data.status === "success") {
+        // Refresh leaves after successful update
+        await dispatch(fetchLeaves());
+        return transformAdminLeaveData(response.data.data || response.data);
+      } else {
+        return rejectWithValue(
+          response.data?.message || "Failed to update leave request",
+        );
+      }
+    } catch (error) {
+      console.error("Admin update leave error:", error);
+      if (error.response?.data?.errors) {
+        const errorMessages = Object.values(error.response.data.errors)
+          .flat()
+          .join(", ");
+        return rejectWithValue(errorMessages);
+      }
+      return rejectWithValue(
+        error.response?.data?.message || "Failed to update leave request",
+      );
+    }
+  },
+);
+
+// Delete Leave Request (Admin)
+export const deleteLeaveRequest = createAsyncThunk(
+  "leaves/deleteRequest",
+  async (id, { rejectWithValue, dispatch }) => {
+    try {
+      console.log(`Admin deleting leave request ${id}`);
+
+      const response = await apiClient.delete(`/admin/leaves/${id}`);
+      console.log("Admin delete leave response:", response.data);
+
+      if (response.data && response.data.status === "success") {
+        // Refresh leaves after successful deletion
+        await dispatch(fetchLeaves());
+        return id;
+      } else {
+        return rejectWithValue(
+          response.data?.message || "Failed to delete leave request",
+        );
+      }
+    } catch (error) {
+      console.error("Admin delete leave error:", error);
+      return rejectWithValue(
+        error.response?.data?.message || "Failed to delete leave request",
+      );
     }
   },
 );
@@ -425,6 +516,44 @@ const leaveSlice = createSlice({
         if (index !== -1) {
           state.leaveTypes[index].status = updatedType.status === 1;
         }
+      })
+      .addCase(updateLeaveRequest.pending, (state) => {
+        state.loading = true;
+        state.error = null;
+      })
+      .addCase(updateLeaveRequest.fulfilled, (state, action) => {
+        state.loading = false;
+        const updatedLeave = action.payload;
+        const index = state.leaves.findIndex((l) => l.id === updatedLeave.id);
+        if (index !== -1) {
+          state.leaves[index] = updatedLeave;
+        }
+        if (state.currentLeave?.id === updatedLeave.id) {
+          state.currentLeave = updatedLeave;
+        }
+      })
+      .addCase(updateLeaveRequest.rejected, (state, action) => {
+        state.loading = false;
+        state.error = action.payload || action.error.message;
+      })
+
+      // Delete Leave Request
+      .addCase(deleteLeaveRequest.pending, (state) => {
+        state.loading = true;
+        state.error = null;
+      })
+      .addCase(deleteLeaveRequest.fulfilled, (state, action) => {
+        state.loading = false;
+        state.leaves = state.leaves.filter(
+          (leave) => leave.id !== action.payload,
+        );
+        if (state.currentLeave?.id === action.payload) {
+          state.currentLeave = null;
+        }
+      })
+      .addCase(deleteLeaveRequest.rejected, (state, action) => {
+        state.loading = false;
+        state.error = action.payload || action.error.message;
       });
   },
 });

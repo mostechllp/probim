@@ -28,6 +28,31 @@ export const fetchEmployeeLeaves = createAsyncThunk(
   },
 );
 
+export const fetchLeaveById = createAsyncThunk(
+  "leaves/fetchLeaveById",
+  async (id, { rejectWithValue }) => {
+    try {
+      console.log(`Fetching leave with ID: ${id}`);
+      const response = await apiClient.get(`/employee/leaves/${id}`);
+      console.log("Fetch leave by ID response:", response.data);
+
+      if (response.data && response.data.status === "success") {
+        const leaveData = response.data.data || response.data;
+        return leaveData;
+      } else {
+        return rejectWithValue(
+          response.data?.message || "Failed to fetch leave details",
+        );
+      }
+    } catch (error) {
+      console.error("Fetch leave by ID error:", error);
+      return rejectWithValue(
+        error.response?.data?.message || "Failed to fetch leave details",
+      );
+    }
+  },
+);
+
 // Fetch all employees (for HR to request leave on behalf)
 // Fetch all employees (for HR to request leave on behalf)
 export const fetchEmployeesForLeave = createAsyncThunk(
@@ -382,7 +407,7 @@ export const updateLeaveRequest = createAsyncThunk(
 
       console.log(`Updating leave request ${id} with payload:`, payload);
 
-      const response = await apiClient.put(`/employee/leaves/${id}`, payload, {
+      const response = await apiClient.post(`/employee/leaves/${id}`, payload, {
         headers,
       });
       console.log("Update leave response:", response.data);
@@ -445,6 +470,7 @@ const initialState = {
   leaves: [],
   leaveTypes: [],
   employeesList: [],
+  editingLeave: null, 
   leaveBalances: {
     total: {
       allocated: 0,
@@ -606,6 +632,19 @@ const leavesSlice = createSlice({
         state.error = null;
       })
       .addCase(deleteLeaveRequest.rejected, (state, action) => {
+        state.loading = false;
+        state.error = action.payload;
+      })
+      .addCase(fetchLeaveById.pending, (state) => {
+        state.loading = true;
+        state.error = null;
+      })
+      .addCase(fetchLeaveById.fulfilled, (state, action) => {
+        state.loading = false;
+        state.editingLeave = action.payload;
+        state.error = null;
+      })
+      .addCase(fetchLeaveById.rejected, (state, action) => {
         state.loading = false;
         state.error = action.payload;
       });

@@ -1,5 +1,3 @@
-// src/admin/store/slices/attendanceSlice.js
-
 import { createSlice, createAsyncThunk } from "@reduxjs/toolkit";
 import apiClient from "../../../utils/apiClient";
 
@@ -15,85 +13,7 @@ const handleApiError = (error) => {
 
 const isValidPunch = (value) => value && value !== "-" && value.trim() !== "";
 
-// FIXED: Improved extractData function
-const extractData = (response) => {
-  try {
-    const recordsData = response.data?.data?.data || [];
-    const meta = response.data?.data?.meta || {};
-
-    if (recordsData && Array.isArray(recordsData)) {
-      const records = recordsData.map((record, idx) => {
-        const hasPunchOut = record.punch_out && record.punch_out !== "-";
-
-        const punchIn =
-          record.punch_in && record.punch_in !== "-" ? record.punch_in : "-";
-
-        const employeeName = record.name || `Employee ${record.employee_id}`;
-
-        const department = record.department || "-";
-
-        const workingHours =
-          record.worked_hours !== undefined ? record.worked_hours : "--";
-
-        return {
-          id: record.employee_id || idx,
-          employee_id: record.employee_id,
-          employeeName,
-          company: record.company || "N/A",
-          company_id: record.company_id || null,
-          department,
-          date: record.date || "-",
-          punchIn,
-          punchOut: hasPunchOut ? record.punch_out : null,
-          punch_in_raw: record.punch_in,
-          punch_out_raw: record.punch_out,
-          workingHours,
-          status:
-            record.status ||
-            (record.punch_in && record.punch_in !== "-" ? "Present" : "Absent"),
-          isLate: false,
-          hasPunchOut,
-          raw: record,
-        };
-      });
-
-      const stats = {
-        totalActiveEmployees: meta.total || records.length,
-        presentToday: records.filter((r) => r.status === "Present").length,
-        absentToday: records.filter((r) => r.status === "Absent").length,
-        punchedInOnTime: 0,
-        punchedLate: 0,
-        punchedOutToday: records.filter((r) => r.hasPunchOut).length,
-      };
-
-      return {
-        records,
-        stats,
-        meta,
-      };
-    }
-
-    // Check for: response.data (array)
-    if (response?.data && Array.isArray(response.data)) {
-      return response.data;
-    }
-
-    // Check if response itself is an array
-    if (Array.isArray(response)) {
-      return response;
-    }
-
-    console.warn("No array data found in response, returning empty array");
-
-    return [];
-  } catch (error) {
-    console.error("Error extracting data:", error);
-    return [];
-  }
-};
-
-// FIXED: Improved extractAttendanceRecords function
-// FIXED: Improved extractAttendanceRecords function - REMOVE stats calculation
+// FIXED: Improved extractAttendanceRecords function - PRESERVES EXACT STATUS
 const extractAttendanceRecords = (response) => {
   try {
     console.log("Extracting attendance records from response:", response);
@@ -119,7 +39,7 @@ const extractAttendanceRecords = (response) => {
     console.log("Attendance data extracted:", attendanceData);
     console.log("Meta:", meta);
 
-    // Map the records
+    // Map the records - PRESERVE EXACT STATUS FROM API
     const records = attendanceData.map((record, idx) => {
       const employeeName =
         record.name ||
@@ -144,34 +64,17 @@ const extractAttendanceRecords = (response) => {
       const punchOut =
         record.punch_out && record.punch_out !== "-" ? record.punch_out : "--";
 
-      // Determine status based on available data
+      // ✅ PRESERVE THE EXACT STATUS FROM API - DO NOT TRANSFORM
+      // The API returns: "Presentt", "Absent", "Weekly Off", "Half Day", "Full Day"
       let status = record.status || record.attendance_status || "Absent";
 
-      if (
-        status.toLowerCase() === "present" ||
-        status.toLowerCase() === "ontime" ||
-        status.toLowerCase() === "on time"
-      ) {
-        status = "Present";
-      } else if (
-        status.toLowerCase() === "absent" ||
-        status.toLowerCase() === "absentee"
-      ) {
-        status = "Absent";
-      } else if (status.toLowerCase() === "late") {
-        status = "Late";
-      }
-
-      if (
-        (!status || status === "Absent") &&
-        punchIn &&
-        punchIn !== "--" &&
-        punchIn !== "-"
-      ) {
-        if (record.lateBy && record.lateBy > 0) {
-          status = "Late";
-        } else {
+      // ✅ Keep the exact status as returned by the API
+      // Only set a default if status is empty or null
+      if (!status || status === "") {
+        if (punchIn && punchIn !== "--" && punchIn !== "-") {
           status = "Present";
+        } else {
+          status = "Absent";
         }
       }
 
@@ -211,7 +114,10 @@ const extractAttendanceRecords = (response) => {
         workingHours: workedHours,
         standard_hours: standardHours,
         overtime: overtime,
+        // ✅ Preserve the exact status from API
         status: status,
+        // Keep the original status for reference
+        raw_status: record.status || record.attendance_status,
         isLate: status === "Late" || status === "late",
         hasPunchOut: punchOut !== "--",
         raw: record,
@@ -229,7 +135,6 @@ const extractAttendanceRecords = (response) => {
       currentPage,
       lastPage,
       perPage,
-      // REMOVED: stats - we'll use fetchAttendanceStats for stats
     };
   } catch (error) {
     console.error("Error extracting attendance records:", error);
@@ -253,7 +158,6 @@ export const fetchAttendanceRecords = createAsyncThunk(
     }
   },
 );
-
 export const uploadAttendanceFile = createAsyncThunk(
   "attendance/upload",
   async ({ file }, { rejectWithValue }) => {

@@ -163,6 +163,39 @@ export const generateAttendancePDF = (records, filters = {}) => {
   pdf.save(`attendance_report_${filters.start_date}_to_${filters.end_date}.pdf`);
 };
 
+// src/utils/reportPDFConfigs.js - Add this function
+
+export const generateProjectReportPDF = (projects, filters = {}) => {
+  const pdf = new PDFGenerator();
+  pdf.init("landscape");
+
+  const totalProjects = projects.length;
+  const activeProjects = projects.filter(p => p.status === "Active").length;
+  const totalHours = projects.reduce((sum, p) => sum + p.totalHours, 0);
+  const stats = `Total: ${totalProjects} | Active: ${activeProjects} | Total Hours: ${totalHours.toFixed(1)}h`;
+  
+  pdf.addHeader("Project Report", "", { ...filters, stats });
+
+  const columns = [
+    "S.No", "Project ID", "Project Name", "Company", 
+    "Total Hours", "Total Employees", "Status"
+  ];
+
+  const data = projects.map((project, index) => [
+    index + 1,
+    project.id,
+    project.name,
+    project.company_name,
+    project.totalHours.toFixed(1) + "h",
+    project.totalEmployees,
+    project.status,
+  ]);
+
+  pdf.addTable(columns, data, 55);
+  pdf.addFooter();
+  pdf.save(`project_report_${new Date().toISOString().split("T")[0]}.pdf`);
+};
+
 export const generateLeavesPDF = (leaves, filters = {}) => {
   const pdf = new PDFGenerator();
   pdf.init("landscape");

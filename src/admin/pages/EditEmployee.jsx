@@ -538,7 +538,7 @@ const EditEmployee = () => {
       setValue("designation_id", currentEmployee.user?.designation_id || "");
       setValue("department_id", currentEmployee.user?.department_id || "");
       setValue("employee_id", currentEmployee.employee_id || "");
-      setValue("type", currentEmployee.type || "employee");
+      setValue("type", currentEmployee.user?.type || currentEmployee.type || "employee");
       setValue(
         "joining_date",
         convertToDisplayDate(currentEmployee.joining_date),

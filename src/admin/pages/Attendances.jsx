@@ -15,18 +15,33 @@ import {
 } from "../store/slices/attendanceSlice";
 import { fetchEmployees } from "../store/slices/employeeSlice";
 
-// Helper function to get status color
+// Update the getStatusColor function at the top of the file:
 const getStatusColor = (status) => {
   if (!status) return "bg-gray-200 dark:bg-gray-600";
 
-  const statusLower = status.toLowerCase();
-  if (statusLower === "present") return "bg-green-500";
+  const statusLower = status.toLowerCase().trim();
+
+  // Map all possible status values
+  if (
+    statusLower === "present" ||
+    statusLower === "presentt" ||
+    statusLower === "ontime" ||
+    statusLower === "on time"
+  )
+    return "bg-green-500";
   if (statusLower === "absent" || statusLower === "absentee")
     return "bg-red-500";
   if (statusLower === "late") return "bg-yellow-500";
-  if (statusLower === "half day") return "bg-blue-500";
-  if (statusLower === "leave") return "bg-purple-500";
-  if (statusLower === "holiday") return "bg-pink-500";
+  if (statusLower === "half day" || statusLower === "halfday")
+    return "bg-blue-500";
+  // ✅ FIXED: Added "full day" with space
+  if (statusLower === "full day" || statusLower === "fullday")
+    return "bg-purple-500";
+  if (statusLower === "weekly off" || statusLower === "weeklyoff")
+    return "bg-pink-500";
+  if (statusLower === "holiday") return "bg-indigo-500";
+  if (statusLower === "leave") return "bg-orange-500";
+
   return "bg-gray-400";
 };
 
@@ -96,39 +111,39 @@ const Attendances = () => {
 
   // Get unique employees for filter
   // Get unique employees for filter
-const uniqueEmployeesMap = new Map();
+  const uniqueEmployeesMap = new Map();
 
-records.forEach((record) => {
-  // Get employee name from record
-  let name = record.name || record.employee_name || record.employeeName;
-  if (!name && record.user) {
-    if (record.user.employee) {
-      name =
-        `${record.user.employee.first_name || ""} ${record.user.employee.last_name || ""}`.trim() ||
-        record.user.employee.employee_id;
+  records.forEach((record) => {
+    // Get employee name from record
+    let name = record.name || record.employee_name || record.employeeName;
+    if (!name && record.user) {
+      if (record.user.employee) {
+        name =
+          `${record.user.employee.first_name || ""} ${record.user.employee.last_name || ""}`.trim() ||
+          record.user.employee.employee_id;
+      }
+      if (!name && record.user.username) {
+        name = record.user.username;
+      }
     }
-    if (!name && record.user.username) {
-      name = record.user.username;
-    }
-  }
-  
-  const id =
-    record.employee_id ||
-    record.user_id ||
-    record.userid ||
-    record.id ||
-    record.user?.id;
-  
-  const employeeName = name || `Employee #${record.employee_id || record.id}`;
-  
-  // Use the employee name as the key to deduplicate
-  // This ensures each employee appears only once
-  if (id && employeeName && !uniqueEmployeesMap.has(employeeName)) {
-    uniqueEmployeesMap.set(employeeName, { id, name: employeeName });
-  }
-});
 
-const uniqueEmployees = Array.from(uniqueEmployeesMap.values());
+    const id =
+      record.employee_id ||
+      record.user_id ||
+      record.userid ||
+      record.id ||
+      record.user?.id;
+
+    const employeeName = name || `Employee #${record.employee_id || record.id}`;
+
+    // Use the employee name as the key to deduplicate
+    // This ensures each employee appears only once
+    if (id && employeeName && !uniqueEmployeesMap.has(employeeName)) {
+      uniqueEmployeesMap.set(employeeName, { id, name: employeeName });
+    }
+  });
+
+  const uniqueEmployees = Array.from(uniqueEmployeesMap.values());
   // Fetch attendance data on mount and when month changes
   useEffect(() => {
     const year = selectedMonth.getFullYear();
@@ -180,6 +195,7 @@ const uniqueEmployees = Array.from(uniqueEmployeesMap.values());
   }, [records, pendingDate, pendingDayModal]);
 
   // Process records for calendar
+  // Update the status detection in getDayStatus function:
   const getDayStatus = (date) => {
     const dateStr = formatDateToDDMMYYYY(date);
     const today = new Date();
@@ -203,15 +219,28 @@ const uniqueEmployees = Array.from(uniqueEmployeesMap.values());
     }
 
     const statuses = dayRecords.map((r) => {
-      const status = (r.status || r.attendance_status || "").toLowerCase();
-      if (status === "present" || status === "ontime" || status === "on time")
+      const status = (r.status || r.attendance_status || "")
+        .toLowerCase()
+        .trim();
+
+      // ✅ Check for all status types including "Full Day"
+      if (
+        status === "present" ||
+        status === "presentt" ||
+        status === "ontime" ||
+        status === "on time"
+      )
         return "present";
       if (status === "late") return "late";
       if (status === "absent" || status === "absentee") return "absent";
-      if (status === "half day") return "halfday";
+      if (status === "half day" || status === "halfday") return "halfday";
+      // ✅ Added "full day" detection
+      if (status === "full day" || status === "fullday") return "full day";
       if (status === "leave") return "leave";
       if (status === "holiday") return "holiday";
+      if (status === "weekly off" || status === "weeklyoff") return "weeklyoff";
 
+      // Fallback: if punch_in exists but no specific status
       if (
         r.punch_in &&
         r.punch_in !== "--" &&
@@ -375,6 +404,62 @@ const uniqueEmployees = Array.from(uniqueEmployeesMap.values());
     return classes;
   };
 
+  // Update the getStatusColorClass function in the Attendances component:
+
+  const getStatusColorClass = (status) => {
+    if (!status)
+      return "bg-gray-100 dark:bg-gray-700/30 text-gray-600 dark:text-gray-400";
+
+    const statusLower = status.toLowerCase().trim();
+
+    // Present/On Time variations
+    if (
+      statusLower === "present" ||
+      statusLower === "presentt" ||
+      statusLower === "ontime" ||
+      statusLower === "on time"
+    ) {
+      return "bg-green-100 dark:bg-green-900/30 text-green-600 dark:text-green-400";
+    }
+
+    // Full Day
+    if (statusLower === "full day" || statusLower === "fullday") {
+      return "bg-purple-100 dark:bg-purple-900/30 text-purple-600 dark:text-purple-400";
+    }
+
+    // Half Day
+    if (statusLower === "half day" || statusLower === "halfday") {
+      return "bg-blue-100 dark:bg-blue-900/30 text-blue-600 dark:text-blue-400";
+    }
+
+    // Late
+    if (statusLower === "late") {
+      return "bg-yellow-100 dark:bg-yellow-900/30 text-yellow-600 dark:text-yellow-400";
+    }
+
+    // Weekly Off
+    if (statusLower === "weekly off" || statusLower === "weeklyoff") {
+      return "bg-pink-100 dark:bg-pink-900/30 text-pink-600 dark:text-pink-400";
+    }
+
+    // Holiday
+    if (statusLower === "holiday") {
+      return "bg-indigo-100 dark:bg-indigo-900/30 text-indigo-600 dark:text-indigo-400";
+    }
+
+    // Leave
+    if (statusLower === "leave") {
+      return "bg-orange-100 dark:bg-orange-900/30 text-orange-600 dark:text-orange-400";
+    }
+
+    // Absent (default to red)
+    if (statusLower === "absent" || statusLower === "absentee") {
+      return "bg-red-100 dark:bg-red-900/30 text-red-600 dark:text-red-400";
+    }
+
+    // Unknown status - gray
+    return "bg-gray-100 dark:bg-gray-700/30 text-gray-600 dark:text-gray-400";
+  };
   const isToday = (date) => {
     const today = new Date();
     return (
@@ -451,15 +536,14 @@ const uniqueEmployees = Array.from(uniqueEmployeesMap.values());
     setShowMonthModal(true);
   };
 
+  // In the Attendances component, update the getRecordStatus function:
   const getRecordStatus = (record) => {
+    // ✅ Use the exact status from the API
     if (record.status) {
-      const status = record.status.toLowerCase();
-      if (status === "present" || status === "ontime" || status === "on time")
-        return "Present";
-      if (status === "late") return "Late";
-      if (status === "absent" || status === "absentee") return "Absent";
+      return record.status; // Returns exact status like "Presentt", "Weekly Off", etc.
     }
 
+    // Fallback logic if no status
     if (
       record.punch_in &&
       record.punch_in !== "--" &&
@@ -467,8 +551,6 @@ const uniqueEmployees = Array.from(uniqueEmployeesMap.values());
       record.punch_in !== ""
     ) {
       if (record.lateBy && record.lateBy > 0) return "Late";
-      if (record.status && record.status.toLowerCase() === "late")
-        return "Late";
       return "Present";
     }
     return "Absent";
@@ -1041,6 +1123,7 @@ const uniqueEmployees = Array.from(uniqueEmployeesMap.values());
       </div>
 
       {/* Day Modal - Keep same but compact */}
+      {/* Day Modal - Fixed */}
       {showDayModal && (
         <div
           className="fixed inset-0 bg-black/50 backdrop-blur-sm z-50 flex items-center justify-center p-4"
@@ -1071,13 +1154,8 @@ const uniqueEmployees = Array.from(uniqueEmployeesMap.values());
               <div className="grid grid-cols-1 md:grid-cols-2 gap-2">
                 {dayData.map((record, idx) => {
                   const status = getRecordStatus(record);
-                  const statusColor =
-                    status === "Present"
-                      ? "bg-green-100 dark:bg-green-900/30 text-green-600 dark:text-green-400"
-                      : status === "Late"
-                        ? "bg-yellow-100 dark:bg-yellow-900/30 text-yellow-600 dark:text-yellow-400"
-                        : "bg-red-100 dark:bg-red-900/30 text-red-600 dark:text-red-400";
-
+                  // ✅ Use getStatusColorClass function instead of manual mapping
+                  const statusColorClass = getStatusColorClass(status);
                   const employeeName = getEmployeeName(record);
                   const avatarUrl = getEmployeeAvatarUrl(record, employees);
                   const initials = getInitials(employeeName);
@@ -1119,8 +1197,9 @@ const uniqueEmployees = Array.from(uniqueEmployeesMap.values());
                             </p>
                           </div>
                         </div>
+                        {/* ✅ Use statusColorClass here */}
                         <span
-                          className={`px-1.5 py-0.5 rounded-full text-[9px] font-medium ${statusColor}`}
+                          className={`px-1.5 py-0.5 rounded-full text-[9px] font-medium ${statusColorClass}`}
                         >
                           {status}
                         </span>
@@ -1175,6 +1254,7 @@ const uniqueEmployees = Array.from(uniqueEmployeesMap.values());
       )}
 
       {/* Month Modal - Keep same but compact */}
+      {/* Month Modal - Fixed */}
       {showMonthModal && (
         <div
           className="fixed inset-0 bg-black/50 backdrop-blur-sm z-50 flex items-center justify-center p-4"
@@ -1256,12 +1336,8 @@ const uniqueEmployees = Array.from(uniqueEmployeesMap.values());
                     {filteredMonthData.length > 0 ? (
                       filteredMonthData.map((record, idx) => {
                         const status = getRecordStatus(record);
-                        const statusColor =
-                          status === "Present"
-                            ? "bg-green-100 dark:bg-green-900/30 text-green-600 dark:text-green-400"
-                            : status === "Late"
-                              ? "bg-yellow-100 dark:bg-yellow-900/30 text-yellow-600 dark:text-yellow-400"
-                              : "bg-red-100 dark:bg-red-900/30 text-red-600 dark:text-red-400";
+                        // ✅ Use getStatusColorClass instead of manual mapping
+                        const statusColorClass = getStatusColorClass(status);
 
                         return (
                           <tr
@@ -1338,8 +1414,9 @@ const uniqueEmployees = Array.from(uniqueEmployeesMap.values());
                                 "--"}
                             </td>
                             <td className="px-2 py-1.5">
+                              {/* ✅ Use statusColorClass here */}
                               <span
-                                className={`px-1.5 py-0.5 rounded-full text-[8px] font-medium ${statusColor}`}
+                                className={`px-1.5 py-0.5 rounded-full text-[8px] font-medium ${statusColorClass}`}
                               >
                                 {status}
                               </span>
