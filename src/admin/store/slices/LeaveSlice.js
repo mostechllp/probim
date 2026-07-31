@@ -3,9 +3,22 @@
 import { createSlice, createAsyncThunk } from "@reduxjs/toolkit";
 import apiClient from "../../../utils/apiClient";
 
-// Helper function to transform leave data from admin API
+
 const transformAdminLeaveData = (leave) => {
-  // Handle different possible data structures
+  // Get processed by from approver if available
+  let processedBy = leave.processed_by || leave.processedBy || "-";
+  
+  // If processed_by is not set but approver exists, use approver's full name
+  if (processedBy === "-" && leave.approver) {
+    // Try to get full name from employee relation
+    if (leave.approver.employee) {
+      const emp = leave.approver.employee;
+      processedBy = `${emp.first_name || ''} ${emp.last_name || ''}`.trim() || emp.name || leave.approver.username || "-";
+    } else {
+      processedBy = leave.approver.name || leave.approver.username || "-";
+    }
+  }
+  
   return {
     id: leave.id,
     employee_name:
@@ -15,32 +28,30 @@ const transformAdminLeaveData = (leave) => {
       leave.employee_name ||
       "-",
     employee_id: leave.employee_id || leave.employee?.id,
-    employee: leave.employee || null, // ✅ Keep full employee object
+    employee: leave.employee || null,
     type: leave.leave_type?.name || leave.leave_type || leave.type || "-",
     leave_type_id: leave.leave_type_id || leave.leave_type?.id,
-    leave_type: leave.leave_type || null, // ✅ Keep full leave_type object
+    leave_type: leave.leave_type || null,
     from_date: leave.start_date || leave.from_date || leave.fromDate,
     to_date: leave.end_date || leave.to_date || leave.toDate,
     start_date: leave.start_date || leave.from_date || leave.fromDate,
     end_date: leave.end_date || leave.to_date || leave.toDate,
     days: leave.duration_days || leave.number_of_days || leave.days || 0,
-    duration_days:
-      leave.duration_days || leave.number_of_days || leave.days || 0,
-    claim_salary:
-      leave.claim_salary === 1 || leave.claim_salary === "Yes" ? "Yes" : "No",
+    duration_days: leave.duration_days || leave.number_of_days || leave.days || 0,
+    claim_salary: leave.claim_salary === 1 || leave.claim_salary === "Yes" ? "Yes" : "No",
     claim_salary_raw: leave.claim_salary,
     document: leave.document_path || leave.document || leave.doc,
     document_path: leave.document_path || leave.document || leave.doc,
     reason: leave.reason || "-",
     status: (leave.status || "pending").toLowerCase(),
-    processed_by: leave.processed_by || leave.processedBy || "-",
-    approver: leave.approver || null, // ✅ Keep approver object
+    processed_by: processedBy,
+    processedBy: processedBy,
+    approver: leave.approver || null,
     created_at: leave.created_at,
     updated_at: leave.updated_at,
-    rejection_reason: leave.rejection_reason || null,
-    // ✅ IMPORTANT: Preserve the applied_by data
+    rejection_reason: leave.rejection_reason || leave.admin_remark || null,
+    admin_remark: leave.admin_remark || null,
     applied_by: leave.applied_by || null,
-    // Keep raw data for debugging
     raw: leave,
   };
 };
@@ -99,6 +110,8 @@ export const fetchLeaveById = createAsyncThunk(
     }
   },
 );
+
+// src/admin/store/slices/LeaveSlice.js
 
 export const updateLeaveStatus = createAsyncThunk(
   "leaves/updateStatus",
@@ -282,31 +295,39 @@ export const toggleLeaveTypeStatus = createAsyncThunk(
   },
 );
 
+// src/admin/store/slices/LeaveSlice.js
+
 export const updateLeaveRequest = createAsyncThunk(
   "leaves/updateRequest",
   async ({ id, formData }, { rejectWithValue, dispatch }) => {
     try {
-      // Check if formData is FormData or plain object
-      let payload;
-      let headers = {};
-
+      // If formData is FormData, convert to plain object
+      let payload = {};
+      
       if (formData instanceof FormData) {
-        payload = formData;
-        headers = { "Content-Type": "multipart/form-data" };
+        for (let [key, value] of formData.entries()) {
+          if (key === 'document') {
+            continue;
+          }
+          if (key === 'leave_type_id' || key === 'claim_salary') {
+            payload[key] = parseInt(value);
+          } else {
+            payload[key] = value;
+          }
+        }
       } else {
         payload = formData;
-        headers = { "Content-Type": "application/json" };
       }
 
       console.log(`Admin updating leave request ${id} with payload:`, payload);
 
       const response = await apiClient.post(`/admin/leaves/${id}`, payload, {
-        headers,
+        headers: { "Content-Type": "application/json" },
       });
+      
       console.log("Admin update leave response:", response.data);
 
       if (response.data && response.data.status === "success") {
-        // Refresh leaves after successful update
         await dispatch(fetchLeaves());
         return transformAdminLeaveData(response.data.data || response.data);
       } else {

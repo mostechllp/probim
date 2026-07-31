@@ -251,7 +251,9 @@ const RequestLeaveForEmployee = () => {
 
     if (addLeaveRequestForEmployee.fulfilled.match(result)) {
       showToast("Leave request submitted successfully!", "success");
-      navigate(`${basePath}/leaves`);
+      if(user?.type === "admin") navigate(`${basePath}/leaves`);
+      if(user?.role?.name === "HR Manager") navigate(`${basePath}/leave-management`);
+      
     }
   };
 
