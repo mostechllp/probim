@@ -9,6 +9,43 @@ import { logoutUser } from '../../../store/slices/authSlice';
 import { fetchNotifications, markAsRead, markAllRead } from "../../../admin/store/slices/notificationSlice";
 import ConfirmModal from '../../../admin/components/common/ConfirmModal'; // Adjust path as needed
 
+// ─── HELPER FUNCTIONS ──────────────────────────────────────────────────
+// Format user type for display
+const formatUserType = (type) => {
+  if (!type) return 'User';
+  
+  const typeMap = {
+    'employee': 'Employee',
+    'admin': 'Admin',
+    'hr': 'HR',
+    'manager': 'Manager',
+    'team_lead': 'Team Lead',
+    'teamlead': 'Team Lead',
+    'team lead': 'Team Lead',
+  };
+  
+  const lowerType = type.toLowerCase().trim();
+  return typeMap[lowerType] || type;
+};
+
+// Format user type for badge/capitalized display
+const formatUserTypeBadge = (type) => {
+  if (!type) return 'USER';
+  
+  const typeMap = {
+    'employee': 'EMPLOYEE',
+    'admin': 'ADMIN',
+    'hr': 'HR',
+    'manager': 'MANAGER',
+    'team_lead': 'TEAM LEAD',
+    'teamlead': 'TEAM LEAD',
+    'team lead': 'TEAM LEAD',
+  };
+  
+  const lowerType = type.toLowerCase().trim();
+  return typeMap[lowerType] || type.toUpperCase();
+};
+
 const Header = ({ onMenuClick }) => {
   const dispatch = useDispatch();
   const navigate = useNavigate();
@@ -86,7 +123,13 @@ const Header = ({ onMenuClick }) => {
     return '';
   };
 
-  const userRole = user?.type || user?.role || 'employee';
+  // Get raw user role from API
+  const rawUserRole = user?.type || user?.role || 'employee';
+  // Format the role for display
+  const userRole = formatUserType(rawUserRole);
+  // Format for badge display (uppercase)
+  const userRoleBadge = formatUserTypeBadge(rawUserRole);
+  
   const displayName = getUserName();
   const userEmail = getUserEmail();
 
@@ -145,7 +188,9 @@ const Header = ({ onMenuClick }) => {
 
   // Get the base path for navigation
   const getBasePath = () => {
-    return userRole === 'admin' ? '/admin' : '/employee';
+    // Use raw user type to determine base path
+    const rawType = user?.type || user?.role || 'employee';
+    return rawType === 'admin' || rawType === 'hr' ? '/admin' : '/employee';
   };
 
   return (
@@ -162,7 +207,7 @@ const Header = ({ onMenuClick }) => {
           
           <div>
             <h1 className="text-lg font-bold text-gray-800 dark:text-white">
-              {userRole === 'admin' ? 'Admin Dashboard' : 'Employee Portal'}
+              {rawUserRole === 'admin' || rawUserRole === 'hr' ? 'Admin Dashboard' : 'Employee Portal'}
             </h1>
             <p className="text-xs text-gray-500 dark:text-gray-400">
               Welcome back, {displayName}

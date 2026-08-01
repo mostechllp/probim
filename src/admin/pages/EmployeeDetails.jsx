@@ -576,6 +576,20 @@ const EmployeeDetails = () => {
     }
   };
 
+  const formatUserType = (type) => {
+  if (!type) return "EMPLOYEE";
+  
+  const typeMap = {
+    'employee': 'Employee',
+    'admin': 'Admin',
+    'hr': 'HR',
+    'manager': 'Manager',
+    'team_lead': 'Team Lead',
+  };
+  
+  return typeMap[type.toLowerCase()] || type;
+};
+
   const isSkilled = () => {
     return (
       currentEmployee?.is_skilled === 1 || currentEmployee?.is_skilled === true
@@ -735,7 +749,7 @@ const EmployeeDetails = () => {
                 </h2>
                 <div className="flex flex-wrap gap-2 mt-2 justify-center md:justify-start">
                   <span className="px-2 py-1 bg-green-100 text-green-700 rounded-full text-xs font-semibold">
-                    {currentEmployee.user?.type?.toUpperCase() || "EMPLOYEE"}
+                    {formatUserType(currentEmployee.user?.type) || "EMPLOYEE"}
                   </span>
                   <span
                     className={`px-2 py-1 rounded-full text-xs font-semibold ${
@@ -834,7 +848,7 @@ const EmployeeDetails = () => {
                         User Type
                       </label>
                       <p className="text-gray-800 font-medium mt-1 capitalize">
-                        {currentEmployee.user?.type || "N/A"}
+                        {formatUserType(currentEmployee.user?.type) || "N/A"}
                       </p>
                     </div>
                     <div className="border-b border-gray-100 pb-3">
