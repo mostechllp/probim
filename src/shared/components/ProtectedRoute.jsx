@@ -13,10 +13,47 @@ const ProtectedRoute = ({ requiredType, requiredPermission, children }) => {
     return <Navigate to="/login" replace />;
   }
 
-  // Check user type - use user?.type instead of userType
-  if (requiredType && user?.type !== requiredType) {
-    const redirectPath = user?.type === "admin" ? "/admin/dashboard" : "/employee/dashboard";
-    return <Navigate to={redirectPath} replace />;
+  // Helper to check if user is HR or Admin (can access admin routes)
+  const isHR = user?.type === "hr" || 
+               user?.role?.name === "HR Manager" || 
+               user?.role?.name === "HR";
+  
+  const isAdmin = user?.type === "admin";
+  const isManager = user?.role?.name === "Manager" || user?.type === "manager";
+  const isTeamLead = user?.role?.name === "Team Lead" || user?.type === "team_lead";
+  const isEmployee = user?.type === "employee";
+
+  // Determine user's primary dashboard
+  const getUserDashboard = () => {
+    if (isAdmin || isHR) {
+      return "/admin/dashboard";
+    }
+    // Managers, Team Leads, and Employees go to employee dashboard
+    return "/employee/dashboard";
+  };
+
+  // Check user type
+  if (requiredType) {
+    let hasRequiredType = false;
+
+    // Admin routes - accessible by admin and HR
+    if (requiredType === "admin") {
+      hasRequiredType = isAdmin || isHR;
+    }
+    // Employee routes - accessible by employee, manager, team lead, and HR
+    else if (requiredType === "employee") {
+      hasRequiredType = isEmployee || isManager || isTeamLead || isHR || isAdmin;
+    }
+    // Exact type match for other types
+    else {
+      hasRequiredType = user?.type === requiredType;
+    }
+
+    // If user doesn't have required type, redirect to their dashboard
+    if (!hasRequiredType) {
+      const redirectPath = getUserDashboard();
+      return <Navigate to={redirectPath} replace />;
+    }
   }
 
   // Check permission if required
@@ -25,11 +62,10 @@ const ProtectedRoute = ({ requiredType, requiredPermission, children }) => {
     const hasPermission = 
       permissions[requiredPermission]?.read === true || 
       permissions.all === true ||
-      user?.type === 'admin';
+      isAdmin; // Admin always has all permissions
     
     if (!hasPermission) {
-      // Redirect to dashboard or unauthorized page
-      const redirectPath = user?.type === "admin" ? "/admin/dashboard" : "/employee/dashboard";
+      const redirectPath = getUserDashboard();
       return <Navigate to={redirectPath} replace />;
     }
   }
