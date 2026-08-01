@@ -34,7 +34,7 @@ const getStatusColor = (status) => {
   if (statusLower === "late") return "bg-yellow-500";
   if (statusLower === "half day" || statusLower === "halfday")
     return "bg-blue-500";
-  // ✅ FIXED: Added "full day" with space
+  // ✅ Fixed: Added "full day" with proper handling
   if (statusLower === "full day" || statusLower === "fullday")
     return "bg-purple-500";
   if (statusLower === "weekly off" || statusLower === "weeklyoff")
@@ -194,7 +194,6 @@ const Attendances = () => {
     }
   }, [records, pendingDate, pendingDayModal]);
 
-  // Process records for calendar
   // Update the status detection in getDayStatus function:
   const getDayStatus = (date) => {
     const dateStr = formatDateToDDMMYYYY(date);
@@ -395,6 +394,9 @@ const Attendances = () => {
         classes += " bg-blue-50 dark:bg-blue-900/20";
       else if (dayInfo.status === "halfday")
         classes += " bg-purple-50 dark:bg-purple-900/20";
+      // ✅ Added "full day" to tileClassName
+      else if (dayInfo.status === "full day")
+        classes += " bg-purple-50 dark:bg-purple-900/20";
       else if (dayInfo.status === "leave")
         classes += " bg-pink-50 dark:bg-pink-900/20";
       else if (dayInfo.status === "holiday")
@@ -422,7 +424,7 @@ const Attendances = () => {
       return "bg-green-100 dark:bg-green-900/30 text-green-600 dark:text-green-400";
     }
 
-    // Full Day
+    // ✅ Full Day - Added with proper handling
     if (statusLower === "full day" || statusLower === "fullday") {
       return "bg-purple-100 dark:bg-purple-900/30 text-purple-600 dark:text-purple-400";
     }
