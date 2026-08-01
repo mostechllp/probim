@@ -707,7 +707,7 @@ const EditEmployee = () => {
     { value: "admin", label: "Admin" },
     { value: "hr", label: "HR" },
     { value: "manager", label: "Manager" },
-    { value: "team-lead", label: "Team Lead" },
+    { value: "team_lead", label: "Team Lead" },
   ];
   const genderOptions = [
     { value: "male", label: "Male" },
