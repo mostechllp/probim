@@ -35,19 +35,26 @@ const AddProjectModal = ({
   const [currency, setCurrency] = useState("AED");
   const [error, setError] = useState("");
   const [eligibleManagers, setEligibleManagers] = useState([]);
+  const [eligibleTeamLeads, setEligibleTeamLeads] = useState([]);
+  const [loadingManagers, setLoadingManagers] = useState(false);
+  const [loadingTeamLeads, setLoadingTeamLeads] = useState(false);
 
   const isEditMode = !!project;
 
   useEffect(() => {
-    const fetchEligibleManagers = async () => {
+    const fetchEligibleUsers = async () => {
+      if (!isOpen) return;
+
+      // Fetch eligible managers
+      setLoadingManagers(true);
       try {
         const response = await apiClient.get(
           "/admin/projects/eligible-managers",
         );
-        console.log("Project res: ", response);
+        console.log("Eligible managers response: ", response);
         if (response.data && response.data.status === "success") {
           const managers = (response.data.data || []).map((emp) => {
-            console.log("Original employee:", {
+            console.log("Original manager:", {
               id: emp.id,
               user_id: emp.user_id,
               name: emp.full_name,
@@ -63,11 +70,41 @@ const AddProjectModal = ({
         }
       } catch (err) {
         console.error("Failed to fetch eligible managers:", err);
+      } finally {
+        setLoadingManagers(false);
+      }
+
+      // Fetch eligible team leads
+      setLoadingTeamLeads(true);
+      try {
+        const response = await apiClient.get(
+          "/admin/projects/eligible-team-leads",
+        );
+        console.log("Eligible team leads response: ", response);
+        if (response.data && response.data.status === "success") {
+          const teamLeads = (response.data.data || []).map((emp) => {
+            console.log("Original team lead:", {
+              id: emp.id,
+              user_id: emp.user_id,
+              name: emp.full_name,
+            });
+            return {
+              ...emp,
+              id: emp.user_id,
+              original_employee_id: emp.id,
+            };
+          });
+          console.log("Mapped team leads with user_id as id:", teamLeads);
+          setEligibleTeamLeads(teamLeads);
+        }
+      } catch (err) {
+        console.error("Failed to fetch eligible team leads:", err);
+      } finally {
+        setLoadingTeamLeads(false);
       }
     };
-    if (isOpen) {
-      fetchEligibleManagers();
-    }
+
+    fetchEligibleUsers();
   }, [isOpen]);
 
   const getFieldError = (field) => {
@@ -152,6 +189,35 @@ const AddProjectModal = ({
     });
   };
 
+  // Helper function to render select options
+  const renderEmployeeOptions = (employees, loading) => {
+    if (loading) {
+      return (
+        <option value="" disabled className="text-gray-400">
+          Loading...
+        </option>
+      );
+    }
+
+    if (employees.length === 0) {
+      return (
+        <option value="" disabled className="text-gray-400">
+          No eligible employees found
+        </option>
+      );
+    }
+
+    return employees.map((emp) => (
+      <option key={emp.id} value={emp.id}>
+        {emp.full_name ||
+          emp.name ||
+          `${emp.first_name || ""} ${emp.last_name || ""}`.trim() ||
+          `Employee #${emp.id}`}
+        
+      </option>
+    ));
+  };
+
   return (
     <div className="fixed inset-0 bg-black/10 backdrop-blur-sm flex items-center justify-center z-[1100] p-4 animate-fadeIn">
       <div className="bg-white dark:bg-gray-800 rounded-3xl w-full max-w-lg shadow-soft-lg border border-gray-150 dark:border-gray-700/60 overflow-hidden transform scale-100 transition-all duration-300 max-h-[90vh] flex flex-col">
@@ -222,20 +288,13 @@ const AddProjectModal = ({
               <select
                 value={managerId}
                 onChange={(e) => setManagerId(e.target.value)}
-                disabled={actionLoading}
+                disabled={actionLoading || loadingManagers}
                 className={`w-full px-4 py-2.5 text-sm rounded-xl border ${getFieldError("project_manager_id") ? "border-red-400 focus:ring-red-500/20 focus:border-red-500" : "border-gray-200 dark:border-gray-600 focus:ring-green-500/20 focus:border-green-500"} bg-white dark:bg-gray-800 text-gray-800 dark:text-gray-200 focus:outline-none focus:ring-2 disabled:opacity-60 transition-all cursor-pointer`}
               >
                 <option value="" className="text-gray-400">
-                  Select Project Manager
+                  {loadingManagers ? "Loading managers..." : "Select Project Manager"}
                 </option>
-                {eligibleManagers.map((emp) => (
-                  <option key={emp.id} value={emp.id}>
-                    {emp.full_name ||
-                      emp.name ||
-                      `${emp.first_name || ""} ${emp.last_name || ""}`.trim() ||
-                      `Employee #${emp.id}`}
-                  </option>
-                ))}
+                {!loadingManagers && renderEmployeeOptions(eligibleManagers, loadingManagers)}
               </select>
               {getFieldError("project_manager_id") && (
                 <p className="text-[11px] text-red-500 font-semibold mt-1 flex items-center gap-1">
@@ -253,20 +312,13 @@ const AddProjectModal = ({
               <select
                 value={teamLeadId}
                 onChange={(e) => setTeamLeadId(e.target.value)}
-                disabled={actionLoading}
+                disabled={actionLoading || loadingTeamLeads}
                 className={`w-full px-4 py-2.5 text-sm rounded-xl border ${getFieldError("team_lead_id") ? "border-red-400 focus:ring-red-500/20 focus:border-red-500" : "border-gray-200 dark:border-gray-600 focus:ring-green-500/20 focus:border-green-500"} bg-white dark:bg-gray-800 text-gray-800 dark:text-gray-200 focus:outline-none focus:ring-2 disabled:opacity-60 transition-all cursor-pointer`}
               >
                 <option value="" className="text-gray-400">
-                  Select Team Lead
+                  {loadingTeamLeads ? "Loading team leads..." : "Select Team Lead"}
                 </option>
-                {eligibleManagers.map((emp) => (
-                  <option key={emp.id} value={emp.id}>
-                    {emp.full_name ||
-                      emp.name ||
-                      `${emp.first_name || ""} ${emp.last_name || ""}`.trim() ||
-                      `Employee #${emp.id}`}
-                  </option>
-                ))}
+                {!loadingTeamLeads && renderEmployeeOptions(eligibleTeamLeads, loadingTeamLeads)}
               </select>
               {getFieldError("team_lead_id") && (
                 <p className="text-[11px] text-red-500 font-semibold mt-1 flex items-center gap-1">
