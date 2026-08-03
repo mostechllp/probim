@@ -135,7 +135,7 @@ const Reports = () => {
     },
     {
       id: "emp-near-expiry",
-      title: "Emp. Nearest Expiry",
+      title: "Employee Nearest Expiry",
       description: "Critical expiry alerts",
       icon: "fas fa-exclamation-triangle",
       iconBg: "bg-red-100 dark:bg-red-900/30",
@@ -146,7 +146,7 @@ const Reports = () => {
     },
     {
       id: "emp-upcoming-renewals",
-      title: "Emp. Upcoming Renewals",
+      title: "Employee Upcoming Renewals",
       description: "Renewal pipeline",
       icon: "fas fa-calendar-alt",
       iconBg: "bg-cyan-100 dark:bg-cyan-900/30",
@@ -156,7 +156,7 @@ const Reports = () => {
     },
     {
       id: "org-near-expiry",
-      title: "Org. Nearest Expiry",
+      title: "Organization Nearest Expiry",
       description: "Company document alerts",
       icon: "fas fa-building",
       iconBg: "bg-rose-100 dark:bg-rose-900/30",
@@ -167,7 +167,7 @@ const Reports = () => {
     },
     {
       id: "org-upcoming-renewals",
-      title: "Org. Upcoming Renewals",
+      title: "Organization Upcoming Renewals",
       description: "Planned compliance",
       icon: "fas fa-chart-line",
       iconBg: "bg-indigo-100 dark:bg-indigo-900/30",

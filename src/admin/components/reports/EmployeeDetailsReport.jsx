@@ -5,7 +5,7 @@ import SearchBar from "../common/SearchBar";
 import EntriesSelector from "../common/EntriesSelector";
 import { showToast } from "../../../components/common/Toast";
 import Pagination from "../common/Paginations";
-import { fetchEmployeeDetailsReport } from "../../store/slices/reportSlice";
+import { fetchEmployees } from "../../store/slices/employeeSlice";
 import { exportToCSV, formatDate } from "../../../utils/reportUtils";
 import { generateEmployeeDetailsPDF } from "../../../utils/reportPDFConfigs";
 import ExportModal from "../../../components/common/ExportModal";
@@ -41,14 +41,7 @@ const basePath = getBasePath();
   const [exportFormat, setExportFormat] = useState("csv");
 
   useEffect(() => {
-    dispatch(
-      fetchEmployeeDetailsReport({
-        page: currentPage,
-        per_page: perPage,
-        start_date: "2024-01-01",
-        end_date: "2024-01-31",
-      }),
-    );
+    dispatch(fetchEmployees());
   }, [dispatch]);
 
   // Reset to first page when filters change
