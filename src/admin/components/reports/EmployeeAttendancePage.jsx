@@ -493,6 +493,10 @@ const EmployeeAttendancePage = () => {
           if (employeeProjectData) {
             projectData = employeeProjectData;
           }
+        } else if (projectResult?.data?.projects) {
+          projectData = projectResult.data;
+        } else if (projectResult?.projects) {
+          projectData = projectResult;
         }
         setDailyProjectData(projectData);
       }
@@ -1222,7 +1226,12 @@ const EmployeeAttendancePage = () => {
                   value={null}
                   activeStartDate={selectedMonth}
                   onActiveStartDateChange={({ activeStartDate }) => {
-                    setSelectedMonth(activeStartDate);
+                    if (
+                      selectedMonth.getMonth() !== activeStartDate.getMonth() ||
+                      selectedMonth.getFullYear() !== activeStartDate.getFullYear()
+                    ) {
+                      setSelectedMonth(activeStartDate);
+                    }
                   }}
                   tileContent={tileContent}
                   tileClassName={tileClassName}
@@ -1331,7 +1340,7 @@ const EmployeeAttendancePage = () => {
                           <div className="mt-0.5">
                             {getStatusBadge(
                               currentDayData.status ||
-                                currentDayData.attendance_status,
+                              currentDayData.attendance_status,
                             )}
                           </div>
                         </div>
@@ -1342,8 +1351,8 @@ const EmployeeAttendancePage = () => {
                           <p className="text-sm font-semibold text-blue-600 dark:text-blue-400">
                             {formatWorkedHours(
                               currentDayData.worked_hours ||
-                                currentDayData.working_hours ||
-                                0,
+                              currentDayData.working_hours ||
+                              0,
                             )}
                           </p>
                         </div>
@@ -1370,18 +1379,15 @@ const EmployeeAttendancePage = () => {
                       </div>
 
                       {/* Overtime */}
-                      {currentDayData.overtime &&
-                        currentDayData.overtime > 0 && (
-                          <div className="bg-green-50 dark:bg-green-900/20 border border-green-200 dark:border-green-800 rounded-lg p-2">
-                            <div className="flex items-center gap-2">
-                              <i className="fas fa-clock text-green-600 dark:text-green-400"></i>
-                              <span className="text-sm font-semibold text-green-700 dark:text-green-400">
-                                Overtime:{" "}
-                                {formatWorkedHours(currentDayData.overtime)}
-                              </span>
-                            </div>
-                          </div>
-                        )}
+                      <div className={`${currentDayData.overtime && currentDayData.overtime !== "-" && currentDayData.overtime !== "0" ? "bg-green-50 dark:bg-green-900/20 border-green-200 dark:border-green-800" : "bg-gray-50 dark:bg-gray-700/30 border-transparent"} border rounded-lg p-2`}>
+                        <div className="flex items-center gap-2">
+                          <i className={`fas fa-clock ${currentDayData.overtime && currentDayData.overtime !== "-" && currentDayData.overtime !== "0" ? "text-green-600 dark:text-green-400" : "text-gray-400 dark:text-gray-500"}`}></i>
+                          <span className={`text-sm font-semibold ${currentDayData.overtime && currentDayData.overtime !== "-" && currentDayData.overtime !== "0" ? "text-green-700 dark:text-green-400" : "text-gray-600 dark:text-gray-400"}`}>
+                            Overtime:{" "}
+                            {currentDayData.overtime && currentDayData.overtime !== "-" ? formatWorkedHours(currentDayData.overtime) : "0 hrs"}
+                          </span>
+                        </div>
+                      </div>
 
                       {/* Daily Project Hours */}
                       {/* Daily Project Hours */}
@@ -1432,10 +1438,10 @@ const EmployeeAttendancePage = () => {
                             {dailyProjectData.projects.filter(
                               (p) => (p.total_hours || 0) > 0,
                             ).length === 0 && (
-                              <p className="text-xs text-gray-500 dark:text-gray-400 italic">
-                                No project hours logged for this day
-                              </p>
-                            )}
+                                <p className="text-xs text-gray-500 dark:text-gray-400 italic">
+                                  No project hours logged for this day
+                                </p>
+                              )}
                           </div>
                         </div>
                       ) : null}
@@ -1539,10 +1545,10 @@ const EmployeeAttendancePage = () => {
                             employeeMonthlyHours.projects.filter(
                               (p) => (p.total_hours || 0) > 0,
                             ).length === 0) && (
-                            <p className="text-xs text-gray-500 dark:text-gray-400 italic text-center py-4">
-                              No project hours logged this month
-                            </p>
-                          )}
+                              <p className="text-xs text-gray-500 dark:text-gray-400 italic text-center py-4">
+                                No project hours logged this month
+                              </p>
+                            )}
                         </div>
                       </div>
 

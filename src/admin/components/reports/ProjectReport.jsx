@@ -8,12 +8,13 @@ import SearchBar from "../common/SearchBar";
 import EntriesSelector from "../common/EntriesSelector";
 import { showToast } from "../../../components/common/Toast";
 import Pagination from "../common/Paginations";
-import { fetchProjects } from "../../store/slices/projectSlice";
+import { fetchProjectReport } from "../../store/slices/reportSlice";
 import { fetchMonthlyHoursByProject, fetchEmployeeDetails, clearMonthlyHours } from "../../store/slices/dashboardSlice";
 import { exportToCSV } from "../../../utils/reportUtils";
 import { generateProjectReportPDF } from "../../../utils/reportPDFConfigs";
 import { ProjectHoursModal } from "../../components/dashboard/ProjectHoursModal";
 import ExportModal from "../../../components/common/ExportModal";
+import DateInput from "../common/DateInput";
 
 // Blue gradient shades for chart
 const BLUE_GRADIENT = [
@@ -36,131 +37,91 @@ const ProjectReport = () => {
   };
   const basePath = getBasePath();
 
-  const { projects = [], loading: projectsLoading } = useSelector(
-    (state) => state.projects || { projects: [], loading: false }
-  );
+  const { 
+    projectReportRecords = [], 
+    projectReportLoading: loading = false,
+    projectReportTotalCount: totalCount = 0,
+    projectReportLastPage: lastPage = 1,
+  } = useSelector((state) => state.reports || {});
   const { employees = [] } = useSelector((state) => state.employees || {});
-  const { monthlyHours } = useSelector((state) => state.dashboard || { monthlyHours: { data: [], loading: false } });
-  
-  // Get the actual data array from monthlyHours
-  const monthlyHoursData = Array.isArray(monthlyHours?.data) ? monthlyHours.data : [];
-  const monthlyHoursLoading = monthlyHours?.loading || false;
 
   // Local state
   const [searchTerm, setSearchTerm] = useState("");
+  const [appliedSearchTerm, setAppliedSearchTerm] = useState("");
   const [currentPage, setCurrentPage] = useState(1);
   const [perPage, setPerPage] = useState(10);
   const [showExportModal, setShowExportModal] = useState(false);
   
   // Filter states
   const [selectedStatus, setSelectedStatus] = useState("all");
+  const [appliedStatus, setAppliedStatus] = useState("all");
   const [selectedCompany, setSelectedCompany] = useState("");
   
+  // Date range state
+  const [startDate, setStartDate] = useState(() => {
+    const date = new Date();
+    date.setDate(1);
+    return date.toISOString().split("T")[0];
+  });
+  const [endDate, setEndDate] = useState(() => {
+    return new Date().toISOString().split("T")[0];
+  });
+
+  const [appliedStartDate, setAppliedStartDate] = useState(startDate);
+  const [appliedEndDate, setAppliedEndDate] = useState(endDate);
+
   // Modal states
   const [showProjectHoursModal, setShowProjectHoursModal] = useState(false);
   const [selectedProject, setSelectedProject] = useState(null);
   const [modalMonth, setModalMonth] = useState(new Date().getMonth() + 1);
   const [modalYear, setModalYear] = useState(new Date().getFullYear());
-  
-  // Store hours data by project ID
-  const [hoursByProject, setHoursByProject] = useState({});
 
-  // Fetch projects on mount
+  // Fetch project report data
   useEffect(() => {
-    dispatch(fetchProjects());
-  }, [dispatch]);
+    const fetchData = async () => {
+      const params = {
+        page: currentPage,
+        per_page: perPage,
+        search: appliedSearchTerm || undefined,
+        start_date: appliedStartDate,
+        end_date: appliedEndDate,
+        status: appliedStatus,
+      };
 
-  // Fetch monthly hours for each project
-  useEffect(() => {
-    const fetchHoursForProjects = async () => {
-      if (projects.length > 0) {
-        const hoursMap = {};
-        
-        // Fetch hours for each project
-        for (const project of projects) {
-          try {
-            const result = await dispatch(fetchMonthlyHoursByProject({ projectId: project.id })).unwrap();
-            if (result && result.employees) {
-              // Calculate total hours and employee count from the employees array
-              const totalHours = result.employees.reduce((sum, emp) => sum + (emp.total_hours || 0), 0);
-              const employeeCount = result.employees.filter(emp => emp.total_hours > 0).length;
-              
-              hoursMap[project.id] = {
-                totalHours: totalHours,
-                employeeCount: employeeCount,
-                employees: result.employees,
-                data: result
-              };
-            }
-          } catch (error) {
-            console.error(`Failed to fetch hours for project ${project.id}:`, error);
-          }
-        }
-        
-        setHoursByProject(hoursMap);
-      }
+      await dispatch(fetchProjectReport(params));
     };
-    
-    fetchHoursForProjects();
-  }, [dispatch, projects]);
+    fetchData();
+  }, [dispatch, currentPage, perPage, appliedSearchTerm, appliedStartDate, appliedEndDate, appliedStatus]);
 
   // Reset to first page when filters change
   useEffect(() => {
     setCurrentPage(1);
-  }, [searchTerm, selectedStatus, selectedCompany, perPage]);
+  }, [appliedSearchTerm, appliedStatus, selectedCompany, perPage, appliedStartDate, appliedEndDate]);
 
   // Transform project data with hours from API
   const transformProject = (project) => {
-    const projectHours = hoursByProject[project.id] || {};
-    
     return {
-      id: project.id,
-      name: project.name || "Unnamed Project",
+      id: project.id || project.project_id,
+      name: project.name || project.project_name || "Unnamed Project",
       status: project.status || "Active",
-      company_name: "-", // Company info not available in projects API
-      totalHours: projectHours.totalHours || 0,
-      totalEmployees: projectHours.employeeCount || 0,
-      hoursByEmployee: projectHours.employees || [],
+      company_name: project.company_name || "-", 
+      totalHours: project.total_hours || project.totalHours || 0,
+      totalEmployees: project.total_employees || project.totalEmployees || 0,
+      hoursByEmployee: project.employees || project.hoursByEmployee || [],
       originalData: project,
       raw: project,
     };
   };
 
   // Safely transform projects
-  const transformedProjects = Array.isArray(projects)
-    ? projects.map(transformProject)
+  const transformedProjects = Array.isArray(projectReportRecords)
+    ? projectReportRecords.map(transformProject)
     : [];
 
-  // Get unique companies for filter (since we don't have company data, this will be empty)
-  const uniqueCompanies = [];
-
-  // Filter projects
-  const getFilteredProjects = () => {
-    let filtered = [...transformedProjects];
-
-    // Apply status filter
-    if (selectedStatus !== "all") {
-      filtered = filtered.filter((p) => p.status === selectedStatus);
-    }
-
-    // Apply search term
-    if (searchTerm) {
-      const searchLower = searchTerm.toLowerCase();
-      filtered = filtered.filter(
-        (p) =>
-          (p.name || "").toLowerCase().includes(searchLower) ||
-          (p.id?.toString() || "").includes(searchLower)
-      );
-    }
-
-    return filtered;
-  };
-
-  const filteredProjects = getFilteredProjects();
-  const totalFiltered = filteredProjects.length;
-  const totalPages = Math.ceil(totalFiltered / perPage);
+  const pageProjects = transformedProjects;
+  const totalFiltered = totalCount;
+  const totalPages = lastPage || Math.ceil(totalFiltered / perPage);
   const start = (currentPage - 1) * perPage;
-  const pageProjects = filteredProjects.slice(start, start + perPage);
 
   // Calculate statistics
   const totalProjects = transformedProjects.length;
@@ -180,10 +141,31 @@ const ProjectReport = () => {
     return styles[status] || "bg-gray-100 text-gray-700";
   };
 
+  const handleApplyFilters = () => {
+    setAppliedSearchTerm(searchTerm);
+    setAppliedStatus(selectedStatus);
+    setAppliedStartDate(startDate);
+    setAppliedEndDate(endDate);
+    setCurrentPage(1);
+  };
+
   const handleResetFilters = () => {
     setSelectedCompany("");
     setSelectedStatus("all");
+    setAppliedStatus("all");
     setSearchTerm("");
+    setAppliedSearchTerm("");
+    
+    const initialStart = new Date();
+    initialStart.setDate(1);
+    const startStr = initialStart.toISOString().split("T")[0];
+    const endStr = new Date().toISOString().split("T")[0];
+    
+    setStartDate(startStr);
+    setEndDate(endStr);
+    setAppliedStartDate(startStr);
+    setAppliedEndDate(endStr);
+    
     setCurrentPage(1);
     showToast("Filters reset successfully", "success");
   };
@@ -209,7 +191,7 @@ const ProjectReport = () => {
   };
 
   // Prepare chart data
-  const chartData = filteredProjects
+  const chartData = transformedProjects
     .filter(p => (p.totalHours || 0) > 0)
     .sort((a, b) => (b.totalHours || 0) - (a.totalHours || 0))
     .slice(0, 10)
@@ -223,7 +205,7 @@ const ProjectReport = () => {
 
   // Prepare export data
   const getExportData = () => {
-    return filteredProjects.map(p => ({
+    return transformedProjects.map(p => ({
       project_id: p.id || "",
       project_name: p.name || "",
       status: p.status || "",
@@ -245,8 +227,8 @@ const ProjectReport = () => {
     if (format === "csv") {
       exportToCSV(exportData, headers, `project_report_${new Date().toISOString().split("T")[0]}.csv`);
     } else if (format === "pdf") {
-      generateProjectReportPDF(filteredProjects, {
-        status: selectedStatus !== "all" ? selectedStatus : null,
+      generateProjectReportPDF(transformedProjects, {
+        status: appliedStatus !== "all" ? appliedStatus : null,
       });
     }
     setShowExportModal(false);
@@ -376,7 +358,7 @@ const ProjectReport = () => {
 
         {/* Filters Bar */}
         <div className="bg-white dark:bg-gray-800 border border-gray-200 dark:border-gray-700 rounded-xl p-4 mb-6">
-          <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
+          <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-5 gap-4">
             {/* Status Filter */}
             <div>
               <label className="block text-xs font-semibold text-gray-500 dark:text-gray-400 mb-1">
@@ -395,8 +377,36 @@ const ProjectReport = () => {
               </select>
             </div>
 
+            {/* Date Filters */}
+            <div>
+              <label className="block text-xs font-semibold text-gray-500 dark:text-gray-400 mb-1">
+                <i className="fas fa-calendar-alt mr-1"></i> START
+              </label>
+              <DateInput
+                value={startDate}
+                onChange={(date) => setStartDate(date)}
+                placeholder="dd/mm/yyyy"
+              />
+            </div>
+            <div>
+              <label className="block text-xs font-semibold text-gray-500 dark:text-gray-400 mb-1">
+                <i className="fas fa-calendar-alt mr-1"></i> END
+              </label>
+              <DateInput
+                value={endDate}
+                onChange={(date) => setEndDate(date)}
+                placeholder="dd/mm/yyyy"
+              />
+            </div>
+
             {/* Filter Actions */}
-            <div className="flex items-end gap-2">
+            <div className="flex items-end gap-2 lg:col-span-2">
+              <button
+                onClick={handleApplyFilters}
+                className="px-4 py-2 rounded-lg bg-indigo-500 hover:bg-indigo-600 text-white font-medium text-sm flex items-center gap-2 transition-all"
+              >
+                <i className="fas fa-check"></i> Apply
+              </button>
               <button
                 onClick={handleResetFilters}
                 className="px-4 py-2 rounded-lg bg-gray-100 dark:bg-gray-700 text-gray-700 dark:text-gray-300 font-medium text-sm flex items-center gap-2 hover:bg-gray-200 dark:hover:bg-gray-600 transition-all"
@@ -424,7 +434,7 @@ const ProjectReport = () => {
             />
             <button
               onClick={() => setShowExportModal(true)}
-              className="bg-indigo-500 hover:bg-indigo-600 text-white px-4 py-2 rounded-full text-sm font-semibold flex items-center justify-center gap-2 transition-all shadow-md hover:shadow-lg w-full sm:w-auto"
+              className="bg-green-500 hover:bg-green-600 text-white px-4 py-2 rounded-full text-sm font-semibold flex items-center justify-center gap-2 transition-all shadow-md hover:shadow-lg w-full sm:w-auto"
             >
               <i className="fas fa-download"></i> Export Report
             </button>
@@ -446,7 +456,7 @@ const ProjectReport = () => {
                 </tr>
               </thead>
               <tbody>
-                {!projectsLoading && pageProjects.length > 0 ? (
+                {!loading && pageProjects.length > 0 ? (
                   pageProjects.map((project, idx) => (
                     <tr
                       key={project.id || idx}
@@ -495,7 +505,7 @@ const ProjectReport = () => {
                 ) : (
                   <tr>
                     <td colSpan="6" className="px-4 py-8 text-center text-gray-500 dark:text-gray-400">
-                      {projectsLoading || monthlyHoursLoading ? "Loading projects..." : "No projects found"}
+                      {loading ? "Loading projects..." : "No projects found"}
                     </td>
                   </tr>
                 )}
@@ -523,7 +533,7 @@ const ProjectReport = () => {
         onExport={handleExport}
         title="Export Project Report"
         subtitle="Download project data with hours and employee information"
-        totalRecords={filteredProjects.length}
+        totalRecords={transformedProjects.length}
         formats={["csv", "pdf"]}
         defaultFormat="csv"
       />

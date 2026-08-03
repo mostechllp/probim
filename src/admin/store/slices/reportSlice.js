@@ -1,6 +1,21 @@
 // store/slices/reportSlice.js
-import { createSlice, createAsyncThunk } from "@reduxjs/toolkit";
+import { createSlice, createAsyncThunk, createSelector } from "@reduxjs/toolkit";
 import apiClient from "../../../utils/apiClient";
+
+// ==================== Reports Count ====================
+export const fetchReportCounts = createAsyncThunk(
+  "reports/fetchCounts",
+  async (_, { rejectWithValue }) => {
+    try {
+      const response = await apiClient.get("/admin/reports/counts");
+      return response.data;
+    } catch (error) {
+      return rejectWithValue(
+        error.response?.data?.message || "Failed to fetch report counts",
+      );
+    }
+  },
+);
 
 // ==================== Attendance Report ====================
 export const fetchAttendanceReport = createAsyncThunk(
@@ -45,23 +60,15 @@ export const fetchAttendanceReport = createAsyncThunk(
     const meta = response.data?.data?.meta || {};
 
     return {
-      data: apiData.map((record) => ({
-        ...record,
-        employeeName: record.name,
-        punchIn: record.punch_in,
-        punchOut: record.punch_out,
-        workedHours: record.worked_hours,
-        attendance_status: record.status,
-        // Keep original fields for compatibility
-        id: record.employee_id,
-        name: record.name,
-        department: record.department,
-        company: record.company,
-        date: record.date,
-        punch_in: record.punch_in,
-        punch_out: record.punch_out,
-        working_hours: record.worked_hours,
-        status: record.status,
+      data: apiData.map((emp) => ({
+        id: emp.employee_id,
+        user_id: emp.user_id,
+        name: emp.name,
+        employeeName: emp.name, // for compatibility
+        department: emp.department,
+        designation: emp.designation,
+        company: emp.company,
+        attendance: emp.attendance || []
       })),
       total: meta.total || 0,
       current_page: meta.current_page || 1,
@@ -121,13 +128,15 @@ export const fetchAllAttendanceReport = createAsyncThunk(
     }
 
     return {
-      data: allData.map((record) => ({
-        ...record,
-        employeeName: record.name,
-        punchIn: record.punch_in,
-        punchOut: record.punch_out,
-        workedHours: record.worked_hours,
-        attendance_status: record.status,
+      data: allData.map((emp) => ({
+        id: emp.employee_id,
+        user_id: emp.user_id,
+        name: emp.name,
+        employeeName: emp.name,
+        department: emp.department,
+        designation: emp.designation,
+        company: emp.company,
+        attendance: emp.attendance || []
       })),
       total: allData.length,
     };
@@ -310,19 +319,24 @@ export const fetchEmployeeAttendanceForCalendar = createAsyncThunk(
       const apiData = response.data?.data?.data || [];
       const meta = response.data?.data?.meta || {};
 
+      let attendanceRecords = [];
+      if (apiData.length > 0) {
+         attendanceRecords = apiData[0].attendance || [];
+      }
+
       // Map the data to include all necessary fields
-      const mappedData = apiData.map((record) => ({
+      const mappedData = attendanceRecords.map((record) => ({
         ...record,
-        employeeName: record.name,
+        employeeName: apiData[0]?.name,
         punchIn: record.punch_in,
         punchOut: record.punch_out,
         workedHours: record.worked_hours,
         attendance_status: record.status,
         // Keep original fields for compatibility
-        id: record.employee_id,
-        name: record.name,
-        department: record.department,
-        company: record.company,
+        id: apiData[0]?.employee_id,
+        name: apiData[0]?.name,
+        department: apiData[0]?.department,
+        company: apiData[0]?.company,
         date: record.date,
         punch_in: record.punch_in,
         punch_out: record.punch_out,
@@ -375,26 +389,28 @@ export const fetchEmployeeDailyAttendance = createAsyncThunk(
       });
 
       const apiData = response.data?.data?.data || [];
-      const record = apiData.length > 0 ? apiData[0] : null;
+      const employeeData = apiData.length > 0 ? apiData[0] : null;
 
-      if (!record) {
+      if (!employeeData || !employeeData.attendance || employeeData.attendance.length === 0) {
         return {
           employeeId,
           date,
           data: null,
         };
       }
+      
+      const record = employeeData.attendance[0];
 
       const mappedRecord = {
         ...record,
-        employeeName: record.name,
+        employeeName: employeeData.name,
         punchIn: record.punch_in,
         punchOut: record.punch_out,
         workedHours: record.worked_hours,
         attendance_status: record.status,
-        id: record.employee_id,
-        name: record.name,
-        department: record.department,
+        id: employeeData.employee_id,
+        name: employeeData.name,
+        department: employeeData.department,
         date: record.date,
         punch_in: record.punch_in,
         punch_out: record.punch_out,
@@ -524,6 +540,33 @@ export const fetchLeavesReport = createAsyncThunk(
   },
 );
 
+// ==================== Project Report ====================
+export const fetchProjectReport = createAsyncThunk(
+  "reports/fetchProjectReport",
+  async (params, { rejectWithValue }) => {
+    try {
+      const apiParams = {
+        page: params.page || 1,
+        per_page: params.per_page || 10,
+        date_range: params.date_range || (params.start_date ? "custom" : "all"),
+        from_date: params.start_date || params.from_date,
+        to_date: params.end_date || params.to_date,
+        search: params.search,
+        status: params.status !== "all" ? params.status : undefined,
+      };
+
+      const response = await apiClient.get("/admin/reports/projects", {
+        params: apiParams,
+      });
+      return response.data;
+    } catch (error) {
+      return rejectWithValue(
+        error.response?.data?.message || "Failed to fetch project report",
+      );
+    }
+  },
+);
+
 // ==================== Employees Basic Report ====================
 export const fetchEmployeesReport = createAsyncThunk(
   "reports/fetchEmployees",
@@ -553,7 +596,7 @@ export const fetchEmployeeDetailsReport = createAsyncThunk(
   "reports/fetchEmployeeDetails",
   async (params, { rejectWithValue }) => {
     try {
-      const response = await apiClient.get("/admin/reports/employee-details", {
+      const response = await apiClient.get("/admin/reports/employees", {
         params: {
           page: params.page || 1,
           per_page: params.per_page || 10,
@@ -778,6 +821,20 @@ const initialState = {
   leavesPerPage: 10,
   leavesLastPage: 1,
 
+  // Reports Counts
+  counts: null,
+  countsLoading: false,
+  countsError: null,
+
+  // Project Report
+  projectReportRecords: [],
+  projectReportLoading: false,
+  projectReportError: null,
+  projectReportTotalCount: 0,
+  projectReportCurrentPage: 1,
+  projectReportPerPage: 10,
+  projectReportLastPage: 1,
+
   // Employees Basic Report
   basicEmployees: [],
   basicEmployeesLoading: false,
@@ -911,6 +968,66 @@ const reportSlice = createSlice({
         state.attendanceTotalCount = 0;
       })
 
+      // Reports Counts
+      .addCase(fetchReportCounts.pending, (state) => {
+        state.countsLoading = true;
+        state.countsError = null;
+      })
+      .addCase(fetchReportCounts.fulfilled, (state, action) => {
+        state.countsLoading = false;
+        console.log("========== API REPORT COUNTS ==========");
+        console.log(action.payload);
+        console.log("=======================================");
+        
+        const payload = action.payload;
+        let countsList = null;
+        
+        // Find if there is an array in payload
+        if (Array.isArray(payload)) {
+          countsList = payload;
+        } else if (Array.isArray(payload?.data)) {
+          countsList = payload.data;
+        } else if (Array.isArray(payload?.counts)) {
+          countsList = payload.counts;
+        } else if (Array.isArray(payload?.data?.counts)) {
+          countsList = payload.data.counts;
+        }
+        
+        if (countsList) {
+          const countsObj = {};
+          countsList.forEach((item) => {
+            const k = item?.key || item?.id;
+            if (k !== undefined) {
+              countsObj[k] = item.count !== undefined ? item.count : 0;
+            }
+          });
+          state.counts = countsObj;
+        } else {
+          // If it is not an array, it is a direct object
+          const rawObj = payload?.data || payload;
+          const countsObj = {};
+          
+          if (rawObj && typeof rawObj === "object") {
+            const innerObj = rawObj.counts || rawObj;
+            Object.keys(innerObj).forEach((key) => {
+              const val = innerObj[key];
+              if (val !== null && typeof val === "object" && val.count !== undefined) {
+                countsObj[key] = val.count;
+              } else {
+                countsObj[key] = val;
+              }
+            });
+            state.counts = countsObj;
+          } else {
+            state.counts = {};
+          }
+        }
+      })
+      .addCase(fetchReportCounts.rejected, (state, action) => {
+        state.countsLoading = false;
+        state.countsError = action.payload;
+      })
+
       // ==================== Export Report ====================
       .addCase(exportReport.pending, (state) => {
         state.exportLoading = true;
@@ -1019,6 +1136,25 @@ const reportSlice = createSlice({
         state.leavesError = action.payload;
       })
 
+      // ==================== Project Report ====================
+      .addCase(fetchProjectReport.pending, (state) => {
+        state.projectReportLoading = true;
+        state.projectReportError = null;
+      })
+      .addCase(fetchProjectReport.fulfilled, (state, action) => {
+        state.projectReportLoading = false;
+        const responseData = action.payload?.data || action.payload;
+        state.projectReportRecords = responseData?.data || responseData || [];
+        state.projectReportTotalCount = responseData?.total || 0;
+        state.projectReportCurrentPage = responseData?.current_page || 1;
+        state.projectReportPerPage = responseData?.per_page || 10;
+        state.projectReportLastPage = responseData?.last_page || 1;
+      })
+      .addCase(fetchProjectReport.rejected, (state, action) => {
+        state.projectReportLoading = false;
+        state.projectReportError = action.payload;
+      })
+
       // ==================== Employees Basic Report ====================
       .addCase(fetchEmployeesReport.pending, (state) => {
         state.basicEmployeesLoading = true;
@@ -1045,9 +1181,28 @@ const reportSlice = createSlice({
       })
       .addCase(fetchEmployeeDetailsReport.fulfilled, (state, action) => {
         state.employeeDetailsLoading = false;
+        
+        console.log("========== API EMPLOYEE DETAILS ==========");
+        console.log(action.payload);
+        console.log("==========================================");
+        
         const responseData = action.payload?.data || action.payload;
-        state.employeeDetails = responseData?.data || responseData || [];
-        state.employeeDetailsTotalCount = responseData?.total || 0;
+        
+        let finalData = [];
+        if (responseData?.employees && Array.isArray(responseData.employees)) {
+          finalData = responseData.employees;
+        } else if (responseData?.data && Array.isArray(responseData.data)) {
+          finalData = responseData.data;
+        } else if (Array.isArray(responseData)) {
+          finalData = responseData;
+        } else if (typeof responseData === 'object' && responseData !== null) {
+           const arrayProp = Object.values(responseData).find((val) => Array.isArray(val));
+           if (arrayProp) finalData = arrayProp;
+           else finalData = Object.values(responseData).filter(v => v && typeof v === 'object');
+        }
+        
+        state.employeeDetails = finalData;
+        state.employeeDetailsTotalCount = responseData?.total || finalData.length;
         state.employeeDetailsCurrentPage = responseData?.current_page || 1;
         state.employeeDetailsPerPage = responseData?.per_page || 10;
         state.employeeDetailsLastPage = responseData?.last_page || 1;
@@ -1064,9 +1219,28 @@ const reportSlice = createSlice({
       })
       .addCase(fetchEmployeeNearestExpiryReport.fulfilled, (state, action) => {
         state.employeeNearestExpiryLoading = false;
+        
+        console.log("========== API EMPLOYEE NEAREST EXPIRY ==========");
+        console.log(action.payload);
+        console.log("=================================================");
+        
         const responseData = action.payload?.data || action.payload;
-        state.employeeNearestExpiry = responseData?.data || responseData || [];
-        state.employeeNearestExpiryTotalCount = responseData?.total || 0;
+        
+        let finalData = [];
+        if (responseData?.employees && Array.isArray(responseData.employees)) {
+          finalData = responseData.employees;
+        } else if (responseData?.data && Array.isArray(responseData.data)) {
+          finalData = responseData.data;
+        } else if (Array.isArray(responseData)) {
+          finalData = responseData;
+        } else if (typeof responseData === 'object' && responseData !== null) {
+           const arrayProp = Object.values(responseData).find((val) => Array.isArray(val));
+           if (arrayProp) finalData = arrayProp;
+           else finalData = Object.values(responseData).filter(v => v && typeof v === 'object');
+        }
+        
+        state.employeeNearestExpiry = finalData;
+        state.employeeNearestExpiryTotalCount = responseData?.total || finalData.length;
         state.employeeNearestExpiryCurrentPage =
           responseData?.current_page || 1;
         state.employeeNearestExpiryPerPage = responseData?.per_page || 10;
@@ -1087,9 +1261,22 @@ const reportSlice = createSlice({
         (state, action) => {
           state.employeeUpcomingRenewalsLoading = false;
           const responseData = action.payload?.data || action.payload;
-          state.employeeUpcomingRenewals =
-            responseData?.data || responseData || [];
-          state.employeeUpcomingRenewalsTotalCount = responseData?.total || 0;
+          
+          let finalData = [];
+          if (responseData?.employees && Array.isArray(responseData.employees)) {
+            finalData = responseData.employees;
+          } else if (responseData?.data && Array.isArray(responseData.data)) {
+            finalData = responseData.data;
+          } else if (Array.isArray(responseData)) {
+            finalData = responseData;
+          } else if (typeof responseData === 'object' && responseData !== null) {
+             const arrayProp = Object.values(responseData).find((val) => Array.isArray(val));
+             if (arrayProp) finalData = arrayProp;
+             else finalData = Object.values(responseData).filter(v => v && typeof v === 'object');
+          }
+          
+          state.employeeUpcomingRenewals = finalData;
+          state.employeeUpcomingRenewalsTotalCount = responseData?.total || finalData.length;
           state.employeeUpcomingRenewalsCurrentPage =
             responseData?.current_page || 1;
           state.employeeUpcomingRenewalsPerPage = responseData?.per_page || 10;
@@ -1112,8 +1299,22 @@ const reportSlice = createSlice({
       .addCase(fetchCompanyNearestExpiryReport.fulfilled, (state, action) => {
         state.companyNearestExpiryLoading = false;
         const responseData = action.payload?.data || action.payload;
-        state.companyNearestExpiry = responseData?.data || responseData || [];
-        state.companyNearestExpiryTotalCount = responseData?.total || 0;
+        
+        let finalData = [];
+        if (responseData?.companies && Array.isArray(responseData.companies)) {
+          finalData = responseData.companies;
+        } else if (responseData?.data && Array.isArray(responseData.data)) {
+          finalData = responseData.data;
+        } else if (Array.isArray(responseData)) {
+          finalData = responseData;
+        } else if (typeof responseData === 'object' && responseData !== null) {
+           const arrayProp = Object.values(responseData).find((val) => Array.isArray(val));
+           if (arrayProp) finalData = arrayProp;
+           else finalData = Object.values(responseData).filter(v => v && typeof v === 'object');
+        }
+        
+        state.companyNearestExpiry = finalData;
+        state.companyNearestExpiryTotalCount = responseData?.total || finalData.length;
         state.companyNearestExpiryCurrentPage = responseData?.current_page || 1;
         state.companyNearestExpiryPerPage = responseData?.per_page || 10;
         state.companyNearestExpiryLastPage = responseData?.last_page || 1;
@@ -1133,9 +1334,22 @@ const reportSlice = createSlice({
         (state, action) => {
           state.companyUpcomingRenewalsLoading = false;
           const responseData = action.payload?.data || action.payload;
-          state.companyUpcomingRenewals =
-            responseData?.data || responseData || [];
-          state.companyUpcomingRenewalsTotalCount = responseData?.total || 0;
+          
+          let finalData = [];
+          if (responseData?.companies && Array.isArray(responseData.companies)) {
+            finalData = responseData.companies;
+          } else if (responseData?.data && Array.isArray(responseData.data)) {
+            finalData = responseData.data;
+          } else if (Array.isArray(responseData)) {
+            finalData = responseData;
+          } else if (typeof responseData === 'object' && responseData !== null) {
+             const arrayProp = Object.values(responseData).find((val) => Array.isArray(val));
+             if (arrayProp) finalData = arrayProp;
+             else finalData = Object.values(responseData).filter(v => v && typeof v === 'object');
+          }
+          
+          state.companyUpcomingRenewals = finalData;
+          state.companyUpcomingRenewalsTotalCount = responseData?.total || finalData.length;
           state.companyUpcomingRenewalsCurrentPage =
             responseData?.current_page || 1;
           state.companyUpcomingRenewalsPerPage = responseData?.per_page || 10;
@@ -1154,12 +1368,63 @@ const reportSlice = createSlice({
       })
       .addCase(fetchPendingLeavesReport.fulfilled, (state, action) => {
         state.pendingLeavesLoading = false;
-        const responseData = action.payload?.data || action.payload;
-        state.pendingLeaves = responseData?.data || responseData || [];
-        state.pendingLeavesTotalCount = responseData?.total || 0;
-        state.pendingLeavesCurrentPage = responseData?.current_page || 1;
-        state.pendingLeavesPerPage = responseData?.per_page || 10;
-        state.pendingLeavesLastPage = responseData?.last_page || 1;
+        console.log("========== API PENDING LEAVES ==========");
+        console.log(action.payload);
+        console.log("========================================");
+        
+        const payload = action.payload;
+        let leavesList = [];
+        let total = 0;
+        let currentPage = 1;
+        let perPage = 10;
+        let lastPage = 1;
+        
+        const dataObj = payload?.data || payload;
+        
+        if (dataObj) {
+          if (Array.isArray(dataObj.leaves)) {
+            leavesList = dataObj.leaves;
+            total = dataObj.total || leavesList.length;
+            currentPage = dataObj.current_page || 1;
+            perPage = dataObj.per_page || 10;
+            lastPage = dataObj.last_page || 1;
+          } else if (Array.isArray(dataObj.data)) {
+            leavesList = dataObj.data;
+            total = dataObj.total || leavesList.length;
+            currentPage = dataObj.current_page || 1;
+            perPage = dataObj.per_page || 10;
+            lastPage = dataObj.last_page || 1;
+          } else if (Array.isArray(dataObj)) {
+            leavesList = dataObj;
+            total = leavesList.length;
+          } else if (typeof dataObj === "object") {
+            // Check if there is a leaves property that is an object (associative array)
+            if (dataObj.leaves && typeof dataObj.leaves === "object" && !Array.isArray(dataObj.leaves)) {
+              leavesList = Object.values(dataObj.leaves);
+              total = dataObj.total || leavesList.length;
+              currentPage = dataObj.current_page || 1;
+              perPage = dataObj.per_page || 10;
+              lastPage = dataObj.last_page || 1;
+            } else {
+              const arrayProp = Object.values(dataObj).find((val) => Array.isArray(val));
+              if (arrayProp) {
+                leavesList = arrayProp;
+                total = dataObj.total || leavesList.length;
+              } else {
+                leavesList = Object.values(dataObj).filter(
+                  (val) => val && typeof val === "object"
+                );
+                total = leavesList.length;
+              }
+            }
+          }
+        }
+        
+        state.pendingLeaves = leavesList;
+        state.pendingLeavesTotalCount = total;
+        state.pendingLeavesCurrentPage = currentPage;
+        state.pendingLeavesPerPage = perPage;
+        state.pendingLeavesLastPage = lastPage;
       })
       .addCase(fetchPendingLeavesReport.rejected, (state, action) => {
         state.pendingLeavesLoading = false;
@@ -1202,23 +1467,37 @@ export const selectAttendanceRecords = (state) =>
 export const selectAttendanceLoading = (state) =>
   state.reports.attendanceLoading;
 export const selectAttendanceError = (state) => state.reports.attendanceError;
-export const selectAttendancePagination = (state) => ({
-  total: state.reports.attendanceTotalCount,
-  currentPage: state.reports.attendanceCurrentPage,
-  perPage: state.reports.attendancePerPage,
-  lastPage: state.reports.attendanceLastPage,
-});
+export const selectAttendancePagination = createSelector(
+  [(state) => state.reports.attendanceTotalCount,
+   (state) => state.reports.attendanceCurrentPage,
+   (state) => state.reports.attendancePerPage,
+   (state) => state.reports.attendanceLastPage],
+  (total, currentPage, perPage, lastPage) => ({ total, currentPage, perPage, lastPage })
+);
 
 // Leaves Report Selectors
 export const selectLeaveRecords = (state) => state.reports.leaveRecords;
 export const selectLeavesLoading = (state) => state.reports.leavesLoading;
 export const selectLeavesError = (state) => state.reports.leavesError;
-export const selectLeavesPagination = (state) => ({
-  total: state.reports.leavesTotalCount,
-  currentPage: state.reports.leavesCurrentPage,
-  perPage: state.reports.leavesPerPage,
-  lastPage: state.reports.leavesLastPage,
-});
+export const selectLeavesPagination = createSelector(
+  [(state) => state.reports.leavesTotalCount,
+   (state) => state.reports.leavesCurrentPage,
+   (state) => state.reports.leavesPerPage,
+   (state) => state.reports.leavesLastPage],
+  (total, currentPage, perPage, lastPage) => ({ total, currentPage, perPage, lastPage })
+);
+
+// Project Report Selectors
+export const selectProjectReportRecords = (state) => state.reports.projectReportRecords;
+export const selectProjectReportLoading = (state) => state.reports.projectReportLoading;
+export const selectProjectReportError = (state) => state.reports.projectReportError;
+export const selectProjectReportPagination = createSelector(
+  [(state) => state.reports.projectReportTotalCount,
+   (state) => state.reports.projectReportCurrentPage,
+   (state) => state.reports.projectReportPerPage,
+   (state) => state.reports.projectReportLastPage],
+  (total, currentPage, perPage, lastPage) => ({ total, currentPage, perPage, lastPage })
+);
 
 // Employee Details Selectors
 export const selectEmployeeDetails = (state) => state.reports.employeeDetails;
@@ -1226,12 +1505,13 @@ export const selectEmployeeDetailsLoading = (state) =>
   state.reports.employeeDetailsLoading;
 export const selectEmployeeDetailsError = (state) =>
   state.reports.employeeDetailsError;
-export const selectEmployeeDetailsPagination = (state) => ({
-  total: state.reports.employeeDetailsTotalCount,
-  currentPage: state.reports.employeeDetailsCurrentPage,
-  perPage: state.reports.employeeDetailsPerPage,
-  lastPage: state.reports.employeeDetailsLastPage,
-});
+export const selectEmployeeDetailsPagination = createSelector(
+  [(state) => state.reports.employeeDetailsTotalCount,
+   (state) => state.reports.employeeDetailsCurrentPage,
+   (state) => state.reports.employeeDetailsPerPage,
+   (state) => state.reports.employeeDetailsLastPage],
+  (total, currentPage, perPage, lastPage) => ({ total, currentPage, perPage, lastPage })
+);
 
 // Employee Nearest Expiry Selectors
 export const selectEmployeeNearestExpiry = (state) =>
@@ -1240,12 +1520,13 @@ export const selectEmployeeNearestExpiryLoading = (state) =>
   state.reports.employeeNearestExpiryLoading;
 export const selectEmployeeNearestExpiryError = (state) =>
   state.reports.employeeNearestExpiryError;
-export const selectEmployeeNearestExpiryPagination = (state) => ({
-  total: state.reports.employeeNearestExpiryTotalCount,
-  currentPage: state.reports.employeeNearestExpiryCurrentPage,
-  perPage: state.reports.employeeNearestExpiryPerPage,
-  lastPage: state.reports.employeeNearestExpiryLastPage,
-});
+export const selectEmployeeNearestExpiryPagination = createSelector(
+  [(state) => state.reports.employeeNearestExpiryTotalCount,
+   (state) => state.reports.employeeNearestExpiryCurrentPage,
+   (state) => state.reports.employeeNearestExpiryPerPage,
+   (state) => state.reports.employeeNearestExpiryLastPage],
+  (total, currentPage, perPage, lastPage) => ({ total, currentPage, perPage, lastPage })
+);
 
 // Employee Upcoming Renewals Selectors
 export const selectEmployeeUpcomingRenewals = (state) =>
@@ -1254,12 +1535,13 @@ export const selectEmployeeUpcomingRenewalsLoading = (state) =>
   state.reports.employeeUpcomingRenewalsLoading;
 export const selectEmployeeUpcomingRenewalsError = (state) =>
   state.reports.employeeUpcomingRenewalsError;
-export const selectEmployeeUpcomingRenewalsPagination = (state) => ({
-  total: state.reports.employeeUpcomingRenewalsTotalCount,
-  currentPage: state.reports.employeeUpcomingRenewalsCurrentPage,
-  perPage: state.reports.employeeUpcomingRenewalsPerPage,
-  lastPage: state.reports.employeeUpcomingRenewalsLastPage,
-});
+export const selectEmployeeUpcomingRenewalsPagination = createSelector(
+  [(state) => state.reports.employeeUpcomingRenewalsTotalCount,
+   (state) => state.reports.employeeUpcomingRenewalsCurrentPage,
+   (state) => state.reports.employeeUpcomingRenewalsPerPage,
+   (state) => state.reports.employeeUpcomingRenewalsLastPage],
+  (total, currentPage, perPage, lastPage) => ({ total, currentPage, perPage, lastPage })
+);
 
 // Company Nearest Expiry Selectors
 export const selectCompanyNearestExpiry = (state) =>
@@ -1268,12 +1550,13 @@ export const selectCompanyNearestExpiryLoading = (state) =>
   state.reports.companyNearestExpiryLoading;
 export const selectCompanyNearestExpiryError = (state) =>
   state.reports.companyNearestExpiryError;
-export const selectCompanyNearestExpiryPagination = (state) => ({
-  total: state.reports.companyNearestExpiryTotalCount,
-  currentPage: state.reports.companyNearestExpiryCurrentPage,
-  perPage: state.reports.companyNearestExpiryPerPage,
-  lastPage: state.reports.companyNearestExpiryLastPage,
-});
+export const selectCompanyNearestExpiryPagination = createSelector(
+  [(state) => state.reports.companyNearestExpiryTotalCount,
+   (state) => state.reports.companyNearestExpiryCurrentPage,
+   (state) => state.reports.companyNearestExpiryPerPage,
+   (state) => state.reports.companyNearestExpiryLastPage],
+  (total, currentPage, perPage, lastPage) => ({ total, currentPage, perPage, lastPage })
+);
 
 // Company Upcoming Renewals Selectors
 export const selectCompanyUpcomingRenewals = (state) =>
@@ -1282,12 +1565,13 @@ export const selectCompanyUpcomingRenewalsLoading = (state) =>
   state.reports.companyUpcomingRenewalsLoading;
 export const selectCompanyUpcomingRenewalsError = (state) =>
   state.reports.companyUpcomingRenewalsError;
-export const selectCompanyUpcomingRenewalsPagination = (state) => ({
-  total: state.reports.companyUpcomingRenewalsTotalCount,
-  currentPage: state.reports.companyUpcomingRenewalsCurrentPage,
-  perPage: state.reports.companyUpcomingRenewalsPerPage,
-  lastPage: state.reports.companyUpcomingRenewalsLastPage,
-});
+export const selectCompanyUpcomingRenewalsPagination = createSelector(
+  [(state) => state.reports.companyUpcomingRenewalsTotalCount,
+   (state) => state.reports.companyUpcomingRenewalsCurrentPage,
+   (state) => state.reports.companyUpcomingRenewalsPerPage,
+   (state) => state.reports.companyUpcomingRenewalsLastPage],
+  (total, currentPage, perPage, lastPage) => ({ total, currentPage, perPage, lastPage })
+);
 
 // Pending Leaves Selectors
 export const selectPendingLeaves = (state) => state.reports.pendingLeaves;
@@ -1295,12 +1579,19 @@ export const selectPendingLeavesLoading = (state) =>
   state.reports.pendingLeavesLoading;
 export const selectPendingLeavesError = (state) =>
   state.reports.pendingLeavesError;
-export const selectPendingLeavesPagination = (state) => ({
-  total: state.reports.pendingLeavesTotalCount,
-  currentPage: state.reports.pendingLeavesCurrentPage,
-  perPage: state.reports.pendingLeavesPerPage,
-  lastPage: state.reports.pendingLeavesLastPage,
-});
+export const selectPendingLeavesPagination = createSelector(
+  [(state) => state.reports.pendingLeavesTotalCount,
+   (state) => state.reports.pendingLeavesCurrentPage,
+   (state) => state.reports.pendingLeavesPerPage,
+   (state) => state.reports.pendingLeavesLastPage],
+  (total, currentPage, perPage, lastPage) => ({ total, currentPage, perPage, lastPage })
+);
+
+// Report Counts Selectors
+export const selectReportCounts = (state) => state.reports.counts;
+export const selectReportCountsLoading = (state) => state.reports.countsLoading;
+export const selectReportCountsError = (state) => state.reports.countsError;
+
 // Export Selectors
 export const selectExportLoading = (state) => state.reports.exportLoading;
 export const selectExportError = (state) => state.reports.exportError;
