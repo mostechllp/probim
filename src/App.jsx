@@ -144,6 +144,17 @@ const RequestLeaveForEmployee = lazy(
   () => import("./employee/pages/RequestLeaveForEmployees"),
 );
 
+// Helper function to check if user is employee type (includes manager, team_lead, hr)
+const isEmployeeType = (type) => {
+  const employeeTypes = ['employee', 'manager', 'team_lead', 'hr'];
+  return employeeTypes.includes(type);
+};
+
+// Helper function to check if user is admin type
+const isAdminType = (type) => {
+  return type === 'admin';
+};
+
 // Custom wrapper for lazy-loaded components
 const LazyWrapper = ({ children }) => {
   return <Suspense fallback={<Loader fullScreen />}>{children}</Suspense>;
@@ -179,6 +190,9 @@ function App() {
   if (authLoading && initialLoad) {
     return <Loader fullScreen />;
   }
+
+  // Get user type for routing decisions
+  const userType = user?.type || '';
 
   return (
     <ThemeProvider>
@@ -489,7 +503,7 @@ function App() {
           element={
             <ProtectedRoute>
               <LazyWrapper>
-                {user?.type === "employee" ? (
+                {isEmployeeType(userType) ? (
                   <Navigate to="/employee/employees/add-employee" replace />
                 ) : (
                   <Navigate to="/admin/employees/add-employee" replace />
@@ -505,7 +519,7 @@ function App() {
           element={
             <ProtectedRoute>
               <LazyWrapper>
-                {user?.type === "employee" ? (
+                {isEmployeeType(userType) ? (
                   <Navigate to="/employee/employees/onboarding" replace />
                 ) : (
                   <Navigate to="/admin/employees/onboarding" replace />
@@ -521,7 +535,7 @@ function App() {
           element={
             <ProtectedRoute>
               <LazyWrapper>
-                {user?.type === "employee" ? (
+                {isEmployeeType(userType) ? (
                   <Navigate to="/employee/reports/employee-details" replace />
                 ) : (
                   <Navigate to="/admin/reports/employee-details" replace />
@@ -536,7 +550,7 @@ function App() {
           element={
             <ProtectedRoute>
               <LazyWrapper>
-                {user?.type === "employee" ? (
+                {isEmployeeType(userType) ? (
                   <Navigate to="/employee/reports/attendance-reports" replace />
                 ) : (
                   <Navigate to="/admin/reports/attendance-reports" replace />
@@ -551,7 +565,7 @@ function App() {
           element={
             <ProtectedRoute>
               <LazyWrapper>
-                {user?.type === "employee" ? (
+                {isEmployeeType(userType) ? (
                   <Navigate
                     to="/employee/reports/leave-requests-reports"
                     replace
@@ -572,7 +586,7 @@ function App() {
           element={
             <ProtectedRoute>
               <LazyWrapper>
-                {user?.type === "employee" ? (
+                {isEmployeeType(userType) ? (
                   <Navigate
                     to="/employee/reports/pending-leaves-reports"
                     replace
@@ -593,7 +607,7 @@ function App() {
           element={
             <ProtectedRoute>
               <LazyWrapper>
-                {user?.type === "employee" ? (
+                {isEmployeeType(userType) ? (
                   <Navigate
                     to="/employee/reports/employee-near-expiry"
                     replace
@@ -611,7 +625,7 @@ function App() {
           element={
             <ProtectedRoute>
               <LazyWrapper>
-                {user?.type === "employee" ? (
+                {isEmployeeType(userType) ? (
                   <Navigate
                     to="/employee/reports/employee-upcoming-renewals"
                     replace
@@ -632,7 +646,7 @@ function App() {
           element={
             <ProtectedRoute>
               <LazyWrapper>
-                {user?.type === "employee" ? (
+                {isEmployeeType(userType) ? (
                   <Navigate
                     to="/employee/reports/organization-near-expiry"
                     replace
@@ -653,7 +667,7 @@ function App() {
           element={
             <ProtectedRoute>
               <LazyWrapper>
-                {user?.type === "employee" ? (
+                {isEmployeeType(userType) ? (
                   <Navigate
                     to="/employee/reports/organization-upcoming-renewals"
                     replace
@@ -673,7 +687,7 @@ function App() {
           element={
             <ProtectedRoute>
               <LazyWrapper>
-                {user?.type === "employee" ? (
+                {isEmployeeType(userType) ? (
                   <Navigate
                     to="/employee/reports/attendance/employee/:employeeId"
                     replace
@@ -695,7 +709,7 @@ function App() {
           element={
             <ProtectedRoute>
               <LazyWrapper>
-                {user?.type === "employee" ? (
+                {isEmployeeType(userType) ? (
                   <Navigate to="/employee/modules" replace />
                 ) : (
                   <Navigate to="/admin/modules" replace />
@@ -711,7 +725,7 @@ function App() {
           element={
             <ProtectedRoute>
               <LazyWrapper>
-                {user?.type === "employee" ? (
+                {isEmployeeType(userType) ? (
                   <Navigate to="/employee/project-working-hours" replace />
                 ) : (
                   <Navigate to="/admin/project-working-hours" replace />
@@ -729,8 +743,7 @@ function App() {
           element={
             <ProtectedRoute>
               <LazyWrapper>
-                {user?.type === "employee" ||
-                user?.role?.name === "HR Manager" ? (
+                {isEmployeeType(userType) ? (
                   <Navigate to="/employee/payroll" replace />
                 ) : (
                   <Navigate to="/admin/payroll" replace />
@@ -746,8 +759,7 @@ function App() {
           element={
             <ProtectedRoute>
               <LazyWrapper>
-                {user?.type === "employee" ||
-                user?.role?.name === "HR Manager" ? (
+                {isEmployeeType(userType) ? (
                   <Navigate to="/employee/payroll/add" replace />
                 ) : (
                   <Navigate to="/admin/payroll/add" replace />
@@ -763,8 +775,7 @@ function App() {
           element={
             <ProtectedRoute>
               <LazyWrapper>
-                {user?.type === "employee" ||
-                user?.role?.name === "HR Manager" ? (
+                {isEmployeeType(userType) ? (
                   <Navigate
                     to={`/employee/payroll/${window.location.pathname.split("/").pop()}`}
                     replace
@@ -786,8 +797,7 @@ function App() {
           element={
             <ProtectedRoute>
               <LazyWrapper>
-                {user?.type === "employee" ||
-                user?.role?.name === "HR Manager" ? (
+                {isEmployeeType(userType) ? (
                   <Navigate
                     to={`/employee/payroll/edit/${window.location.pathname.split("/").pop()}`}
                     replace

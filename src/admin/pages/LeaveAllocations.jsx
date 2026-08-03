@@ -33,8 +33,8 @@ const LeaveAllocations = () => {
   const [perPage, setPerPage] = useState(10);
   const [loading, setLoading] = useState(false);
   const { user } = useSelector((state) => state.auth || {});
-  const routePrefix = user?.type === "employee" ? "/employee" : "/admin";
-  const leavesUrl = user?.type === "employee" ? "/employee/leave-management" : "/admin/leaves";
+  const routePrefix = (user?.type === "employee" || user?.type === "hr" || user?.type === "manager" || user?.type === "team_lead")? "/employee" : "/admin";
+  const leavesUrl = (user?.type === "employee" || user?.type === "hr" || user?.type === "manager" || user?.type === "team_lead") ? "/employee/leave-management" : "/admin/leaves";
 
   useEffect(() => {
     const fetchData = async () => {
