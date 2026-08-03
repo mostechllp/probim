@@ -5,25 +5,26 @@ import SearchBar from "../common/SearchBar";
 import EntriesSelector from "../common/EntriesSelector";
 import { showToast } from "../../../components/common/Toast";
 import Pagination from "../common/Paginations";
-import { fetchEmployees } from "../../store/slices/employeeSlice";
+import { fetchEmployeeDetailsReport, selectEmployeeDetails, selectEmployeeDetailsLoading, selectEmployeeDetailsPagination } from "../../store/slices/reportSlice";
 import { exportToCSV, formatDate } from "../../../utils/reportUtils";
-import { generateEmployeeDetailsPDF } from "../../../utils/reportPDFConfigs";
 import ExportModal from "../../../components/common/ExportModal";
+import apiClient from "../../../utils/apiClient";
 
 const EmployeeDetailsReport = () => {
   const dispatch = useDispatch();
-const location = useLocation();
+  const location = useLocation();
 
-// Determine base path based on current route
-const getBasePath = () => {
-  if (location.pathname.startsWith('/admin')) return '/admin';
-  if (location.pathname.startsWith('/employee')) return '/employee';
-  return '';
-};
-const basePath = getBasePath();
-  const { employees = [], loading } = useSelector(
-    (state) => state.employees || {},
-  );
+  // Determine base path based on current route
+  const getBasePath = () => {
+    if (location.pathname.startsWith('/admin')) return '/admin';
+    if (location.pathname.startsWith('/employee')) return '/employee';
+    return '';
+  };
+  const basePath = getBasePath();
+  const rawEmployees = useSelector(selectEmployeeDetails) || [];
+  const loading = useSelector(selectEmployeeDetailsLoading);
+  const pagination = useSelector(selectEmployeeDetailsPagination);
+  const employees = Array.isArray(rawEmployees) ? rawEmployees : [];
 
   // Local state for filtering and pagination
   const [searchTerm, setSearchTerm] = useState("");
@@ -41,8 +42,14 @@ const basePath = getBasePath();
   const [exportFormat, setExportFormat] = useState("csv");
 
   useEffect(() => {
-    dispatch(fetchEmployees());
-  }, [dispatch]);
+    dispatch(fetchEmployeeDetailsReport({
+      page: currentPage,
+      per_page: perPage,
+      department: selectedDepartment || undefined,
+      status: selectedStatus !== "all" ? selectedStatus : undefined,
+      search: searchTerm || undefined,
+    }));
+  }, [dispatch, currentPage, perPage, selectedDepartment, selectedStatus, searchTerm]);
 
   // Reset to first page when filters change
   useEffect(() => {
@@ -57,21 +64,21 @@ const basePath = getBasePath();
 
   // Transform employee data from raw object to get all fields
   const transformEmployee = (emp) => {
-    const raw = emp.raw;
-    const user = raw?.user;
-    const company = user?.company;
-    const department = user?.department;
-    const designation = user?.designation;
+    const raw = emp.raw || emp;
+    const user = raw?.user || emp?.user || emp;
+    const company = user?.company || emp?.company;
+    const department = user?.department || emp?.department;
+    const designation = user?.designation || emp?.designation;
 
     return {
       id: emp.id,
-      name: emp.name,
-      status: emp.status,
+      name: emp.name || raw?.first_name ? `${raw.first_name} ${raw.last_name || ''}`.trim() : "-",
+      status: emp.status || raw?.status || "active",
       // Basic fields from the transformed data
-      emp_id: raw?.employee_id || "-",
-      company_name: company?.company_name || user?.company?.company_name || "-",
-      department_name: department?.name || user?.department?.name || "-",
-      designation_name: designation?.name || user?.designation?.name || "-",
+      emp_id: raw?.employee_id || emp?.emp_id || "-",
+      company_name: company?.company_name || company?.name || "-",
+      department_name: department?.name || "-",
+      designation_name: designation?.name || "-",
       // Document fields from raw
       passport_no: raw?.passport_number || "-",
       passport_expiry: raw?.passport_expiry_date,
@@ -93,7 +100,7 @@ const basePath = getBasePath();
       total_leaves_allocated: raw?.total_leaves_allocated,
       user_type: user?.type,
       // Raw reference for any other needs
-      raw: raw,
+      raw: emp.raw || emp,
     };
   };
 
@@ -146,13 +153,14 @@ const basePath = getBasePath();
     return filtered;
   };
 
+  // For backend pagination, the total is from the API
   const filteredEmployees = getFilteredEmployees();
-  const totalFiltered = filteredEmployees.length;
-  const totalPages = Math.ceil(totalFiltered / perPage);
-  const start = (currentPage - 1) * perPage;
-  const pageEmployees = filteredEmployees.slice(start, start + perPage);
+  const totalFiltered = pagination?.total || filteredEmployees.length;
+  const totalPages = pagination?.lastPage || Math.ceil(totalFiltered / perPage);
+  const start = 0; // Backend returns only current page, so start is 0
+  const pageEmployees = filteredEmployees;
 
-    const getExportData = () => {
+  const getExportData = () => {
     // Use the same filteredEmployees data
     return filteredEmployees.map(emp => ({
       emp_id: emp.emp_id,
@@ -208,11 +216,22 @@ const basePath = getBasePath();
     if (format === "csv") {
       exportToCSV(exportData, headers, `employee_details_${new Date().toISOString().split("T")[0]}.csv`);
     } else if (format === "pdf") {
-      generateEmployeeDetailsPDF(filteredEmployees, {
-        company: null,
-        department: selectedDepartment,
-        status: selectedStatus !== "all" ? selectedStatus : null,
-      });
+      try {
+        const response = await apiClient.post('/admin/reports/export', 
+          { report_type: 'employee', format: 'pdf' },
+          { responseType: 'blob' }
+        );
+        const url = window.URL.createObjectURL(new Blob([response.data]));
+        const link = document.createElement('a');
+        link.href = url;
+        link.setAttribute('download', `employee_details_${new Date().toISOString().split("T")[0]}.pdf`);
+        document.body.appendChild(link);
+        link.click();
+        document.body.removeChild(link);
+        showToast("PDF report downloaded successfully!", "success");
+      } catch (error) {
+        showToast("Failed to download PDF report", "error");
+      }
     }
   };
 
@@ -246,11 +265,11 @@ const basePath = getBasePath();
         <div className="mb-6">
           <div className="flex items-center gap-2 text-xs md:text-sm mb-4 md:mb-6 flex-wrap">
             <Link
-  to={`${basePath}/reports`}
-  className="text-green-500 hover:text-green-600 font-medium"
->
-  Reports
-</Link>
+              to={`${basePath}/reports`}
+              className="text-green-500 hover:text-green-600 font-medium"
+            >
+              Reports
+            </Link>
             <i className="fas fa-chevron-right text-gray-400 text-[10px] md:text-xs"></i>
             <span className="text-gray-500">Employee details report</span>
           </div>
@@ -438,7 +457,7 @@ const basePath = getBasePath();
                       className="border-b border-gray-200 dark:border-gray-700 hover:bg-gray-50 dark:hover:bg-gray-700/50 transition-colors"
                     >
                       <td className="px-3 py-3 text-sm text-gray-600 dark:text-gray-400 text-center">
-                        {start + idx + 1}
+                        {(currentPage - 1) * perPage + idx + 1}
                       </td>
                       <td className="px-3 py-3 text-sm font-mono text-gray-700 dark:text-gray-300">
                         {emp.emp_id}
@@ -466,13 +485,12 @@ const basePath = getBasePath();
                       </td>
                       <td className="px-3 py-3">
                         <span
-                          className={`px-2 py-1 rounded-full text-xs font-semibold ${
-                            emp.status === "Active"
+                          className={`px-2 py-1 rounded-full text-xs font-semibold ${(emp.status || "").toLowerCase() === "active"
                               ? "bg-green-100 text-green-700 dark:bg-green-900/30 dark:text-green-400"
-                              : emp.status === "Onboarding"
-                              ? "bg-amber-100 text-amber-700 dark:bg-amber-900/30 dark:text-amber-400"
-                              : "bg-red-100 text-red-700 dark:bg-red-900/30 dark:text-red-400"
-                          }`}
+                              : (emp.status || "").toLowerCase() === "onboarding"
+                                ? "bg-amber-100 text-amber-700 dark:bg-amber-900/30 dark:text-amber-400"
+                                : "bg-red-100 text-red-700 dark:bg-red-900/30 dark:text-red-400"
+                            }`}
                         >
                           {emp.status}
                         </span>
@@ -620,7 +638,7 @@ const basePath = getBasePath();
                 </div>
               </div>
             </div>
-            
+
             <div className="mt-6 pt-4 border-t border-gray-200 dark:border-gray-700 flex justify-end">
               <button
                 onClick={() => setShowViewModal(false)}

@@ -5,16 +5,22 @@ import SearchBar from "../common/SearchBar";
 import EntriesSelector from "../common/EntriesSelector";
 import { showToast } from "../../../components/common/Toast";
 import Pagination from "../common/Paginations";
-import { fetchEmployeeUpcomingRenewalsReport } from "../../store/slices/reportSlice";
+import {
+  fetchEmployeeUpcomingRenewalsReport,
+  selectEmployeeUpcomingRenewals,
+  selectEmployeeUpcomingRenewalsLoading,
+  selectEmployeeUpcomingRenewalsPagination
+} from "../../store/slices/reportSlice";
 import ExportModal from "../../../components/common/ExportModal";
 import { exportToCSV, formatDate, getDaysDifference } from "../../../utils/reportUtils";
-import { generateEmployeeUpcomingRenewalsPDF } from "../../../utils/reportPDFConfigs";
+import apiClient from "../../../utils/apiClient";
 
 const EmployeeUpcomingRenewalsReport = () => {
   const dispatch = useDispatch();
-  const { employees = [], loading } = useSelector(
-    (state) => state.employees || {},
-  );
+  const rawEmployees = useSelector(selectEmployeeUpcomingRenewals) || [];
+  const loading = useSelector(selectEmployeeUpcomingRenewalsLoading);
+  const pagination = useSelector(selectEmployeeUpcomingRenewalsPagination);
+  const employees = Array.isArray(rawEmployees) ? rawEmployees : [];
 
   // Local state
   const [currentPage, setCurrentPage] = useState(1);
@@ -33,11 +39,14 @@ const EmployeeUpcomingRenewalsReport = () => {
       fetchEmployeeUpcomingRenewalsReport({
         page: currentPage,
         per_page: perPage,
-        start_date: "2024-01-01",
-        end_date: "2024-01-31",
-      }),
+        min_days: minDays,
+        max_days: maxDays,
+        company: selectedCompany !== "all" ? selectedCompany : undefined,
+        department: selectedDepartment !== "all" ? selectedDepartment : undefined,
+        search: searchTerm || undefined,
+      })
     );
-  }, [dispatch]);
+  }, [dispatch, currentPage, perPage, minDays, maxDays, selectedCompany, selectedDepartment, searchTerm]);
 
   // Reset to first page when filters change
   useEffect(() => {
@@ -47,16 +56,16 @@ const EmployeeUpcomingRenewalsReport = () => {
 
   // Transform employee data to extract document expiry fields
   const transformEmployee = (emp) => {
-    const raw = emp.raw;
-    const user = raw?.user;
-    const company = user?.company;
-    const department = user?.department;
+    const raw = emp.raw || emp;
+    const user = raw?.user || emp?.user || emp;
+    const company = user?.company || emp?.company;
+    const department = user?.department || emp?.department;
 
     return {
       id: emp.id,
-      emp_id: raw?.employee_id || "-",
-      name: emp.name,
-      company_name: company?.company_name || "-",
+      emp_id: raw?.employee_id || emp?.emp_id || "-",
+      name: emp.name || raw?.first_name ? `${raw.first_name} ${raw.last_name || ''}`.trim() : "-",
+      company_name: company?.company_name || company?.name || "-",
       department_name: department?.name || "-",
       passport_expiry: raw?.passport_expiry_date,
       visa_expiry: raw?.visa_expiry_date,
@@ -89,7 +98,7 @@ const EmployeeUpcomingRenewalsReport = () => {
     );
 
     if (expiryItems.length === 0) return null;
-    return expiryItems.reduce((min, item) => 
+    return expiryItems.reduce((min, item) =>
       item.days < min.days ? item : min, expiryItems[0]
     );
   };
@@ -100,15 +109,7 @@ const EmployeeUpcomingRenewalsReport = () => {
       ? employees.map(transformEmployee)
       : [];
 
-    let filtered = transformedEmps.filter((emp) => {
-      // Check if any document is expiring within the upcoming renewal range
-      return (
-        isUpcomingRenewal(emp.passport_expiry) ||
-        isUpcomingRenewal(emp.visa_expiry) ||
-        isUpcomingRenewal(emp.labor_expiry) ||
-        isUpcomingRenewal(emp.eid_expiry)
-      );
-    });
+    let filtered = [...transformedEmps];
 
     // Apply company filter
     if (selectedCompany !== "all") {
@@ -174,11 +175,12 @@ const EmployeeUpcomingRenewalsReport = () => {
     });
   };
 
+  // Backend returns only current page data
   const filteredEmployees = getEmployeesWithUpcomingRenewals();
-  const totalFiltered = filteredEmployees.length;
-  const totalPages = Math.ceil(totalFiltered / perPage);
-  const start = (currentPage - 1) * perPage;
-  const pageEmployees = filteredEmployees.slice(start, start + perPage);
+  const totalFiltered = pagination?.total || filteredEmployees.length;
+  const totalPages = pagination?.lastPage || Math.ceil(totalFiltered / perPage);
+  const start = 0; // backend handles pagination
+  const pageEmployees = filteredEmployees;
 
   const handleResetFilters = () => {
     setSelectedCompany("all");
@@ -192,7 +194,7 @@ const EmployeeUpcomingRenewalsReport = () => {
 
   const handleExport = async (format) => {
     const exportData = getExportData();
-    
+
     if (exportData.length === 0) {
       showToast("No data to export", "warning");
       return;
@@ -220,15 +222,22 @@ const EmployeeUpcomingRenewalsReport = () => {
       exportToCSV(exportData, headers, `${filename}.csv`);
       showToast("Employee upcoming renewals exported successfully!", "success");
     } else if (format === "pdf") {
-      generateEmployeeUpcomingRenewalsPDF(filteredEmployees, "Employee Upcoming Renewals Report", {
-        minDays: minDays,
-        maxDays: maxDays,
-        company: selectedCompany !== "all" ? selectedCompany : null,
-        department: selectedDepartment !== "all" ? selectedDepartment : null,
-        search: searchTerm || null,
-        generated_date: new Date().toISOString(),
-      });
-      showToast("PDF report generated successfully!", "success");
+      try {
+        const response = await apiClient.post('/admin/reports/export', 
+          { report_type: 'employee_upcoming_renewals', format: 'pdf' },
+          { responseType: 'blob' }
+        );
+        const url = window.URL.createObjectURL(new Blob([response.data]));
+        const link = document.createElement('a');
+        link.href = url;
+        link.setAttribute('download', `${filename}.pdf`);
+        document.body.appendChild(link);
+        link.click();
+        document.body.removeChild(link);
+        showToast("PDF report generated successfully!", "success");
+      } catch (error) {
+        showToast("Failed to download PDF report", "error");
+      }
     }
   };
 
@@ -611,14 +620,14 @@ const EmployeeUpcomingRenewalsReport = () => {
                     {pageEmployees.length > 0 ? (
                       pageEmployees.map((emp, idx) => {
                         const earliest = getEarliestUpcomingExpiry(emp);
-                        
+
                         return (
                           <tr
                             key={emp.id}
                             className="border-b border-gray-200 dark:border-gray-700 hover:bg-gray-50 dark:hover:bg-gray-700/50 transition-colors"
                           >
                             <td className="px-3 md:px-4 py-2 md:py-3 text-xs md:text-sm text-gray-600 dark:text-gray-400 text-center">
-                              {start + idx + 1}
+                              {(currentPage - 1) * perPage + idx + 1}
                             </td>
                             <td className="px-3 md:px-4 py-2 md:py-3 text-xs md:text-sm font-mono text-gray-700 dark:text-gray-300">
                               {emp.emp_id}
@@ -655,13 +664,12 @@ const EmployeeUpcomingRenewalsReport = () => {
                             <td className="px-3 md:px-4 py-2 md:py-3 text-xs md:text-sm">
                               {earliest ? (
                                 <span
-                                  className={`inline-flex items-center gap-1 px-2 py-1 rounded-full text-xs font-semibold ${
-                                    earliest.days >= 31 && earliest.days <= 45
+                                  className={`inline-flex items-center gap-1 px-2 py-1 rounded-full text-xs font-semibold ${earliest.days >= 31 && earliest.days <= 45
                                       ? "bg-blue-100 text-blue-700 dark:bg-blue-900/30 dark:text-blue-400"
                                       : earliest.days >= 46 && earliest.days <= 60
                                         ? "bg-cyan-100 text-cyan-700 dark:bg-cyan-900/30 dark:text-cyan-400"
                                         : "bg-green-100 text-green-700 dark:bg-green-900/30 dark:text-green-400"
-                                  }`}
+                                    }`}
                                 >
                                   <i className="fas fa-calendar-day text-[10px]"></i>
                                   {earliest.days} days ({earliest.name})

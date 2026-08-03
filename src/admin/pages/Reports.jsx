@@ -6,6 +6,7 @@ import { fetchOrganizations } from "../store/slices/organizationSlice";
 import { fetchAttendanceRecords } from "../store/slices/attendanceSlice";
 import { fetchLeaves } from "../store/slices/LeaveSlice";
 import { fetchProjects } from "../store/slices/projectSlice";
+import { fetchReportCounts, selectReportCounts } from "../store/slices/reportSlice";
 
 const Reports = () => {
   const dispatch = useDispatch();
@@ -21,6 +22,8 @@ const Reports = () => {
     (state) => state.leaves || {},
   );
   const { projects = [] } = useSelector((state) => state.projects || {});
+  
+  const counts = useSelector(selectReportCounts);
 
   // Get user role from auth
   const { user } = useSelector((state) => state.auth);
@@ -35,6 +38,7 @@ const Reports = () => {
     dispatch(fetchAttendanceRecords());
     dispatch(fetchLeaves());
     dispatch(fetchProjects());
+    dispatch(fetchReportCounts());
   }, [dispatch]);
 
   // Calculate statistics for cards
@@ -90,7 +94,7 @@ const Reports = () => {
       iconBg: "bg-blue-100 dark:bg-blue-900/30",
       iconColor: "text-blue-600 dark:text-blue-400",
       link: `${basePath}/reports/employee-details`,
-      count: totalEmployees,
+      count: counts?.employee_details ?? counts?.employeeDetails ?? counts?.employee ?? totalEmployees,
     },
     {
       id: "attendance",
@@ -100,7 +104,7 @@ const Reports = () => {
       iconBg: "bg-green-100 dark:bg-green-900/30",
       iconColor: "text-green-600 dark:text-green-400",
       link: `${basePath}/reports/attendance-reports`,
-      count: attendanceRecords.length,
+      count: counts?.attendance ?? counts?.attendance_reports ?? attendanceRecords.length,
     },
     {
       id: "project-report",
@@ -110,7 +114,7 @@ const Reports = () => {
       iconBg: "bg-indigo-100 dark:bg-indigo-900/30",
       iconColor: "text-indigo-600 dark:text-indigo-400",
       link: `${basePath}/reports/project-report`,
-      count: projects.length,
+      count: counts?.project_reports ?? counts?.projects ?? counts?.project ?? projects.length,
     },
     {
       id: "leave-requests",
@@ -120,7 +124,7 @@ const Reports = () => {
       iconBg: "bg-purple-100 dark:bg-purple-900/30",
       iconColor: "text-purple-600 dark:text-purple-400",
       link: `${basePath}/reports/leave-requests-reports`,
-      count: leaveRecords.length,
+      count: counts?.leave_requests ?? counts?.leaves ?? counts?.leave ?? leaveRecords.length,
     },
     {
       id: "pending-leaves",
@@ -130,8 +134,8 @@ const Reports = () => {
       iconBg: "bg-amber-100 dark:bg-amber-900/30",
       iconColor: "text-amber-600 dark:text-amber-400",
       link: `${basePath}/reports/pending-leaves-reports`,
-      count: pendingLeaves,
-      highlight: pendingLeaves > 0,
+      count: counts?.pending_leaves ?? counts?.pendingLeaves ?? pendingLeaves,
+      highlight: (counts?.pending_leaves ?? counts?.pendingLeaves ?? pendingLeaves) > 0,
     },
     {
       id: "emp-near-expiry",
@@ -141,8 +145,8 @@ const Reports = () => {
       iconBg: "bg-red-100 dark:bg-red-900/30",
       iconColor: "text-red-600 dark:text-red-400",
       link: `${basePath}/reports/employee-near-expiry`,
-      count: employeeNearExpiry,
-      highlight: employeeNearExpiry > 0,
+      count: counts?.employee_nearest_expiry ?? counts?.employeeNearExpiry ?? counts?.employee_nearest ?? employeeNearExpiry,
+      highlight: (counts?.employee_nearest_expiry ?? counts?.employeeNearExpiry ?? counts?.employee_nearest ?? employeeNearExpiry) > 0,
     },
     {
       id: "emp-upcoming-renewals",
@@ -152,7 +156,7 @@ const Reports = () => {
       iconBg: "bg-cyan-100 dark:bg-cyan-900/30",
       iconColor: "text-cyan-600 dark:text-cyan-400",
       link: `${basePath}/reports/employee-upcoming-renewals`,
-      count: employeeUpcomingRenewals,
+      count: counts?.employee_upcoming_renewals ?? counts?.employeeUpcomingRenewals ?? counts?.employee_upcoming ?? employeeUpcomingRenewals,
     },
     {
       id: "org-near-expiry",
@@ -162,8 +166,8 @@ const Reports = () => {
       iconBg: "bg-rose-100 dark:bg-rose-900/30",
       iconColor: "text-rose-600 dark:text-rose-400",
       link: `${basePath}/reports/organization-near-expiry`,
-      count: orgNearExpiry,
-      highlight: orgNearExpiry > 0,
+      count: counts?.company_nearest_expiry ?? counts?.orgNearExpiry ?? counts?.company_nearest ?? orgNearExpiry,
+      highlight: (counts?.company_nearest_expiry ?? counts?.orgNearExpiry ?? counts?.company_nearest ?? orgNearExpiry) > 0,
     },
     {
       id: "org-upcoming-renewals",
@@ -173,7 +177,7 @@ const Reports = () => {
       iconBg: "bg-indigo-100 dark:bg-indigo-900/30",
       iconColor: "text-indigo-600 dark:text-indigo-400",
       link: `${basePath}/reports/organization-upcoming-renewals`,
-      count: orgUpcomingRenewals,
+      count: counts?.company_upcoming_renewals ?? counts?.orgUpcomingRenewals ?? counts?.company_upcoming ?? orgUpcomingRenewals,
     },
   ];
 
