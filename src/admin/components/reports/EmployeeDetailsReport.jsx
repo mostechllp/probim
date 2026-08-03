@@ -30,9 +30,10 @@ const basePath = getBasePath();
   const [currentPage, setCurrentPage] = useState(1);
   const [perPage, setPerPage] = useState(10);
   const [showExportModal, setShowExportModal] = useState(false);
+  const [showViewModal, setShowViewModal] = useState(false);
+  const [selectedEmployee, setSelectedEmployee] = useState(null);
 
   // Filter states
-  const [selectedCompany, setSelectedCompany] = useState("");
   const [selectedDepartment, setSelectedDepartment] = useState("");
   const [selectedStatus, setSelectedStatus] = useState("all");
 
@@ -56,7 +57,6 @@ const basePath = getBasePath();
     setCurrentPage(1);
   }, [
     searchTerm,
-    selectedCompany,
     selectedDepartment,
     selectedStatus,
     perPage,
@@ -90,6 +90,8 @@ const basePath = getBasePath();
       eid_expiry: raw?.eid_expiry_date,
       joining_date: raw?.joining_date,
       // Contact fields
+      company_email: raw?.company_email || "-",
+      personal_email: raw?.personal_email || "-",
       email: raw?.company_email || raw?.personal_email || user?.email || "-",
       phone: raw?.company_mobile_number || raw?.personal_number || "-",
       // Additional fields that might be useful
@@ -106,14 +108,7 @@ const basePath = getBasePath();
     ? employees.map(transformEmployee)
     : [];
 
-  // Get unique companies and departments for filters
-  const uniqueCompanies = [
-    ...new Set(
-      transformedEmployees
-        .map((emp) => emp.company_name)
-        .filter((c) => c !== "-"),
-    ),
-  ];
+  // Get unique departments for filters
   const uniqueDepartments = [
     ...new Set(
       transformedEmployees
@@ -125,11 +120,6 @@ const basePath = getBasePath();
   // Filter employees
   const getFilteredEmployees = () => {
     let filtered = [...transformedEmployees];
-
-    // Apply company filter
-    if (selectedCompany) {
-      filtered = filtered.filter((emp) => emp.company_name === selectedCompany);
-    }
 
     // Apply department filter
     if (selectedDepartment) {
@@ -193,7 +183,6 @@ const basePath = getBasePath();
   };
 
   const handleResetFilters = () => {
-    setSelectedCompany("");
     setSelectedDepartment("");
     setSelectedStatus("all");
     setSearchTerm("");
@@ -227,7 +216,7 @@ const basePath = getBasePath();
       exportToCSV(exportData, headers, `employee_details_${new Date().toISOString().split("T")[0]}.csv`);
     } else if (format === "pdf") {
       generateEmployeeDetailsPDF(filteredEmployees, {
-        company: selectedCompany,
+        company: null,
         department: selectedDepartment,
         status: selectedStatus !== "all" ? selectedStatus : null,
       });
@@ -334,26 +323,7 @@ const basePath = getBasePath();
 
         {/* Filters Bar */}
         <div className="bg-white dark:bg-gray-800 border border-gray-200 dark:border-gray-700 rounded-xl p-4 mb-6">
-          <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
-            {/* Company Filter */}
-            <div>
-              <label className="block text-xs font-semibold text-gray-500 dark:text-gray-400 mb-1">
-                <i className="fas fa-building mr-1"></i> Company
-              </label>
-              <select
-                value={selectedCompany}
-                onChange={(e) => setSelectedCompany(e.target.value)}
-                className="w-full px-3 py-2 bg-gray-50 dark:bg-gray-700 border border-gray-200 dark:border-gray-600 rounded-lg text-sm text-gray-700 dark:text-gray-300 focus:outline-none focus:border-green-500"
-              >
-                <option value="">All Companies</option>
-                {uniqueCompanies.map((company) => (
-                  <option key={company} value={company}>
-                    {company}
-                  </option>
-                ))}
-              </select>
-            </div>
-
+          <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">
             {/* Department Filter */}
             <div>
               <label className="block text-xs font-semibold text-gray-500 dark:text-gray-400 mb-1">
@@ -442,49 +412,28 @@ const basePath = getBasePath();
                     Name
                   </th>
                   <th className="px-3 py-3 text-left text-xs font-semibold text-gray-500 dark:text-gray-400">
-                    Company
-                  </th>
-                  <th className="px-3 py-3 text-left text-xs font-semibold text-gray-500 dark:text-gray-400">
                     Department
                   </th>
                   <th className="px-3 py-3 text-left text-xs font-semibold text-gray-500 dark:text-gray-400">
                     Designation
                   </th>
                   <th className="px-3 py-3 text-left text-xs font-semibold text-gray-500 dark:text-gray-400">
-                    Passport No
-                  </th>
-                  <th className="px-3 py-3 text-left text-xs font-semibold text-gray-500 dark:text-gray-400">
-                    Passport Expiry
-                  </th>
-                  <th className="px-3 py-3 text-left text-xs font-semibold text-gray-500 dark:text-gray-400">
-                    Visa No
-                  </th>
-                  <th className="px-3 py-3 text-left text-xs font-semibold text-gray-500 dark:text-gray-400">
-                    Visa Expiry
-                  </th>
-                  <th className="px-3 py-3 text-left text-xs font-semibold text-gray-500 dark:text-gray-400">
-                    Labor No
-                  </th>
-                  <th className="px-3 py-3 text-left text-xs font-semibold text-gray-500 dark:text-gray-400">
-                    Labor Expiry
-                  </th>
-                  <th className="px-3 py-3 text-left text-xs font-semibold text-gray-500 dark:text-gray-400">
-                    EID No
-                  </th>
-                  <th className="px-3 py-3 text-left text-xs font-semibold text-gray-500 dark:text-gray-400">
-                    EID Expiry
-                  </th>
-                  <th className="px-3 py-3 text-left text-xs font-semibold text-gray-500 dark:text-gray-400">
                     Joining Date
                   </th>
                   <th className="px-3 py-3 text-left text-xs font-semibold text-gray-500 dark:text-gray-400">
-                    Email
+                    Company Email
+                  </th>
+                  <th className="px-3 py-3 text-left text-xs font-semibold text-gray-500 dark:text-gray-400">
+                    Personal Email
                   </th>
                   <th className="px-3 py-3 text-left text-xs font-semibold text-gray-500 dark:text-gray-400">
                     Phone
                   </th>
                   <th className="px-3 py-3 text-left text-xs font-semibold text-gray-500 dark:text-gray-400">
                     Status
+                  </th>
+                  <th className="px-3 py-3 text-left text-xs font-semibold text-gray-500 dark:text-gray-400 text-center">
+                    Action
                   </th>
                 </tr>
               </thead>
@@ -505,51 +454,19 @@ const basePath = getBasePath();
                         {emp.name}
                       </td>
                       <td className="px-3 py-3 text-sm text-gray-600 dark:text-gray-400">
-                        {emp.company_name}
-                      </td>
-                      <td className="px-3 py-3 text-sm text-gray-600 dark:text-gray-400">
                         {emp.department_name}
                       </td>
                       <td className="px-3 py-3 text-sm text-gray-600 dark:text-gray-400">
                         {emp.designation_name}
                       </td>
-                      <td className="px-3 py-3 text-sm font-mono text-gray-600 dark:text-gray-400">
-                        {emp.passport_no}
-                      </td>
-                      <td
-                        className={`px-3 py-3 text-sm ${getExpiryClass(emp.passport_expiry)}`}
-                      >
-                        {formatDate(emp.passport_expiry)}
-                      </td>
-                      <td className="px-3 py-3 text-sm font-mono text-gray-600 dark:text-gray-400">
-                        {emp.visa_no}
-                      </td>
-                      <td
-                        className={`px-3 py-3 text-sm ${getExpiryClass(emp.visa_expiry)}`}
-                      >
-                        {formatDate(emp.visa_expiry)}
-                      </td>
-                      <td className="px-3 py-3 text-sm font-mono text-gray-600 dark:text-gray-400">
-                        {emp.labor_no}
-                      </td>
-                      <td
-                        className={`px-3 py-3 text-sm ${getExpiryClass(emp.labor_expiry)}`}
-                      >
-                        {formatDate(emp.labor_expiry)}
-                      </td>
-                      <td className="px-3 py-3 text-sm font-mono text-gray-600 dark:text-gray-400">
-                        {emp.eid_no}
-                      </td>
-                      <td
-                        className={`px-3 py-3 text-sm ${getExpiryClass(emp.eid_expiry)}`}
-                      >
-                        {formatDate(emp.eid_expiry)}
-                      </td>
                       <td className="px-3 py-3 text-sm text-gray-600 dark:text-gray-400">
                         {formatDate(emp.joining_date)}
                       </td>
                       <td className="px-3 py-3 text-sm text-gray-600 dark:text-gray-400">
-                        {emp.email}
+                        {emp.company_email}
+                      </td>
+                      <td className="px-3 py-3 text-sm text-gray-600 dark:text-gray-400">
+                        {emp.personal_email}
                       </td>
                       <td className="px-3 py-3 text-sm text-gray-600 dark:text-gray-400">
                         {emp.phone}
@@ -566,6 +483,18 @@ const basePath = getBasePath();
                         >
                           {emp.status}
                         </span>
+                      </td>
+                      <td className="px-3 py-3 text-center">
+                        <button
+                          onClick={() => {
+                            setSelectedEmployee(emp);
+                            setShowViewModal(true);
+                          }}
+                          className="w-8 h-8 rounded-full bg-blue-50 dark:bg-blue-900/30 text-blue-600 dark:text-blue-400 flex items-center justify-center hover:bg-blue-100 dark:hover:bg-blue-900/50 transition-colors mx-auto"
+                          title="View Details"
+                        >
+                          <i className="fas fa-eye"></i>
+                        </button>
                       </td>
                     </tr>
                   ))
@@ -595,6 +524,121 @@ const basePath = getBasePath();
           />
         )}
       </main>
+
+      {/* View Details Modal */}
+      {showViewModal && selectedEmployee && (
+        <div className="fixed inset-0 bg-black/50 backdrop-blur-sm flex items-center justify-center z-[1000] p-4">
+          <div className="bg-white dark:bg-gray-800 rounded-2xl max-w-2xl w-full p-6 shadow-soft-lg border border-gray-200 dark:border-gray-700">
+            <div className="flex justify-between items-center mb-6 pb-4 border-b border-gray-200 dark:border-gray-700">
+              <div>
+                <h3 className="text-xl font-bold text-gray-800 dark:text-gray-200">
+                  Document Details
+                </h3>
+                <p className="text-sm text-gray-500 mt-1">
+                  {selectedEmployee.name} ({selectedEmployee.emp_id})
+                </p>
+              </div>
+              <button
+                onClick={() => setShowViewModal(false)}
+                className="w-8 h-8 rounded-full bg-gray-100 dark:bg-gray-700 text-gray-500 hover:text-red-500 hover:bg-red-50 dark:hover:bg-red-900/30 flex items-center justify-center transition-colors"
+              >
+                <i className="fas fa-times"></i>
+              </button>
+            </div>
+
+            <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+              {/* Passport */}
+              <div className="p-4 bg-gray-50 dark:bg-gray-700/50 rounded-xl border border-gray-100 dark:border-gray-600">
+                <div className="flex items-center gap-2 mb-3 text-blue-600 dark:text-blue-400">
+                  <i className="fas fa-passport text-lg"></i>
+                  <h4 className="font-semibold">Passport Details</h4>
+                </div>
+                <div className="space-y-2">
+                  <div>
+                    <p className="text-xs text-gray-500 dark:text-gray-400">Document No.</p>
+                    <p className="text-sm font-medium text-gray-800 dark:text-gray-200">{selectedEmployee.passport_no}</p>
+                  </div>
+                  <div>
+                    <p className="text-xs text-gray-500 dark:text-gray-400">Expiry Date</p>
+                    <p className={`text-sm font-medium ${getExpiryClass(selectedEmployee.passport_expiry) || "text-gray-800 dark:text-gray-200"}`}>
+                      {formatDate(selectedEmployee.passport_expiry)}
+                    </p>
+                  </div>
+                </div>
+              </div>
+
+              {/* Visa */}
+              <div className="p-4 bg-gray-50 dark:bg-gray-700/50 rounded-xl border border-gray-100 dark:border-gray-600">
+                <div className="flex items-center gap-2 mb-3 text-green-600 dark:text-green-400">
+                  <i className="fas fa-id-card text-lg"></i>
+                  <h4 className="font-semibold">Visa Details</h4>
+                </div>
+                <div className="space-y-2">
+                  <div>
+                    <p className="text-xs text-gray-500 dark:text-gray-400">Document No.</p>
+                    <p className="text-sm font-medium text-gray-800 dark:text-gray-200">{selectedEmployee.visa_no}</p>
+                  </div>
+                  <div>
+                    <p className="text-xs text-gray-500 dark:text-gray-400">Expiry Date</p>
+                    <p className={`text-sm font-medium ${getExpiryClass(selectedEmployee.visa_expiry) || "text-gray-800 dark:text-gray-200"}`}>
+                      {formatDate(selectedEmployee.visa_expiry)}
+                    </p>
+                  </div>
+                </div>
+              </div>
+
+              {/* Labor Card */}
+              <div className="p-4 bg-gray-50 dark:bg-gray-700/50 rounded-xl border border-gray-100 dark:border-gray-600">
+                <div className="flex items-center gap-2 mb-3 text-amber-600 dark:text-amber-400">
+                  <i className="fas fa-file-contract text-lg"></i>
+                  <h4 className="font-semibold">Labor Card</h4>
+                </div>
+                <div className="space-y-2">
+                  <div>
+                    <p className="text-xs text-gray-500 dark:text-gray-400">Document No.</p>
+                    <p className="text-sm font-medium text-gray-800 dark:text-gray-200">{selectedEmployee.labor_no}</p>
+                  </div>
+                  <div>
+                    <p className="text-xs text-gray-500 dark:text-gray-400">Expiry Date</p>
+                    <p className={`text-sm font-medium ${getExpiryClass(selectedEmployee.labor_expiry) || "text-gray-800 dark:text-gray-200"}`}>
+                      {formatDate(selectedEmployee.labor_expiry)}
+                    </p>
+                  </div>
+                </div>
+              </div>
+
+              {/* Emirates ID */}
+              <div className="p-4 bg-gray-50 dark:bg-gray-700/50 rounded-xl border border-gray-100 dark:border-gray-600">
+                <div className="flex items-center gap-2 mb-3 text-purple-600 dark:text-purple-400">
+                  <i className="fas fa-address-card text-lg"></i>
+                  <h4 className="font-semibold">Emirates ID</h4>
+                </div>
+                <div className="space-y-2">
+                  <div>
+                    <p className="text-xs text-gray-500 dark:text-gray-400">Document No.</p>
+                    <p className="text-sm font-medium text-gray-800 dark:text-gray-200">{selectedEmployee.eid_no}</p>
+                  </div>
+                  <div>
+                    <p className="text-xs text-gray-500 dark:text-gray-400">Expiry Date</p>
+                    <p className={`text-sm font-medium ${getExpiryClass(selectedEmployee.eid_expiry) || "text-gray-800 dark:text-gray-200"}`}>
+                      {formatDate(selectedEmployee.eid_expiry)}
+                    </p>
+                  </div>
+                </div>
+              </div>
+            </div>
+            
+            <div className="mt-6 pt-4 border-t border-gray-200 dark:border-gray-700 flex justify-end">
+              <button
+                onClick={() => setShowViewModal(false)}
+                className="px-6 py-2 bg-gray-100 hover:bg-gray-200 dark:bg-gray-700 dark:hover:bg-gray-600 text-gray-800 dark:text-gray-200 rounded-full font-medium transition-colors text-sm"
+              >
+                Close
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
 
       {/* Export Modal */}
       {showExportModal && (
