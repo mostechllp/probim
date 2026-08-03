@@ -143,6 +143,7 @@ const AttendanceRequests = lazy(
 const RequestLeaveForEmployee = lazy(
   () => import("./employee/pages/RequestLeaveForEmployees"),
 );
+const EmployeeMyPayroll = lazy(() => import("./employee/pages/MyPayroll"));
 
 // Custom wrapper for lazy-loaded components
 const LazyWrapper = ({ children }) => {
@@ -461,8 +462,7 @@ function App() {
             path="leaves/allocations/:id"
             element={<EditLeaveAllocation />}
           />
-          <Route path="payroll" element={<Payroll />} />
-          <Route path="payroll/add" element={<AddPayroll />} />
+
           <Route path="wfh" element={<AdminWFH />} />
           <Route path="settings" element={<Settings />} />
           <Route path="roles" element={<RoleManagement />} />
@@ -471,10 +471,7 @@ function App() {
             path="project-working-hours"
             element={<ProjectWorkingHours />}
           />
-          <Route path="payroll" element={<Payroll />} />
-          <Route path="payroll/add" element={<AddPayroll />} />
-          <Route path="payroll/:id" element={<PayrollDetails />} />
-          <Route path="payroll/edit/:id" element={<EditPayroll />} />
+          <Route path="payroll" element={<EmployeeMyPayroll />} />
           <Route
             path="request-leave-for-employee"
             element={<RequestLeaveForEmployee />}
