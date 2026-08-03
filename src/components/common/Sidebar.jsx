@@ -24,7 +24,8 @@ const ADMIN_ROUTE_MAP = {
   organizations: "/admin/organizations",
   agreements: "/admin/agreements",
   "role-management": "/admin/role-management",
-  // "my-wfh-requests" is NOT in admin route map - it's employee only
+  wfh: "/admin/wfh",
+  "my-wfh-requests": "/admin/my-wfh-requests",
 };
 
 const EMPLOYEE_ROUTE_MAP = {
@@ -47,6 +48,7 @@ const EMPLOYEE_ROUTE_MAP = {
   "my-tasks": "/employee/my-tasks",
   "my-profile": "/employee/profile",
   "project-assignments": "/employee/project-assignments",
+  wfh: "/employee/wfh",
 };
 
 const ICON_MAP = {
@@ -73,6 +75,7 @@ const ICON_MAP = {
   organizations: "fas fa-building",
   agreements: "fas fa-file",
   "role-management": "fas fa-user-shield",
+  wfh: "fas fa-house-user",
 };
 
 // Configuration for parent menus and their children
@@ -81,21 +84,21 @@ const PARENT_MENU_CONFIG = {
     label: "Leaves",
     icon: "fas fa-calendar-check",
     children: ["leaves", "my-leaves"],
-    roles: ["HR Manager", "hr manager", "HR"],
+    roles: ["HR Manager", "hr manager", "HR", "manager", "team_lead", "Team Lead", "BIM Manager"],
     order: 999,
   },
   tasks: {
     label: "Tasks",
     icon: "fas fa-tasks",
     children: ["task-reports", "my-tasks"],
-    roles: ["HR Manager", "hr manager", "HR"],
+    roles: ["HR Manager", "hr manager", "HR", "manager", "team_lead", "Team Lead", "BIM Manager"],
     order: 1000,
   },
   wfh: {
     label: "WFH Requests",
     icon: "fas fa-house-user",
     children: ["wfh-requests", "my-wfh-requests"],
-    roles: ["HR Manager", "hr manager", "HR"],
+    roles: ["HR Manager", "hr manager", "HR", "manager", "team_lead", "Team Lead", "BIM Manager"],
     order: 998,
   },
 };
@@ -104,7 +107,7 @@ const PARENT_MENU_CONFIG = {
 const ALL_CHILDREN = Object.values(PARENT_MENU_CONFIG).flatMap(config => config.children);
 
 // Define modules that should be hidden (aliases/duplicates)
-const HIDDEN_MODULES = ["role-management", "agreements", "wfh"];
+const HIDDEN_MODULES = ["role-management", "agreements", "wfh"]; // Added wfh back to hidden
 
 // Define order of standalone modules
 const MODULE_ORDER = {
@@ -161,15 +164,34 @@ const Sidebar = ({ isOpen, setIsOpen }) => {
   // Determine which route map to use based on user type
   const activeRouteMap = user?.type === 'admin' ? ADMIN_ROUTE_MAP : EMPLOYEE_ROUTE_MAP;
   
-  // Check if user has specific role
-  const userRole = user?.role?.name;
-  const isHR = user?.type === 'hr' || user?.role?.name === 'HR Manager' || user?.role?.name === 'HR';
+  // Get user role and type
+  const userRole = user?.role?.name || user?.role || "";
+  const userType = user?.type || "";
+  
+  // Check if user is HR
+  const isHR = userType === 'hr' || 
+               userRole === 'HR Manager' || 
+               userRole === 'HR' || 
+               userRole === 'hr manager' ||
+               userRole?.toLowerCase() === 'hr';
+  
+  // Check if user is Manager or Team Lead
+  const isManager = userType === 'manager' || 
+                    userType === 'team_lead' ||
+                    userRole?.toLowerCase().includes('manager') ||
+                    userRole?.toLowerCase().includes('team lead') ||
+                    userRole?.toLowerCase().includes('team_lead') ||
+                    userRole === 'Team Lead' ||
+                    userRole === 'BIM Manager';
   
   // Check if user has all permissions (Super Admin or Admin with all permissions)
   const hasAllPermissions = user?.permissions?.all === true;
   
   // Check if user is admin (either type admin or has all permissions)
-  const isAdmin = user?.type === 'admin' || hasAllPermissions;
+  const isAdmin = userType === 'admin' || hasAllPermissions;
+
+  // Check if user should see parent menus (HR, Manager, Team Lead, or Admin)
+  const shouldShowParentMenus = isHR || isManager || isAdmin;
 
   // Get permissions from user object
   const permissions = user?.permissions || {};
@@ -180,7 +202,7 @@ const Sidebar = ({ isOpen, setIsOpen }) => {
     if (hasAllPermissions) return true;
     
     // If user is admin type, allow all
-    if (user?.type === 'admin') return true;
+    if (userType === 'admin') return true;
     
     // Check specific permission for the module
     const modulePermission = permissions[slug];
@@ -236,11 +258,17 @@ const Sidebar = ({ isOpen, setIsOpen }) => {
     const parentItems = [];
     const standaloneItems = [];
 
-    // Create parent menus for HR role
-    if (isHR || isAdmin) {
+    // Create parent menus for users with appropriate roles
+    if (shouldShowParentMenus) {
       Object.entries(PARENT_MENU_CONFIG).forEach(([parentKey, config]) => {
         // Check if user has access to this parent menu
-        const hasRoleAccess = config.roles.some(role => userRole === role) || isAdmin;
+        const hasRoleAccess = config.roles.some(role => 
+          userRole === role || 
+          userRole?.toLowerCase() === role.toLowerCase() ||
+          userRole?.toLowerCase().includes(role.toLowerCase()) ||
+          userType === role
+        ) || isAdmin;
+        
         if (!hasRoleAccess) return;
 
         // Get children that exist in allModules
@@ -248,7 +276,8 @@ const Sidebar = ({ isOpen, setIsOpen }) => {
           return allModules.includes(child) && hasReadPermission(child);
         });
         
-        // If there are 2 or more children, show as parent menu
+        // Show parent menu if there are 2 or more children
+        // This ensures both admin and employee versions are shown
         if (availableChildren.length >= 2) {
           const children = availableChildren.map(childSlug => {
             const module = user?.sidebar_modules?.find(m => m.slug === childSlug);
@@ -279,7 +308,6 @@ const Sidebar = ({ isOpen, setIsOpen }) => {
           const childSlug = availableChildren[0];
           const module = user?.sidebar_modules?.find(m => m.slug === childSlug);
           
-          // Use the child's name and icon
           const childLabel = module?.name || childSlug;
           const childIcon = ICON_MAP[childSlug] || "fas fa-circle";
           
@@ -289,15 +317,32 @@ const Sidebar = ({ isOpen, setIsOpen }) => {
             label: childLabel,
             path: activeRouteMap[childSlug],
             icon: childIcon,
-            order: (config.order || 500) - 1, // Slightly before the parent would be
+            order: (config.order || 500) - 1,
           });
           
           processedSlugs.add(childSlug);
         }
       });
+    } else {
+      // For regular employees, show my-leaves, my-tasks, my-wfh-requests as standalone
+      const employeeStandalone = ["my-leaves", "my-tasks", "my-wfh-requests"];
+      employeeStandalone.forEach(slug => {
+        if (allModules.includes(slug) && hasReadPermission(slug)) {
+          const module = user?.sidebar_modules?.find(m => m.slug === slug);
+          standaloneItems.push({
+            type: "single",
+            slug: slug,
+            label: module?.name || slug,
+            path: activeRouteMap[slug],
+            icon: ICON_MAP[slug] || "fas fa-circle",
+            order: MODULE_ORDER[slug] || 100,
+          });
+          processedSlugs.add(slug);
+        }
+      });
     }
 
-    // Add all standalone modules
+    // Add all standalone modules (skip children that are already in parent menus)
     allModules.forEach((slug) => {
       if (processedSlugs.has(slug)) return;
       

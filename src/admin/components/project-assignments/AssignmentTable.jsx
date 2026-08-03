@@ -234,7 +234,7 @@ const EmployeeProjectsModal = ({
                   {employeeName}
                 </h3>
                 <p className="text-[10.5px] text-gray-400 dark:text-gray-500 font-semibold mt-1.5 leading-none">
-                  {employeeCode} &bull; {designation} &bull; {department}
+                  {employeeCode} 
                 </p>
               </div>
             </div>
@@ -440,49 +440,50 @@ const AssignmentTable = ({
   const [drawerEmployee, setDrawerEmployee] = useState(null);
 
   // In AssignmentTable.jsx - fullAssignments mapping
-const fullAssignments = useMemo(() => {
-  if (!assignments || !Array.isArray(assignments)) {
-    return [];
-  }
-
-  return assignments.map((assign) => {
-    // Find employee by ID (primary key)
-    const emp = employees && Array.isArray(employees)
-      ? employees.find((e) => Number(e.id) === Number(assign.employeeId))
-      : undefined;
-    
-    let employeeName = emp?.name || "";
-    if (!employeeName && (assign.firstName || assign.lastName)) {
-      employeeName = [assign.firstName, assign.lastName]
-        .filter(Boolean)
-        .join(" ");
+  const fullAssignments = useMemo(() => {
+    if (!assignments || !Array.isArray(assignments)) {
+      return [];
     }
-    if (!employeeName && emp) {
-      employeeName = [emp.first_name, emp.last_name]
-        .filter(Boolean)
-        .join(" ");
-    }
-    if (!employeeName && emp) {
-      employeeName = emp.user?.username || `Employee #${emp.id}`;
-    }
-    if (!employeeName) employeeName = `Employee #${assign.employeeId}`;
 
-    // IMPORTANT: Use emp?.employee_id (from the employee data) as the primary source
-    // Only fallback to assign.employeeCode if emp doesn't have it
-    const employeeCode = emp?.employee_id || assign.employeeCode || `EMP-${assign.employeeId}`;
+    return assignments.map((assign) => {
+      // Find employee by ID (primary key)
+      const emp = employees && Array.isArray(employees)
+        ? employees.find((e) => Number(e.id) === Number(assign.employeeId))
+        : undefined;
+      
+      let employeeName = emp?.name || "";
+      if (!employeeName && (assign.firstName || assign.lastName)) {
+        employeeName = [assign.firstName, assign.lastName]
+          .filter(Boolean)
+          .join(" ");
+      }
+      if (!employeeName && emp) {
+        employeeName = [emp.first_name, emp.last_name]
+          .filter(Boolean)
+          .join(" ");
+      }
+      if (!employeeName && emp) {
+        employeeName = emp.user?.username || `Employee #${emp.id}`;
+      }
+      if (!employeeName) employeeName = `Employee #${assign.employeeId}`;
 
-    return {
-      ...assign,
-      employeeName,
-      employeeCode, // Use the employee's employee_id
-      userId: assign.userId || emp?.user_id || emp?.user?.id || null,
-      designation: emp?.designation || emp?.user?.designation?.name || "-",
-      department: emp?.department || emp?.user?.department?.name || "-",
-      avatar: getPhotoUrl(emp?.avatar) || null,
-      projectCount: assign.projectIds?.length || 0,
-    };
-  });
-}, [assignments, employees]);
+      // IMPORTANT: Use emp?.employee_id (from the employee data) as the primary source
+      // Only fallback to assign.employeeCode if emp doesn't have it
+      const employeeCode = emp?.employee_id || assign.employeeCode || `EMP-${assign.employeeId}`;
+
+      return {
+        ...assign,
+        employeeName,
+        employeeCode, // Use the employee's employee_id
+        userId: assign.userId || emp?.user_id || emp?.user?.id || null,
+        designation: emp?.designation || emp?.user?.designation?.name || "-",
+        department: emp?.department || emp?.user?.department?.name || "-",
+        avatar: getPhotoUrl(emp?.avatar) || null,
+        projectCount: assign.projectIds?.length || 0,
+      };
+    });
+  }, [assignments, employees]);
+
   // Build projects with manager/team lead data from assignments
   const projectsWithDetails = useMemo(() => {
     if (!assignments || !Array.isArray(assignments)) return [];
@@ -604,6 +605,19 @@ const fullAssignments = useMemo(() => {
   const handleOpenDrawer = (assign) => {
     setDrawerEmployee(assign);
     setDrawerOpen(true);
+  };
+
+  // Handle row click - opens the modal
+  const handleRowClick = (assign) => {
+    handleOpenDrawer(assign);
+  };
+
+  // Handle action button click - prevents row click from triggering
+  const handleActionClick = (e, callback, assign) => {
+    e.stopPropagation();
+    if (callback) {
+      callback(assign);
+    }
   };
 
   return (
@@ -739,16 +753,14 @@ const fullAssignments = useMemo(() => {
               paginatedAssignments.map((assign) => (
                 <tr
                   key={assign.employeeId}
-                  className="hover:bg-gray-50/50 dark:hover:bg-gray-700/10 transition-colors group"
+                  onClick={() => handleRowClick(assign)}
+                  className="hover:bg-gray-50/50 dark:hover:bg-gray-700/10 transition-colors group cursor-pointer"
                 >
                   {/* Employee Info Card */}
                   <td className="px-6 py-4 whitespace-nowrap">
                     <div className="flex items-center gap-3">
                       {/* Avatar */}
-                      <div
-                        onClick={() => handleOpenDrawer(assign)}
-                        className="w-8 h-8 rounded-full overflow-hidden bg-gradient-to-br from-green-500/20 to-teal-500/20 dark:from-green-500/10 dark:to-teal-500/10 flex items-center justify-center flex-shrink-0 border border-gray-100 dark:border-gray-700 cursor-pointer hover:ring-2 hover:ring-green-400 transition-all"
-                      >
+                      <div className="w-8 h-8 rounded-full overflow-hidden bg-gradient-to-br from-green-500/20 to-teal-500/20 dark:from-green-500/10 dark:to-teal-500/10 flex items-center justify-center flex-shrink-0 border border-gray-100 dark:border-gray-700 transition-all">
                         {assign.avatar ? (
                           <img
                             src={assign.avatar}
@@ -770,14 +782,8 @@ const fullAssignments = useMemo(() => {
 
                       {/* Details */}
                       <div className="min-w-0">
-                        <span
-                          onClick={() => handleOpenDrawer(assign)}
-                          className="text-sm font-bold text-gray-800 dark:text-gray-200 block hover:text-green-550 cursor-pointer transition-colors"
-                        >
+                        <span className="text-sm font-bold text-gray-800 dark:text-gray-200 block transition-colors">
                           {assign.employeeName}
-                        </span>
-                        <span className="text-[10px] text-gray-400 dark:text-gray-500 block leading-none mt-1 font-semibold">
-                          {assign.designation} &bull; {assign.department}
                         </span>
                       </div>
                     </div>
@@ -803,7 +809,7 @@ const fullAssignments = useMemo(() => {
                     <div className="flex justify-end items-center gap-2">
                       {/* View Assignments (Drawer) */}
                       <button
-                        onClick={() => handleOpenDrawer(assign)}
+                        onClick={(e) => handleActionClick(e, handleOpenDrawer, assign)}
                         title="View Assignments Card"
                         className="w-8 h-8 rounded-lg bg-blue-500/10 hover:bg-blue-500 text-blue-550 hover:text-white flex items-center justify-center transition-all shadow-sm hover:shadow-soft"
                       >
@@ -812,7 +818,7 @@ const fullAssignments = useMemo(() => {
 
                       {/* Edit Button */}
                       <button
-                        onClick={() => onEdit(assign)}
+                        onClick={(e) => handleActionClick(e, onEdit, assign)}
                         title="Edit Assignment"
                         className="w-8 h-8 rounded-lg bg-green-500/10 hover:bg-green-500 text-green-500 hover:text-white flex items-center justify-center transition-all shadow-sm hover:shadow-soft"
                       >
@@ -821,7 +827,7 @@ const fullAssignments = useMemo(() => {
 
                       {/* Delete Button */}
                       <button
-                        onClick={() => onDelete(assign)}
+                        onClick={(e) => handleActionClick(e, onDelete, assign)}
                         title="Delete Assignment"
                         className="w-8 h-8 rounded-lg bg-red-500/10 hover:bg-red-500 text-red-500 hover:text-white flex items-center justify-center transition-all shadow-sm hover:shadow-soft"
                       >
