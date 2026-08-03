@@ -45,23 +45,15 @@ export const fetchAttendanceReport = createAsyncThunk(
     const meta = response.data?.data?.meta || {};
 
     return {
-      data: apiData.map((record) => ({
-        ...record,
-        employeeName: record.name,
-        punchIn: record.punch_in,
-        punchOut: record.punch_out,
-        workedHours: record.worked_hours,
-        attendance_status: record.status,
-        // Keep original fields for compatibility
-        id: record.employee_id,
-        name: record.name,
-        department: record.department,
-        company: record.company,
-        date: record.date,
-        punch_in: record.punch_in,
-        punch_out: record.punch_out,
-        working_hours: record.worked_hours,
-        status: record.status,
+      data: apiData.map((emp) => ({
+        id: emp.employee_id,
+        user_id: emp.user_id,
+        name: emp.name,
+        employeeName: emp.name, // for compatibility
+        department: emp.department,
+        designation: emp.designation,
+        company: emp.company,
+        attendance: emp.attendance || []
       })),
       total: meta.total || 0,
       current_page: meta.current_page || 1,
@@ -121,13 +113,15 @@ export const fetchAllAttendanceReport = createAsyncThunk(
     }
 
     return {
-      data: allData.map((record) => ({
-        ...record,
-        employeeName: record.name,
-        punchIn: record.punch_in,
-        punchOut: record.punch_out,
-        workedHours: record.worked_hours,
-        attendance_status: record.status,
+      data: allData.map((emp) => ({
+        id: emp.employee_id,
+        user_id: emp.user_id,
+        name: emp.name,
+        employeeName: emp.name,
+        department: emp.department,
+        designation: emp.designation,
+        company: emp.company,
+        attendance: emp.attendance || []
       })),
       total: allData.length,
     };
@@ -310,19 +304,24 @@ export const fetchEmployeeAttendanceForCalendar = createAsyncThunk(
       const apiData = response.data?.data?.data || [];
       const meta = response.data?.data?.meta || {};
 
+      let attendanceRecords = [];
+      if (apiData.length > 0) {
+         attendanceRecords = apiData[0].attendance || [];
+      }
+
       // Map the data to include all necessary fields
-      const mappedData = apiData.map((record) => ({
+      const mappedData = attendanceRecords.map((record) => ({
         ...record,
-        employeeName: record.name,
+        employeeName: apiData[0]?.name,
         punchIn: record.punch_in,
         punchOut: record.punch_out,
         workedHours: record.worked_hours,
         attendance_status: record.status,
         // Keep original fields for compatibility
-        id: record.employee_id,
-        name: record.name,
-        department: record.department,
-        company: record.company,
+        id: apiData[0]?.employee_id,
+        name: apiData[0]?.name,
+        department: apiData[0]?.department,
+        company: apiData[0]?.company,
         date: record.date,
         punch_in: record.punch_in,
         punch_out: record.punch_out,
@@ -375,26 +374,28 @@ export const fetchEmployeeDailyAttendance = createAsyncThunk(
       });
 
       const apiData = response.data?.data?.data || [];
-      const record = apiData.length > 0 ? apiData[0] : null;
+      const employeeData = apiData.length > 0 ? apiData[0] : null;
 
-      if (!record) {
+      if (!employeeData || !employeeData.attendance || employeeData.attendance.length === 0) {
         return {
           employeeId,
           date,
           data: null,
         };
       }
+      
+      const record = employeeData.attendance[0];
 
       const mappedRecord = {
         ...record,
-        employeeName: record.name,
+        employeeName: employeeData.name,
         punchIn: record.punch_in,
         punchOut: record.punch_out,
         workedHours: record.worked_hours,
         attendance_status: record.status,
-        id: record.employee_id,
-        name: record.name,
-        department: record.department,
+        id: employeeData.employee_id,
+        name: employeeData.name,
+        department: employeeData.department,
         date: record.date,
         punch_in: record.punch_in,
         punch_out: record.punch_out,
@@ -519,6 +520,33 @@ export const fetchLeavesReport = createAsyncThunk(
     } catch (error) {
       return rejectWithValue(
         error.response?.data?.message || "Failed to fetch leaves report",
+      );
+    }
+  },
+);
+
+// ==================== Project Report ====================
+export const fetchProjectReport = createAsyncThunk(
+  "reports/fetchProjectReport",
+  async (params, { rejectWithValue }) => {
+    try {
+      const apiParams = {
+        page: params.page || 1,
+        per_page: params.per_page || 10,
+        date_range: params.date_range || (params.start_date ? "custom" : "all"),
+        from_date: params.start_date || params.from_date,
+        to_date: params.end_date || params.to_date,
+        search: params.search,
+        status: params.status !== "all" ? params.status : undefined,
+      };
+
+      const response = await apiClient.get("/admin/reports/projects", {
+        params: apiParams,
+      });
+      return response.data;
+    } catch (error) {
+      return rejectWithValue(
+        error.response?.data?.message || "Failed to fetch project report",
       );
     }
   },
@@ -778,6 +806,15 @@ const initialState = {
   leavesPerPage: 10,
   leavesLastPage: 1,
 
+  // Project Report
+  projectReportRecords: [],
+  projectReportLoading: false,
+  projectReportError: null,
+  projectReportTotalCount: 0,
+  projectReportCurrentPage: 1,
+  projectReportPerPage: 10,
+  projectReportLastPage: 1,
+
   // Employees Basic Report
   basicEmployees: [],
   basicEmployeesLoading: false,
@@ -1019,6 +1056,25 @@ const reportSlice = createSlice({
         state.leavesError = action.payload;
       })
 
+      // ==================== Project Report ====================
+      .addCase(fetchProjectReport.pending, (state) => {
+        state.projectReportLoading = true;
+        state.projectReportError = null;
+      })
+      .addCase(fetchProjectReport.fulfilled, (state, action) => {
+        state.projectReportLoading = false;
+        const responseData = action.payload?.data || action.payload;
+        state.projectReportRecords = responseData?.data || responseData || [];
+        state.projectReportTotalCount = responseData?.total || 0;
+        state.projectReportCurrentPage = responseData?.current_page || 1;
+        state.projectReportPerPage = responseData?.per_page || 10;
+        state.projectReportLastPage = responseData?.last_page || 1;
+      })
+      .addCase(fetchProjectReport.rejected, (state, action) => {
+        state.projectReportLoading = false;
+        state.projectReportError = action.payload;
+      })
+
       // ==================== Employees Basic Report ====================
       .addCase(fetchEmployeesReport.pending, (state) => {
         state.basicEmployeesLoading = true;
@@ -1218,6 +1274,17 @@ export const selectLeavesPagination = (state) => ({
   currentPage: state.reports.leavesCurrentPage,
   perPage: state.reports.leavesPerPage,
   lastPage: state.reports.leavesLastPage,
+});
+
+// Project Report Selectors
+export const selectProjectReportRecords = (state) => state.reports.projectReportRecords;
+export const selectProjectReportLoading = (state) => state.reports.projectReportLoading;
+export const selectProjectReportError = (state) => state.reports.projectReportError;
+export const selectProjectReportPagination = (state) => ({
+  total: state.reports.projectReportTotalCount,
+  currentPage: state.reports.projectReportCurrentPage,
+  perPage: state.reports.projectReportPerPage,
+  lastPage: state.reports.projectReportLastPage,
 });
 
 // Employee Details Selectors
