@@ -41,6 +41,7 @@ const EMPLOYEE_ROUTE_MAP = {
   leaves: "/employee/leave-management",
   "my-leaves": "/employee/leaves",
   "my-wfh-requests": "/employee/wfh",
+  "wfh-requests": "/employee/wfh",
   payroll: "/employee/payroll",
   roles: "/employee/roles",
   "my-tasks": "/employee/my-tasks",
@@ -300,8 +301,7 @@ const Sidebar = ({ isOpen, setIsOpen }) => {
     allModules.forEach((slug) => {
       if (processedSlugs.has(slug)) return;
       
-      // Skip children if they are in parent menus
-      if (ALL_CHILDREN.includes(slug)) return;
+      
 
       const module = user?.sidebar_modules?.find(m => m.slug === slug);
       standaloneItems.push({
