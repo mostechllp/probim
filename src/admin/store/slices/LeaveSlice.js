@@ -19,6 +19,11 @@ const transformAdminLeaveData = (leave) => {
     }
   }
   
+  // Get approval statuses
+  // Check if the leave has been approved by team lead or manager
+  const isTeamLeadApproved = leave.is_team_lead_approved === true || leave.is_team_lead_approved === 1;
+  const isManagerApproved = leave.is_manager_approved === true || leave.is_manager_approved === 1;
+  
   return {
     id: leave.id,
     employee_name:
@@ -52,6 +57,11 @@ const transformAdminLeaveData = (leave) => {
     rejection_reason: leave.rejection_reason || leave.admin_remark || null,
     admin_remark: leave.admin_remark || null,
     applied_by: leave.applied_by || null,
+    // Add approval fields
+    is_team_lead_approved: isTeamLeadApproved,
+    is_manager_approved: isManagerApproved,
+    approved_by: leave.approved_by || null,
+    remarks: leave.remarks || null,
     raw: leave,
   };
 };
@@ -116,15 +126,29 @@ export const fetchLeaveById = createAsyncThunk(
 export const updateLeaveStatus = createAsyncThunk(
   "leaves/updateStatus",
   async (
-    { id, status, processedBy, rejection_reason },
+    { id, status, processedBy, rejection_reason, approved_by, remarks },
     { rejectWithValue },
   ) => {
-    try {
-      const response = await apiClient.post(`/admin/leaves/${id}/status`, {
+     try {
+      const payload = {
         status,
         processed_by: processedBy,
         rejection_reason: rejection_reason || null,
-      });
+      };
+
+      // Add remark if provided
+      if (remarks) {
+        payload.remarks = remarks;
+      }
+
+      // Add approved_by if provided
+      if (approved_by) {
+        payload.approved_by = approved_by;
+      }
+
+      console.log("Update leave status payload:", payload);
+
+      const response = await apiClient.post(`/admin/leaves/${id}/status`, payload);
 
       let updatedLeave = response.data?.data || response.data;
       return transformAdminLeaveData(updatedLeave);

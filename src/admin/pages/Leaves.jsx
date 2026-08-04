@@ -80,6 +80,7 @@ const Leaves = () => {
   const [managerActionLeave, setManagerActionLeave] = useState(null);
   const [managerRemark, setManagerRemark] = useState("");
   const [managerActionLoading, setManagerActionLoading] = useState(false);
+  const [remarkError, setRemarkError] = useState("");
 
   // Delete confirm states
   const [deleteConfirmOpen, setDeleteConfirmOpen] = useState(false);
@@ -90,6 +91,16 @@ const Leaves = () => {
     user?.type === "manager" ||
     user?.type === "team_lead" ||
     user?.role?.name?.toLowerCase().includes("manager") ||
+    user?.role?.name?.toLowerCase().includes("team lead");
+
+  // Check if user is manager specifically
+  const isManager =
+    user?.type === "manager" ||
+    user?.role?.name?.toLowerCase().includes("manager");
+
+  // Check if user is team lead specifically
+  const isTeamLead =
+    user?.type === "team_lead" ||
     user?.role?.name?.toLowerCase().includes("team lead");
 
   // Check if user is admin or HR (has full permissions)
@@ -218,21 +229,41 @@ const Leaves = () => {
     setManagerActionLeave(leave);
     setManagerActionType(action);
     setManagerRemark("");
+    setRemarkError("");
     setManagerActionModalOpen(true);
   };
 
   const handleManagerActionConfirm = async () => {
     if (!managerActionLeave) return;
 
+    // Validate remark is required
+    if (!managerRemark.trim()) {
+      setRemarkError("Remark is required");
+      return;
+    }
+
     setManagerActionLoading(true);
 
     const status = managerActionType === "approve" ? "approved" : "rejected";
+
+    // Determine who is approving/rejecting
+    let approvedBy = null;
+    if (isManager) {
+      approvedBy = "manager";
+    } else if (isTeamLead) {
+      approvedBy = "team_lead";
+    } else if (isAdminOrHR) {
+      approvedBy = "admin";
+    }
+
     const result = await dispatch(
       updateLeaveStatus({
         id: managerActionLeave.id,
         status: status,
         processedBy: user?.username || user?.name || "Manager",
         rejection_reason: managerActionType === "reject" ? managerRemark : null,
+        approved_by: approvedBy,
+        remarks: managerRemark,
       }),
     );
 
@@ -245,6 +276,7 @@ const Leaves = () => {
       setManagerActionLeave(null);
       setManagerActionType(null);
       setManagerRemark("");
+      setRemarkError("");
       dispatch(fetchLeaves());
     } else {
       showToast(
@@ -280,6 +312,9 @@ const Leaves = () => {
         status: actionType === "approve" ? "approved" : "rejected",
         processedBy: user?.username || "HR Admin",
         rejection_reason: actionType === "reject" ? rejectionReason : null,
+        approved_by: "admin",
+        remarks:
+          actionType === "approve" ? "Approved by Admin/HR" : rejectionReason,
       }),
     );
 
@@ -530,6 +565,28 @@ const Leaves = () => {
     setActionLoading(false);
   };
 
+  // Helper to get approval status badge
+  const getApprovalBadge = (isApproved) => {
+    if (isApproved === true) {
+      return (
+        <span className="inline-flex items-center px-2 py-0.5 rounded-full text-xs font-medium bg-green-100 text-green-800 dark:bg-green-900/30 dark:text-green-400">
+          <i className="fas fa-check-circle mr-1 text-xs"></i> Approved
+        </span>
+      );
+    } else if (isApproved === false) {
+      return (
+        <span className="inline-flex items-center px-2 py-0.5 rounded-full text-xs font-medium bg-red-100 text-red-800 dark:bg-red-900/30 dark:text-red-400">
+          <i className="fas fa-times-circle mr-1 text-xs"></i> Rejected
+        </span>
+      );
+    }
+    return (
+      <span className="inline-flex items-center px-2 py-0.5 rounded-full text-xs font-medium bg-gray-100 text-gray-600 dark:bg-gray-700 dark:text-gray-400">
+        <i className="fas fa-clock mr-1 text-xs"></i> Pending
+      </span>
+    );
+  };
+
   // Calculate stats
   const leavesArray = Array.isArray(leaves) ? leaves : [];
   const total = leavesArray.length;
@@ -596,6 +653,10 @@ const Leaves = () => {
       (isManagerOrTeamLead || user?.type === "admin" || user?.type === "hr")
     );
   };
+
+  // Determine which approval columns to show
+  const showTeamLeadApproval = isAdminOrHR || isManager;
+  const showManagerApproval = isAdminOrHR;
 
   return (
     <div className="w-full overflow-x-hidden">
@@ -771,6 +832,17 @@ const Leaves = () => {
                 <th className="px-3 md:px-4 py-2 md:py-3 text-left text-[10px] md:text-xs font-semibold text-gray-500 dark:text-gray-400">
                   Status
                 </th>
+                {/* Approval columns - conditional */}
+                {showTeamLeadApproval && (
+                  <th className="px-3 md:px-4 py-2 md:py-3 text-left text-[10px] md:text-xs font-semibold text-gray-500 dark:text-gray-400">
+                    Team Lead
+                  </th>
+                )}
+                {showManagerApproval && (
+                  <th className="px-3 md:px-4 py-2 md:py-3 text-left text-[10px] md:text-xs font-semibold text-gray-500 dark:text-gray-400">
+                    Manager
+                  </th>
+                )}
                 <th className="px-3 md:px-4 py-2 md:py-3 text-left text-[10px] md:text-xs font-semibold text-gray-500 dark:text-gray-400">
                   Processed By
                 </th>
@@ -870,6 +942,17 @@ const Leaves = () => {
                           {leave.status || "pending"}
                         </span>
                       </td>
+                      {/* Approval columns - conditional */}
+                      {showTeamLeadApproval && (
+                        <td className="px-3 md:px-4 py-2 md:py-3">
+                          {getApprovalBadge(leave.is_team_lead_approved)}
+                        </td>
+                      )}
+                      {showManagerApproval && (
+                        <td className="px-3 md:px-4 py-2 md:py-3">
+                          {getApprovalBadge(leave.is_manager_approved)}
+                        </td>
+                      )}
                       <td className="px-3 md:px-4 py-2 md:py-3 text-xs md:text-sm text-gray-600 dark:text-gray-400 whitespace-nowrap">
                         {leave.processed_by ||
                           leave.processedBy ||
@@ -939,7 +1022,11 @@ const Leaves = () => {
               ) : (
                 <tr>
                   <td
-                    colSpan="13"
+                    colSpan={
+                      13 +
+                      (showTeamLeadApproval ? 1 : 0) +
+                      (showManagerApproval ? 1 : 0)
+                    }
                     className="px-4 py-8 text-center text-gray-500 dark:text-gray-400"
                   >
                     No leave requests found
@@ -984,6 +1071,7 @@ const Leaves = () => {
                   setManagerActionLeave(null);
                   setManagerActionType(null);
                   setManagerRemark("");
+                  setRemarkError("");
                 }}
                 className="p-2 hover:bg-gray-100 dark:hover:bg-gray-700 rounded-lg transition-colors"
               >
@@ -1018,19 +1106,34 @@ const Leaves = () => {
             <div className="mb-4">
               <label className="block text-sm font-semibold text-gray-700 dark:text-gray-300 mb-2">
                 {managerActionType === "approve" ? "Approval" : "Rejection"}{" "}
-                Remark
+                Remark <span className="text-red-500">*</span>
               </label>
               <textarea
                 value={managerRemark}
-                onChange={(e) => setManagerRemark(e.target.value)}
+                onChange={(e) => {
+                  setManagerRemark(e.target.value);
+                  if (e.target.value.trim()) {
+                    setRemarkError("");
+                  }
+                }}
                 rows="4"
-                className="w-full px-3 py-2 bg-gray-50 dark:bg-gray-900 border border-gray-200 dark:border-gray-700 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-amber-500"
+                className={`w-full px-3 py-2 bg-gray-50 dark:bg-gray-900 border rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-amber-500 ${
+                  remarkError
+                    ? "border-red-500 focus:border-red-500 focus:ring-red-500/20"
+                    : "border-gray-200 dark:border-gray-700"
+                }`}
                 placeholder={
                   managerActionType === "approve"
-                    ? "Add approval notes (optional)..."
-                    : "Provide reason for rejection..."
+                    ? "Add approval notes (required)..."
+                    : "Provide reason for rejection (required)..."
                 }
               />
+              {remarkError && (
+                <p className="text-xs text-red-500 mt-1">
+                  <i className="fas fa-exclamation-circle mr-1"></i>
+                  {remarkError}
+                </p>
+              )}
               {managerActionType === "reject" && (
                 <p className="text-xs text-gray-500 mt-1">
                   <i className="fas fa-info-circle mr-1"></i>
@@ -1047,6 +1150,7 @@ const Leaves = () => {
                   setManagerActionLeave(null);
                   setManagerActionType(null);
                   setManagerRemark("");
+                  setRemarkError("");
                 }}
                 className="px-4 py-2 rounded-lg font-semibold bg-gray-100 dark:bg-gray-700 text-gray-700 dark:text-gray-300 hover:bg-gray-200 dark:hover:bg-gray-600 transition-colors"
               >
