@@ -5,16 +5,22 @@ import SearchBar from "../common/SearchBar";
 import EntriesSelector from "../common/EntriesSelector";
 import { showToast } from "../../../components/common/Toast";
 import Pagination from "../common/Paginations";
-import { fetchCompanyNearestExpiryReport } from "../../store/slices/reportSlice";
+import {
+  fetchCompanyNearestExpiryReport,
+  selectCompanyNearestExpiry,
+  selectCompanyNearestExpiryLoading,
+  selectCompanyNearestExpiryPagination
+} from "../../store/slices/reportSlice";
 import ExportModal from "../../../components/common/ExportModal";
 import { exportToCSV, formatDate, getDaysDifference } from "../../../utils/reportUtils";
-import { generateCompanyExpiryPDF } from "../../../utils/reportPDFConfigs";
+import apiClient from "../../../utils/apiClient";
 
 const CompanyNearestExpiryReport = () => {
   const dispatch = useDispatch();
-  const { organizations = [], loading } = useSelector(
-    (state) => state.organizations || {},
-  );
+  const rawOrganizations = useSelector(selectCompanyNearestExpiry) || [];
+  const loading = useSelector(selectCompanyNearestExpiryLoading);
+  const pagination = useSelector(selectCompanyNearestExpiryPagination);
+  const organizations = Array.isArray(rawOrganizations) ? rawOrganizations : [];
 
   // Local state
   const [currentPage, setCurrentPage] = useState(1);
@@ -30,11 +36,11 @@ const CompanyNearestExpiryReport = () => {
       fetchCompanyNearestExpiryReport({
         page: currentPage,
         per_page: perPage,
-        start_date: "2024-01-01",
-        end_date: "2024-01-31",
-      }),
+        expiry_days: expiryDays,
+        search: searchTerm || undefined,
+      })
     );
-  }, [dispatch]);
+  }, [dispatch, currentPage, perPage, expiryDays, searchTerm]);
 
   // Reset to first page when filters change
   useEffect(() => {
@@ -107,13 +113,7 @@ const CompanyNearestExpiryReport = () => {
       });
     }
 
-    let filtered = allCompanies.filter((company) => {
-      // Check if any document is expiring within the selected days
-      return (
-        isWithinExpiry(company.trade_license_expiry) ||
-        isWithinExpiry(company.establishment_card_expiry)
-      );
-    });
+    let filtered = [...allCompanies];
 
     // Apply search term
     if (searchTerm) {
@@ -172,11 +172,12 @@ const CompanyNearestExpiryReport = () => {
     }));
   };
 
+  // Backend returns only current page data
   const filteredCompanies = getCompaniesWithNearestExpiry();
-  const totalFiltered = filteredCompanies.length;
-  const totalPages = Math.ceil(totalFiltered / perPage);
-  const start = (currentPage - 1) * perPage;
-  const pageCompanies = filteredCompanies.slice(start, start + perPage);
+  const totalFiltered = pagination?.total || filteredCompanies.length;
+  const totalPages = pagination?.lastPage || Math.ceil(totalFiltered / perPage);
+  const start = 0; // backend handles pagination
+  const pageCompanies = filteredCompanies;
 
   const handleResetFilters = () => {
     setExpiryDays(30);
@@ -187,7 +188,7 @@ const CompanyNearestExpiryReport = () => {
 
   const handleExport = async (format) => {
     const exportData = getExportData();
-    
+
     if (exportData.length === 0) {
       showToast("No data to export", "warning");
       return;
@@ -211,12 +212,22 @@ const CompanyNearestExpiryReport = () => {
       exportToCSV(exportData, headers, `${filename}.csv`);
       showToast("Company expiry data exported successfully!", "success");
     } else if (format === "pdf") {
-      generateCompanyExpiryPDF(filteredCompanies, "Company Document Expiry Report", {
-        expiryDays: expiryDays,
-        search: searchTerm || null,
-        generated_date: new Date().toISOString(),
-      });
-      showToast("PDF report generated successfully!", "success");
+      try {
+        const response = await apiClient.post('/admin/reports/export', 
+          { report_type: 'company_nearest_expiry', format: 'pdf' },
+          { responseType: 'blob' }
+        );
+        const url = window.URL.createObjectURL(new Blob([response.data]));
+        const link = document.createElement('a');
+        link.href = url;
+        link.setAttribute('download', `${filename}.pdf`);
+        document.body.appendChild(link);
+        link.click();
+        document.body.removeChild(link);
+        showToast("PDF report generated successfully!", "success");
+      } catch (error) {
+        showToast("Failed to download PDF report", "error");
+      }
     }
   };
 
@@ -510,7 +521,7 @@ const CompanyNearestExpiryReport = () => {
                             className="border-b border-gray-200 dark:border-gray-700 hover:bg-gray-50 dark:hover:bg-gray-700/50 transition-colors"
                           >
                             <td className="px-3 md:px-4 py-2 md:py-3 text-xs md:text-sm text-gray-600 dark:text-gray-400 text-center">
-                              {start + idx + 1}
+                              {(currentPage - 1) * perPage + idx + 1}
                             </td>
                             <td className="px-3 md:px-4 py-2 md:py-3 text-xs md:text-sm font-semibold text-gray-800 dark:text-gray-200">
                               {company.name}
@@ -526,13 +537,12 @@ const CompanyNearestExpiryReport = () => {
                             <td className="px-3 md:px-4 py-2 md:py-3 text-xs md:text-sm">
                               {tlDays !== null && tlDays >= 0 ? (
                                 <span
-                                  className={`inline-flex items-center gap-1 px-2 py-1 rounded-full text-xs font-semibold ${
-                                    tlDays <= 7
+                                  className={`inline-flex items-center gap-1 px-2 py-1 rounded-full text-xs font-semibold ${tlDays <= 7
                                       ? "bg-red-100 text-red-700 dark:bg-red-900/30 dark:text-red-400"
                                       : tlDays <= 15
                                         ? "bg-amber-100 text-amber-700 dark:bg-amber-900/30 dark:text-amber-400"
                                         : "bg-yellow-100 text-yellow-700 dark:bg-yellow-900/30 dark:text-yellow-400"
-                                  }`}
+                                    }`}
                                 >
                                   <i className="fas fa-hourglass-half text-[10px]"></i>
                                   {tlDays} days
@@ -552,13 +562,12 @@ const CompanyNearestExpiryReport = () => {
                             <td className="px-3 md:px-4 py-2 md:py-3 text-xs md:text-sm">
                               {ecDays !== null && ecDays >= 0 ? (
                                 <span
-                                  className={`inline-flex items-center gap-1 px-2 py-1 rounded-full text-xs font-semibold ${
-                                    ecDays <= 7
+                                  className={`inline-flex items-center gap-1 px-2 py-1 rounded-full text-xs font-semibold ${ecDays <= 7
                                       ? "bg-red-100 text-red-700 dark:bg-red-900/30 dark:text-red-400"
                                       : ecDays <= 15
                                         ? "bg-amber-100 text-amber-700 dark:bg-amber-900/30 dark:text-amber-400"
                                         : "bg-yellow-100 text-yellow-700 dark:bg-yellow-900/30 dark:text-yellow-400"
-                                  }`}
+                                    }`}
                                 >
                                   <i className="fas fa-hourglass-half text-[10px]"></i>
                                   {ecDays} days

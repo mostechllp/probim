@@ -5,28 +5,32 @@ import SearchBar from "../common/SearchBar";
 import EntriesSelector from "../common/EntriesSelector";
 import { showToast } from "../../../components/common/Toast";
 import Pagination from "../common/Paginations";
-import { fetchLeavesReport } from "../../store/slices/reportSlice";
+import {
+  fetchLeavesReport,
+  selectLeaveRecords,
+  selectLeavesLoading,
+  selectLeavesPagination
+} from "../../store/slices/reportSlice";
 import { clearError } from "../../store/slices/LeaveSlice";
 import ExportModal from "../../../components/common/ExportModal";
 import { exportToCSV, formatDate } from "../../../utils/reportUtils";
-import { generateLeavesPDF } from "../../../utils/reportPDFConfigs";
+import apiClient from "../../../utils/apiClient";
 
 const LeaveRequestReports = () => {
   const dispatch = useDispatch();
-const location = useLocation();
+  const location = useLocation();
 
-// Determine base path based on current route
-const getBasePath = () => {
-  if (location.pathname.startsWith('/admin')) return '/admin';
-  if (location.pathname.startsWith('/employee')) return '/employee';
-  return '';
-};
-const basePath = getBasePath();
-  const {
-    leaves = [],
-    loading,
-    error = null,
-  } = useSelector((state) => state.leaves || { leaves: [] });
+  // Determine base path based on current route
+  const getBasePath = () => {
+    if (location.pathname.startsWith('/admin')) return '/admin';
+    if (location.pathname.startsWith('/employee')) return '/employee';
+    return '';
+  };
+  const basePath = getBasePath();
+  const rawLeaves = useSelector(selectLeaveRecords) || [];
+  const loading = useSelector(selectLeavesLoading);
+  const pagination = useSelector(selectLeavesPagination);
+  const leaves = Array.isArray(rawLeaves) ? rawLeaves : [];
 
   // Local state
   const [currentPage, setCurrentPage] = useState(1);
@@ -46,19 +50,18 @@ const basePath = getBasePath();
       fetchLeavesReport({
         page: currentPage,
         per_page: perPage,
-        start_date: "2024-01-01",
-        end_date: "2024-01-31",
-      }),
+        status: selectedStatus !== "all" ? selectedStatus : undefined,
+        leave_type: selectedLeaveType !== "all" ? selectedLeaveType : undefined,
+        date_range: dateRange !== "all" ? dateRange : undefined,
+        start_date: startDate || undefined,
+        end_date: endDate || undefined,
+        search: searchTerm || undefined,
+      })
     );
-  }, [dispatch]);
+  }, [dispatch, currentPage, perPage, selectedStatus, selectedLeaveType, dateRange, startDate, endDate, searchTerm]);
 
-  // Handle errors
-  useEffect(() => {
-    if (error) {
-      showToast(error, "error");
-      dispatch(clearError());
-    }
-  }, [error, dispatch]);
+  // Handle errors globally or omit
+  // Note: leavesSlice error is not available here anymore
 
   // Reset to first page when filters change
   useEffect(() => {
@@ -189,11 +192,12 @@ const basePath = getBasePath();
     return filtered;
   };
 
+  // Backend returns only current page data
   const filteredLeaves = getFilteredLeaves();
-  const totalFiltered = filteredLeaves.length;
-  const totalPages = Math.ceil(totalFiltered / perPage);
-  const start = (currentPage - 1) * perPage;
-  const pageLeaves = filteredLeaves.slice(start, start + perPage);
+  const totalFiltered = pagination?.total || filteredLeaves.length;
+  const totalPages = pagination?.lastPage || Math.ceil(totalFiltered / perPage);
+  const start = 0; // backend handles pagination
+  const pageLeaves = filteredLeaves;
 
   const handleResetFilters = () => {
     setSelectedStatus("all");
@@ -208,7 +212,7 @@ const basePath = getBasePath();
 
   const handleExport = async (format) => {
     const exportData = getExportData();
-    
+
     if (exportData.length === 0) {
       showToast("No data to export", "warning");
       return;
@@ -230,17 +234,22 @@ const basePath = getBasePath();
       exportToCSV(exportData, headers, `${filename}.csv`);
       showToast("Leave requests exported successfully!", "success");
     } else if (format === "pdf") {
-      // Get filter summary for PDF
-      const filters = {
-        status: selectedStatus !== "all" ? selectedStatus : null,
-        leave_type: selectedLeaveType !== "all" ? selectedLeaveType : null,
-        date_range: dateRange !== "all" ? dateRange : null,
-        start_date: startDate || null,
-        end_date: endDate || null,
-      };
-      
-      generateLeavesPDF(filteredLeaves, filters);
-      showToast("PDF report generated successfully!", "success");
+      try {
+        const response = await apiClient.post('/admin/reports/export', 
+          { report_type: 'leave', format: 'pdf' },
+          { responseType: 'blob' }
+        );
+        const url = window.URL.createObjectURL(new Blob([response.data]));
+        const link = document.createElement('a');
+        link.href = url;
+        link.setAttribute('download', `${filename}.pdf`);
+        document.body.appendChild(link);
+        link.click();
+        document.body.removeChild(link);
+        showToast("PDF report generated successfully!", "success");
+      } catch (error) {
+        showToast("Failed to download PDF report", "error");
+      }
     }
   };
 
@@ -296,11 +305,11 @@ const basePath = getBasePath();
         <div className="mb-6">
           <div className="flex items-center gap-2 text-xs md:text-sm mb-4 md:mb-6 flex-wrap">
             <Link
-  to={`${basePath}/reports`}
-  className="text-green-500 hover:text-green-600 font-medium"
->
-  Reports
-</Link>
+              to={`${basePath}/reports`}
+              className="text-green-500 hover:text-green-600 font-medium"
+            >
+              Reports
+            </Link>
             <i className="fas fa-chevron-right text-gray-400 text-[10px] md:text-xs"></i>
             <span className="text-gray-500">Leave Request Report</span>
           </div>
@@ -553,7 +562,7 @@ const basePath = getBasePath();
                           className="border-b border-gray-200 dark:border-gray-700 hover:bg-gray-50 dark:hover:bg-gray-700/50 transition-colors"
                         >
                           <td className="px-3 md:px-4 py-2 md:py-3 text-xs md:text-sm text-gray-600 dark:text-gray-400 text-center">
-                            {start + idx + 1}
+                            {(currentPage - 1) * perPage + idx + 1}
                           </td>
                           <td className="px-3 md:px-4 py-2 md:py-3 text-xs md:text-sm text-gray-600 dark:text-gray-400 whitespace-nowrap">
                             {formatDate(leave.created_at || leave.request_date)}

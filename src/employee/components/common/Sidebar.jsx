@@ -26,6 +26,7 @@ const Sidebar = ({ isOpen, onClose }) => {
       icon: "fas fa-clipboard-list",
       label: "Task Reports",
     },
+    { path: "/employee/payroll", icon: "fas fa-file-invoice-dollar", label: "My Payroll" },
     { path: "/employee/profile", icon: "fas fa-user-circle", label: "My Profile" },
   ];
 
