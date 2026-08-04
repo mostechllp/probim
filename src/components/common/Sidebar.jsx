@@ -26,6 +26,7 @@ const ADMIN_ROUTE_MAP = {
   "role-management": "/admin/role-management",
   wfh: "/admin/wfh",
   "my-wfh-requests": "/admin/my-wfh-requests",
+  "my-payroll": "/admin/payroll",
 };
 
 const EMPLOYEE_ROUTE_MAP = {
@@ -49,6 +50,7 @@ const EMPLOYEE_ROUTE_MAP = {
   "my-profile": "/employee/profile",
   "project-assignments": "/employee/project-assignments",
   wfh: "/employee/wfh",
+  "my-payroll": "/employee/payroll",
 };
 
 const ICON_MAP = {
@@ -76,6 +78,7 @@ const ICON_MAP = {
   agreements: "fas fa-file",
   "role-management": "fas fa-user-shield",
   wfh: "fas fa-house-user",
+  "my-payroll": "fas fa-file-invoice-dollar",
 };
 
 // Configuration for parent menus and their children
@@ -128,6 +131,7 @@ const MODULE_ORDER = {
   "my-wfh-requests": 15,
   reports: 16,
   payroll: 17,
+  "my-payroll": 17,
   roles: 18,
   organizations: 19,
   agreements: 20,
