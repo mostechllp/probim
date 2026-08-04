@@ -5,16 +5,22 @@ import SearchBar from "../common/SearchBar";
 import EntriesSelector from "../common/EntriesSelector";
 import { showToast } from "../../../components/common/Toast";
 import Pagination from "../common/Paginations";
-import { fetchEmployeeNearestExpiryReport } from "../../store/slices/reportSlice";
+import {
+  fetchEmployeeNearestExpiryReport,
+  selectEmployeeNearestExpiry,
+  selectEmployeeNearestExpiryLoading,
+  selectEmployeeNearestExpiryPagination
+} from "../../store/slices/reportSlice";
 import ExportModal from "../../../components/common/ExportModal";
 import { exportToCSV, formatDate } from "../../../utils/reportUtils";
-import { generateEmployeeExpiryPDF } from "../../../utils/reportPDFConfigs";
+import apiClient from "../../../utils/apiClient";
 
 const EmployeeNearestExpiryReport = () => {
   const dispatch = useDispatch();
-  const { employees = [], loading } = useSelector(
-    (state) => state.employees || {},
-  );
+  const rawEmployees = useSelector(selectEmployeeNearestExpiry) || [];
+  const loading = useSelector(selectEmployeeNearestExpiryLoading);
+  const pagination = useSelector(selectEmployeeNearestExpiryPagination);
+  const employees = Array.isArray(rawEmployees) ? rawEmployees : [];
 
   // Local state
   const [currentPage, setCurrentPage] = useState(1);
@@ -32,11 +38,13 @@ const EmployeeNearestExpiryReport = () => {
       fetchEmployeeNearestExpiryReport({
         page: currentPage,
         per_page: perPage,
-        start_date: "2024-01-01",
-        end_date: "2024-01-31",
-      }),
+        expiry_days: expiryDays,
+        company: selectedCompany !== "all" ? selectedCompany : undefined,
+        department: selectedDepartment !== "all" ? selectedDepartment : undefined,
+        search: searchTerm || undefined,
+      })
     );
-  }, [dispatch]);
+  }, [dispatch, currentPage, perPage, expiryDays, selectedCompany, selectedDepartment, searchTerm]);
 
   // Reset to first page when filters change
   useEffect(() => {
@@ -46,16 +54,16 @@ const EmployeeNearestExpiryReport = () => {
 
   // Transform employee data to extract document expiry fields
   const transformEmployee = (emp) => {
-    const raw = emp.raw;
-    const user = raw?.user;
-    const company = user?.company;
-    const department = user?.department;
+    const raw = emp.raw || emp;
+    const user = raw?.user || emp?.user || emp;
+    const company = user?.company || emp?.company;
+    const department = user?.department || emp?.department;
 
     return {
       id: emp.id,
-      emp_id: raw?.employee_id || "-",
-      name: emp.name,
-      company_name: company?.company_name || "-",
+      emp_id: raw?.employee_id || emp?.emp_id || "-",
+      name: emp.name || raw?.first_name ? `${raw.first_name} ${raw.last_name || ''}`.trim() : "-",
+      company_name: company?.company_name || company?.name || "-",
       department_name: department?.name || "-",
       passport_expiry: raw?.passport_expiry_date,
       visa_expiry: raw?.visa_expiry_date,
@@ -103,15 +111,7 @@ const EmployeeNearestExpiryReport = () => {
       ? employees.map(transformEmployee)
       : [];
 
-    let filtered = transformedEmps.filter((emp) => {
-      // Check if any document is expiring within the selected days
-      return (
-        isWithinExpiry(emp.passport_expiry) ||
-        isWithinExpiry(emp.visa_expiry) ||
-        isWithinExpiry(emp.labor_expiry) ||
-        isWithinExpiry(emp.eid_expiry)
-      );
-    });
+    let filtered = [...transformedEmps];
 
     // Apply company filter
     if (selectedCompany !== "all") {
@@ -176,11 +176,12 @@ const EmployeeNearestExpiryReport = () => {
     });
   };
 
+  // Backend returns only current page data
   const filteredEmployees = getEmployeesWithNearestExpiry();
-  const totalFiltered = filteredEmployees.length;
-  const totalPages = Math.ceil(totalFiltered / perPage);
-  const start = (currentPage - 1) * perPage;
-  const pageEmployees = filteredEmployees.slice(start, start + perPage);
+  const totalFiltered = pagination?.total || filteredEmployees.length;
+  const totalPages = pagination?.lastPage || Math.ceil(totalFiltered / perPage);
+  const start = 0; // backend handles pagination
+  const pageEmployees = filteredEmployees;
 
   const handleResetFilters = () => {
     setSelectedCompany("all");
@@ -193,7 +194,7 @@ const EmployeeNearestExpiryReport = () => {
 
   const handleExport = async (format) => {
     const exportData = getExportData();
-    
+
     if (exportData.length === 0) {
       showToast("No data to export", "warning");
       return;
@@ -220,14 +221,22 @@ const EmployeeNearestExpiryReport = () => {
       exportToCSV(exportData, headers, `${filename}.csv`);
       showToast("Employee expiry data exported successfully!", "success");
     } else if (format === "pdf") {
-      generateEmployeeExpiryPDF(filteredEmployees, "Employee Document Expiry Report", {
-        expiryDays: expiryDays,
-        company: selectedCompany !== "all" ? selectedCompany : null,
-        department: selectedDepartment !== "all" ? selectedDepartment : null,
-        search: searchTerm || null,
-        generated_date: new Date().toISOString(),
-      });
-      showToast("PDF report generated successfully!", "success");
+      try {
+        const response = await apiClient.post('/admin/reports/export', 
+          { report_type: 'employee_nearest_expiry', format: 'pdf' },
+          { responseType: 'blob' }
+        );
+        const url = window.URL.createObjectURL(new Blob([response.data]));
+        const link = document.createElement('a');
+        link.href = url;
+        link.setAttribute('download', `${filename}.pdf`);
+        document.body.appendChild(link);
+        link.click();
+        document.body.removeChild(link);
+        showToast("PDF report generated successfully!", "success");
+      } catch (error) {
+        showToast("Failed to download PDF report", "error");
+      }
     }
   };
 
@@ -606,7 +615,7 @@ const EmployeeNearestExpiryReport = () => {
                             className="border-b border-gray-200 dark:border-gray-700 hover:bg-gray-50 dark:hover:bg-gray-700/50 transition-colors"
                           >
                             <td className="px-3 md:px-4 py-2 md:py-3 text-xs md:text-sm text-gray-600 dark:text-gray-400 text-center">
-                              {start + idx + 1}
+                              {(currentPage - 1) * perPage + idx + 1}
                             </td>
                             <td className="px-3 md:px-4 py-2 md:py-3 text-xs md:text-sm font-mono text-gray-700 dark:text-gray-300">
                               {emp.emp_id}
@@ -643,13 +652,12 @@ const EmployeeNearestExpiryReport = () => {
                             <td className="px-3 md:px-4 py-2 md:py-3 text-xs md:text-sm">
                               {earliest ? (
                                 <span
-                                  className={`inline-flex items-center gap-1 px-2 py-1 rounded-full text-xs font-semibold ${
-                                    earliest.daysLeft <= 7
+                                  className={`inline-flex items-center gap-1 px-2 py-1 rounded-full text-xs font-semibold ${earliest.daysLeft <= 7
                                       ? "bg-red-100 text-red-700 dark:bg-red-900/30 dark:text-red-400"
                                       : earliest.daysLeft <= 15
                                         ? "bg-amber-100 text-amber-700 dark:bg-amber-900/30 dark:text-amber-400"
                                         : "bg-yellow-100 text-yellow-700 dark:bg-yellow-900/30 dark:text-yellow-400"
-                                  }`}
+                                    }`}
                                 >
                                   <i className="fas fa-hourglass-half text-[10px]"></i>
                                   {earliest.daysLeft} days

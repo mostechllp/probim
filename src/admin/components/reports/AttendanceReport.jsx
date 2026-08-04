@@ -1,4 +1,4 @@
-import { useEffect, useState } from "react";
+import React, { useEffect, useState } from "react";
 import { useDispatch, useSelector } from "react-redux";
 import { Link, useLocation } from "react-router-dom";
 import SearchBar from "../common/SearchBar";
@@ -52,6 +52,8 @@ const AttendanceReport = () => {
 
   const [showExportModal, setShowExportModal] = useState(false);
   const [exportType, setExportType] = useState("all");
+
+
 
   // Date range state
   const [startDate, setStartDate] = useState(() => {
@@ -169,7 +171,7 @@ const AttendanceReport = () => {
 
   const handleEmployeeClick = (record) => {
     // Get the employee's string employee_id from the record
-    const employeeStringId = record.employee_id;
+    const employeeStringId = record.employee_id || record.id;
 
     // Find the employee in the employeesList by matching the employee_id string
     const matchedEmployee = employeesList.find(
@@ -476,25 +478,31 @@ const AttendanceReport = () => {
   };
 
   // Calculate stats for summary
-  const allRecords = records || [];
-  const totalPresent = allRecords.filter(
-    (r) => r.status !== "Absent" && !r.lateBy,
-  ).length;
-  const totalHalfDay = allRecords.filter((r) => {
-    const status = String(r.status || r.attendance_status || "").toLowerCase();
-    return status === "half day" || status === "halfday";
-  }).length;
-  const totalAbsent = allRecords.filter((r) => r.status === "Absent").length;
-  const totalOvertime = allRecords.filter((r) => {
-    const overtime = r.overtime;
-    if (!overtime || overtime === "-" || overtime === "0" || overtime === 0)
-      return false;
-    if (typeof overtime === "string" && overtime.trim() !== "") return true;
-    if (typeof overtime === "number" && overtime > 0) return true;
-    return false;
-  }).length;
+  const allEmployees = records || [];
+  let totalPresent = 0;
+  let totalHalfDay = 0;
+  let totalAbsent = 0;
+  let totalOvertime = 0;
+  let totalRecordsCount = 0;
 
-  const filteredRecords = allRecords;
+  allEmployees.forEach((emp) => {
+    if (emp.attendance && Array.isArray(emp.attendance)) {
+      emp.attendance.forEach((r) => {
+        totalRecordsCount++;
+        const status = String(r.status || r.attendance_status || "").toLowerCase();
+        if (status === "absent") totalAbsent++;
+        else if (status === "half day" || status === "halfday") totalHalfDay++;
+        else if (status === "full day" || status === "fullday" || status === "present") totalPresent++;
+
+        const overtime = r.overtime;
+        if (overtime && overtime !== "-" && overtime !== "0" && overtime !== 0) {
+          totalOvertime++;
+        }
+      });
+    }
+  });
+
+  const filteredRecords = allEmployees;
   const totalFiltered = totalCount || filteredRecords.length;
   const totalPages = lastPage || Math.ceil(totalFiltered / perPage);
   const start = (currentPage - 1) * perPage;
@@ -529,14 +537,14 @@ const AttendanceReport = () => {
             <div className="flex items-center justify-between">
               <div>
                 <p className="text-xs text-gray-500 dark:text-gray-400">
-                  Total Records
+                  Total Employees
                 </p>
                 <p className="text-2xl font-bold text-blue-600 dark:text-blue-400">
                   {totalFiltered}
                 </p>
               </div>
               <div className="w-10 h-10 bg-blue-100 dark:bg-blue-900/30 rounded-lg flex items-center justify-center">
-                <i className="fas fa-calendar-check text-blue-600 dark:text-blue-400"></i>
+                <i className="fas fa-users text-blue-600 dark:text-blue-400"></i>
               </div>
             </div>
           </div>
@@ -729,11 +737,9 @@ const AttendanceReport = () => {
                 <table className="w-full border-collapse">
                   <thead>
                     <tr className="bg-gray-50 dark:bg-gray-700/50 border-b border-gray-200 dark:border-gray-700">
+
                       <th className="px-3 md:px-4 py-2 md:py-3 text-left text-[10px] md:text-xs font-semibold text-gray-500 dark:text-gray-400">
-                        S.No
-                      </th>
-                      <th className="px-3 md:px-4 py-2 md:py-3 text-left text-[10px] md:text-xs font-semibold text-gray-500 dark:text-gray-400">
-                        DATE
+                        EMP ID
                       </th>
                       <th className="px-3 md:px-4 py-2 md:py-3 text-left text-[10px] md:text-xs font-semibold text-gray-500 dark:text-gray-400">
                         EMPLOYEE
@@ -742,155 +748,65 @@ const AttendanceReport = () => {
                         DEPARTMENT
                       </th>
                       <th className="px-3 md:px-4 py-2 md:py-3 text-left text-[10px] md:text-xs font-semibold text-gray-500 dark:text-gray-400">
-                        PUNCH IN
+                        DESIGNATION
                       </th>
-                      <th className="px-3 md:px-4 py-2 md:py-3 text-left text-[10px] md:text-xs font-semibold text-gray-500 dark:text-gray-400">
-                        PUNCH OUT
-                      </th>
-                      <th className="px-3 md:px-4 py-2 md:py-3 text-left text-[10px] md:text-xs font-semibold text-gray-500 dark:text-gray-400">
-                        WORKED HOURS
-                      </th>
-                      <th className="px-3 md:px-4 py-2 md:py-3 text-left text-[10px] md:text-xs font-semibold text-emerald-600 dark:text-emerald-400">
-                        OVERTIME
-                      </th>
-                      <th className="px-3 md:px-4 py-2 md:py-3 text-left text-[10px] md:text-xs font-semibold text-gray-500 dark:text-gray-400">
-                        STATUS
-                      </th>
+
                     </tr>
                   </thead>
                   <tbody>
                     {filteredRecords.length > 0 ? (
-                      filteredRecords.map((record, idx) => {
-                        const hasOvertime = hasOvertimeValue(record.overtime);
-                        const isLate = record.lateBy && record.lateBy > 0;
-
+                      filteredRecords.map((emp, idx) => {
+                        let empPresent = 0;
+                        let empAbsent = 0;
+                        let empHalfDay = 0;
+                        let empOvertime = 0;
+                        (emp.attendance || []).forEach(r => {
+                          const s = String(r.status || "").toLowerCase();
+                          if (s === "absent") empAbsent++;
+                          else if (s === "half day" || s === "halfday") empHalfDay++;
+                          else if (s === "full day" || s === "fullday" || s === "present") empPresent++;
+                          const ot = r.overtime;
+                          if (ot && ot !== "-" && ot !== "0" && ot !== 0) empOvertime++;
+                        });
                         return (
-                          <tr
-                            key={record.id || idx}
-                            className={`border-b border-gray-200 dark:border-gray-700 hover:bg-gray-50 dark:hover:bg-gray-700/50 transition-colors cursor-pointer ${
-                              hasOvertime ? "dark:bg-emerald-900/5" : ""
-                            }`}
-                            onClick={() => handleEmployeeClick(record)}
-                          >
-                            <td className="px-3 md:px-4 py-2 md:py-3 text-xs md:text-sm text-gray-600 dark:text-gray-400 text-center">
-                              {start + idx + 1}
-                            </td>
-                            <td className="px-3 md:px-4 py-2 md:py-3 text-xs md:text-sm text-gray-600 dark:text-gray-400 whitespace-nowrap">
-                              {record.date
-                                ? (() => {
-                                    try {
-                                      if (record.date.includes("/")) {
-                                        const parts = record.date.split("/");
-                                        if (parts.length === 3) {
-                                          const date = new Date(
-                                            `${parts[2]}-${parts[1]}-${parts[0]}`,
-                                          );
-                                          if (!isNaN(date.getTime())) {
-                                            return date.toLocaleDateString(
-                                              "en-GB",
-                                              {
-                                                day: "2-digit",
-                                                month: "short",
-                                                year: "numeric",
-                                              },
-                                            );
-                                          }
-                                        }
-                                      }
-                                      const date = new Date(record.date);
-                                      if (!isNaN(date.getTime())) {
-                                        return date.toLocaleDateString(
-                                          "en-GB",
-                                          {
-                                            day: "2-digit",
-                                            month: "short",
-                                            year: "numeric",
-                                          },
-                                        );
-                                      }
-                                      return record.date;
-                                    } catch (e) {
-                                      return record.date;
-                                    }
-                                  })()
-                                : "-"}
-                            </td>
-                            <td className="px-3 md:px-4 py-2 md:py-3 text-xs md:text-sm font-semibold text-blue-600 dark:text-blue-400">
-                              {record.employeeName || record.name || "-"}
-                              {hasOvertime && (
-                                <span className="ml-1 text-[8px] bg-emerald-500/20 text-emerald-600 dark:text-emerald-400 px-1.5 py-0.5 rounded-full font-bold">
-                                  OT
-                                </span>
-                              )}
-                            </td>
-                            <td className="px-3 md:px-4 py-2 md:py-3 text-xs md:text-sm text-gray-600 dark:text-gray-400">
-                              {record.department || "-"}
-                            </td>
-                            <td className="px-3 md:px-4 py-2 md:py-3 text-xs md:text-sm">
-                              <span
-                                className={`font-semibold ${isLate ? "text-amber-600 dark:text-amber-400" : "text-gray-800 dark:text-gray-200"}`}
-                              >
-                                {formatTime(record.punchIn)}
-                              </span>
-                              {isLate && (
-                                <span className="ml-1 text-[8px] bg-amber-500/20 text-amber-600 dark:text-amber-400 px-1.5 py-0.5 rounded-full">
-                                  Late
-                                </span>
-                              )}
-                            </td>
-                            <td className="px-3 md:px-4 py-2 md:py-3 text-xs md:text-sm">
-                              {record.punchOut ? (
-                                <span className="font-semibold text-gray-800 dark:text-gray-200">
-                                  {formatTime(record.punchOut)}
-                                </span>
-                              ) : (
-                                <span className="inline-block bg-red-100 dark:bg-red-900/30 text-red-600 dark:text-red-400 text-[9px] md:text-xs px-1.5 md:px-2 py-0.5 rounded-full whitespace-nowrap">
-                                  Not Punched Out
-                                </span>
-                              )}
-                            </td>
-                            <td className="px-3 md:px-4 py-2 md:py-3 text-xs md:text-sm text-gray-600 dark:text-gray-400">
-                              {record.working_hours !== undefined &&
-                              record.working_hours !== null &&
-                              record.working_hours !== 0 &&
-                              record.working_hours !== "0" ? (
-                                <span className="font-medium text-gray-700 dark:text-gray-300">
-                                  {formatWorkedHours(record.working_hours)}
-                                </span>
-                              ) : (
-                                "-"
-                              )}
-                            </td>
-                            <td className="px-3 md:px-4 py-2 md:py-3 text-xs md:text-sm">
-                              {hasOvertime ? (
-                                <span className="inline-flex items-center gap-1 bg-emerald-100 dark:bg-emerald-900/30 text-emerald-700 dark:text-emerald-400 font-semibold px-2 py-1 rounded-full border border-emerald-200 dark:border-emerald-800">
-                                  {record.overtime}
-                                </span>
-                              ) : (
-                                <span className="text-gray-400 dark:text-gray-500 text-[10px]">
-                                  -
-                                </span>
-                              )}
-                            </td>
-                            <td className="px-3 md:px-4 py-2 md:py-3">
-                              {getStatusBadge(
-                                record.attendance_status || record.status,
-                                hasOvertime,
-                              )}
-                            </td>
-                          </tr>
+                          <React.Fragment key={emp.id || idx}>
+                            <tr
+                              className="border-b border-gray-200 dark:border-gray-700 hover:bg-gray-50 dark:hover:bg-gray-700/50 transition-colors cursor-pointer"
+                              onClick={() => handleEmployeeClick(emp)}
+                            >
+                              <td className="px-3 md:px-4 py-2 md:py-3 text-xs md:text-sm font-mono text-gray-600 dark:text-gray-400">
+                                {emp.id || "-"}
+                              </td>
+                              <td className="px-3 md:px-4 py-2 md:py-3 text-xs md:text-sm font-semibold text-blue-600 dark:text-blue-400">
+                                {emp.name || "-"}
+                                {empOvertime > 0 && (
+                                  <span className="ml-2 text-[8px] bg-emerald-500/20 text-emerald-600 dark:text-emerald-400 px-1.5 py-0.5 rounded-full font-bold">
+                                    OT
+                                  </span>
+                                )}
+                              </td>
+                              <td className="px-3 md:px-4 py-2 md:py-3 text-xs md:text-sm text-gray-600 dark:text-gray-400">
+                                {emp.department || "-"}
+                              </td>
+                              <td className="px-3 md:px-4 py-2 md:py-3 text-xs md:text-sm text-gray-600 dark:text-gray-400">
+                                {emp.designation || "-"}
+                              </td>
+
+                            </tr>
+                            
+                          </React.Fragment>
                         );
                       })
                     ) : (
                       <tr>
                         <td
-                          colSpan="9"
-                          className="px-4 py-8 text-center text-gray-500 dark:text-gray-400"
+                          colSpan="4"
+                          className="px-4 py-12 text-center text-gray-500 dark:text-gray-400"
                         >
-                          <div className="flex flex-col items-center justify-center gap-2">
-                            <i className="fas fa-calendar-times text-4xl text-gray-300 dark:text-gray-600"></i>
-                            <p>No attendance records found</p>
-                            <p className="text-xs">
+                          <div className="flex flex-col items-center justify-center gap-3">
+                            <i className="fas fa-users-slash text-4xl text-gray-300 dark:text-gray-600"></i>
+                            <p className="font-medium text-gray-600 dark:text-gray-300">No attendance records found</p>
+                            <p className="text-xs text-gray-400">
                               Try changing the date range or filters
                             </p>
                           </div>

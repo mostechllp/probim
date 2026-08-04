@@ -5,16 +5,22 @@ import SearchBar from "../common/SearchBar";
 import EntriesSelector from "../common/EntriesSelector";
 import { showToast } from "../../../components/common/Toast";
 import Pagination from "../common/Paginations";
-import { fetchCompanyUpcomingRenewalsReport } from "../../store/slices/reportSlice";
+import {
+  fetchCompanyUpcomingRenewalsReport,
+  selectCompanyUpcomingRenewals,
+  selectCompanyUpcomingRenewalsLoading,
+  selectCompanyUpcomingRenewalsPagination
+} from "../../store/slices/reportSlice";
 import ExportModal from "../../../components/common/ExportModal";
 import { exportToCSV, formatDate, getDaysDifference } from "../../../utils/reportUtils";
-import { generateCompanyUpcomingRenewalsPDF } from "../../../utils/reportPDFConfigs";
+import apiClient from "../../../utils/apiClient";
 
 const CompanyUpcomingRenewalsReport = () => {
   const dispatch = useDispatch();
-  const { organizations = [], loading } = useSelector(
-    (state) => state.organizations || {},
-  );
+  const rawOrganizations = useSelector(selectCompanyUpcomingRenewals) || [];
+  const loading = useSelector(selectCompanyUpcomingRenewalsLoading);
+  const pagination = useSelector(selectCompanyUpcomingRenewalsPagination);
+  const organizations = Array.isArray(rawOrganizations) ? rawOrganizations : [];
 
   // Local state
   const [currentPage, setCurrentPage] = useState(1);
@@ -31,11 +37,12 @@ const CompanyUpcomingRenewalsReport = () => {
       fetchCompanyUpcomingRenewalsReport({
         page: currentPage,
         per_page: perPage,
-        start_date: "2024-01-01",
-        end_date: "2024-01-31",
-      }),
+        min_days: minDays,
+        max_days: maxDays,
+        search: searchTerm || undefined,
+      })
     );
-  }, [dispatch]);
+  }, [dispatch, currentPage, perPage, minDays, maxDays, searchTerm]);
 
   // Reset to first page when filters change
   useEffect(() => {
@@ -101,13 +108,7 @@ const CompanyUpcomingRenewalsReport = () => {
       });
     }
 
-    let filtered = allCompanies.filter((company) => {
-      // Check if any document is expiring within the upcoming renewal range
-      return (
-        isUpcomingRenewal(company.trade_license_expiry) ||
-        isUpcomingRenewal(company.establishment_card_expiry)
-      );
-    });
+    let filtered = [...allCompanies];
 
     // Apply search term
     if (searchTerm) {
@@ -175,11 +176,12 @@ const CompanyUpcomingRenewalsReport = () => {
     }));
   };
 
+  // Backend returns only current page data
   const filteredCompanies = getCompaniesWithUpcomingRenewals();
-  const totalFiltered = filteredCompanies.length;
-  const totalPages = Math.ceil(totalFiltered / perPage);
-  const start = (currentPage - 1) * perPage;
-  const pageCompanies = filteredCompanies.slice(start, start + perPage);
+  const totalFiltered = pagination?.total || filteredCompanies.length;
+  const totalPages = pagination?.lastPage || Math.ceil(totalFiltered / perPage);
+  const start = 0; // backend handles pagination
+  const pageCompanies = filteredCompanies;
 
   const handleResetFilters = () => {
     setMinDays(31);
@@ -189,43 +191,52 @@ const CompanyUpcomingRenewalsReport = () => {
     showToast("Filters reset successfully", "success");
   };
 
+
   const handleExport = async (format) => {
-  const exportData = getExportData();
-  
-  if (exportData.length === 0) {
-    showToast("No data to export", "warning");
-    return;
-  }
+    const exportData = getExportData();
 
-  const headers = [
-    { key: "company_name", label: "Company Name" },
-    { key: "trade_license_number", label: "Trade License" },
-    { key: "trade_license_expiry", label: "TL Expiry Date" },
-    { key: "trade_license_days_left", label: "Days Left (TL)" },
-    { key: "establishment_card_number", label: "Establishment Card" },
-    { key: "establishment_card_expiry", label: "EC Expiry Date" },
-    { key: "establishment_card_days_left", label: "Days Left (EC)" },
-    { key: "phone", label: "Phone" },
-    { key: "email", label: "Email" },
-    { key: "renewal_range", label: "Renewal Range" },
-  ];
+    if (exportData.length === 0) {
+      showToast("No data to export", "warning");
+      return;
+    }
 
-  const filename = `company_upcoming_renewals_${minDays}_${maxDays}days_${new Date().toISOString().split("T")[0]}`;
+    const headers = [
+      { key: "company_name", label: "Company Name" },
+      { key: "trade_license_number", label: "Trade License" },
+      { key: "trade_license_expiry", label: "TL Expiry Date" },
+      { key: "trade_license_days_left", label: "Days Left (TL)" },
+      { key: "establishment_card_number", label: "Establishment Card" },
+      { key: "establishment_card_expiry", label: "EC Expiry Date" },
+      { key: "establishment_card_days_left", label: "Days Left (EC)" },
+      { key: "phone", label: "Phone" },
+      { key: "email", label: "Email" },
+      { key: "renewal_range", label: "Renewal Range" },
+    ];
 
-  if (format === "csv") {
-    exportToCSV(exportData, headers, `${filename}.csv`);
-    showToast("Company upcoming renewals exported successfully!", "success");
-  } else if (format === "pdf") {
-    // Use the correct PDF generator for upcoming renewals
-    generateCompanyUpcomingRenewalsPDF(filteredCompanies, "Company Upcoming Renewals Report", {
-      minDays: minDays,
-      maxDays: maxDays,
-      search: searchTerm || null,
-      generated_date: new Date().toISOString(),
-    });
-    showToast("PDF report generated successfully!", "success");
-  }
-};
+    const filename = `company_upcoming_renewals_${minDays}_${maxDays}days_${new Date().toISOString().split("T")[0]}`;
+
+    if (format === "csv") {
+      exportToCSV(exportData, headers, `${filename}.csv`);
+      showToast("Company upcoming renewals exported successfully!", "success");
+    } else if (format === "pdf") {
+      try {
+        const response = await apiClient.post('/admin/reports/export', 
+          { report_type: 'company_upcoming_renewals', format: 'pdf' },
+          { responseType: 'blob' }
+        );
+        const url = window.URL.createObjectURL(new Blob([response.data]));
+        const link = document.createElement('a');
+        link.href = url;
+        link.setAttribute('download', `${filename}.pdf`);
+        document.body.appendChild(link);
+        link.click();
+        document.body.removeChild(link);
+        showToast("PDF report generated successfully!", "success");
+      } catch (error) {
+        showToast("Failed to download PDF report", "error");
+      }
+    }
+  };
 
   const getUpcomingClass = (expiryDate) => {
     const daysLeft = getDaysDifference(expiryDate);
@@ -554,7 +565,7 @@ const CompanyUpcomingRenewalsReport = () => {
                             className="border-b border-gray-200 dark:border-gray-700 hover:bg-gray-50 dark:hover:bg-gray-700/50 transition-colors"
                           >
                             <td className="px-3 md:px-4 py-2 md:py-3 text-xs md:text-sm text-gray-600 dark:text-gray-400 text-center">
-                              {start + idx + 1}
+                              {(currentPage - 1) * perPage + idx + 1}
                             </td>
                             <td className="px-3 md:px-4 py-2 md:py-3 text-xs md:text-sm font-semibold text-gray-800 dark:text-gray-200">
                               {company.name}
@@ -570,13 +581,12 @@ const CompanyUpcomingRenewalsReport = () => {
                             <td className="px-3 md:px-4 py-2 md:py-3 text-xs md:text-sm">
                               {showTradeLicense && tlDays !== null ? (
                                 <span
-                                  className={`inline-flex items-center gap-1 px-2 py-1 rounded-full text-xs font-semibold ${
-                                    tlDays >= 31 && tlDays <= 45
+                                  className={`inline-flex items-center gap-1 px-2 py-1 rounded-full text-xs font-semibold ${tlDays >= 31 && tlDays <= 45
                                       ? "bg-blue-100 text-blue-700 dark:bg-blue-900/30 dark:text-blue-400"
                                       : tlDays >= 46 && tlDays <= 60
                                         ? "bg-cyan-100 text-cyan-700 dark:bg-cyan-900/30 dark:text-cyan-400"
                                         : "bg-green-100 text-green-700 dark:bg-green-900/30 dark:text-green-400"
-                                  }`}
+                                    }`}
                                 >
                                   <i className="fas fa-hourglass-half text-[10px]"></i>
                                   {tlDays} days
@@ -596,13 +606,12 @@ const CompanyUpcomingRenewalsReport = () => {
                             <td className="px-3 md:px-4 py-2 md:py-3 text-xs md:text-sm">
                               {showEstablishmentCard && ecDays !== null ? (
                                 <span
-                                  className={`inline-flex items-center gap-1 px-2 py-1 rounded-full text-xs font-semibold ${
-                                    ecDays >= 31 && ecDays <= 45
+                                  className={`inline-flex items-center gap-1 px-2 py-1 rounded-full text-xs font-semibold ${ecDays >= 31 && ecDays <= 45
                                       ? "bg-blue-100 text-blue-700 dark:bg-blue-900/30 dark:text-blue-400"
                                       : ecDays >= 46 && ecDays <= 60
                                         ? "bg-cyan-100 text-cyan-700 dark:bg-cyan-900/30 dark:text-cyan-400"
                                         : "bg-green-100 text-green-700 dark:bg-green-900/30 dark:text-green-400"
-                                  }`}
+                                    }`}
                                 >
                                   <i className="fas fa-hourglass-half text-[10px]"></i>
                                   {ecDays} days

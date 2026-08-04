@@ -7,18 +7,22 @@ import { showToast } from "../../../components/common/Toast";
 import Pagination from "../common/Paginations";
 import ConfirmModal from "../common/ConfirmModal";
 import { clearError, updateLeaveStatus } from "../../store/slices/LeaveSlice";
-import { fetchPendingLeavesReport } from "../../store/slices/reportSlice";
+import {
+  fetchPendingLeavesReport,
+  selectPendingLeaves,
+  selectPendingLeavesLoading,
+  selectPendingLeavesPagination
+} from "../../store/slices/reportSlice";
 import ExportModal from "../../../components/common/ExportModal";
 import { exportToCSV, formatDate } from "../../../utils/reportUtils";
-import { generateLeavesPDF } from "../../../utils/reportPDFConfigs";
+import apiClient from "../../../utils/apiClient";
 
 const PendingLeavesReport = () => {
   const dispatch = useDispatch();
-  const {
-    leaves = [],
-    loading,
-    error = null,
-  } = useSelector((state) => state.leaves || { leaves: [] });
+  const rawLeaves = useSelector(selectPendingLeaves) || [];
+  const loading = useSelector(selectPendingLeavesLoading);
+  const pagination = useSelector(selectPendingLeavesPagination);
+  const leaves = Array.isArray(rawLeaves) ? rawLeaves : [];
 
   // Local state
   const [currentPage, setCurrentPage] = useState(1);
@@ -44,19 +48,16 @@ const PendingLeavesReport = () => {
       fetchPendingLeavesReport({
         page: currentPage,
         per_page: perPage,
-        start_date: "2024-01-01",
-        end_date: "2024-01-31",
-      }),
+        leave_type: selectedLeaveType !== "all" ? selectedLeaveType : undefined,
+        start_date: startDate || undefined,
+        end_date: endDate || undefined,
+        search: searchTerm || undefined,
+      })
     );
-  }, [dispatch]);
+  }, [dispatch, currentPage, perPage, selectedLeaveType, startDate, endDate, searchTerm]);
 
   // Handle errors
-  useEffect(() => {
-    if (error) {
-      showToast(error, "error");
-      dispatch(clearError());
-    }
-  }, [error, dispatch]);
+  // Note: leavesSlice error is not available here anymore, handling globally or skip
 
   // Reset to first page when filters change
   useEffect(() => {
@@ -69,17 +70,14 @@ const PendingLeavesReport = () => {
   const uniqueLeaveTypes = [
     ...new Set(
       leavesArray
-        .filter((leave) => (leave.status || "").toLowerCase() === "pending")
         .map((leave) => leave.leave_type?.name || leave.type)
         .filter(Boolean),
     ),
   ];
 
-  // Filter leaves (only pending)
+  // Filter leaves (rely on API for status filter)
   const getFilteredLeaves = () => {
-    let filtered = leavesArray.filter(
-      (leave) => (leave.status || "").toLowerCase() === "pending",
-    );
+    let filtered = [...leavesArray];
 
     // Apply leave type filter
     if (selectedLeaveType !== "all") {
@@ -159,26 +157,31 @@ const PendingLeavesReport = () => {
   // Transform data for export
   const getExportData = () => {
     const filtered = getFilteredLeaves();
-    return filtered.map((leave) => ({
-      request_date: formatDate(leave.created_at || leave.request_date),
-      employee_name: leave.employee_name ||
+    return filtered.map((leave) => {
+      const empName = leave.employee_name ||
         leave.employee?.name ||
-        leave.employee?.first_name ||
-        "-",
-      leave_type: leave.leave_type?.name || leave.type || "-",
-      from_date: formatDate(leave.from_date || leave.fromDate),
-      to_date: formatDate(leave.to_date || leave.toDate),
-      days: leave.number_of_days || leave.days || "-",
-      status: "Pending",
-      reason: leave.reason || "-",
-    }));
+        (leave.employee?.first_name
+          ? `${leave.employee.first_name} ${leave.employee.last_name || ""}`.trim()
+          : "-");
+      return {
+        request_date: formatDate(leave.created_at || leave.request_date),
+        employee_name: empName,
+        leave_type: leave.leave_type?.name || leave.type || "-",
+        from_date: formatDate(leave.from_date || leave.fromDate || leave.start_date),
+        to_date: formatDate(leave.to_date || leave.toDate || leave.end_date),
+        days: leave.number_of_days || leave.days || leave.duration_days || "-",
+        status: "Pending",
+        reason: leave.reason || "-",
+      };
+    });
   };
 
+  // Backend returns only current page data, use pagination state
   const filteredLeaves = getFilteredLeaves();
-  const totalFiltered = filteredLeaves.length;
-  const totalPages = Math.ceil(totalFiltered / perPage);
-  const start = (currentPage - 1) * perPage;
-  const pageLeaves = filteredLeaves.slice(start, start + perPage);
+  const totalFiltered = pagination?.total || filteredLeaves.length;
+  const totalPages = pagination?.lastPage || Math.ceil(totalFiltered / perPage);
+  const start = 0; // because backend returns the current page only
+  const pageLeaves = filteredLeaves;
 
   const handleResetFilters = () => {
     setSelectedLeaveType("all");
@@ -230,9 +233,11 @@ const PendingLeavesReport = () => {
         fetchPendingLeavesReport({
           page: currentPage,
           per_page: perPage,
-          start_date: "2024-01-01",
-          end_date: "2024-01-31",
-        }),
+          leave_type: selectedLeaveType !== "all" ? selectedLeaveType : undefined,
+          start_date: startDate || undefined,
+          end_date: endDate || undefined,
+          search: searchTerm || undefined,
+        })
       );
     } else {
       showToast(
@@ -246,7 +251,7 @@ const PendingLeavesReport = () => {
 
   const handleExport = async (format) => {
     const exportData = getExportData();
-    
+
     if (exportData.length === 0) {
       showToast("No data to export", "warning");
       return;
@@ -269,17 +274,22 @@ const PendingLeavesReport = () => {
       exportToCSV(exportData, headers, `${filename}.csv`);
       showToast("Pending leaves exported successfully!", "success");
     } else if (format === "pdf") {
-      // Get filter summary for PDF
-      const filters = {
-        leave_type: selectedLeaveType !== "all" ? selectedLeaveType : null,
-        date_range: dateRange !== "all" ? dateRange : null,
-        start_date: startDate || null,
-        end_date: endDate || null,
-        status_filter: "Pending",
-      };
-      
-      generateLeavesPDF(filteredLeaves, filters);
-      showToast("PDF report generated successfully!", "success");
+      try {
+        const response = await apiClient.get('/admin/reports/export', {
+          params: { report_type: 'pending_leaves', format: 'pdf' },
+          responseType: 'blob'
+        });
+        const url = window.URL.createObjectURL(new Blob([response.data]));
+        const link = document.createElement('a');
+        link.href = url;
+        link.setAttribute('download', `${filename}.pdf`);
+        document.body.appendChild(link);
+        link.click();
+        document.body.removeChild(link);
+        showToast("PDF report generated successfully!", "success");
+      } catch (error) {
+        showToast("Failed to download PDF report", "error");
+      }
     }
   };
 
@@ -293,15 +303,11 @@ const PendingLeavesReport = () => {
   };
 
   // Calculate stats
-  const pendingCount = leavesArray.filter(
-    (l) => (l.status || "").toLowerCase() === "pending",
-  ).length;
-  const approvedCount = leavesArray.filter(
-    (l) => (l.status || "").toLowerCase() === "approved",
-  ).length;
-  const rejectedCount = leavesArray.filter(
-    (l) => (l.status || "").toLowerCase() === "rejected",
-  ).length;
+  // The API already returns only pending leaves
+  const pendingCount = pagination.total || leavesArray.length || 0;
+  // Approved and Rejected will naturally be 0 for this specific report
+  const approvedCount = 0;
+  const rejectedCount = 0;
 
   return (
     <div className="w-full overflow-x-hidden">
@@ -537,7 +543,7 @@ const PendingLeavesReport = () => {
                           className="border-b border-gray-200 dark:border-gray-700 hover:bg-gray-50 dark:hover:bg-gray-700/50 transition-colors"
                         >
                           <td className="px-3 md:px-4 py-2 md:py-3 text-xs md:text-sm text-gray-600 dark:text-gray-400 text-center">
-                            {start + idx + 1}
+                            {(currentPage - 1) * perPage + idx + 1}
                           </td>
                           <td className="px-3 md:px-4 py-2 md:py-3 text-xs md:text-sm text-gray-600 dark:text-gray-400 whitespace-nowrap">
                             {formatDate(leave.created_at || leave.request_date)}
@@ -545,20 +551,21 @@ const PendingLeavesReport = () => {
                           <td className="px-3 md:px-4 py-2 md:py-3 text-xs md:text-sm font-semibold text-gray-800 dark:text-gray-200">
                             {leave.employee_name ||
                               leave.employee?.name ||
-                              leave.employee?.first_name ||
-                              "-"}
+                              (leave.employee?.first_name
+                                ? `${leave.employee.first_name} ${leave.employee.last_name || ""}`.trim()
+                                : "-")}
                           </td>
                           <td className="px-3 md:px-4 py-2 md:py-3 text-xs md:text-sm text-gray-600 dark:text-gray-400 whitespace-nowrap">
                             {leave.leave_type?.name || leave.type || "-"}
                           </td>
                           <td className="px-3 md:px-4 py-2 md:py-3 text-xs md:text-sm text-gray-600 dark:text-gray-400 whitespace-nowrap">
-                            {formatDate(leave.from_date || leave.fromDate)}
+                            {formatDate(leave.from_date || leave.fromDate || leave.start_date)}
                           </td>
                           <td className="px-3 md:px-4 py-2 md:py-3 text-xs md:text-sm text-gray-600 dark:text-gray-400 whitespace-nowrap">
-                            {formatDate(leave.to_date || leave.toDate)}
+                            {formatDate(leave.to_date || leave.toDate || leave.end_date)}
                           </td>
                           <td className="px-3 md:px-4 py-2 md:py-3 text-xs md:text-sm text-gray-600 dark:text-gray-400 text-center">
-                            {leave.number_of_days || leave.days || "-"}
+                            {leave.number_of_days || leave.days || leave.duration_days || "-"}
                           </td>
                           <td className="px-3 md:px-4 py-2 md:py-3">
                             {getStatusBadge()}
