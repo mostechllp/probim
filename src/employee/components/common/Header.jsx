@@ -193,6 +193,28 @@ const Header = ({ onMenuClick }) => {
     return rawType === 'admin' || rawType === 'hr' ? '/admin' : '/employee';
   };
 
+  // Check permissions for modules
+  const hasAllPermissions = user?.permissions?.all === true;
+  const userType = user?.type || "";
+
+  const hasReadPermission = (slug) => {
+    if (hasAllPermissions) return true;
+    if (userType === 'admin') return true;
+    
+    const modulePermission = user?.permissions?.[slug];
+    if (modulePermission) {
+      return modulePermission.read === true;
+    }
+    
+    const publicModules = ["dashboard", "my-leaves", "my-tasks", "task-reports", "my-wfh-requests", "my-profile"];
+    if (publicModules.includes(slug)) return true;
+    
+    return false;
+  };
+
+  const showSettings = hasReadPermission("settings");
+
+
   return (
     <>
       <header className="bg-white dark:bg-gray-800 border-b border-gray-200 dark:border-gray-700 py-3 px-4 md:px-6 sticky top-0 z-40 flex items-center justify-between flex-wrap gap-3 shadow-sm">
@@ -385,14 +407,16 @@ const Header = ({ onMenuClick }) => {
                   <i className="fas fa-user text-green-500 w-5"></i> 
                   <span>My Profile</span>
                 </Link>
-                <Link 
-                  to={`${getBasePath()}/settings`}
-                  className="flex items-center gap-3 px-4 py-3.5 hover:bg-gray-50 dark:hover:bg-gray-700 text-gray-700 dark:text-gray-300 no-underline transition-colors"
-                  onClick={() => setShowProfileMenu(false)}
-                >
-                  <i className="fas fa-cog text-gray-500 w-5"></i> 
-                  <span>Settings</span>
-                </Link>
+                {showSettings && (
+                  <Link 
+                    to={`${getBasePath()}/settings`}
+                    className="flex items-center gap-3 px-4 py-3.5 hover:bg-gray-50 dark:hover:bg-gray-700 text-gray-700 dark:text-gray-300 no-underline transition-colors"
+                    onClick={() => setShowProfileMenu(false)}
+                  >
+                    <i className="fas fa-cog text-gray-500 w-5"></i> 
+                    <span>Settings</span>
+                  </Link>
+                )}
                 <button 
                   onClick={handleLogoutClick}
                   className="flex items-center gap-3 px-4 py-3.5 hover:bg-gray-50 dark:hover:bg-gray-700 text-gray-700 dark:text-gray-300 w-full text-left transition-colors border-t border-gray-200 dark:border-gray-700"
