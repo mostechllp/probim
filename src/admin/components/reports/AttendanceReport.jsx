@@ -166,8 +166,9 @@ const AttendanceReport = () => {
     );
 
     if (matchedEmployee) {
-      // Navigate to the employee attendance page with the numeric ID
-      navigate(`${basePath}/reports/attendance/employee/${matchedEmployee.id}`);
+      navigate(`${basePath}/reports/attendance/employee/${matchedEmployee.id}`, {
+        state: { date: appliedStartDate }
+      });
     } else {
       // Fallback: try to use the record's employee_id
       console.warn("Employee not found in list, using record data:", record);
@@ -176,7 +177,9 @@ const AttendanceReport = () => {
         (emp) => emp.name === (record.employeeName || record.name),
       );
       if (fallbackEmployee) {
-        navigate(`${basePath}/reports/attendance/employee/${fallbackEmployee.id}`);
+        navigate(`${basePath}/reports/attendance/employee/${fallbackEmployee.id}`, {
+          state: { date: appliedStartDate }
+        });
       } else {
         showToast("Employee not found", "error");
       }
