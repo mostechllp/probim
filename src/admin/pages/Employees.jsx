@@ -281,9 +281,6 @@ const Employees = () => {
                   DEPARTMENT
                 </th>
                 <th className="px-3 md:px-4 py-2 md:py-3 text-left text-[10px] md:text-xs font-semibold text-gray-500 dark:text-gray-400">
-                  COMPANY
-                </th>
-                <th className="px-3 md:px-4 py-2 md:py-3 text-left text-[10px] md:text-xs font-semibold text-gray-500 dark:text-gray-400">
                   STATUS
                 </th>
                 <th className="px-3 md:px-4 py-2 md:py-3 text-left text-[10px] md:text-xs font-semibold text-gray-500 dark:text-gray-400">
@@ -378,11 +375,6 @@ const Employees = () => {
                       <td className="px-3 md:px-4 py-2 md:py-3 text-xs md:text-sm text-gray-600 dark:text-gray-400">
                         {emp.department}
                       </td>
-                      <td className="px-3 md:px-4 py-2 md:py-3 text-xs md:text-sm text-gray-600 dark:text-gray-400">
-                        {emp.raw?.user?.company?.company_name ||
-                          emp.company ||
-                          "-"}
-                      </td>
                       <td className="px-3 md:px-4 py-2 md:py-3">
                         <label className="inline-flex items-center gap-1 md:gap-2 cursor-pointer">
                           <div className="relative">
@@ -440,7 +432,7 @@ const Employees = () => {
               ) : (
                 <tr>
                   <td
-                    colSpan="7"
+                    colSpan="6"
                     className="px-4 py-8 text-center text-gray-500 dark:text-gray-400"
                   >
                     {loading ? "Loading employees..." : "No employees found"}

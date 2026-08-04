@@ -9,6 +9,7 @@ import { fetchEmployeeDetailsReport, selectEmployeeDetails, selectEmployeeDetail
 import { exportToCSV, formatDate } from "../../../utils/reportUtils";
 import ExportModal from "../../../components/common/ExportModal";
 import apiClient from "../../../utils/apiClient";
+import { getPhotoUrl, getFallbackAvatar } from "../../../utils/imageHelper";
 
 const EmployeeDetailsReport = () => {
   const dispatch = useDispatch();
@@ -46,7 +47,7 @@ const EmployeeDetailsReport = () => {
       page: currentPage,
       per_page: perPage,
       department: selectedDepartment || undefined,
-      status: selectedStatus !== "all" ? selectedStatus : undefined,
+      status: selectedStatus !== "all" ? selectedStatus.toLowerCase() : undefined,
       search: searchTerm || undefined,
     }));
   }, [dispatch, currentPage, perPage, selectedDepartment, selectedStatus, searchTerm]);
@@ -70,10 +71,14 @@ const EmployeeDetailsReport = () => {
     const department = user?.department || emp?.department;
     const designation = user?.designation || emp?.designation;
 
+    const rawStatus = emp.status || raw?.status || user?.status || "active";
+    const capitalizedStatus = typeof rawStatus === 'string' ? rawStatus.charAt(0).toUpperCase() + rawStatus.slice(1).toLowerCase() : "Active";
+
     return {
       id: emp.id,
       name: emp.name || raw?.first_name ? `${raw.first_name} ${raw.last_name || ''}`.trim() : "-",
-      status: emp.status || raw?.status || "active",
+      status: capitalizedStatus,
+      avatar: raw?.avatar,
       // Basic fields from the transformed data
       emp_id: raw?.employee_id || emp?.emp_id || "-",
       company_name: company?.company_name || company?.name || "-",
@@ -463,7 +468,18 @@ const EmployeeDetailsReport = () => {
                         {emp.emp_id}
                       </td>
                       <td className="px-3 py-3 text-sm font-semibold text-gray-800 dark:text-gray-200">
-                        {emp.name}
+                        <div className="flex items-center gap-3">
+                          <img
+                            src={getPhotoUrl(emp.avatar) || getFallbackAvatar(emp.name)}
+                            alt={emp.name}
+                            className="w-8 h-8 rounded-full object-cover border border-gray-200 dark:border-gray-700"
+                            onError={(e) => {
+                              e.target.onerror = null;
+                              e.target.src = getFallbackAvatar(emp.name);
+                            }}
+                          />
+                          <span>{emp.name}</span>
+                        </div>
                       </td>
                       <td className="px-3 py-3 text-sm text-gray-600 dark:text-gray-400">
                         {emp.department_name}
