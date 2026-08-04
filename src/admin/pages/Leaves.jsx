@@ -74,9 +74,26 @@ const Leaves = () => {
   const [rejectionReason, setRejectionReason] = useState("");
   const [actionLoading, setActionLoading] = useState(false);
 
+  // NEW: Manager/Team Lead approve/reject modal states
+  const [managerActionModalOpen, setManagerActionModalOpen] = useState(false);
+  const [managerActionType, setManagerActionType] = useState(null); // "approve" or "reject"
+  const [managerActionLeave, setManagerActionLeave] = useState(null);
+  const [managerRemark, setManagerRemark] = useState("");
+  const [managerActionLoading, setManagerActionLoading] = useState(false);
+
   // Delete confirm states
   const [deleteConfirmOpen, setDeleteConfirmOpen] = useState(false);
   const [leaveToDelete, setLeaveToDelete] = useState(null);
+
+  // Check if user is manager or team lead
+  const isManagerOrTeamLead =
+    user?.type === "manager" ||
+    user?.type === "team_lead" ||
+    user?.role?.name?.toLowerCase().includes("manager") ||
+    user?.role?.name?.toLowerCase().includes("team lead");
+
+  // Check if user is admin or HR (has full permissions)
+  const isAdminOrHR = user?.type === "admin" || user?.type === "hr";
 
   // ✅ Get API base URL from environment
   const getBaseUrl = () => {
@@ -196,6 +213,50 @@ const Leaves = () => {
   const start = (currentPage - 1) * perPage;
   const pageLeaves = filteredLeaves.slice(start, start + perPage);
 
+  // Manager/Team Lead action handlers
+  const handleManagerActionClick = (leave, action) => {
+    setManagerActionLeave(leave);
+    setManagerActionType(action);
+    setManagerRemark("");
+    setManagerActionModalOpen(true);
+  };
+
+  const handleManagerActionConfirm = async () => {
+    if (!managerActionLeave) return;
+
+    setManagerActionLoading(true);
+
+    const status = managerActionType === "approve" ? "approved" : "rejected";
+    const result = await dispatch(
+      updateLeaveStatus({
+        id: managerActionLeave.id,
+        status: status,
+        processedBy: user?.username || user?.name || "Manager",
+        rejection_reason: managerActionType === "reject" ? managerRemark : null,
+      }),
+    );
+
+    if (updateLeaveStatus.fulfilled.match(result)) {
+      showToast(
+        `Leave request ${managerActionType === "approve" ? "approved" : "rejected"} successfully`,
+        "success",
+      );
+      setManagerActionModalOpen(false);
+      setManagerActionLeave(null);
+      setManagerActionType(null);
+      setManagerRemark("");
+      dispatch(fetchLeaves());
+    } else {
+      showToast(
+        result.payload || `Failed to ${managerActionType} leave request`,
+        "error",
+      );
+    }
+
+    setManagerActionLoading(false);
+  };
+
+  // Original approve/reject handlers (for HR/Admin)
   const handleApproveClick = (id) => {
     setSelectedLeaveId(id);
     setActionType("approve");
@@ -270,7 +331,6 @@ const Leaves = () => {
   const formatDateForInput = (dateString) => {
     if (!dateString) return "";
     try {
-      // If it's already in YYYY-MM-DD format
       if (
         typeof dateString === "string" &&
         dateString.match(/^\d{4}-\d{2}-\d{2}$/)
@@ -288,8 +348,14 @@ const Leaves = () => {
     }
   };
 
-  // ✅ Edit Handlers - Updated to fetch by ID
+  // ✅ Edit Handlers - Only for Admin/HR
   const handleEditClick = async (leave) => {
+    // Only allow editing if user is Admin/HR
+    if (!isAdminOrHR) {
+      showToast("You don't have permission to edit leave requests", "error");
+      return;
+    }
+
     // Only allow editing if status is pending
     if ((leave.status || "").toLowerCase() !== "pending") {
       showToast("Only pending leave requests can be edited", "warning");
@@ -429,8 +495,14 @@ const Leaves = () => {
     setEditFormData({ ...editFormData, end_date: dateValue || "" });
   };
 
-  // ✅ Delete Handlers
+  // ✅ Delete Handlers - Only for Admin/HR
   const handleDeleteClick = (leave) => {
+    // Only allow deletion if user is Admin/HR
+    if (!isAdminOrHR) {
+      showToast("You don't have permission to delete leave requests", "error");
+      return;
+    }
+
     if ((leave.status || "").toLowerCase() !== "pending") {
       showToast("Only pending leave requests can be deleted", "warning");
       return;
@@ -512,6 +584,17 @@ const Leaves = () => {
     } catch (error) {
       return dateString || "-";
     }
+  };
+
+  // Check if user can take action on leave
+  const canTakeAction = (leave) => {
+    const isPending = (leave.status || "").toLowerCase() === "pending";
+    // Managers/Team Leads can take action on any pending leave
+    // HR/Admin can also take action
+    return (
+      isPending &&
+      (isManagerOrTeamLead || user?.type === "admin" || user?.type === "hr")
+    );
   };
 
   return (
@@ -705,6 +788,9 @@ const Leaves = () => {
                     leave.document_path || leave.document || leave.doc;
                   const isPending =
                     (leave.status || "").toLowerCase() === "pending";
+                  const canAct = canTakeAction(leave);
+                  // Only show edit/delete for Admin/HR
+                  const showEditDelete = isPending && isAdminOrHR;
 
                   return (
                     <tr
@@ -791,7 +877,7 @@ const Leaves = () => {
                           "-"}
                       </td>
                       <td className="px-3 md:px-4 py-2 md:py-3">
-                        <div className="flex gap-1 md:gap-2">
+                        <div className="flex items-center gap-1 md:gap-2 whitespace-nowrap">
                           <button
                             onClick={() => handleView(leave)}
                             className="p-1.5 rounded-lg hover:bg-gray-100 dark:hover:bg-gray-700 text-blue-500 transition-colors"
@@ -801,34 +887,48 @@ const Leaves = () => {
                           </button>
                           {isPending && (
                             <>
-                              <button
-                                onClick={() => handleEditClick(leave)}
-                                className="p-1.5 rounded-lg hover:bg-gray-100 dark:hover:bg-gray-700 text-amber-500 transition-colors"
-                                title="Edit Leave Request"
-                              >
-                                <FiEdit2 size={14} />
-                              </button>
-                              <button
-                                onClick={() => handleDeleteClick(leave)}
-                                className="p-1.5 rounded-lg hover:bg-gray-100 dark:hover:bg-gray-700 text-red-500 transition-colors"
-                                title="Delete Leave Request"
-                              >
-                                <FiTrash2 size={14} />
-                              </button>
-                              <button
-                                onClick={() => handleApproveClick(leave.id)}
-                                className="p-1.5 rounded-lg hover:bg-gray-100 dark:hover:bg-gray-700 text-green-500 transition-colors"
-                                title="Approve"
-                              >
-                                <i className="fas fa-check-circle text-xs md:text-sm"></i>
-                              </button>
-                              <button
-                                onClick={() => handleRejectClick(leave.id)}
-                                className="p-1.5 rounded-lg hover:bg-gray-100 dark:hover:bg-gray-700 text-red-500 transition-colors"
-                                title="Reject"
-                              >
-                                <i className="fas fa-times-circle text-xs md:text-sm"></i>
-                              </button>
+                              {/* Edit & Delete - Only for Admin/HR */}
+                              {showEditDelete && (
+                                <>
+                                  <button
+                                    onClick={() => handleEditClick(leave)}
+                                    className="p-1.5 rounded-lg hover:bg-gray-100 dark:hover:bg-gray-700 text-amber-500 transition-colors"
+                                    title="Edit Leave Request"
+                                  >
+                                    <FiEdit2 size={14} />
+                                  </button>
+                                  <button
+                                    onClick={() => handleDeleteClick(leave)}
+                                    className="p-1.5 rounded-lg hover:bg-gray-100 dark:hover:bg-gray-700 text-red-500 transition-colors"
+                                    title="Delete Leave Request"
+                                  >
+                                    <FiTrash2 size={14} />
+                                  </button>
+                                </>
+                              )}
+                              {/* Approve/Reject - For Managers, Team Leads, Admin, and HR */}
+                              {canAct && (
+                                <>
+                                  <button
+                                    onClick={() =>
+                                      handleManagerActionClick(leave, "approve")
+                                    }
+                                    className="p-1.5 rounded-lg hover:bg-gray-100 dark:hover:bg-gray-700 text-green-500 transition-colors"
+                                    title="Approve"
+                                  >
+                                    <i className="fas fa-check-circle text-xs md:text-sm"></i>
+                                  </button>
+                                  <button
+                                    onClick={() =>
+                                      handleManagerActionClick(leave, "reject")
+                                    }
+                                    className="p-1.5 rounded-lg hover:bg-gray-100 dark:hover:bg-gray-700 text-red-500 transition-colors"
+                                    title="Reject"
+                                  >
+                                    <i className="fas fa-times-circle text-xs md:text-sm"></i>
+                                  </button>
+                                </>
+                              )}
                             </>
                           )}
                         </div>
@@ -869,279 +969,124 @@ const Leaves = () => {
         onViewDocument={handleViewDocument}
       />
 
-      {/* Edit Modal */}
-      {showEditModal && (
+      {/* Manager/Team Lead Action Modal */}
+      {managerActionModalOpen && (
         <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 p-4">
-          <div className="bg-white dark:bg-gray-800 rounded-2xl max-w-2xl w-full max-h-[90vh] overflow-y-auto p-6">
-            <div className="flex justify-between items-center mb-6">
+          <div className="bg-white dark:bg-gray-800 rounded-2xl max-w-md w-full p-6">
+            <div className="flex justify-between items-center mb-4">
               <h3 className="text-xl font-bold text-gray-800 dark:text-gray-200">
-                <FiEdit2 className="inline mr-2 text-amber-500" />
-                Edit Leave Request
+                {managerActionType === "approve" ? "Approve" : "Reject"} Leave
+                Request
               </h3>
               <button
-                onClick={handleEditClose}
+                onClick={() => {
+                  setManagerActionModalOpen(false);
+                  setManagerActionLeave(null);
+                  setManagerActionType(null);
+                  setManagerRemark("");
+                }}
                 className="p-2 hover:bg-gray-100 dark:hover:bg-gray-700 rounded-lg transition-colors"
               >
                 <FiX size={20} />
               </button>
             </div>
 
-            {fetchingLeave ? (
-              <div className="flex items-center justify-center py-12">
-                <div className="text-center">
-                  <FiLoader className="w-10 h-10 text-amber-500 animate-spin mx-auto mb-4" />
-                  <p className="text-[var(--muted)]">
-                    Loading leave details...
-                  </p>
-                </div>
-              </div>
-            ) : (
-              <form onSubmit={handleEditSubmit}>
-                <div className="space-y-4">
-                  {/* Leave Type */}
-                  <div>
-                    <label className="block text-sm font-semibold text-gray-700 dark:text-gray-300 mb-1">
-                      Leave Type <span className="text-red-500">*</span>
-                    </label>
-                    <select
-                      value={editFormData.leave_type_id}
-                      onChange={(e) => {
-                        console.log("Leave type selected:", e.target.value);
-                        setEditFormData({
-                          ...editFormData,
-                          leave_type_id: e.target.value,
-                        });
-                      }}
-                      className="w-full px-3 py-2 bg-gray-50 dark:bg-gray-900 border border-gray-200 dark:border-gray-700 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-amber-500"
-                      required
-                    >
-                      <option value="">Select Leave Type</option>
-                      {leaveTypes.map((type) => (
-                        <option key={type.id} value={type.id}>
-                          {type.name}
-                        </option>
-                      ))}
-                    </select>
-                  </div>
+            <div className="mb-4">
+              <p className="text-sm text-gray-600 dark:text-gray-400">
+                <span className="font-semibold">Employee:</span>{" "}
+                {managerActionLeave ? getEmployeeName(managerActionLeave) : "-"}
+              </p>
+              <p className="text-sm text-gray-600 dark:text-gray-400">
+                <span className="font-semibold">Leave Type:</span>{" "}
+                {managerActionLeave?.leave_type?.name ||
+                  managerActionLeave?.type ||
+                  "-"}
+              </p>
+              <p className="text-sm text-gray-600 dark:text-gray-400">
+                <span className="font-semibold">Duration:</span>{" "}
+                {formatDate(
+                  managerActionLeave?.start_date ||
+                    managerActionLeave?.from_date,
+                )}{" "}
+                -{" "}
+                {formatDate(
+                  managerActionLeave?.end_date || managerActionLeave?.to_date,
+                )}
+              </p>
+            </div>
 
-                  {/* Dates */}
-                  <div className="grid grid-cols-2 gap-4">
-                    <div>
-                      <label className="block text-sm font-semibold text-gray-700 dark:text-gray-300 mb-1">
-                        Start Date <span className="text-red-500">*</span>
-                      </label>
-                      <DateInput
-                        value={editFormData.start_date}
-                        onChange={handleStartDateChange}
-                        type="general"
-                        className="w-full"
-                        placeholder="dd/mm/yyyy"
-                        error={false}
-                      />
-                    </div>
-                    <div>
-                      <label className="block text-sm font-semibold text-gray-700 dark:text-gray-300 mb-1">
-                        End Date <span className="text-red-500">*</span>
-                      </label>
-                      <DateInput
-                        value={editFormData.end_date}
-                        onChange={handleEndDateChange}
-                        type="general"
-                        className="w-full"
-                        placeholder="dd/mm/yyyy"
-                        error={false}
-                        minDate={
-                          editFormData.start_date
-                            ? new Date(editFormData.start_date)
-                            : null
-                        }
-                      />
-                    </div>
-                  </div>
+            <div className="mb-4">
+              <label className="block text-sm font-semibold text-gray-700 dark:text-gray-300 mb-2">
+                {managerActionType === "approve" ? "Approval" : "Rejection"}{" "}
+                Remark
+              </label>
+              <textarea
+                value={managerRemark}
+                onChange={(e) => setManagerRemark(e.target.value)}
+                rows="4"
+                className="w-full px-3 py-2 bg-gray-50 dark:bg-gray-900 border border-gray-200 dark:border-gray-700 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-amber-500"
+                placeholder={
+                  managerActionType === "approve"
+                    ? "Add approval notes (optional)..."
+                    : "Provide reason for rejection..."
+                }
+              />
+              {managerActionType === "reject" && (
+                <p className="text-xs text-gray-500 mt-1">
+                  <i className="fas fa-info-circle mr-1"></i>
+                  Rejection reason will be visible to the employee
+                </p>
+              )}
+            </div>
 
-                  {/* Sessions */}
-                  <div className="grid grid-cols-2 gap-4">
-                    <div>
-                      <label className="block text-sm font-semibold text-gray-700 dark:text-gray-300 mb-1">
-                        Start Session <span className="text-red-500">*</span>
-                      </label>
-                      <select
-                        value={editFormData.session1}
-                        onChange={(e) =>
-                          setEditFormData({
-                            ...editFormData,
-                            session1: e.target.value,
-                          })
-                        }
-                        className="w-full px-3 py-2 bg-gray-50 dark:bg-gray-900 border border-gray-200 dark:border-gray-700 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-amber-500"
-                        required
-                      >
-                        <option value="morning">Morning</option>
-                        <option value="afternoon">Afternoon</option>
-                      </select>
-                    </div>
-                    <div>
-                      <label className="block text-sm font-semibold text-gray-700 dark:text-gray-300 mb-1">
-                        End Session <span className="text-red-500">*</span>
-                      </label>
-                      <select
-                        value={editFormData.session2}
-                        onChange={(e) =>
-                          setEditFormData({
-                            ...editFormData,
-                            session2: e.target.value,
-                          })
-                        }
-                        className="w-full px-3 py-2 bg-gray-50 dark:bg-gray-900 border border-gray-200 dark:border-gray-700 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-amber-500"
-                        required
-                      >
-                        <option value="morning">Morning</option>
-                        <option value="afternoon">Afternoon</option>
-                      </select>
-                    </div>
-                  </div>
-
-                  {/* Reason */}
-                  <div>
-                    <label className="block text-sm font-semibold text-gray-700 dark:text-gray-300 mb-1">
-                      Reason <span className="text-red-500">*</span>
-                    </label>
-                    <textarea
-                      value={editFormData.reason}
-                      onChange={(e) =>
-                        setEditFormData({
-                          ...editFormData,
-                          reason: e.target.value,
-                        })
-                      }
-                      rows="3"
-                      className="w-full px-3 py-2 bg-gray-50 dark:bg-gray-900 border border-gray-200 dark:border-gray-700 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-amber-500"
-                      placeholder="Enter reason for leave (min 10 characters)"
-                      required
-                    />
-                  </div>
-
-                  {/* Claim Salary */}
-                  <div>
-                    <label className="block text-sm font-semibold text-gray-700 dark:text-gray-300 mb-1">
-                      Claim Salary
-                    </label>
-                    <div className="flex gap-6">
-                      <label className="flex items-center gap-2">
-                        <input
-                          type="radio"
-                          value="1"
-                          checked={editFormData.claim_salary === "1"}
-                          onChange={() =>
-                            setEditFormData({
-                              ...editFormData,
-                              claim_salary: "1",
-                            })
-                          }
-                          className="text-amber-500 focus:ring-amber-500"
-                        />
-                        <span className="text-sm">Yes</span>
-                      </label>
-                      <label className="flex items-center gap-2">
-                        <input
-                          type="radio"
-                          value="0"
-                          checked={editFormData.claim_salary === "0"}
-                          onChange={() =>
-                            setEditFormData({
-                              ...editFormData,
-                              claim_salary: "0",
-                            })
-                          }
-                          className="text-amber-500 focus:ring-amber-500"
-                        />
-                        <span className="text-sm">No</span>
-                      </label>
-                    </div>
-                  </div>
-
-                  {/* Document Upload */}
-                  <div>
-                    <label className="block text-sm font-semibold text-gray-700 dark:text-gray-300 mb-1">
-                      Upload Document{" "}
-                      <span className="text-gray-400 text-xs">(Optional)</span>
-                    </label>
-
-                    {/* Show current document if it exists */}
-                    {editingLeave?.document && !editFile && (
-                      <div className="mb-3 p-3 bg-gray-50 dark:bg-gray-900 rounded-lg border border-gray-200 dark:border-gray-700">
-                        <p className="text-xs text-gray-600 dark:text-gray-400 mb-1">
-                          Current Document:
-                        </p>
-                        <div className="flex items-center gap-2">
-                          <i className="fas fa-file-pdf text-red-500"></i>
-                          <button
-                            type="button"
-                            onClick={() =>
-                              handleViewDocument(editingLeave.document)
-                            }
-                            className="text-blue-500 hover:text-blue-600 hover:underline text-sm font-medium"
-                          >
-                            {editingLeave.document.split("/").pop()}
-                          </button>
-                          <span className="text-xs text-gray-400">
-                            (Click to view)
-                          </span>
-                        </div>
-                      </div>
-                    )}
-
-                    <input
-                      type="file"
-                      onChange={(e) => setEditFile(e.target.files[0])}
-                      accept=".pdf,.doc,.docx,.jpg,.png"
-                      className="w-full px-3 py-2 bg-gray-50 dark:bg-gray-900 border border-gray-200 dark:border-gray-700 rounded-lg text-sm file:mr-4 file:py-1.5 file:px-3 file:rounded-full file:border-0 file:text-xs file:font-semibold file:bg-amber-500 file:text-white file:cursor-pointer hover:file:bg-amber-600"
-                    />
-                    {editFile && (
-                      <p className="text-xs text-amber-600 mt-1">
-                        File selected: {editFile.name}
-                      </p>
-                    )}
-                    {editingLeave?.document && !editFile && (
-                      <p className="text-xs text-gray-500 mt-1">
-                        Upload a new file to replace the current document
-                      </p>
-                    )}
-                  </div>
-                </div>
-
-                <div className="flex justify-end gap-3 mt-6 pt-4 border-t border-gray-200 dark:border-gray-700">
-                  <button
-                    type="button"
-                    onClick={handleEditClose}
-                    className="px-4 py-2 rounded-lg font-semibold bg-gray-100 dark:bg-gray-700 text-gray-700 dark:text-gray-300 hover:bg-gray-200 dark:hover:bg-gray-600 transition-colors"
-                  >
-                    Cancel
-                  </button>
-                  <button
-                    type="submit"
-                    disabled={submitting}
-                    className="px-4 py-2 rounded-lg font-semibold bg-amber-500 text-white hover:bg-amber-600 transition-colors disabled:opacity-50 flex items-center gap-2"
-                  >
-                    {submitting ? (
+            <div className="flex justify-end gap-3 pt-4 border-t border-gray-200 dark:border-gray-700">
+              <button
+                type="button"
+                onClick={() => {
+                  setManagerActionModalOpen(false);
+                  setManagerActionLeave(null);
+                  setManagerActionType(null);
+                  setManagerRemark("");
+                }}
+                className="px-4 py-2 rounded-lg font-semibold bg-gray-100 dark:bg-gray-700 text-gray-700 dark:text-gray-300 hover:bg-gray-200 dark:hover:bg-gray-600 transition-colors"
+              >
+                Cancel
+              </button>
+              <button
+                type="button"
+                onClick={handleManagerActionConfirm}
+                disabled={managerActionLoading}
+                className={`px-4 py-2 rounded-lg font-semibold text-white transition-colors flex items-center gap-2 ${
+                  managerActionType === "approve"
+                    ? "bg-green-500 hover:bg-green-600"
+                    : "bg-red-500 hover:bg-red-600"
+                } disabled:opacity-50`}
+              >
+                {managerActionLoading ? (
+                  <>
+                    <div className="w-4 h-4 border-2 border-white border-t-transparent rounded-full animate-spin"></div>
+                    Processing...
+                  </>
+                ) : (
+                  <>
+                    {managerActionType === "approve" ? (
                       <>
-                        <div className="w-4 h-4 border-2 border-white border-t-transparent rounded-full animate-spin"></div>
-                        Updating...
+                        <i className="fas fa-check-circle"></i> Approve
                       </>
                     ) : (
                       <>
-                        <FiEdit2 /> Update
+                        <i className="fas fa-times-circle"></i> Reject
                       </>
                     )}
-                  </button>
-                </div>
-              </form>
-            )}
+                  </>
+                )}
+              </button>
+            </div>
           </div>
         </div>
       )}
 
-      {/* Confirm Modal for Approve/Reject */}
+      {/* Confirm Modal for Approve/Reject (HR/Admin) */}
       <ConfirmModal
         isOpen={confirmOpen}
         onClose={() => {
