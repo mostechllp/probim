@@ -42,6 +42,42 @@ const EmployeeDetailsReport = () => {
   // Export states
   const [exportFormat, setExportFormat] = useState("csv");
 
+  // Global counts from API
+  const [totalActiveCount, setTotalActiveCount] = useState(0);
+  const [totalInactiveCount, setTotalInactiveCount] = useState(0);
+
+  useEffect(() => {
+    const fetchCounts = async () => {
+      try {
+        const activeRes = await apiClient.get("/admin/reports/employees", {
+          params: {
+            per_page: 1,
+            department: selectedDepartment || undefined,
+            status: "active",
+            search: searchTerm || undefined,
+          }
+        });
+        const inactiveRes = await apiClient.get("/admin/reports/employees", {
+          params: {
+            per_page: 1,
+            department: selectedDepartment || undefined,
+            status: "inactive",
+            search: searchTerm || undefined,
+          }
+        });
+        
+        const activeData = activeRes.data?.data || activeRes.data;
+        const inactiveData = inactiveRes.data?.data || inactiveRes.data;
+        
+        setTotalActiveCount(activeData?.total || 0);
+        setTotalInactiveCount(inactiveData?.total || 0);
+      } catch (error) {
+        console.error("Failed to fetch global counts", error);
+      }
+    };
+    fetchCounts();
+  }, [selectedDepartment, searchTerm]);
+
   useEffect(() => {
     dispatch(fetchEmployeeDetailsReport({
       page: currentPage,
@@ -160,14 +196,14 @@ const EmployeeDetailsReport = () => {
 
   // For backend pagination, the total is from the API
   const filteredEmployees = getFilteredEmployees();
-  const totalFiltered = pagination?.total || filteredEmployees.length;
+  const totalFiltered = pagination?.total || 0;
   const totalPages = pagination?.lastPage || Math.ceil(totalFiltered / perPage);
   const start = 0; // Backend returns only current page, so start is 0
   const pageEmployees = filteredEmployees;
 
-  const getExportData = () => {
-    // Use the same filteredEmployees data
-    return filteredEmployees.map(emp => ({
+  const getExportData = (employeesToExport = filteredEmployees) => {
+    // Use the provided array (or default to current page)
+    return employeesToExport.map(emp => ({
       emp_id: emp.emp_id,
       name: emp.name,
       company_name: emp.company_name,
@@ -197,7 +233,6 @@ const EmployeeDetailsReport = () => {
   };
 
   const handleExport = async (format) => {
-    const exportData = getExportData();
     const headers = [
       { key: "emp_id", label: "Emp ID" },
       { key: "name", label: "Name" },
@@ -219,10 +254,42 @@ const EmployeeDetailsReport = () => {
     ];
 
     if (format === "csv") {
-      exportToCSV(exportData, headers, `employee_details_${new Date().toISOString().split("T")[0]}.csv`);
+      try {
+        // Fetch all matching records for full export instead of just the current page
+        const response = await apiClient.get('/admin/reports/employees', {
+          params: {
+            page: 1,
+            per_page: 10000,
+            department: selectedDepartment || undefined,
+            status: selectedStatus !== "all" ? selectedStatus.toLowerCase() : undefined,
+            search: searchTerm || undefined,
+          }
+        });
+        
+        let rawData = [];
+        if (Array.isArray(response.data)) {
+          rawData = response.data;
+        } else if (Array.isArray(response.data?.data)) {
+          rawData = response.data.data;
+        } else if (Array.isArray(response.data?.data?.data)) {
+          rawData = response.data.data.data;
+        } else if (Array.isArray(response.data?.employees)) {
+          rawData = response.data.employees;
+        }
+        
+        // Transform the raw data into the same structure used by the table
+        const allEmployees = rawData.map(transformEmployee);
+        
+        const fullExportData = getExportData(allEmployees);
+        exportToCSV(fullExportData, headers, `employee_details_${new Date().toISOString().split("T")[0]}.csv`);
+        showToast("CSV report downloaded successfully!", "success");
+      } catch (error) {
+        console.error("Failed to fetch full data for export", error);
+        showToast("Failed to generate full CSV report", "error");
+      }
     } else if (format === "pdf") {
       try {
-        const response = await apiClient.post('/admin/reports/export', 
+        const response = await apiClient.post('/admin/reports/export',
           { report_type: 'employee', format: 'pdf' },
           { responseType: 'blob' }
         );
@@ -251,17 +318,6 @@ const EmployeeDetailsReport = () => {
       return "text-amber-500 font-semibold bg-amber-50 dark:bg-amber-900/20 px-2 py-0.5 rounded";
     return "";
   };
-
-  const activeCount = transformedEmployees.filter(
-    (e) => e.status === "Active",
-  ).length;
-  const inactiveCount = transformedEmployees.filter(
-    (e) => e.status === "Inactive",
-  ).length;
-  // eslint-disable-next-line no-unused-vars
-  const onboardingCount = transformedEmployees.filter(
-    (e) => e.status === "Onboarding",
-  ).length;
 
   return (
     <div className="w-full overflow-x-hidden">
@@ -296,7 +352,7 @@ const EmployeeDetailsReport = () => {
                   Total Employees
                 </p>
                 <p className="text-2xl font-bold text-blue-600 dark:text-blue-400">
-                  {transformedEmployees.length}
+                  {totalFiltered}
                 </p>
               </div>
               <div className="w-10 h-10 bg-blue-100 dark:bg-blue-900/30 rounded-lg flex items-center justify-center">
@@ -312,7 +368,7 @@ const EmployeeDetailsReport = () => {
                   Active Employees
                 </p>
                 <p className="text-2xl font-bold text-green-600 dark:text-green-400">
-                  {activeCount}
+                  {totalActiveCount}
                 </p>
               </div>
               <div className="w-10 h-10 bg-green-100 dark:bg-green-900/30 rounded-lg flex items-center justify-center">
@@ -328,7 +384,7 @@ const EmployeeDetailsReport = () => {
                   Inactive Employees
                 </p>
                 <p className="text-2xl font-bold text-red-600 dark:text-red-400">
-                  {inactiveCount}
+                  {totalInactiveCount}
                 </p>
               </div>
               <div className="w-10 h-10 bg-red-100 dark:bg-red-900/30 rounded-lg flex items-center justify-center">
@@ -502,10 +558,10 @@ const EmployeeDetailsReport = () => {
                       <td className="px-3 py-3">
                         <span
                           className={`px-2 py-1 rounded-full text-xs font-semibold ${(emp.status || "").toLowerCase() === "active"
-                              ? "bg-green-100 text-green-700 dark:bg-green-900/30 dark:text-green-400"
-                              : (emp.status || "").toLowerCase() === "onboarding"
-                                ? "bg-amber-100 text-amber-700 dark:bg-amber-900/30 dark:text-amber-400"
-                                : "bg-red-100 text-red-700 dark:bg-red-900/30 dark:text-red-400"
+                            ? "bg-green-100 text-green-700 dark:bg-green-900/30 dark:text-green-400"
+                            : (emp.status || "").toLowerCase() === "onboarding"
+                              ? "bg-amber-100 text-amber-700 dark:bg-amber-900/30 dark:text-amber-400"
+                              : "bg-red-100 text-red-700 dark:bg-red-900/30 dark:text-red-400"
                             }`}
                         >
                           {emp.status}
@@ -702,7 +758,7 @@ const EmployeeDetailsReport = () => {
             <div className="bg-gray-50 dark:bg-gray-700/50 rounded-lg p-3 mb-6">
               <p className="text-xs text-gray-500 dark:text-gray-400">
                 <i className="fas fa-info-circle mr-1"></i>
-                Export will include all {filteredEmployees.length} employee
+                Export will include all {totalFiltered} employee
                 records with current filters applied.
               </p>
             </div>
@@ -729,7 +785,7 @@ const EmployeeDetailsReport = () => {
         onClose={() => setShowExportModal(false)}
         onExport={handleExport}
         title="Export Employee Details"
-        totalRecords={filteredEmployees.length}
+        totalRecords={totalFiltered}
         formats={["csv", "pdf"]}
       />
     </div>
