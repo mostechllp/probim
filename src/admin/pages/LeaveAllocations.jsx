@@ -4,7 +4,6 @@ import { Link } from "react-router-dom";
 import SearchBar from "@admin/components/common/SearchBar";
 import EntriesSelector from "@admin/components/common/EntriesSelector";
 import Pagination from "@admin/components/common/Paginations";
-import { fetchEmployees } from "@admin/store/slices/employeeSlice";
 import {
   fetchLeaveTypes,
   fetchLeaveAllocations,
@@ -26,34 +25,30 @@ const getLeaveTypeColor = (typeName) => {
 
 const LeaveAllocations = () => {
   const dispatch = useDispatch();
-  const { employees = [] } = useSelector((state) => state.employees || {});
-  const { leaveTypes = [], leaveAllocations = [] } = useSelector((state) => state.leaves || {});
+  const { leaveTypes = [], leaveAllocations = [], loading = false } = useSelector((state) => state.leaves || {});
   const [searchTerm, setSearchTerm] = useState("");
   const [currentPage, setCurrentPage] = useState(1);
   const [perPage, setPerPage] = useState(10);
-  const [loading, setLoading] = useState(false);
   const { user } = useSelector((state) => state.auth || {});
-  const routePrefix = (user?.type === "employee" || user?.type === "hr" || user?.type === "manager" || user?.type === "team_lead")? "/employee" : "/admin";
+  const routePrefix = (user?.type === "employee" || user?.type === "hr" || user?.type === "manager" || user?.type === "team_lead") ? "/employee" : "/admin";
   const leavesUrl = (user?.type === "employee" || user?.type === "hr" || user?.type === "manager" || user?.type === "team_lead") ? "/employee/leave-management" : "/admin/leaves";
 
   useEffect(() => {
     const fetchData = async () => {
-      setLoading(true);
-      await dispatch(fetchEmployees());
       await dispatch(fetchLeaveTypes());
       await dispatch(fetchLeaveAllocations());
-      setLoading(false);
     };
     fetchData();
   }, [dispatch]);
 
+  // Get filtered employees from leaveAllocations data
   const getFilteredEmployees = () => {
-    let filtered = [...employees];
+    let filtered = [...leaveAllocations];
+    
     if (searchTerm) {
       const searchLower = searchTerm.toLowerCase();
       filtered = filtered.filter(
-        (emp) =>
-          (emp.name || emp.first_name || "").toLowerCase().includes(searchLower)
+        (emp) => (emp.name || "").toLowerCase().includes(searchLower)
       );
     }
     return filtered;
@@ -66,16 +61,10 @@ const LeaveAllocations = () => {
   const pageEmployees = filteredEmployees.slice(start, start + perPage);
 
   // Get allocation value for a specific employee and leave type
-  const getAllocationValue = (employeeId, leaveTypeId, field) => {
-    // Find the employee in the leaveAllocations data
-    const employeeAlloc = leaveAllocations.find(
-      emp => emp.employee_id === employeeId
-    );
+  const getAllocationValue = (employee, leaveTypeId, field) => {
+    if (!employee || !employee.allocations) return 0;
     
-    if (!employeeAlloc || !employeeAlloc.allocations) return 0;
-    
-    // Find the specific leave type allocation
-    const allocation = employeeAlloc.allocations.find(
+    const allocation = employee.allocations.find(
       a => a.leave_type_id === leaveTypeId
     );
     
@@ -83,7 +72,6 @@ const LeaveAllocations = () => {
     
     const allocatedDays = parseFloat(allocation.allocated_days || 0);
     // Since there's no 'used' field in the response, we set it to 0
-    // You can modify this if the API provides used days in the future
     const usedDays = parseFloat(allocation.used || 0);
     
     if (field === "alloc") return allocatedDays;
@@ -98,26 +86,11 @@ const LeaveAllocations = () => {
 
   // Helper function to get photo URL
   const getEmployeePhoto = (employee) => {
-    const photoValue =
-      employee.avatar ||
-      employee.avatar_path ||
-      employee.passport_size_photo ||
-      employee.profile_photo ||
-      employee.photo ||
-      employee.user?.avatar;
+    const photoValue = employee.avatar;
 
     if (!photoValue) return null;
 
-    if (typeof photoValue === "object" && photoValue.path) {
-      const baseUrl = import.meta.env.VITE_API_URL?.replace("/api", "") || "";
-      return `${baseUrl}/storage/${photoValue.path}`;
-    }
-
     if (typeof photoValue === "string") {
-      if (photoValue.startsWith("/tmp/")) {
-        const baseUrl = import.meta.env.VITE_API_URL?.replace("/api", "") || "";
-        return `${baseUrl}/storage/temp/${photoValue.replace("/tmp/", "")}`;
-      }
       if (photoValue.startsWith("data:")) return photoValue;
       if (photoValue.startsWith("http")) return photoValue;
 
@@ -198,6 +171,12 @@ const LeaveAllocations = () => {
                 <th className="px-3 md:px-4 py-2 md:py-3 text-left text-[10px] md:text-xs font-semibold text-gray-500 dark:text-gray-400 whitespace-nowrap">
                   Employee
                 </th>
+                <th className="px-3 md:px-4 py-2 md:py-3 text-left text-[10px] md:text-xs font-semibold text-gray-500 dark:text-gray-400 whitespace-nowrap">
+                  Designation
+                </th>
+                <th className="px-3 md:px-4 py-2 md:py-3 text-left text-[10px] md:text-xs font-semibold text-gray-500 dark:text-gray-400 whitespace-nowrap">
+                  Department
+                </th>
                 {/* Dynamic Leave Type Columns with Pastel Colors */}
                 {leaveTypes.map((type) => {
                   const colorClass = getLeaveTypeColor(type.name);
@@ -215,7 +194,7 @@ const LeaveAllocations = () => {
                 </th>
               </tr>
               <tr className="bg-gray-50 dark:bg-gray-700/50 border-b border-gray-200 dark:border-gray-700">
-                <th colSpan="2" className="px-3 md:px-4 py-1"></th>
+                <th colSpan="4" className="px-3 md:px-4 py-1"></th>
                 {leaveTypes.map((type) => (
                   <th key={`sub-${type.id}`} className="px-3 md:px-4 py-1 text-center text-[10px] font-semibold text-gray-500 dark:text-gray-400">
                     <div className="flex justify-center gap-2">
@@ -234,14 +213,11 @@ const LeaveAllocations = () => {
               {pageEmployees.length > 0 ? (
                 pageEmployees.map((employee, idx) => {
                   const photoUrl = getEmployeePhoto(employee);
-                  const employeeName = employee.name || 
-                    (employee.first_name && employee.last_name 
-                      ? `${employee.first_name} ${employee.last_name}` 
-                      : employee.first_name || employee.last_name || "-");
+                  const employeeName = employee.name || "-";
 
                   return (
                     <tr
-                      key={employee.id}
+                      key={employee.employee_id || idx}
                       className="border-b border-gray-200 dark:border-gray-700 hover:bg-gray-50 dark:hover:bg-gray-700/50 transition-colors"
                     >
                       <td className="px-3 md:px-4 py-2 md:py-3 text-xs md:text-sm text-gray-600 dark:text-gray-400 text-center">
@@ -273,23 +249,29 @@ const LeaveAllocations = () => {
                           </span>
                         </div>
                       </td>
+                      <td className="px-3 md:px-4 py-2 md:py-3 text-xs md:text-sm text-gray-600 dark:text-gray-400">
+                        {employee.designation || "-"}
+                      </td>
+                      <td className="px-3 md:px-4 py-2 md:py-3 text-xs md:text-sm text-gray-600 dark:text-gray-400">
+                        {employee.department || "-"}
+                      </td>
 
                       {/* Dynamic Leave Type Values */}
                       {leaveTypes.map((type) => {
                         const alloc = getAllocationValue(
-                          employee.id,
+                          employee,
                           type.id,
                           "alloc",
                         );
                         const used = getAllocationValue(
-                          employee.id,
+                          employee,
                           type.id,
                           "used",
                         );
                         const bal = alloc - used;
 
                         return (
-                          <td key={`${employee.id}-${type.id}`} className="px-3 md:px-4 py-2 md:py-3">
+                          <td key={`${employee.employee_id}-${type.id}`} className="px-3 md:px-4 py-2 md:py-3">
                             <div className="flex justify-center items-center gap-2">
                               <span className="text-xs md:text-sm font-semibold text-green-600 dark:text-green-400 min-w-[30px] text-center">
                                 {formatNumber(alloc)}
@@ -311,7 +293,7 @@ const LeaveAllocations = () => {
 
                       <td className="px-3 md:px-4 py-2 md:py-3">
                         <Link
-                          to={`${routePrefix}/leaves/allocations/${employee.id}`}
+                          to={`${routePrefix}/leaves/allocations/${employee.employee_id}`}
                           className="p-1.5 rounded-lg hover:bg-gray-100 dark:hover:bg-gray-700 text-amber-500 transition-colors inline-block"
                           title="Edit Allocations"
                         >
@@ -324,7 +306,7 @@ const LeaveAllocations = () => {
               ) : (
                 <tr>
                   <td
-                    colSpan={3 + leaveTypes.length}
+                    colSpan={5 + leaveTypes.length}
                     className="px-4 py-8 text-center text-gray-500 dark:text-gray-400"
                   >
                     No employees found

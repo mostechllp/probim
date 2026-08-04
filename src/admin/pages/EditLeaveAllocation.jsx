@@ -2,50 +2,36 @@ import { useEffect, useState } from 'react';
 import { useDispatch, useSelector } from 'react-redux';
 import { useParams, useNavigate, Link } from 'react-router-dom';
 import { showToast } from '../../components/common/Toast';
-import { fetchEmployeeById } from '@admin/store/slices/employeeSlice';
 import { fetchLeaveTypes, fetchLeaveBalances, updateLeaveAllocation } from '@admin/store/slices/LeaveSlice';
 
 const EditLeaveAllocation = () => {
   const { id } = useParams();
   const dispatch = useDispatch();
   const navigate = useNavigate();
-  const { currentEmployee } = useSelector((state) => state.employees || {});
-  const { leaveTypes = [], loading } = useSelector((state) => state.leaves || {});
+  const { leaveTypes = [], leaveAllocations = [], loading } = useSelector((state) => state.leaves || {});
   const [allocations, setAllocations] = useState({});
   const [updating, setUpdating] = useState(false);
   const [leaveBalances, setLeaveBalances] = useState({});
   const [photoError, setPhotoError] = useState(false);
   const [fetchingBalances, setFetchingBalances] = useState(true);
   const { user } = useSelector((state) => state.auth || {});
-  const routePrefix = user?.type === "employee" ? "/employee" : "/admin";
-  const leavesUrl = user?.type === "employee" ? "/employee/leave-management" : "/admin/leaves";
+  const routePrefix = (user?.type === "employee" || user?.type === "hr" || user?.type === "manager" || user?.type === "team_lead") ? "/employee" : "/admin";
+  const leavesUrl = (user?.type === "employee" || user?.type === "hr" || user?.type === "manager" || user?.type === "team_lead") ? "/employee/leave-management" : "/admin/leaves";
   
-  console.log("Employee: ", currentEmployee);
+  // Get employee data from leaveAllocations
+  const employee = leaveAllocations.find(emp => String(emp.employee_id) === String(id));
+  
+  console.log("Employee from leaveAllocations:", employee);
 
   // Helper function to get employee photo URL
   const getEmployeePhoto = () => {
-    if (!currentEmployee) return null;
+    if (!employee) return null;
     
-    const photoValue = 
-      currentEmployee.avatar ||
-      currentEmployee.avatar_path ||
-      currentEmployee.passport_size_photo ||
-      currentEmployee.profile_photo ||
-      currentEmployee.photo ||
-      currentEmployee.user?.avatar;
+    const photoValue = employee.avatar;
     
     if (!photoValue || photoError) return null;
     
-    if (typeof photoValue === "object" && photoValue.path) {
-      const baseUrl = import.meta.env.VITE_API_URL?.replace("/api", "") || "";
-      return `${baseUrl}/storage/${photoValue.path}`;
-    }
-    
     if (typeof photoValue === "string") {
-      if (photoValue.startsWith("/tmp/")) {
-        const baseUrl = import.meta.env.VITE_API_URL?.replace("/api", "") || "";
-        return `${baseUrl}/storage/temp/${photoValue.replace("/tmp/", "")}`;
-      }
       if (photoValue.startsWith("data:")) return photoValue;
       if (photoValue.startsWith("http")) return photoValue;
       
@@ -57,10 +43,9 @@ const EditLeaveAllocation = () => {
     return null;
   };
 
-  // Fetch employee and leave types
+  // Fetch leave types only
   useEffect(() => {
     if (id) {
-      dispatch(fetchEmployeeById(id));
       dispatch(fetchLeaveTypes());
     }
   }, [dispatch, id]);
@@ -82,7 +67,6 @@ const EditLeaveAllocation = () => {
           let allocationsData = [];
           
           if (result && result.allocations) {
-            // If result has allocations object
             allocationsData = Object.values(result.allocations);
           } else if (result && Array.isArray(result)) {
             allocationsData = result;
@@ -96,7 +80,6 @@ const EditLeaveAllocation = () => {
           allocationsData.forEach(alloc => {
             const leaveTypeId = alloc.leave_type_id || alloc.leave_type?.id;
             if (leaveTypeId) {
-              // Get allocated days (handle different field names)
               const allocatedDays = parseFloat(alloc.allocated_days || alloc.allocated || 0);
               const usedDays = parseFloat(alloc.used || 0);
               
@@ -191,7 +174,7 @@ const EditLeaveAllocation = () => {
   };
 
   // Show loading state while fetching data
-  if (loading || fetchingBalances || !currentEmployee || leaveTypes.length === 0) {
+  if (loading || fetchingBalances || !employee || leaveTypes.length === 0) {
     return (
       <div className="w-full px-4 md:px-6">
         <div className="flex justify-center items-center h-64">
@@ -202,7 +185,8 @@ const EditLeaveAllocation = () => {
   }
 
   const photoUrl = getEmployeePhoto();
-  const employeeInitials = `${currentEmployee.first_name?.charAt(0) || ''}${currentEmployee.last_name?.charAt(0) || ''}`;
+  const employeeName = employee.name || "";
+  const employeeInitials = employeeName.split(' ').map(word => word.charAt(0)).join('').toUpperCase() || '?';
 
   return (
     <div className="w-full px-4 md:px-6">
@@ -245,7 +229,7 @@ const EditLeaveAllocation = () => {
             {photoUrl ? (
               <img
                 src={photoUrl}
-                alt={`${currentEmployee.first_name} ${currentEmployee.last_name}`}
+                alt={employeeName}
                 className="w-12 h-12 rounded-full object-cover border-2 border-green-500 shadow-sm"
                 onError={() => setPhotoError(true)}
               />
@@ -253,19 +237,19 @@ const EditLeaveAllocation = () => {
             
             {(!photoUrl || photoError) && (
               <div className="w-12 h-12 bg-gradient-to-r from-green-500 to-green-600 rounded-full flex items-center justify-center text-white text-lg font-bold shadow-sm">
-                {employeeInitials || '?'}
+                {employeeInitials}
               </div>
             )}
             
             <div>
               <h4 className="text-base font-semibold text-gray-800 dark:text-gray-200">
-                {currentEmployee.first_name} {currentEmployee.last_name}
+                {employeeName}
               </h4>
               <p className="text-xs text-gray-500 dark:text-gray-400">
-                {currentEmployee?.user?.designation?.name || 'N/A'}
+                {employee.designation || 'N/A'}
               </p>
               <p className="text-xs text-gray-400 dark:text-gray-500">
-                {currentEmployee.user?.department?.name || 'N/A'}
+                {employee.department || 'N/A'}
               </p>
             </div>
           </div>
@@ -275,31 +259,25 @@ const EditLeaveAllocation = () => {
             <div className="flex justify-between py-1">
               <span className="text-xs text-gray-500">Employee ID</span>
               <span className="text-xs font-medium text-gray-800 dark:text-gray-200">
-                {currentEmployee.employee_id || '-'}
+                {employee.employee_id || '-'}
               </span>
             </div>
             <div className="flex justify-between py-1 border-t border-gray-100 dark:border-gray-700">
               <span className="text-xs text-gray-500">Company</span>
               <span className="text-xs font-medium text-gray-800 dark:text-gray-200">
-                {currentEmployee.user?.company?.company_name || '-'}
+                {employee.company || '-'}
               </span>
             </div>
             <div className="flex justify-between py-1 border-t border-gray-100 dark:border-gray-700">
               <span className="text-xs text-gray-500">Email</span>
               <span className="text-xs font-medium text-gray-800 dark:text-gray-200 truncate max-w-[180px]">
-                {currentEmployee.personal_email || '-'}
-              </span>
-            </div>
-            <div className="flex justify-between py-1 border-t border-gray-100 dark:border-gray-700">
-              <span className="text-xs text-gray-500">Phone</span>
-              <span className="text-xs font-medium text-gray-800 dark:text-gray-200">
-                {currentEmployee.personal_number || '-'}
+                {employee.email || '-'}
               </span>
             </div>
             <div className="flex justify-between py-1 border-t border-gray-100 dark:border-gray-700">
               <span className="text-xs text-gray-500">Joining Date</span>
               <span className="text-xs font-medium text-gray-800 dark:text-gray-200">
-                {currentEmployee.joining_date ? new Date(currentEmployee.joining_date).toLocaleDateString() : '-'}
+                {employee.joining_date ? new Date(employee.joining_date).toLocaleDateString() : '-'}
               </span>
             </div>
             <div className="flex justify-between py-1 border-t border-gray-100 dark:border-gray-700">
@@ -332,12 +310,6 @@ const EditLeaveAllocation = () => {
               const currentAllocation = allocations[type.id] || 0;
               const usedDays = getUsedDays(type.id);
               const balance = getCurrentBalance(type.id);
-              
-              console.log(`Leave type ${type.name} (ID: ${type.id}):`, {
-                currentAllocation,
-                usedDays,
-                balance
-              });
               
               return (
                 <div key={type.id} className="flex items-center justify-between py-2 border-b border-gray-100 dark:border-gray-700">
