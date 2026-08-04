@@ -410,7 +410,7 @@ const ProjectReport = () => {
             <div className="flex items-end gap-2 lg:col-span-2">
               <button
                 onClick={handleApplyFilters}
-                className="px-4 py-2 rounded-lg bg-indigo-500 hover:bg-indigo-600 text-white font-medium text-sm flex items-center gap-2 transition-all"
+                className="px-4 py-2 rounded-lg bg-green-500 hover:bg-green-600 text-white font-medium text-sm flex items-center gap-2 transition-all"
               >
                 <i className="fas fa-check"></i> Apply
               </button>

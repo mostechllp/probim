@@ -531,6 +531,7 @@ export const fetchLeavesReport = createAsyncThunk(
           search: params.search,
         },
       });
+      console.log("Leave Request Report API Response:", response.data);
       return response.data;
     } catch (error) {
       return rejectWithValue(
