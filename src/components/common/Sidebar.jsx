@@ -363,19 +363,6 @@ const Sidebar = ({ isOpen, setIsOpen }) => {
       });
     });
 
-    // Ensure essential employee modules are always visible
-    if (user?.type !== 'admin') {
-      if (!standaloneItems.find(item => item.slug === 'payroll')) {
-        standaloneItems.push({
-          type: "single",
-          slug: "payroll",
-          label: "My Payroll",
-          path: "/employee/payroll",
-          icon: "fas fa-file-invoice-dollar",
-          order: MODULE_ORDER["payroll"] || 17,
-        });
-      }
-    }
 
     const allItems = [...standaloneItems, ...parentItems];
     allItems.sort((a, b) => (a.order || 0) - (b.order || 0));

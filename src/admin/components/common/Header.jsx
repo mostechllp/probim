@@ -142,6 +142,28 @@ const Header = ({ onMenuClick }) => {
   const userName = getUserName();
   const userEmail = getUserEmail();
 
+  // Check permissions for modules
+  const hasAllPermissions = user?.permissions?.all === true;
+  const userType = user?.type || "";
+
+  const hasReadPermission = (slug) => {
+    if (hasAllPermissions) return true;
+    if (userType === 'admin') return true;
+    
+    const modulePermission = user?.permissions?.[slug];
+    if (modulePermission) {
+      return modulePermission.read === true;
+    }
+    
+    const publicModules = ["dashboard", "my-leaves", "my-tasks", "task-reports", "my-wfh-requests", "my-profile"];
+    if (publicModules.includes(slug)) return true;
+    
+    return false;
+  };
+
+  const showSettings = hasReadPermission("settings");
+
+
   return (
     <>
       <header className="bg-white dark:bg-gray-800 border-b border-gray-200 dark:border-gray-700 px-3 md:px-6 py-2 md:py-3 sticky top-0 z-40">
@@ -293,16 +315,18 @@ const Header = ({ onMenuClick }) => {
                       </p>
                     </div>
                   </div>
-                  <NavLink
-                    to="/admin/settings"
-                    className="flex items-center gap-3 p-3 hover:bg-gray-50 dark:hover:bg-gray-700 transition-colors"
-                    onClick={() => setShowProfile(false)}
-                  >
-                    <i className="fas fa-user text-green-500 w-5"></i>
-                    <span className="text-sm text-gray-700 dark:text-gray-300">
-                      Account Settings
-                    </span>
-                  </NavLink>
+                  {showSettings && (
+                    <NavLink
+                      to="/admin/settings"
+                      className="flex items-center gap-3 p-3 hover:bg-gray-50 dark:hover:bg-gray-700 transition-colors"
+                      onClick={() => setShowProfile(false)}
+                    >
+                      <i className="fas fa-user text-green-500 w-5"></i>
+                      <span className="text-sm text-gray-700 dark:text-gray-300">
+                        Account Settings
+                      </span>
+                    </NavLink>
+                  )}
                   <div>
                     <button
                       onClick={handleLogoutClick}
