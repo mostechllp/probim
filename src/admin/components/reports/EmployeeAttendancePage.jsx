@@ -1,6 +1,6 @@
 import { useEffect, useState } from "react";
 import { useDispatch, useSelector } from "react-redux";
-import { Link, useParams, useNavigate } from "react-router-dom";
+import { Link, useParams, useNavigate, useLocation } from "react-router-dom";
 import Calendar from "react-calendar";
 import "react-calendar/dist/Calendar.css";
 import {
@@ -112,9 +112,11 @@ const isFutureDate = (date) => {
 const EmployeeAttendancePage = () => {
   const dispatch = useDispatch();
   const navigate = useNavigate();
+  const location = useLocation();
   const { employeeId } = useParams();
 
-  const [selectedMonth, setSelectedMonth] = useState(new Date());
+  const initialDate = location.state?.date ? new Date(location.state.date) : new Date();
+  const [selectedMonth, setSelectedMonth] = useState(initialDate);
   const [selectedDate, setSelectedDate] = useState(new Date());
   const [showDayDetails, setShowDayDetails] = useState(false);
   const [dayDetails, setDayDetails] = useState(null);
