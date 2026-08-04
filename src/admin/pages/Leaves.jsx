@@ -28,13 +28,18 @@ const Leaves = () => {
 
   // Determine base path from current route
   const getBasePath = () => {
-    if (location.pathname.startsWith('/admin')) return '/admin';
-    if (location.pathname.startsWith('/employee')) return '/employee';
-    return '';
+    if (location.pathname.startsWith("/admin")) return "/admin";
+    if (location.pathname.startsWith("/employee")) return "/employee";
+    return "";
   };
   const basePath = getBasePath();
 
-  const { leaves = [], error = null, loading = false, leaveTypes = [] } = useSelector((state) => {
+  const {
+    leaves = [],
+    error = null,
+    loading = false,
+    leaveTypes = [],
+  } = useSelector((state) => {
     return state.leaves || { leaves: [] };
   });
   console.log(leaves);
@@ -85,22 +90,22 @@ const Leaves = () => {
   // ✅ Helper to get full document URL
   const getDocumentUrl = (docPath) => {
     if (!docPath) return null;
-    
-    if (docPath.startsWith('http://') || docPath.startsWith('https://')) {
+
+    if (docPath.startsWith("http://") || docPath.startsWith("https://")) {
       return docPath;
     }
-    
+
     const baseUrl = getBaseUrl();
-    const cleanPath = docPath.replace(/^\/+/, '');
-    
-    if (cleanPath.startsWith('storage/')) {
+    const cleanPath = docPath.replace(/^\/+/, "");
+
+    if (cleanPath.startsWith("storage/")) {
       return `${baseUrl}/${cleanPath}`;
     }
-    
-    if (cleanPath.startsWith('leaves/documents/')) {
+
+    if (cleanPath.startsWith("leaves/documents/")) {
       return `${baseUrl}/storage/${cleanPath}`;
     }
-    
+
     return `${baseUrl}/storage/${cleanPath}`;
   };
 
@@ -128,9 +133,9 @@ const Leaves = () => {
     }
 
     const appliedBy = leave.applied_by;
-    
+
     let name = appliedBy.employee_name || appliedBy.name || "-";
-    
+
     let role = "-";
     if (appliedBy.role) {
       role = appliedBy.role.name || appliedBy.role || "-";
@@ -172,16 +177,14 @@ const Leaves = () => {
           (leave.employee?.first_name || "")
             .toLowerCase()
             .includes(searchLower) ||
-          (leave.employee?.name || "")
-            .toLowerCase()
-            .includes(searchLower) ||
+          (leave.employee?.name || "").toLowerCase().includes(searchLower) ||
           (leave.leave_type?.name || leave.type || "")
             .toLowerCase()
             .includes(searchLower) ||
           (leave.reason || "").toLowerCase().includes(searchLower) ||
           (getAppliedByInfo(leave).name || "")
             .toLowerCase()
-            .includes(searchLower)
+            .includes(searchLower),
       );
     }
     return filtered;
@@ -255,7 +258,12 @@ const Leaves = () => {
   // ✅ Helper to check if document exists
   const hasDocument = (leave) => {
     const doc = leave.document_path || leave.document || leave.doc;
-    return !!(doc && doc !== 'null' && doc !== 'undefined' && doc.trim() !== '');
+    return !!(
+      doc &&
+      doc !== "null" &&
+      doc !== "undefined" &&
+      doc.trim() !== ""
+    );
   };
 
   // ✅ Helper to format date for input
@@ -263,7 +271,10 @@ const Leaves = () => {
     if (!dateString) return "";
     try {
       // If it's already in YYYY-MM-DD format
-      if (typeof dateString === 'string' && dateString.match(/^\d{4}-\d{2}-\d{2}$/)) {
+      if (
+        typeof dateString === "string" &&
+        dateString.match(/^\d{4}-\d{2}-\d{2}$/)
+      ) {
         return dateString;
       }
       const date = new Date(dateString);
@@ -291,15 +302,15 @@ const Leaves = () => {
     try {
       // ✅ Fetch the complete leave data by ID
       const result = await dispatch(fetchLeaveById(leave.id)).unwrap();
-      
+
       console.log("Fetched leave data for editing:", result);
 
       const leaveTypeId = result.leave_type_id || result.leave_type?.id;
-      
+
       // Format dates for input
       const startDate = result.start_date || result.from_date;
       const endDate = result.end_date || result.to_date;
-      
+
       const startDateFormatted = startDate ? formatDateForInput(startDate) : "";
       const endDateFormatted = endDate ? formatDateForInput(endDate) : "";
 
@@ -312,7 +323,10 @@ const Leaves = () => {
         start_date: startDateFormatted,
         end_date: endDateFormatted,
         reason: result.reason || "",
-        claim_salary: result.claim_salary === 1 || result.claim_salary === "Yes" ? "1" : "0",
+        claim_salary:
+          result.claim_salary === 1 || result.claim_salary === "Yes"
+            ? "1"
+            : "0",
         session1: session1,
         session2: session2,
       });
@@ -376,7 +390,7 @@ const Leaves = () => {
         updateLeaveRequest({
           id: editingLeave.id,
           formData: formDataToSend,
-        })
+        }),
       );
 
       if (updateLeaveRequest.fulfilled.match(result)) {
@@ -474,21 +488,24 @@ const Leaves = () => {
   const formatDate = (dateString) => {
     if (!dateString) return "-";
     try {
-      if (typeof dateString === 'string' && dateString.match(/^\d{4}-\d{2}-\d{2}$/)) {
-        const [year, month, day] = dateString.split('-');
+      if (
+        typeof dateString === "string" &&
+        dateString.match(/^\d{4}-\d{2}-\d{2}$/)
+      ) {
+        const [year, month, day] = dateString.split("-");
         const date = new Date(year, month - 1, day);
-        return date.toLocaleDateString('en-GB', {
-          day: '2-digit',
-          month: 'short',
-          year: 'numeric'
+        return date.toLocaleDateString("en-GB", {
+          day: "2-digit",
+          month: "short",
+          year: "numeric",
         });
       }
       const date = new Date(dateString);
       if (!isNaN(date.getTime())) {
-        return date.toLocaleDateString('en-GB', {
-          day: '2-digit',
-          month: 'short',
-          year: 'numeric'
+        return date.toLocaleDateString("en-GB", {
+          day: "2-digit",
+          month: "short",
+          year: "numeric",
         });
       }
       return dateString;
@@ -606,22 +623,29 @@ const Leaves = () => {
               <FiPlus /> Request Leave for Employee
             </Link>
           ) : null}
-          <Link
-            to={`${basePath}/leaves/allocations`}
-            className="bg-blue-500 hover:bg-blue-600 text-white px-4 py-2 rounded-full text-sm font-semibold flex items-center justify-center gap-2 transition-all shadow-md hover:shadow-lg w-full sm:w-auto"
-          >
-            <i className="fas fa-chart-line"></i>
-            <span className="hidden sm:inline">Manage Leave Allocations</span>
-            <span className="sm:hidden">Allocations</span>
-          </Link>
-          <Link
-            to={`${basePath}/leaves/leave-types`}
-            className="bg-green-500 hover:bg-green-600 text-white px-4 py-2 rounded-full text-sm font-semibold flex items-center justify-center gap-2 transition-all shadow-md hover:shadow-lg w-full sm:w-auto"
-          >
-            <i className="fas fa-briefcase"></i>
-            <span className="hidden sm:inline">Manage leave types</span>
-            <span className="sm:hidden">Leave Types</span>
-          </Link>
+          {user?.type === "admin" ? (
+            <>
+              <Link
+                to={`${basePath}/leaves/allocations`}
+                className="bg-blue-500 hover:bg-blue-600 text-white px-4 py-2 rounded-full text-sm font-semibold flex items-center justify-center gap-2 transition-all shadow-md hover:shadow-lg w-full sm:w-auto"
+              >
+                <i className="fas fa-chart-line"></i>
+                <span className="hidden sm:inline">
+                  Manage Leave Allocations
+                </span>
+                <span className="sm:hidden">Allocations</span>
+              </Link>
+
+              <Link
+                to={`${basePath}/leaves/leave-types`}
+                className="bg-green-500 hover:bg-green-600 text-white px-4 py-2 rounded-full text-sm font-semibold flex items-center justify-center gap-2 transition-all shadow-md hover:shadow-lg w-full sm:w-auto"
+              >
+                <i className="fas fa-briefcase"></i>
+                <span className="hidden sm:inline">Manage Leave Types</span>
+                <span className="sm:hidden">Leave Types</span>
+              </Link>
+            </>
+          ) : null}
         </div>
       </div>
 
@@ -677,9 +701,11 @@ const Leaves = () => {
                 pageLeaves.map((leave, idx) => {
                   const appliedByInfo = getAppliedByInfo(leave);
                   const hasDoc = hasDocument(leave);
-                  const docPath = leave.document_path || leave.document || leave.doc;
-                  const isPending = (leave.status || "").toLowerCase() === "pending";
-                  
+                  const docPath =
+                    leave.document_path || leave.document || leave.doc;
+                  const isPending =
+                    (leave.status || "").toLowerCase() === "pending";
+
                   return (
                     <tr
                       key={leave.id}
@@ -708,7 +734,10 @@ const Leaves = () => {
                         {formatDate(leave.end_date || leave.to_date)}
                       </td>
                       <td className="px-3 md:px-4 py-2 md:py-3 text-xs md:text-sm text-gray-600 dark:text-gray-400 text-center">
-                        {leave.duration_days || leave.number_of_days || leave.days || "-"}
+                        {leave.duration_days ||
+                          leave.number_of_days ||
+                          leave.days ||
+                          "-"}
                       </td>
                       <td className="px-3 md:px-4 py-2 md:py-3">
                         <span
@@ -720,7 +749,9 @@ const Leaves = () => {
                               : "bg-gray-100 text-gray-600 dark:bg-gray-700 dark:text-gray-400"
                           }`}
                         >
-                          {leave.claim_salary === 1 || leave.claim_salary === "1" || leave.claim_salary === "Yes"
+                          {leave.claim_salary === 1 ||
+                          leave.claim_salary === "1" ||
+                          leave.claim_salary === "Yes"
                             ? "Yes"
                             : "No"}
                         </span>
@@ -735,7 +766,9 @@ const Leaves = () => {
                             <span className="hidden sm:inline">View</span>
                           </button>
                         ) : (
-                          <span className="text-gray-400 dark:text-gray-500 text-xs">-</span>
+                          <span className="text-gray-400 dark:text-gray-500 text-xs">
+                            -
+                          </span>
                         )}
                       </td>
                       <td
@@ -752,7 +785,10 @@ const Leaves = () => {
                         </span>
                       </td>
                       <td className="px-3 md:px-4 py-2 md:py-3 text-xs md:text-sm text-gray-600 dark:text-gray-400 whitespace-nowrap">
-                        {leave.processed_by || leave.processedBy || leave.approver?.username || "-"}
+                        {leave.processed_by ||
+                          leave.processedBy ||
+                          leave.approver?.username ||
+                          "-"}
                       </td>
                       <td className="px-3 md:px-4 py-2 md:py-3">
                         <div className="flex gap-1 md:gap-2">
@@ -854,7 +890,9 @@ const Leaves = () => {
               <div className="flex items-center justify-center py-12">
                 <div className="text-center">
                   <FiLoader className="w-10 h-10 text-amber-500 animate-spin mx-auto mb-4" />
-                  <p className="text-[var(--muted)]">Loading leave details...</p>
+                  <p className="text-[var(--muted)]">
+                    Loading leave details...
+                  </p>
                 </div>
               </div>
             ) : (
@@ -1028,25 +1066,31 @@ const Leaves = () => {
                       Upload Document{" "}
                       <span className="text-gray-400 text-xs">(Optional)</span>
                     </label>
-                    
+
                     {/* Show current document if it exists */}
                     {editingLeave?.document && !editFile && (
                       <div className="mb-3 p-3 bg-gray-50 dark:bg-gray-900 rounded-lg border border-gray-200 dark:border-gray-700">
-                        <p className="text-xs text-gray-600 dark:text-gray-400 mb-1">Current Document:</p>
+                        <p className="text-xs text-gray-600 dark:text-gray-400 mb-1">
+                          Current Document:
+                        </p>
                         <div className="flex items-center gap-2">
                           <i className="fas fa-file-pdf text-red-500"></i>
                           <button
                             type="button"
-                            onClick={() => handleViewDocument(editingLeave.document)}
+                            onClick={() =>
+                              handleViewDocument(editingLeave.document)
+                            }
                             className="text-blue-500 hover:text-blue-600 hover:underline text-sm font-medium"
                           >
-                            {editingLeave.document.split('/').pop()}
+                            {editingLeave.document.split("/").pop()}
                           </button>
-                          <span className="text-xs text-gray-400">(Click to view)</span>
+                          <span className="text-xs text-gray-400">
+                            (Click to view)
+                          </span>
                         </div>
                       </div>
                     )}
-                    
+
                     <input
                       type="file"
                       onChange={(e) => setEditFile(e.target.files[0])}
@@ -1119,11 +1163,7 @@ const Leaves = () => {
         }
         confirmText={actionType === "approve" ? "Approve" : "Reject"}
         loading={actionLoading}
-        variant={
-          actionType === "approve"
-          ? "success"
-          : "danger"
-        }
+        variant={actionType === "approve" ? "success" : "danger"}
       >
         {actionType === "reject" && (
           <div className="mt-4">
