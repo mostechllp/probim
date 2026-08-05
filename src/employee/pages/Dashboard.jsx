@@ -138,6 +138,35 @@ const getAvatarUrl = (avatarPath) => {
   return `${baseUrl}/storage/${avatarPath}`;
 };
 
+// Helper to get leave status color
+const getLeaveStatusColor = (status) => {
+  switch (status?.toLowerCase()) {
+    case "pending":
+      return "bg-amber-100 text-amber-700 dark:bg-amber-900/30 dark:text-amber-400 border-amber-200 dark:border-amber-800";
+    case "approved":
+      return "bg-green-100 text-green-700 dark:bg-green-900/30 dark:text-green-400 border-green-200 dark:border-green-800";
+    case "rejected":
+      return "bg-red-100 text-red-700 dark:bg-red-900/30 dark:text-red-400 border-red-200 dark:border-red-800";
+    default:
+      return "bg-gray-100 text-gray-700 dark:bg-gray-800 dark:text-gray-400 border-gray-200 dark:border-gray-700";
+  }
+};
+
+// Helper to get leave type icon
+const getLeaveTypeIcon = (type) => {
+  const typeMap = {
+    "sick leave": "fa-notes-medical",
+    "annual leave": "fa-umbrella-beach",
+    "casual leave": "fa-smile",
+    "maternity leave": "fa-baby",
+    "paternity leave": "fa-child",
+    "unpaid leave": "fa-money-bill-wave",
+    "public holiday": "fa-calendar-day",
+    "work from home": "fa-home",
+  };
+  return typeMap[type?.toLowerCase()] || "fa-calendar-alt";
+};
+
 // ─── THEME AWARE GRADIENT ──────────────────────────────────────────────
 const getWelcomeBannerGradient = (isDark) => {
   if (isDark) {
@@ -264,16 +293,6 @@ const Dashboard = () => {
     return user?.role?.name || user?.role || "Employee";
   };
 
-  // Get initials for fallback avatar
-  const getInitials = () => {
-    const name = getEmployeeName();
-    const parts = name.trim().split(' ');
-    if (parts.length >= 2) {
-      return `${parts[0].charAt(0)}${parts[1].charAt(0)}`.toUpperCase();
-    }
-    return name.charAt(0).toUpperCase();
-  };
-
   // Fetch dashboard data and projects on component mount
   useEffect(() => {
     const fetchData = async () => {
@@ -302,10 +321,6 @@ const Dashboard = () => {
   // Separate useEffect to fetch projects when dashboard data loads
   useEffect(() => {
     if (dashboardData?.employee?.id) {
-      console.log(
-        "Fetching projects for employee ID from dashboard:",
-        dashboardData.employee.id,
-      );
       dispatch(fetchMyProjects(dashboardData.employee.id));
     }
   }, [dashboardData]);
@@ -356,7 +371,7 @@ const Dashboard = () => {
         await withErrorHandling(
           async () => {
             const result = await dispatch(punchIn({ location: locationData })).unwrap();
-            showToastMessage("Punched in successfully with location verification!", "success", "Success");
+            showToastMessage("Punched in successfully!", "success", "Success");
             await dispatch(fetchDashboardData()).unwrap();
             return result;
           }
@@ -383,7 +398,7 @@ const Dashboard = () => {
           ).unwrap();
           showToastMessage(
             isPastDatePunchOut
-              ? `Punched out for ${pendingPunchOutDate} successfully! Now punch in for today.`
+              ? `Punched out for ${pendingPunchOutDate}! Now punch in for today.`
               : "Punched out successfully!",
             "success",
             "Success"
@@ -600,7 +615,199 @@ const Dashboard = () => {
   const allocationData = charts?.project_allocation || [];
   const hoursData = charts?.project_hours || [];
 
-  // Render location info
+  // Leave data from dashboard
+  const recentLeaves = dashboardData?.recent_leaves || [];
+  const leaveStats = dashboardData?.leave_stats || {};
+
+  // ─── NEW COMPACT STATS CARDS ──────────────────────────────────────────
+
+  // Leave Stats Card - matches image style
+  const LeaveStatsCard = () => (
+    <div className="bg-[var(--surface)] border border-[var(--border)] rounded-xl p-4">
+      <div className="flex items-center justify-between mb-3">
+        <h3 className="text-sm font-semibold text-[var(--text)] flex items-center gap-2">
+          <i className="fas fa-calendar-alt text-green-500"></i>
+          Leave Status
+        </h3>
+        {recentLeaves.length > 0 && (
+          <button
+            onClick={() => navigate("/employee/leaves")}
+            className="text-xs text-green-500 hover:text-green-600 font-medium"
+          >
+            View All
+          </button>
+        )}
+      </div>
+
+      {/* Stats Row - Three columns like the image */}
+      <div className="grid grid-cols-3 gap-3">
+        <div className="bg-blue-50 dark:bg-blue-900/20 rounded-xl p-3 text-center border border-blue-200 dark:border-blue-800">
+          <div className="text-2xl font-bold text-blue-600 dark:text-blue-400">
+            {leaveStats.allocated || 0}
+          </div>
+          <div className="text-xs text-blue-600/80 dark:text-blue-400/80 font-medium mt-0.5">
+            Allocated
+          </div>
+        </div>
+        
+        <div className="bg-orange-50 dark:bg-orange-900/20 rounded-xl p-3 text-center border border-orange-200 dark:border-orange-800">
+          <div className="text-2xl font-bold text-orange-600 dark:text-orange-400">
+            {leaveStats.total_taken || 0}
+          </div>
+          <div className="text-xs text-orange-600/80 dark:text-orange-400/80 font-medium mt-0.5">
+            Taken
+          </div>
+        </div>
+        
+        <div className="bg-green-50 dark:bg-green-900/20 rounded-xl p-3 text-center border border-green-200 dark:border-green-800">
+          <div className="text-2xl font-bold text-green-600 dark:text-green-400">
+            {leaveStats.balance || 0}
+          </div>
+          <div className="text-xs text-green-600/80 dark:text-green-400/80 font-medium mt-0.5">
+            Balance
+          </div>
+        </div>
+      </div>
+
+      {/* Recent Leave Requests - Optional, shown when there are pending requests */}
+      {recentLeaves.length > 0 && (
+        <div className="mt-3 pt-3 border-t border-[var(--border)]">
+          <div className="text-xs text-[var(--muted)] mb-2">Recent Requests</div>
+          <div className="space-y-1.5">
+            {recentLeaves.slice(0, 2).map((leave, index) => (
+              <div
+                key={index}
+                className="flex items-center justify-between text-xs p-2 bg-[var(--surface2)] rounded-lg"
+              >
+                <div className="flex items-center gap-2">
+                  <span className={`px-1.5 py-0.5 rounded-full text-[10px] font-medium ${getLeaveStatusColor(leave.status)}`}>
+                    {leave.status || "Pending"}
+                  </span>
+                  <span className="text-[var(--text)] truncate max-w-[100px]">
+                    {leave.leave_type?.name || leave.type || "Leave"}
+                  </span>
+                </div>
+                <span className="text-[var(--muted)] text-[10px]">
+                  {formatDateDisplay(leave.start_date || leave.from_date)}
+                </span>
+              </div>
+            ))}
+          </div>
+          {recentLeaves.length > 2 && (
+            <button
+              onClick={() => navigate("/employee/leaves")}
+              className="text-xs text-green-500 hover:text-green-600 font-medium mt-1.5 block"
+            >
+              + {recentLeaves.length - 2} more
+            </button>
+          )}
+        </div>
+      )}
+
+      {/* No recent leaves message - matches image style */}
+      {recentLeaves.length === 0 && (
+        <div className="mt-3 pt-3 border-t border-[var(--border)]">
+          <div className="text-xs text-[var(--text-secondary)] text-center">
+            No recent leave requests
+          </div>
+          <button
+            onClick={() => navigate("/employee/request-leave")}
+            className="text-xs text-green-500 hover:text-green-600 font-medium mt-1.5 block text-center w-full"
+          >
+            + Request
+          </button>
+        </div>
+      )}
+    </div>
+  );
+
+  // Projects Stats Card - matches image style
+  const ProjectsStatsCard = () => (
+    <div className="bg-[var(--surface)] border border-[var(--border)] rounded-xl p-4">
+      <div className="flex items-center justify-between mb-3">
+        <h3 className="text-sm font-semibold text-[var(--text)] flex items-center gap-2">
+          <i className="fas fa-project-diagram text-blue-500"></i>
+          Project Status
+        </h3>
+        {employeeProjects.length > 0 && (
+          <button
+            onClick={() => navigate("/employee/projects")}
+            className="text-xs text-blue-500 hover:text-blue-600 font-medium"
+          >
+            View All
+          </button>
+        )}
+      </div>
+
+      {/* Stats Row - Two columns like the image */}
+      <div className="grid grid-cols-2 gap-3">
+        <div className="bg-purple-50 dark:bg-purple-900/20 rounded-xl p-4 text-center border border-purple-200 dark:border-purple-800">
+          <div className="text-3xl font-bold text-purple-600 dark:text-purple-400">
+            {stats.totalProjects || employeeProjects.length || 0}
+          </div>
+          <div className="text-xs text-purple-600/80 dark:text-purple-400/80 font-medium mt-0.5">
+            Total Projects
+          </div>
+        </div>
+        
+        <div className="bg-green-50 dark:bg-green-900/20 rounded-xl p-4 text-center border border-green-200 dark:border-green-800">
+          <div className="text-3xl font-bold text-green-600 dark:text-green-400">
+            {stats.activeProjects || employeeProjects.filter(p => p.status === "Active").length || 0}
+          </div>
+          <div className="text-xs text-green-600/80 dark:text-green-400/80 font-medium mt-0.5">
+            Active Projects
+          </div>
+        </div>
+      </div>
+
+      {/* Project list preview - shown when there are projects */}
+      {employeeProjects.length > 0 && (
+        <div className="mt-3 pt-3 border-t border-[var(--border)]">
+          <div className="space-y-1.5">
+            {employeeProjects.slice(0, 2).map((project) => (
+              <div
+                key={project.id}
+                className="flex items-center justify-between text-xs p-2 bg-[var(--surface2)] rounded-lg cursor-pointer hover:bg-[var(--surface3)] transition-colors"
+                onClick={() => setSelectedProject(project)}
+              >
+                <div className="flex items-center gap-2 min-w-0">
+                  <span className={`w-1.5 h-1.5 rounded-full flex-shrink-0 ${
+                    project.status === "Active" ? "bg-green-500" : 
+                    project.status === "Completed" ? "bg-blue-500" : "bg-gray-400"
+                  }`}></span>
+                  <span className="text-[var(--text)] truncate max-w-[120px]">
+                    {project.name}
+                  </span>
+                </div>
+                <span className={`px-1.5 py-0.5 rounded-full text-[10px] font-medium ${getPriorityColor(project.priority)}`}>
+                  {project.priority || "Medium"}
+                </span>
+              </div>
+            ))}
+          </div>
+          {employeeProjects.length > 2 && (
+            <button
+              onClick={() => navigate("/employee/projects")}
+              className="text-xs text-blue-500 hover:text-blue-600 font-medium mt-1.5 block"
+            >
+              + {employeeProjects.length - 2} more projects
+            </button>
+          )}
+        </div>
+      )}
+
+      {/* No projects message */}
+      {employeeProjects.length === 0 && (
+        <div className="mt-3 pt-3 border-t border-[var(--border)]">
+          <div className="text-xs text-[var(--text-secondary)] text-center">
+            No projects assigned yet
+          </div>
+        </div>
+      )}
+    </div>
+  );
+
+  // Render location info - compact
   const renderLocationInfo = () => {
     const punchInLocation = normalizeLocation(
       todayAttendance.punch_in_location,
@@ -617,56 +824,41 @@ const Dashboard = () => {
     };
 
     return (
-      <div className="location-info bg-[var(--surface)] border border-[var(--border)] rounded-xl p-5 mb-7">
-        <h3 className="text-base font-semibold text-[var(--text)] mb-3 flex items-center gap-2">
-          <i className="fas fa-map-marker-alt text-green-500"></i>
-          Today's Punch Locations
-        </h3>
-
-        {punchInLocation && (
-          <div className="mb-3 pb-3 border-b border-[var(--border)]">
-            <div className="flex justify-between items-start">
-              <div className="flex-1">
-                <p className="text-sm font-semibold text-green-500">
-                  <i className="fas fa-sign-in-alt mr-1"></i> Punch In Location:
-                </p>
-                <p className="text-sm text-[var(--text)] mt-1">
-                  {punchInLocation.address ||
-                    `${punchInLocation.latitude}, ${punchInLocation.longitude}`}
-                </p>
-              </div>
+      <div className="location-info bg-[var(--surface)] border border-[var(--border)] rounded-xl p-3 mb-4">
+        <div className="flex items-center gap-3 flex-wrap">
+          <h3 className="text-sm font-semibold text-[var(--text)] flex items-center gap-2">
+            <i className="fas fa-map-marker-alt text-green-500"></i>
+            Locations
+          </h3>
+          {punchInLocation && (
+            <div className="flex items-center gap-2 text-xs">
+              <span className="text-green-500 font-medium">IN:</span>
+              <span className="text-[var(--muted)] truncate max-w-[200px]">
+                {punchInLocation.address?.substring(0, 30) || "📍"}
+              </span>
               <button
                 onClick={() => handleShowMap(punchInLocation)}
-                className="text-xs bg-green-500/10 text-green-500 px-3 py-1 rounded-lg hover:bg-green-500/20 transition-colors"
+                className="text-blue-500 hover:text-blue-600 text-xs"
               >
-                <i className="fas fa-map mr-1"></i> View Map
+                <i className="fas fa-map"></i>
               </button>
             </div>
-          </div>
-        )}
-
-        {punchOutLocation && punchOutLocation.latitude && (
-          <div>
-            <div className="flex justify-between items-start">
-              <div className="flex-1">
-                <p className="text-sm font-semibold text-red-500">
-                  <i className="fas fa-sign-out-alt mr-1"></i> Punch Out
-                  Location:
-                </p>
-                <p className="text-sm text-[var(--text)] mt-1">
-                  {punchOutLocation.address ||
-                    `${punchOutLocation.latitude}, ${punchOutLocation.longitude}`}
-                </p>
-              </div>
+          )}
+          {punchOutLocation && punchOutLocation.latitude && (
+            <div className="flex items-center gap-2 text-xs">
+              <span className="text-red-500 font-medium">OUT:</span>
+              <span className="text-[var(--muted)] truncate max-w-[200px]">
+                {punchOutLocation.address?.substring(0, 30) || "📍"}
+              </span>
               <button
                 onClick={() => handleShowMap(punchOutLocation)}
-                className="text-xs bg-red-500/10 text-red-500 px-3 py-1 rounded-lg hover:bg-red-500/20 transition-colors"
+                className="text-blue-500 hover:text-blue-600 text-xs"
               >
-                <i className="fas fa-map mr-1"></i> View Map
+                <i className="fas fa-map"></i>
               </button>
             </div>
-          </div>
-        )}
+          )}
+        </div>
       </div>
     );
   };
@@ -721,11 +913,11 @@ const Dashboard = () => {
   };
 
   return (
-    <div>
-      {/* Welcome Banner with Avatar - Theme Aware */}
-      <div className={`welcome-banner rounded-xl p-5 md:p-7 mb-7 flex flex-col md:flex-row justify-between items-center gap-5 shadow-lg ${getWelcomeBannerGradient(isDarkMode)}`}>
-        <div className="welcome-left flex items-center gap-5 flex-wrap">
-          <div className="welcome-avatar w-16 h-16 rounded-xl overflow-hidden border-3 border-white shadow-lg bg-white flex items-center justify-center">
+    <div className="space-y-3">
+      {/* Welcome Banner - Compact */}
+      <div className={`welcome-banner rounded-xl p-4 flex flex-col md:flex-row justify-between items-center gap-3 shadow-lg ${getWelcomeBannerGradient(isDarkMode)}`}>
+        <div className="welcome-left flex items-center gap-3">
+          <div className="w-12 h-12 rounded-xl overflow-hidden border-2 border-white shadow-lg bg-white flex items-center justify-center flex-shrink-0">
             {employeeAvatar ? (
               <img 
                 src={employeeAvatar} 
@@ -733,24 +925,24 @@ const Dashboard = () => {
                 className="w-full h-full object-cover"
                 onError={(e) => {
                   e.target.style.display = 'none';
-                  e.target.parentElement.innerHTML = `<i class="fas fa-user text-green-600 text-3xl"></i>`;
+                  e.target.parentElement.innerHTML = `<i class="fas fa-user text-green-600 text-2xl"></i>`;
                 }}
               />
             ) : (
-              <i className="fas fa-user text-green-600 text-3xl"></i>
+              <i className="fas fa-user text-green-600 text-2xl"></i>
             )}
           </div>
           <div className="welcome-text">
-            <h2 className={`text-xl md:text-2xl font-bold ${isDarkMode ? 'text-white' : 'text-white'}`}>
+            <h2 className={`text-base md:text-lg font-bold ${isDarkMode ? 'text-white' : 'text-white'}`}>
               Welcome, {getEmployeeName()}! 👋
             </h2>
-            <p className={`${isDarkMode ? 'text-gray-300' : 'text-white/90'} text-xs md:text-sm`}>
+            <p className={`${isDarkMode ? 'text-gray-300' : 'text-white/90'} text-xs`}>
               {getEmployeeRole()}
             </p>
           </div>
         </div>
         <div className="datetime-info text-center md:text-right">
-          <div className={`text-2xl md:text-3xl font-bold ${isDarkMode ? 'text-white' : 'text-white'}`}>
+          <div className={`text-xl md:text-2xl font-bold ${isDarkMode ? 'text-white' : 'text-white'}`}>
             {currentTime}
           </div>
           <div className={`text-xs ${isDarkMode ? 'text-gray-400' : 'text-white/80'}`}>
@@ -762,37 +954,27 @@ const Dashboard = () => {
       {/* Location Info */}
       {renderLocationInfo()}
 
-      {/* Punch Card */}
-      <div className="punch-card bg-[var(--surface)] border border-[var(--border)] rounded-xl p-4 md:p-6 mb-7 flex flex-col md:flex-row justify-between items-center gap-5">
-        <div className="punch-stats flex gap-8 md:gap-10 flex-wrap justify-center">
+      {/* Punch Card - Compact */}
+      <div className="punch-card bg-[var(--surface)] border border-[var(--border)] rounded-xl p-3 flex flex-col md:flex-row justify-between items-center gap-3 mb-4">
+        <div className="punch-stats flex gap-6 md:gap-8 flex-wrap justify-center">
           <div className="punch-item text-center">
-            <div className="punch-label text-xs text-[var(--muted)] mb-2">
-              Today's Date
-            </div>
+            <div className="punch-label text-[10px] text-[var(--muted)]">Date</div>
             <div className="punch-value text-sm font-semibold text-[var(--text)]">
-              {currentDate}
+              {currentDate.split(',')[0]}
             </div>
           </div>
           <div className="punch-item text-center">
-            <div className="punch-label text-xs text-[var(--muted)] mb-2">
-              Punch In Time
-            </div>
-            <div
-              className={`punch-value text-2xl font-bold ${isActuallyPunchedIn ? "text-green-500" : "text-[var(--text)]"}`}
-            >
+            <div className="punch-label text-[10px] text-[var(--muted)]">Punch In</div>
+            <div className={`punch-value text-xl font-bold ${isActuallyPunchedIn ? "text-green-500" : "text-[var(--text)]"}`}>
               {formatPunchTime(displayPunchTime)}
             </div>
           </div>
           <div className="punch-item text-center">
-            <div className="punch-label text-xs text-[var(--muted)] mb-2">
-              Status
-            </div>
-            <div
-              className={`punch-value text-lg font-bold ${statusDisplay.color}`}
-            >
+            <div className="punch-label text-[10px] text-[var(--muted)]">Status</div>
+            <div className={`punch-value text-base font-bold ${statusDisplay.color}`}>
               {statusDisplay.text}
               {isActuallyPunchedIn && (
-                <span className="ml-2 text-xs animate-pulse">●</span>
+                <span className="ml-1.5 text-xs animate-pulse">●</span>
               )}
             </div>
           </div>
@@ -800,49 +982,27 @@ const Dashboard = () => {
         <button
           onClick={handlePunch}
           disabled={isButtonDisabled()}
-          className="punch-btn bg-red-500 border-none text-white py-3 px-8 rounded-full font-semibold text-sm cursor-pointer transition-all flex items-center gap-2 hover:bg-red-600 hover:-translate-y-0.5 hover:shadow-md disabled:opacity-50 disabled:cursor-not-allowed"
+          className="punch-btn bg-red-500 border-none text-white py-2 px-6 rounded-full font-semibold text-sm cursor-pointer transition-all flex items-center gap-2 hover:bg-red-600 hover:-translate-y-0.5 hover:shadow-md disabled:opacity-50 disabled:cursor-not-allowed flex-shrink-0"
         >
           <i className="fas fa-fingerprint"></i>
           {getButtonText()}
         </button>
       </div>
 
-      {/* ─── EMPLOYEE STATS (Only 2 cards for regular employees) ─────────── */}
-      {!showAdminGraphs && (
-        <div className="stats-grid grid grid-cols-2 gap-5 mb-7">
-          <div className="stat-card bg-[var(--surface)] border border-[var(--border)] rounded-xl p-5 text-center hover:-translate-y-0.5 hover:shadow-md transition-all">
-            <div className="stat-icon w-12 h-12 rounded-xl bg-green-500/10 text-green-500 flex items-center justify-center text-2xl mx-auto mb-3">
-              <i className="fas fa-project-diagram"></i>
-            </div>
-            <div className="stat-number text-3xl font-extrabold text-green-600">
-              {stats.totalProjects || 0}
-            </div>
-            <div className="stat-label text-xs text-[var(--muted)]">
-              Total Projects
-            </div>
-          </div>
-          <div className="stat-card bg-[var(--surface)] border border-[var(--border)] rounded-xl p-5 text-center hover:-translate-y-0.5 hover:shadow-md transition-all">
-            <div className="stat-icon w-12 h-12 rounded-xl bg-blue-500/10 text-blue-500 flex items-center justify-center text-2xl mx-auto mb-3">
-              <i className="fas fa-check-circle"></i>
-            </div>
-            <div className="stat-number text-3xl font-extrabold text-blue-500">
-              {stats.activeProjects || 0}
-            </div>
-            <div className="stat-label text-xs text-[var(--muted)]">
-              Active Projects
-            </div>
-          </div>
-        </div>
-      )}
+      {/* ─── LEAVE & PROJECTS STATS CARDS ────────────────────────────────── */}
+      <div className="grid grid-cols-1 md:grid-cols-2 gap-4 mb-4">
+        <LeaveStatsCard />
+        <ProjectsStatsCard />
+      </div>
 
       {/* ─── ADMIN/HR GRAPHS ──────────────────────────────────────────────── */}
       {showAdminGraphs && (
         <>
-          {/* ─── ROW 1: Overview (8 cards in a single row) ────────────────────── */}
-          <div className="section-label text-xs font-medium uppercase tracking-wider text-gray-400 dark:text-gray-500 mt-4 mb-2">
+          {/* ─── ROW 1: Overview (4 columns instead of 8) ────────────────────── */}
+          <div className="section-label text-[10px] font-medium uppercase tracking-wider text-gray-400 dark:text-gray-500 mt-2 mb-1">
             Overview
           </div>
-          <div className="stats-grid grid grid-cols-2 sm:grid-cols-4 lg:grid-cols-8 gap-3 md:gap-4 mb-6">
+          <div className="stats-grid grid grid-cols-2 sm:grid-cols-4 gap-2 mb-4">
             <StatsCard
               title="Total Employees"
               value={totalEmployees}
@@ -852,7 +1012,7 @@ const Dashboard = () => {
               onClick={() => handleNavigate("/employees")}
             />
             <StatsCard
-              title="Punched In Today"
+              title="Punched In"
               value={punchedInToday}
               icon="fas fa-fingerprint"
               color="blue"
@@ -860,7 +1020,7 @@ const Dashboard = () => {
               onClick={() => handleNavigate("/attendances")}
             />
             <StatsCard
-              title="Late Arrivals"
+              title="Late"
               value={lateArrivals}
               icon="fas fa-clock"
               color="amber"
@@ -868,13 +1028,17 @@ const Dashboard = () => {
               onClick={() => handleNavigate("/attendances")}
             />
             <StatsCard
-              title="Absent Today"
+              title="Absent"
               value={absentToday}
               icon="fas fa-user-slash"
               color="red"
               route="/attendances"
               onClick={() => handleNavigate("/attendances")}
             />
+          </div>
+
+          {/* ─── ROW 2: Projects Stats (4 columns) ───────────────────────────── */}
+          <div className="grid grid-cols-2 sm:grid-cols-4 gap-2 mb-4">
             <StatsCard
               title="Total Projects"
               value={totalProjects}
@@ -884,7 +1048,7 @@ const Dashboard = () => {
               onClick={() => handleNavigate("/projects")}
             />
             <StatsCard
-              title="Active Projects"
+              title="Active"
               value={activeProjectsCount}
               icon="fas fa-play-circle"
               color="green"
@@ -892,7 +1056,7 @@ const Dashboard = () => {
               onClick={() => handleNavigate("/projects")}
             />
             <StatsCard
-              title="Total Assignments"
+              title="Assignments"
               value={totalAssignmentsCount}
               icon="fas fa-link"
               color="orange"
@@ -900,7 +1064,7 @@ const Dashboard = () => {
               onClick={() => handleNavigate("/project-assignments")}
             />
             <StatsCard
-              title="Employees Assigned"
+              title="Assigned"
               value={employeesAssigned}
               icon="fas fa-user-check"
               color="blue"
@@ -909,41 +1073,50 @@ const Dashboard = () => {
             />
           </div>
 
-          {/* ─── ROW 3: Project Allocation & Hours ────────────────────────── */}
-          <div className="section-label text-xs font-medium uppercase tracking-wider text-gray-400 dark:text-gray-500 mt-4 mb-2">
-            Project Allocation & Hours
+          {/* ─── ROW 3: Project Charts ────────────────────────────────────────── */}
+          <div className="section-label text-[10px] font-medium uppercase tracking-wider text-gray-400 dark:text-gray-500 mt-2 mb-1">
+            Project Overview
           </div>
-          <div className="grid grid-cols-1 lg:grid-cols-2 gap-4 mb-6">
-            <ProjectAllocationChart data={allocationData} />
-            <ProjectHoursChart data={hoursData} onBarClick={handleBarClick} />
+          <div className="grid grid-cols-1 lg:grid-cols-2 gap-3 mb-4">
+            <div className="h-[200px]">
+              <ProjectAllocationChart data={allocationData} />
+            </div>
+            <div className="h-[200px]">
+              <ProjectHoursChart data={hoursData} onBarClick={handleBarClick} />
+            </div>
           </div>
 
-          {/* ─── ROW 4: Attendance Analytics (3 equal height cards) ────────── */}
-          <div className="section-label text-xs font-medium uppercase tracking-wider text-gray-400 dark:text-gray-500 mt-4 mb-2">
+          {/* ─── ROW 4: Attendance Analytics ──────────────────────────────────── */}
+          <div className="section-label text-[10px] font-medium uppercase tracking-wider text-gray-400 dark:text-gray-500 mt-2 mb-1">
             Attendance Analytics
           </div>
-          <div className="grid grid-cols-1 lg:grid-cols-3 gap-4 mb-6">
-            <div className="h-[220px]">
+          <div className="grid grid-cols-1 md:grid-cols-3 gap-3 mb-4">
+            <div className="h-[180px]">
               <WeeklyAttendanceChart data={charts?.weekly_attendance} />
             </div>
-            <div className="h-[220px]">
+            <div className="h-[180px]">
               <TodayStatusChart data={charts?.today_status} />
             </div>
-            <div className="h-[220px]">
+            <div className="h-[180px]">
               <AvgPunchTimeCard data={charts?.avg_punch_time} />
             </div>
           </div>
 
-          {/* ─── ROW 5: Today's Punch-in Activity ──────────────────────────── */}
-          <div className="section-label text-xs font-medium uppercase tracking-wider text-gray-400 dark:text-gray-500 mt-4 mb-2">
-            Today's Punch-in Activity
+          {/* ─── ROW 5: Punch Activity ────────────────────────────────────────── */}
+          <div className="section-label text-[10px] font-medium uppercase tracking-wider text-gray-400 dark:text-gray-500 mt-2 mb-1">
+            Today's Activity
           </div>
-          <div className="grid grid-cols-1 lg:grid-cols-2 gap-4 mb-6">
-            <RecentPunchesList
-              punches={charts?.recent_punches || []}
-              employees={employees}
-            />
-            <PunchDistributionChart data={charts?.punch_distribution || []} />
+          <div className="grid grid-cols-1 lg:grid-cols-2 gap-3 mb-4">
+            <div className="h-[180px]">
+              <RecentPunchesList
+                punches={charts?.recent_punches || []}
+                employees={employees}
+                compact
+              />
+            </div>
+            <div className="h-[180px]">
+              <PunchDistributionChart data={charts?.punch_distribution || []} />
+            </div>
           </div>
 
           {/* ─── PROJECT HOURS DETAIL MODAL ───────────────────────────────── */}
@@ -962,87 +1135,83 @@ const Dashboard = () => {
         </>
       )}
 
-      {/* ─── EMPLOYEE PROJECTS SECTION (Always visible) ───────────────────── */}
-      <div className="projects-section bg-[var(--surface)] border border-[var(--border)] rounded-xl p-5 mb-7">
-        <h3 className="text-base font-semibold text-[var(--text)] mb-5 flex items-center gap-2">
-          <i className="fas fa-project-diagram text-green-500"></i>
-          My Assigned Projects
-        </h3>
+      {/* ─── EMPLOYEE PROJECTS SECTION ──────────────────────────────────── */}
+      {!showAdminGraphs && employeeProjects.length > 0 && (
+        <div className="projects-section bg-[var(--surface)] border border-[var(--border)] rounded-xl p-3 mb-4">
+          <div className="flex items-center justify-between mb-2">
+            <h3 className="text-sm font-semibold text-[var(--text)] flex items-center gap-2">
+              <i className="fas fa-project-diagram text-green-500"></i>
+              My Projects
+              <span className="text-xs text-[var(--muted)] font-normal">
+                ({employeeProjects.length})
+              </span>
+            </h3>
+            <button
+              onClick={() => navigate("/employee/projects")}
+              className="text-xs text-green-500 hover:text-green-600 font-medium"
+            >
+              View All
+            </button>
+          </div>
 
-        {projectsLoading ? (
-          <div className="flex justify-center items-center py-12">
-            <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-green-500"></div>
-          </div>
-        ) : employeeProjects.length === 0 ? (
-          <div className="text-center py-12">
-            <i className="fas fa-folder-open text-5xl text-[var(--muted)] mb-3"></i>
-            <p className="text-[var(--text-secondary)]">
-              No projects assigned yet
-            </p>
-          </div>
-        ) : (
-          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-5">
-            {employeeProjects.map((project) => (
-              <div
-                key={project.id}
-                className="project-card bg-[var(--surface2)] border border-[var(--border)] rounded-xl p-5 hover:shadow-md transition-all cursor-pointer"
-                onClick={() => setSelectedProject(project)}
+          {projectsLoading ? (
+            <div className="flex justify-center items-center py-6">
+              <div className="animate-spin rounded-full h-6 w-6 border-b-2 border-green-500"></div>
+            </div>
+          ) : (
+            <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-2">
+              {employeeProjects.slice(0, 4).map((project) => (
+                <div
+                  key={project.id}
+                  className="project-card bg-[var(--surface2)] border border-[var(--border)] rounded-lg p-3 hover:shadow-md transition-all cursor-pointer"
+                  onClick={() => setSelectedProject(project)}
+                >
+                  <div className="flex justify-between items-start mb-1.5">
+                    <h4 className="font-semibold text-[var(--text)] text-sm truncate max-w-[120px]">
+                      {project.name}
+                    </h4>
+                    <span
+                      className={`px-1.5 py-0.5 rounded-full text-[10px] font-semibold ${getPriorityColor(project.priority)}`}
+                    >
+                      {project.priority || "Med"}
+                    </span>
+                  </div>
+
+                  <p className="text-xs text-[var(--text-secondary)] mb-2 line-clamp-1">
+                    {project.description || "No description"}
+                  </p>
+
+                  <div className="flex items-center gap-2 text-[10px] text-[var(--muted)]">
+                    <i className="fas fa-user-tie text-green-500"></i>
+                    <span className="truncate">{project.managerName || "N/A"}</span>
+                  </div>
+
+                  <div className="mt-1.5 pt-1.5 border-t border-[var(--border)] flex justify-between items-center">
+                    <span
+                      className={`px-1.5 py-0.5 rounded-full text-[10px] font-semibold ${getStatusColor(project.status)}`}
+                    >
+                      {project.status || "Active"}
+                    </span>
+                    <span className="text-[10px] text-[var(--muted)]">
+                      {project.assignedDate?.split('-')[0] || ""}
+                    </span>
+                  </div>
+                </div>
+              ))}
+            </div>
+          )}
+          {employeeProjects.length > 4 && (
+            <div className="text-center mt-2">
+              <button
+                onClick={() => navigate("/employee/projects")}
+                className="text-xs text-green-500 hover:text-green-600 font-medium"
               >
-                <div className="flex justify-between items-start mb-3">
-                  <h4 className="font-semibold text-[var(--text)] text-base">
-                    {project.name}
-                  </h4>
-                  <span
-                    className={`px-2 py-1 rounded-full text-xs font-semibold ${getPriorityColor(project.priority)}`}
-                  >
-                    {project.priority || "Medium"}
-                  </span>
-                </div>
-
-                <p className="text-sm text-[var(--text-secondary)] mb-3 line-clamp-2">
-                  {project.description || "No description provided"}
-                </p>
-
-                <div className="flex items-center gap-2 mb-2">
-                  <i className="fas fa-user-tie text-xs text-green-500"></i>
-                  <span className="text-xs text-[var(--muted)]">Manager:</span>
-                  <span className="text-xs font-medium text-[var(--text)]">
-                    {project.managerName}
-                  </span>
-                </div>
-
-                <div className="flex items-center gap-2 mb-3">
-                  <i className="fas fa-users text-xs text-blue-500"></i>
-                  <span className="text-xs text-[var(--muted)]">
-                    Team Lead:
-                  </span>
-                  <span className="text-xs font-medium text-[var(--text)]">
-                    {project.teamLeadName}
-                  </span>
-                </div>
-
-                <div className="flex items-center gap-2 mb-3 pt-2 border-t border-[var(--border)]">
-                  <i className="fas fa-calendar-alt text-xs text-purple-500"></i>
-                  <span className="text-xs text-[var(--muted)]">
-                    Assigned on:
-                  </span>
-                  <span className="text-xs font-medium text-[var(--text)]">
-                    {project.assignedDate}
-                  </span>
-                </div>
-
-                <div className="mt-2 pt-2 border-t border-[var(--border)]">
-                  <span
-                    className={`px-2 py-1 rounded-full text-xs font-semibold ${getStatusColor(project.status)}`}
-                  >
-                    {project.status || "Active"}
-                  </span>
-                </div>
-              </div>
-            ))}
-          </div>
-        )}
-      </div>
+                + {employeeProjects.length - 4} more projects
+              </button>
+            </div>
+          )}
+        </div>
+      )}
 
       {/* Project Details Modal */}
       {selectedProject && (
@@ -1069,8 +1238,7 @@ const Dashboard = () => {
                 <div className="grid grid-cols-1 md:grid-cols-2 gap-4 mb-4">
                   <div className="bg-[var(--surface2)] rounded-lg p-3">
                     <label className="text-xs text-[var(--muted)] flex items-center gap-1 mb-2">
-                      <i className="fas fa-user-tie text-green-500"></i> Project
-                      Manager
+                      <i className="fas fa-user-tie text-green-500"></i> Project Manager
                     </label>
                     <p className="text-sm font-semibold text-[var(--text)]">
                       {selectedProject.managerName}
@@ -1114,8 +1282,7 @@ const Dashboard = () => {
 
                   <div className="bg-[var(--surface2)] rounded-lg p-3 md:col-span-2">
                     <label className="text-xs text-[var(--muted)] flex items-center gap-1 mb-2">
-                      <i className="fas fa-calendar-alt text-purple-500"></i>{" "}
-                      Assigned On
+                      <i className="fas fa-calendar-alt text-purple-500"></i> Assigned On
                     </label>
                     <p className="text-sm font-semibold text-[var(--text)]">
                       {selectedProject.assignedDate}
@@ -1128,35 +1295,33 @@ const Dashboard = () => {
         </div>
       )}
 
-      {/* Recent Activity Section - Scrollable with vertical scroll */}
+      {/* Recent Activity Section - Compact */}
       {dashboardData?.attendance_history &&
         dashboardData.attendance_history.length > 0 && (
-          <div className="recent-activity bg-[var(--surface)] border border-[var(--border)] rounded-xl p-5">
-            <h3 className="text-base font-semibold text-[var(--text)] mb-5 flex items-center gap-2">
-              <i className="fas fa-history"></i> Recent Activity
-            </h3>
+          <div className="recent-activity bg-[var(--surface)] border border-[var(--border)] rounded-xl p-3">
+            <div className="flex items-center justify-between mb-2">
+              <h3 className="text-sm font-semibold text-[var(--text)] flex items-center gap-2">
+                <i className="fas fa-history"></i> Recent Activity
+              </h3>
+              <span className="text-[10px] text-[var(--muted)]">
+                {dashboardData.attendance_history.length} records
+              </span>
+            </div>
             
-            <div className="w-full overflow-auto max-h-[300px]">
-              <div className="min-w-[700px]">
-                <table className="w-full text-sm">
+            <div className="w-full overflow-auto max-h-[200px]">
+              <div className="min-w-[500px]">
+                <table className="w-full text-xs">
                   <thead className="sticky top-0 bg-[var(--surface)] z-10">
                     <tr className="border-b border-[var(--border)]">
-                      <th className="text-left py-3 px-4 text-[var(--muted)] font-semibold w-[100px]">
-                        Date
-                      </th>
-                      <th className="text-left py-3 px-4 text-[var(--muted)] font-semibold w-[120px]">
-                        Punch In
-                      </th>
-                      <th className="text-left py-3 px-4 text-[var(--muted)] font-semibold min-w-[250px]">
-                        Location
-                      </th>
-                      <th className="text-left py-3 px-4 text-[var(--muted)] font-semibold w-[120px]">
-                        Punch Out
-                      </th>
+                      <th className="text-left py-1.5 px-2 text-[var(--muted)] font-semibold">Date</th>
+                      <th className="text-left py-1.5 px-2 text-[var(--muted)] font-semibold">In</th>
+                      <th className="text-left py-1.5 px-2 text-[var(--muted)] font-semibold">Location</th>
+                      <th className="text-left py-1.5 px-2 text-[var(--muted)] font-semibold">Out</th>
                     </tr>
                   </thead>
                   <tbody>
                     {dashboardData.attendance_history
+                      .slice(0, 5)
                       .map((attendance, index) => {
                         const locationAddress = attendance.punch_in_address;
 
@@ -1165,32 +1330,28 @@ const Dashboard = () => {
                             key={index}
                             className="border-b border-[var(--border)] hover:bg-[var(--surface2)] transition-colors"
                           >
-                            <td className="py-3 px-4 text-[var(--text)] whitespace-nowrap">
+                            <td className="py-1.5 px-2 text-[var(--text)] whitespace-nowrap">
                               {attendance.log_date}
                             </td>
-                            <td className="py-3 px-4 text-[var(--text)] whitespace-nowrap">
-                              {attendance.punch_in
-                                ? formatPunchTime(attendance.punch_in)
-                                : "-"}
+                            <td className="py-1.5 px-2 text-[var(--text)] whitespace-nowrap">
+                              {attendance.punch_in ? formatPunchTime(attendance.punch_in) : "-"}
                             </td>
-                            <td className="py-3 px-4">
+                            <td className="py-1.5 px-2">
                               {locationAddress ? (
-                                <div className="text-xs text-[var(--muted)] flex items-start gap-1.5">
-                                  <i className="fas fa-map-marker-alt text-green-500 text-xs mt-0.5 flex-shrink-0"></i>
+                                <div className="text-[10px] text-[var(--muted)] flex items-start gap-1">
+                                  <i className="fas fa-map-marker-alt text-green-500 text-[10px] mt-0.5 flex-shrink-0"></i>
                                   <span className="break-words">
-                                    {locationAddress.length > 60 
-                                      ? locationAddress.substring(0, 60) + "..." 
+                                    {locationAddress.length > 40 
+                                      ? locationAddress.substring(0, 40) + "..." 
                                       : locationAddress}
                                   </span>
                                 </div>
                               ) : (
-                                <span className="text-xs text-[var(--muted)]">-</span>
+                                <span className="text-[10px] text-[var(--muted)]">-</span>
                               )}
                             </td>
-                            <td className="py-3 px-4 text-[var(--text)] whitespace-nowrap">
-                              {attendance.punch_out
-                                ? formatPunchTime(attendance.punch_out)
-                                : "-"}
+                            <td className="py-1.5 px-2 text-[var(--text)] whitespace-nowrap">
+                              {attendance.punch_out ? formatPunchTime(attendance.punch_out) : "-"}
                             </td>
                           </tr>
                         );
@@ -1198,10 +1359,6 @@ const Dashboard = () => {
                   </tbody>
                 </table>
               </div>
-            </div>
-            
-            <div className="mt-3 text-xs text-[var(--muted)] text-right">
-              Showing {dashboardData.attendance_history.length} records
             </div>
           </div>
         )}
