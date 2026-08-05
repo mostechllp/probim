@@ -5,10 +5,10 @@ import { format } from "date-fns";
 
 // Redux Actions
 import {
-  fetchPayrolls,
-  generatePayslip,
-  fetchPayrollStats,
-} from "../../admin/store/slices/payrollSlice";
+  fetchMyPayrollHistory,
+  fetchMyPayrollSummary,
+  downloadMyPayslip,
+} from "../store/slices/myPayrollSlice";
 
 import Pagination from "../../admin/components/common/Paginations";
 import EntriesSelector from "../../admin/components/common/EntriesSelector";
@@ -18,24 +18,23 @@ const MyPayroll = () => {
 
   const { user } = useSelector((state) => state.auth || {});
   const {
-    payrolls,
+    history: payrolls,
+    summary: stats,
     loading,
     totalCount,
     perPage,
-    stats,
-  } = useSelector((state) => state.payroll);
+  } = useSelector((state) => state.myPayroll);
 
   const [currentPageState, setCurrentPageState] = useState(1);
   const [yearFilter, setYearFilter] = useState(new Date().getFullYear().toString());
 
-  // Function to fetch payrolls
   const fetchPayrollsData = useCallback(() => {
     const params = {
       page: currentPageState,
       per_page: perPage || 10,
       year: yearFilter || undefined,
     };
-    dispatch(fetchPayrolls(params));
+    dispatch(fetchMyPayrollHistory(params));
   }, [dispatch, currentPageState, yearFilter, perPage]);
 
   useEffect(() => {
@@ -46,7 +45,7 @@ const MyPayroll = () => {
     const params = {
       year: yearFilter || undefined,
     };
-    dispatch(fetchPayrollStats(params));
+    dispatch(fetchMyPayrollSummary(params));
   }, [dispatch, yearFilter]);
 
   const handlePageChange = (page) => {
@@ -60,10 +59,10 @@ const MyPayroll = () => {
 
   const handleGeneratePayslip = async (payrollId) => {
     try {
-      await dispatch(generatePayslip(payrollId)).unwrap();
+      await dispatch(downloadMyPayslip(payrollId)).unwrap();
       showToast("Payslip downloaded successfully!", "success");
     } catch (error) {
-      showToast(error || "Failed to generate payslip", "error");
+      showToast(error || "Failed to download payslip", "error");
     }
   };
 
@@ -229,9 +228,9 @@ const MyPayroll = () => {
       </div>
 
       {/* History Table Section */}
-      <div className="bg-white dark:bg-gray-800 rounded-2xl shadow-soft border border-gray-100 dark:border-gray-700 overflow-hidden">
-        <div className="p-5 border-b border-gray-100 dark:border-gray-700 bg-gray-50/50 dark:bg-gray-800/50 flex justify-between items-center">
-          <h3 className="text-base font-bold text-gray-800 dark:text-gray-100 flex items-center gap-2">
+      <div className="leave-table-wrapper bg-[var(--surface)] rounded-xl border border-[var(--border)] overflow-x-auto shadow-sm">
+        <div className="p-5 border-b border-[var(--border)] bg-[var(--surface)] flex justify-between items-center">
+          <h3 className="text-base font-bold text-[var(--text)] flex items-center gap-2">
             <i className="fas fa-history text-green-500"></i>
             Payment History
           </h3>
@@ -243,86 +242,95 @@ const MyPayroll = () => {
           />
         </div>
 
-        <div className="overflow-x-auto">
-          <table className="w-full text-left border-collapse">
-            <thead>
-              <tr className="bg-gray-50 dark:bg-gray-700/50">
-                <th className="px-6 py-4 text-xs font-semibold text-gray-500 dark:text-gray-400 uppercase tracking-wider">Month/Year</th>
-                <th className="px-6 py-4 text-xs font-semibold text-gray-500 dark:text-gray-400 uppercase tracking-wider">Gross Pay</th>
-                <th className="px-6 py-4 text-xs font-semibold text-gray-500 dark:text-gray-400 uppercase tracking-wider">Deductions</th>
-                <th className="px-6 py-4 text-xs font-semibold text-gray-500 dark:text-gray-400 uppercase tracking-wider">Net Pay</th>
-                <th className="px-6 py-4 text-xs font-semibold text-gray-500 dark:text-gray-400 uppercase tracking-wider">Status</th>
-                <th className="px-6 py-4 text-xs font-semibold text-gray-500 dark:text-gray-400 uppercase tracking-wider">Payment Date</th>
-                <th className="px-6 py-4 text-right text-xs font-semibold text-gray-500 dark:text-gray-400 uppercase tracking-wider">Action</th>
+        <table className="leave-table w-full border-collapse text-xs min-w-[900px]">
+          <thead>
+            <tr className="bg-[var(--surface2)]">
+              <th className="text-left py-3 px-4 text-xs font-semibold text-[var(--muted)] border-b border-[var(--border)]">
+                Month/Year
+              </th>
+              <th className="text-left py-3 px-4 text-xs font-semibold text-[var(--muted)] border-b border-[var(--border)]">
+                Gross Pay
+              </th>
+              <th className="text-left py-3 px-4 text-xs font-semibold text-[var(--muted)] border-b border-[var(--border)]">
+                Deductions
+              </th>
+              <th className="text-left py-3 px-4 text-xs font-semibold text-[var(--muted)] border-b border-[var(--border)]">
+                Net Pay
+              </th>
+              <th className="text-left py-3 px-4 text-xs font-semibold text-[var(--muted)] border-b border-[var(--border)]">
+                Status
+              </th>
+              <th className="text-left py-3 px-4 text-xs font-semibold text-[var(--muted)] border-b border-[var(--border)]">
+                Payment Date
+              </th>
+              <th className="text-right py-3 px-4 text-xs font-semibold text-[var(--muted)] border-b border-[var(--border)] w-32">
+                Actions
+              </th>
+            </tr>
+          </thead>
+          <tbody>
+            {loading && payrolls.length === 0 ? (
+              <tr>
+                <td colSpan="7" className="text-center py-8 text-[var(--muted)]">
+                  <div className="flex flex-col items-center justify-center">
+                    <i className="fas fa-spinner fa-spin text-3xl text-green-500 mb-3 block"></i>
+                    <p>Loading your payslips...</p>
+                  </div>
+                </td>
               </tr>
-            </thead>
-            <tbody className="divide-y divide-gray-100 dark:divide-gray-700/60">
-              {loading && payrolls.length === 0 ? (
-                <tr>
-                  <td colSpan="7" className="px-6 py-10 text-center">
-                    <div className="flex flex-col items-center justify-center text-gray-400">
-                      <i className="fas fa-spinner fa-spin text-2xl text-green-500 mb-3"></i>
-                      <p>Loading your payslips...</p>
-                    </div>
-                  </td>
-                </tr>
-              ) : payrolls.length === 0 ? (
-                <tr>
-                  <td colSpan="7" className="px-6 py-12 text-center">
-                    <div className="w-16 h-16 bg-gray-50 dark:bg-gray-800 rounded-full flex items-center justify-center mx-auto mb-4 border border-gray-100 dark:border-gray-700">
-                      <i className="fas fa-folder-open text-gray-300 dark:text-gray-600 text-2xl"></i>
-                    </div>
-                    <p className="text-gray-500 dark:text-gray-400 font-medium">No payslips found for this period.</p>
-                  </td>
-                </tr>
-              ) : (
-                payrolls.map((payroll) => (
-                  <tr key={payroll.id} className="hover:bg-green-50/30 dark:hover:bg-gray-700/30 transition-colors group">
-                    <td className="px-6 py-4 whitespace-nowrap">
-                      <div className="flex items-center gap-3">
-                        <div className="w-10 h-10 rounded-xl bg-gray-100 dark:bg-gray-700 flex flex-col items-center justify-center text-gray-600 dark:text-gray-300 border border-gray-200 dark:border-gray-600 group-hover:border-green-300 dark:group-hover:border-green-700 transition-colors">
-                          <span className="text-[10px] font-bold uppercase -mb-1">{getMonthName(payroll.month).substring(0,3)}</span>
-                          <span className="text-[9px] text-gray-400">{payroll.year}</span>
-                        </div>
-                        <span className="font-semibold text-gray-800 dark:text-gray-200 text-sm">
-                          {getMonthName(payroll.month)} {payroll.year}
-                        </span>
-                      </div>
-                    </td>
-                    <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-600 dark:text-gray-400">
-                      {formatCurrency(payroll.gross_salary)}
-                    </td>
-                    <td className="px-6 py-4 whitespace-nowrap text-sm text-red-500 dark:text-red-400 font-medium">
-                      {formatCurrency(payroll.total_deductions)}
-                    </td>
-                    <td className="px-6 py-4 whitespace-nowrap">
-                      <span className="font-bold text-gray-900 dark:text-white text-sm">
-                        {formatCurrency(payroll.net_pay)}
-                      </span>
-                    </td>
-                    <td className="px-6 py-4 whitespace-nowrap">
-                      <span className={`px-2.5 py-1 rounded-md text-[10px] font-bold uppercase tracking-wider ${getStatusBadge(payroll.status)}`}>
-                        {payroll.status}
-                      </span>
-                    </td>
-                    <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500 dark:text-gray-400">
-                      {formatDate(payroll.payment_date)}
-                    </td>
-                    <td className="px-6 py-4 whitespace-nowrap text-right">
-                      <button
-                        onClick={() => handleGeneratePayslip(payroll.id)}
-                        className="p-2 text-gray-400 hover:text-green-600 hover:bg-green-50 dark:hover:bg-green-900/20 rounded-lg transition-all"
-                        title="Download PDF"
+            ) : payrolls.length === 0 ? (
+              <tr>
+                <td colSpan="7" className="text-center py-8 text-[var(--muted)]">
+                  <div className="flex flex-col items-center gap-2">
+                    <i className="fas fa-folder-open text-3xl text-[var(--muted)] mb-2 block"></i>
+                    <p>No payslips found for this period.</p>
+                  </div>
+                </td>
+              </tr>
+            ) : (
+              payrolls.map((payroll) => (
+                <tr key={payroll.id} className="hover:bg-[var(--surface2)] transition-colors">
+                  <td className="py-3.5 px-4 border-b border-[var(--border)]">
+                    <div className="flex items-center gap-2">
+                      <span
+                        className={`inline-flex items-center gap-1.5 px-2 py-1 rounded-full text-[11px] font-semibold border bg-green-100 text-green-700 dark:bg-green-900/30 dark:text-green-400 border-green-200 dark:border-green-800`}
                       >
-                        <i className="fas fa-file-pdf text-lg"></i>
-                      </button>
-                    </td>
-                  </tr>
-                ))
-              )}
-            </tbody>
-          </table>
-        </div>
+                        <i className="fas fa-calendar-alt text-[10px]"></i>
+                        {getMonthName(payroll.month).substring(0,3)} {payroll.year}
+                      </span>
+                    </div>
+                  </td>
+                  <td className="py-3.5 px-4 border-b border-[var(--border)] text-[var(--text-secondary)] font-semibold">
+                    {formatCurrency(payroll.gross_salary)}
+                  </td>
+                  <td className="py-3.5 px-4 border-b border-[var(--border)] text-red-500 font-semibold">
+                    {formatCurrency(payroll.total_deductions)}
+                  </td>
+                  <td className="py-3.5 px-4 border-b border-[var(--border)] font-bold text-green-500">
+                    {formatCurrency(payroll.net_pay)}
+                  </td>
+                  <td className="py-3.5 px-4 border-b border-[var(--border)]">
+                    <span className={`inline-block px-2.5 py-1 rounded-full text-[11px] font-semibold uppercase ${getStatusBadge(payroll.status)}`}>
+                      {payroll.status}
+                    </span>
+                  </td>
+                  <td className="py-3.5 px-4 border-b border-[var(--border)] text-[var(--text-secondary)]">
+                    {formatDate(payroll.payment_date)}
+                  </td>
+                  <td className="py-3.5 px-4 border-b border-[var(--border)] text-right">
+                    <button
+                      onClick={() => handleGeneratePayslip(payroll.id)}
+                      className="text-blue-500 hover:text-blue-600 hover:underline flex items-center justify-end gap-1 text-xs ml-auto"
+                      title="Download PDF"
+                    >
+                      <i className="fas fa-file-pdf"></i> View
+                    </button>
+                  </td>
+                </tr>
+              ))
+            )}
+          </tbody>
+        </table>
 
         {totalCount > 0 && (
           <div className="p-4 border-t border-gray-100 dark:border-gray-700 bg-gray-50/30 dark:bg-gray-800/30">

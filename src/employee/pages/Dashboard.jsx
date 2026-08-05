@@ -982,7 +982,7 @@ const Dashboard = () => {
         <button
           onClick={handlePunch}
           disabled={isButtonDisabled()}
-          className="punch-btn bg-red-500 border-none text-white py-2 px-6 rounded-full font-semibold text-sm cursor-pointer transition-all flex items-center gap-2 hover:bg-red-600 hover:-translate-y-0.5 hover:shadow-md disabled:opacity-50 disabled:cursor-not-allowed flex-shrink-0"
+          className={`punch-btn border-none text-white py-2 px-6 rounded-full font-semibold text-sm cursor-pointer transition-all flex items-center gap-2 hover:-translate-y-0.5 hover:shadow-md disabled:opacity-50 disabled:cursor-not-allowed flex-shrink-0 ${isActuallyPunchedIn ? "bg-red-500 hover:bg-red-600" : "bg-green-500 hover:bg-green-600"}`}
         >
           <i className="fas fa-fingerprint"></i>
           {getButtonText()}
@@ -1298,7 +1298,7 @@ const Dashboard = () => {
       {/* Recent Activity Section - Compact */}
       {dashboardData?.attendance_history &&
         dashboardData.attendance_history.length > 0 && (
-          <div className="recent-activity bg-[var(--surface)] border border-[var(--border)] rounded-xl p-3">
+          <div className="recent-activity mt-6 bg-[var(--surface)] border border-[var(--border)] rounded-xl p-3">
             <div className="flex items-center justify-between mb-2">
               <h3 className="text-sm font-semibold text-[var(--text)] flex items-center gap-2">
                 <i className="fas fa-history"></i> Recent Activity
@@ -1321,7 +1321,6 @@ const Dashboard = () => {
                   </thead>
                   <tbody>
                     {dashboardData.attendance_history
-                      .slice(0, 5)
                       .map((attendance, index) => {
                         const locationAddress = attendance.punch_in_address;
 
