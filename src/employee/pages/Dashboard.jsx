@@ -235,6 +235,8 @@ const Dashboard = () => {
 
   const [showPendingErrorModal, setShowPendingErrorModal] = useState(false);
   const [pendingPunchOutDate, setPendingPunchOutDate] = useState("");
+  const [showBlockedErrorModal, setShowBlockedErrorModal] = useState(false);
+  const [blockedErrorMessage, setBlockedErrorMessage] = useState("");
 
   // Admin graphs states
   const [showProjectHoursModal, setShowProjectHoursModal] = useState(false);
@@ -377,13 +379,17 @@ const Dashboard = () => {
           }
         );
       } catch (err) {
-        const errorMsg = typeof err === "string" ? err : (err?.message || "");
+        const errorMsg = typeof err === "string" ? err : (err?.original || err?.message || "");
         if (errorMsg.includes("pending punch-out") || errorMsg.includes("punch out for that day")) {
           clearError();
           const match = errorMsg.match(/for (\d{4}-\d{2}-\d{2})/);
           const date = match ? match[1] : "that day";
           setPendingPunchOutDate(date);
           setShowPendingErrorModal(true);
+        } else if (errorMsg.includes("Punch-in blocked") || errorMsg.includes("blocked")) {
+          clearError();
+          setBlockedErrorMessage(errorMsg);
+          setShowBlockedErrorModal(true);
         }
       }
     } else if (punchOutData) {
@@ -913,7 +919,7 @@ const Dashboard = () => {
   };
 
   return (
-    <div className="space-y-3">
+    <div className="space-y-3 px-4 md:px-6 lg:px-8 pb-8">
       {/* Welcome Banner - Compact */}
       <div className={`welcome-banner rounded-xl p-4 flex flex-col md:flex-row justify-between items-center gap-3 shadow-lg ${getWelcomeBannerGradient(isDarkMode)}`}>
         <div className="welcome-left flex items-center gap-3">
@@ -1313,10 +1319,10 @@ const Dashboard = () => {
                 <table className="w-full text-xs">
                   <thead className="sticky top-0 bg-[var(--surface)] z-10">
                     <tr className="border-b border-[var(--border)]">
-                      <th className="text-left py-1.5 px-2 text-[var(--muted)] font-semibold">Date</th>
-                      <th className="text-left py-1.5 px-2 text-[var(--muted)] font-semibold">In</th>
-                      <th className="text-left py-1.5 px-2 text-[var(--muted)] font-semibold">Location</th>
-                      <th className="text-left py-1.5 px-2 text-[var(--muted)] font-semibold">Out</th>
+                      <th className="text-left py-2 px-2 text-[var(--muted)] font-semibold">Date</th>
+                      <th className="text-left py-2 px-2 text-[var(--muted)] font-semibold">In</th>
+                      <th className="text-left py-2 px-2 text-[var(--muted)] font-semibold">Location</th>
+                      <th className="text-left py-2 px-2 text-[var(--muted)] font-semibold">Out</th>
                     </tr>
                   </thead>
                   <tbody>
@@ -1329,13 +1335,13 @@ const Dashboard = () => {
                             key={index}
                             className="border-b border-[var(--border)] hover:bg-[var(--surface2)] transition-colors"
                           >
-                            <td className="py-1.5 px-2 text-[var(--text)] whitespace-nowrap">
+                            <td className="py-3 px-2 text-[var(--text)] whitespace-nowrap">
                               {attendance.log_date}
                             </td>
-                            <td className="py-1.5 px-2 text-[var(--text)] whitespace-nowrap">
+                            <td className="py-3 px-2 text-[var(--text)] whitespace-nowrap">
                               {attendance.punch_in ? formatPunchTime(attendance.punch_in) : "-"}
                             </td>
-                            <td className="py-1.5 px-2">
+                            <td className="py-3 px-2">
                               {locationAddress ? (
                                 <div className="text-[10px] text-[var(--muted)] flex items-start gap-1">
                                   <i className="fas fa-map-marker-alt text-green-500 text-[10px] mt-0.5 flex-shrink-0"></i>
@@ -1349,7 +1355,7 @@ const Dashboard = () => {
                                 <span className="text-[10px] text-[var(--muted)]">-</span>
                               )}
                             </td>
-                            <td className="py-1.5 px-2 text-[var(--text)] whitespace-nowrap">
+                            <td className="py-3 px-2 text-[var(--text)] whitespace-nowrap">
                               {attendance.punch_out ? formatPunchTime(attendance.punch_out) : "-"}
                             </td>
                           </tr>
@@ -1417,6 +1423,32 @@ const Dashboard = () => {
                   className="flex-1 py-2.5 px-4 bg-red-500 text-white rounded-lg font-medium text-sm hover:bg-red-600 transition-colors"
                 >
                   Continue to Punch Out
+                </button>
+              </div>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Blocked Punch-In Error Modal */}
+      {showBlockedErrorModal && (
+        <div className="fixed inset-0 bg-black/70 flex items-center justify-center z-[60] p-4 animate-fade-in">
+          <div className="bg-[var(--surface)] rounded-xl max-w-md w-full p-6 shadow-2xl animate-slide-up">
+            <div className="flex flex-col items-center text-center">
+              <div className="w-16 h-16 bg-orange-100 dark:bg-orange-900/30 text-orange-500 rounded-full flex items-center justify-center text-3xl mb-4">
+                <i className="fas fa-exclamation-circle"></i>
+              </div>
+              <h3 className="text-xl font-bold text-[var(--text)] mb-2">Punch-In Blocked</h3>
+              <p className="text-[var(--text-secondary)] mb-6 text-sm">
+                {blockedErrorMessage}
+              </p>
+              
+              <div className="flex w-full">
+                <button
+                  onClick={() => setShowBlockedErrorModal(false)}
+                  className="flex-1 py-2.5 px-4 bg-[var(--surface2)] border border-[var(--border)] rounded-lg text-[var(--text)] font-medium text-sm hover:bg-[var(--surface3)] transition-colors"
+                >
+                  Close
                 </button>
               </div>
             </div>
