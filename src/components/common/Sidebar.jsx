@@ -215,7 +215,7 @@ const Sidebar = ({ isOpen, setIsOpen }) => {
     }
     
     // If no permission found, check if it's a public module
-    const publicModules = ["dashboard", "my-leaves", "my-tasks", "task-reports", "my-wfh-requests", "my-profile"];
+    const publicModules = ["dashboard", "my-leaves", "my-tasks", "task-reports", "my-wfh-requests", "my-profile", "documents"];
     if (publicModules.includes(slug)) return true;
     
     return false;
@@ -237,7 +237,7 @@ const Sidebar = ({ isOpen, setIsOpen }) => {
   };
 
   // Get all available modules from API and filter
-  const allModules = (user?.sidebar_modules || [])
+  const apiModules = (user?.sidebar_modules || [])
     .filter((mod) => {
       // Must be active
       if (mod.status !== "active") return false;
@@ -254,6 +254,12 @@ const Sidebar = ({ isOpen, setIsOpen }) => {
       return true;
     })
     .map((mod) => mod.slug);
+
+  // Ensure "documents" is always available for employees as "My Documents"
+  const allModules = [...apiModules];
+  if (userType !== 'admin' && !allModules.includes("documents")) {
+    allModules.push("documents");
+  }
 
   // Build navigation with submenus
   const buildNavItems = () => {
@@ -328,15 +334,15 @@ const Sidebar = ({ isOpen, setIsOpen }) => {
         }
       });
     } else {
-      // For regular employees, show my-leaves, my-tasks, my-wfh-requests as standalone
-      const employeeStandalone = ["my-leaves", "my-tasks", "my-wfh-requests"];
+      // For regular employees, show my-leaves, my-tasks, my-wfh-requests, documents as standalone
+      const employeeStandalone = ["my-leaves", "my-tasks", "my-wfh-requests", "documents"];
       employeeStandalone.forEach(slug => {
         if (allModules.includes(slug) && hasReadPermission(slug)) {
           const module = user?.sidebar_modules?.find(m => m.slug === slug);
           standaloneItems.push({
             type: "single",
             slug: slug,
-            label: module?.name || slug,
+            label: slug === "documents" && userType !== 'admin' ? "My Documents" : (module?.name || slug),
             path: activeRouteMap[slug],
             icon: ICON_MAP[slug] || "fas fa-circle",
             order: MODULE_ORDER[slug] || 100,
@@ -350,13 +356,11 @@ const Sidebar = ({ isOpen, setIsOpen }) => {
     allModules.forEach((slug) => {
       if (processedSlugs.has(slug)) return;
       
-      
-
       const module = user?.sidebar_modules?.find(m => m.slug === slug);
       standaloneItems.push({
         type: "single",
         slug: slug,
-        label: module?.name || slug,
+        label: slug === "documents" && userType !== 'admin' ? "My Documents" : (module?.name || slug),
         path: activeRouteMap[slug],
         icon: ICON_MAP[slug] || "fas fa-circle",
         order: MODULE_ORDER[slug] || 100,
