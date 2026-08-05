@@ -5,6 +5,7 @@ import {
   addLeaveRequestForEmployee,
   fetchLeaveTypes,
   fetchEmployeesForLeave,
+  clearLeaveError,
 } from "../store/slices/leavesSlice";
 import {
   FiCalendar,
@@ -18,6 +19,7 @@ import {
   FiUser,
   FiSearch,
   FiCheck,
+  FiFile,
 } from "react-icons/fi";
 import { MdCalculate } from "react-icons/md";
 import DateInput from "../../admin/components/common/DateInput";
@@ -27,7 +29,7 @@ const RequestLeaveForEmployee = () => {
   const navigate = useNavigate();
   const dispatch = useDispatch();
   const dropdownRef = useRef(null);
-  const {user} = useSelector((state) => state.auth);
+  const { user } = useSelector((state) => state.auth);
   
   // Determine base path from current route
   const getBasePath = () => {
@@ -61,6 +63,23 @@ const RequestLeaveForEmployee = () => {
   const [localError, setLocalError] = useState("");
   const [searchEmployee, setSearchEmployee] = useState("");
   const [showDropdown, setShowDropdown] = useState(false);
+  const [selectedLeaveType, setSelectedLeaveType] = useState(null);
+  const [fileError, setFileError] = useState("");
+  const [apiError, setApiError] = useState("");
+
+  // Clear API error when form changes
+  useEffect(() => {
+    if (apiError) {
+      setApiError("");
+    }
+  }, [formData, selectedFile]);
+
+  // Reset error from Redux store on unmount
+  useEffect(() => {
+    return () => {
+      dispatch(clearLeaveError());
+    };
+  }, [dispatch]);
 
   // Click outside handler for dropdown
   useEffect(() => {
@@ -81,6 +100,18 @@ const RequestLeaveForEmployee = () => {
     dispatch(fetchLeaveTypes());
     dispatch(fetchEmployeesForLeave());
   }, [dispatch]);
+
+  // Update selected leave type when leave_type_id changes
+  useEffect(() => {
+    if (formData.leave_type_id) {
+      const type = leaveTypes.find(t => t.id === parseInt(formData.leave_type_id));
+      setSelectedLeaveType(type || null);
+      // Clear file error when leave type changes
+      setFileError("");
+    } else {
+      setSelectedLeaveType(null);
+    }
+  }, [formData.leave_type_id, leaveTypes]);
 
   // Filter employees based on search
   const filteredEmployees = employeesList.filter((emp) => {
@@ -189,7 +220,37 @@ const RequestLeaveForEmployee = () => {
     setShowDropdown(false);
   };
 
+  const handleFileChange = (e) => {
+    const file = e.target.files[0];
+    if (file) {
+      // Validate file size (max 5MB)
+      if (file.size > 5 * 1024 * 1024) {
+        setFileError("File size should be less than 5MB");
+        setSelectedFile(null);
+        e.target.value = '';
+        return;
+      }
+      
+      // Validate file type
+      const allowedTypes = ['application/pdf', 'application/msword', 'application/vnd.openxmlformats-officedocument.wordprocessingml.document', 'image/jpeg', 'image/png'];
+      if (!allowedTypes.includes(file.type)) {
+        setFileError("Please upload PDF, DOC, DOCX, JPG, or PNG file");
+        setSelectedFile(null);
+        e.target.value = '';
+        return;
+      }
+      
+      setFileError("");
+      setSelectedFile(file);
+    }
+  };
+
   const validateForm = () => {
+    // Reset errors
+    setLocalError("");
+    setFileError("");
+    setApiError("");
+
     if (!formData.employee_id) {
       setLocalError("Please select an employee");
       return false;
@@ -216,12 +277,27 @@ const RequestLeaveForEmployee = () => {
       setLocalError("Please provide a reason (minimum 10 characters)");
       return false;
     }
+
+    // Check if document is required for sick leave
+    if (selectedLeaveType) {
+      const isSickLeave = selectedLeaveType.name?.toLowerCase() === 'sick leave' || 
+                          selectedLeaveType.name?.toLowerCase().includes('sick');
+      
+      if (isSickLeave && !selectedFile) {
+        setFileError("Medical certificate is required for sick leave");
+        setLocalError("Medical certificate is required for sick leave");
+        return false;
+      }
+    }
+
     return true;
   };
 
   const handleSubmit = async (e) => {
     e.preventDefault();
     setLocalError("");
+    setFileError("");
+    setApiError("");
 
     if (!validateForm()) {
       return;
@@ -247,13 +323,44 @@ const RequestLeaveForEmployee = () => {
       console.log(pair[0] + ": " + pair[1]);
     }
 
-    const result = await dispatch(addLeaveRequestForEmployee(formDataToSend));
+    try {
+      const result = await dispatch(addLeaveRequestForEmployee(formDataToSend));
 
-    if (addLeaveRequestForEmployee.fulfilled.match(result)) {
-      showToast("Leave request submitted successfully!", "success");
-      if(user?.type === "admin") navigate(`${basePath}/leaves`);
-      if(user?.role?.name === "HR Manager") navigate(`${basePath}/leave-management`);
-      
+      if (addLeaveRequestForEmployee.fulfilled.match(result)) {
+        showToast("Leave request submitted successfully!", "success");
+        if(user?.type === "admin") navigate(`${basePath}/leaves`);
+        if(user?.role?.name === "HR Manager") navigate(`${basePath}/leave-management`);
+      } else if (addLeaveRequestForEmployee.rejected.match(result)) {
+        // Handle rejected action
+        const errorPayload = result.payload;
+        console.log("Error payload:", errorPayload);
+        
+        // Extract error message from various possible formats
+        let errorMessage = "Failed to submit leave request. Please try again.";
+        
+        if (errorPayload) {
+          // Check for message in different formats
+          if (typeof errorPayload === 'string') {
+            errorMessage = errorPayload;
+          } else if (errorPayload.message) {
+            errorMessage = errorPayload.message;
+          } else if (errorPayload.error) {
+            errorMessage = errorPayload.error;
+          } else if (errorPayload.data?.message) {
+            errorMessage = errorPayload.data.message;
+          } else if (errorPayload.data?.error) {
+            errorMessage = errorPayload.data.error;
+          }
+        }
+        
+        setApiError(errorMessage);
+        showToast(errorMessage, "error");
+      }
+    } catch (err) {
+      console.error("Submit error:", err);
+      const errorMessage = err?.message || "An unexpected error occurred";
+      setApiError(errorMessage);
+      showToast(errorMessage, "error");
     }
   };
 
@@ -266,6 +373,10 @@ const RequestLeaveForEmployee = () => {
       </div>
     );
   }
+
+  // Check if selected leave type is sick leave
+  const isSickLeave = selectedLeaveType?.name?.toLowerCase() === 'sick leave' || 
+                      selectedLeaveType?.name?.toLowerCase().includes('sick');
 
   return (
     <div className="w-full px-4 md:px-6">
@@ -301,11 +412,24 @@ const RequestLeaveForEmployee = () => {
         </p>
       </div>
 
-      {/* Error Display */}
-      {(localError || error) && (
-        <div className="error-message mb-6 p-4 bg-red-500/10 border border-red-500 rounded-lg flex items-center gap-3 text-red-600">
-          <FiAlertCircle className="text-xl" />
-          <span className="text-sm">{localError || error}</span>
+      {/* Error Display - Combined for all errors */}
+      {(localError || apiError || error || fileError) && (
+        <div className="error-message mb-6 p-4 bg-red-500/10 border border-red-500 rounded-lg">
+          <div className="flex items-start gap-3 text-red-600">
+            <FiAlertCircle className="text-xl flex-shrink-0 mt-0.5" />
+            <div className="flex-1">
+              {localError && <p className="text-sm">{localError}</p>}
+              {apiError && <p className="text-sm font-medium">{apiError}</p>}
+              {error && (
+                <p className="text-sm">
+                  {typeof error === 'string' ? error : error.message || 'An error occurred'}
+                </p>
+              )}
+              {fileError && !localError && !apiError && !error && (
+                <p className="text-sm">{fileError}</p>
+              )}
+            </div>
+          </div>
         </div>
       )}
 
@@ -408,6 +532,12 @@ const RequestLeaveForEmployee = () => {
                   </option>
                 ))}
               </select>
+              {isSickLeave && (
+                <p className="text-xs text-red-500 flex items-center gap-1 mt-1">
+                  <FiAlertCircle className="text-xs" />
+                  Medical certificate is required for sick leave
+                </p>
+              )}
             </div>
 
             {/* Date Inputs with Sessions */}
@@ -493,16 +623,48 @@ const RequestLeaveForEmployee = () => {
               <div className="form-field flex flex-col gap-2">
                 <label className="text-xs font-semibold text-gray-700 dark:text-gray-300 flex items-center gap-1">
                   <FiPaperclip className="text-green-500" /> Supporting Document
-                  <span className="text-gray-400 text-[10px] ml-1">
-                    (Optional)
-                  </span>
+                  {isSickLeave ? (
+                    <span className="text-red-500 text-[10px] ml-1">*</span>
+                  ) : (
+                    <span className="text-gray-400 text-[10px] ml-1">
+                      (Optional)
+                    </span>
+                  )}
                 </label>
                 <input
                   type="file"
-                  onChange={(e) => setSelectedFile(e.target.files[0])}
+                  onChange={handleFileChange}
                   accept=".pdf,.doc,.docx,.jpg,.png"
-                  className="py-2.5 px-3.5 bg-gray-50 dark:bg-gray-900 border border-gray-200 dark:border-gray-700 rounded-lg text-sm text-gray-800 dark:text-gray-200 file:mr-4 file:py-1.5 file:px-3 file:rounded-full file:border-0 file:text-xs file:font-semibold file:bg-green-500 file:text-white file:cursor-pointer hover:file:bg-green-600 w-full"
+                  className={`py-2.5 px-3.5 bg-gray-50 dark:bg-gray-900 border ${
+                    fileError || (isSickLeave && !selectedFile && formData.leave_type_id)
+                      ? 'border-red-500 dark:border-red-400'
+                      : 'border-gray-200 dark:border-gray-700'
+                  } rounded-lg text-sm text-gray-800 dark:text-gray-200 file:mr-4 file:py-1.5 file:px-3 file:rounded-full file:border-0 file:text-xs file:font-semibold file:bg-green-500 file:text-white file:cursor-pointer hover:file:bg-green-600 w-full`}
                 />
+                {fileError && (
+                  <p className="text-xs text-red-500 flex items-center gap-1 mt-1">
+                    <FiAlertCircle className="text-xs" />
+                    {fileError}
+                  </p>
+                )}
+                {isSickLeave && selectedFile && !fileError && (
+                  <p className="text-xs text-green-600 flex items-center gap-1 mt-1">
+                    <FiCheck className="text-xs" />
+                    Medical certificate uploaded: {selectedFile.name}
+                  </p>
+                )}
+                {isSickLeave && !selectedFile && formData.leave_type_id && (
+                  <p className="text-xs text-red-500 flex items-center gap-1 mt-1">
+                    <FiAlertCircle className="text-xs" />
+                    Medical certificate is required
+                  </p>
+                )}
+                {selectedFile && !isSickLeave && !fileError && (
+                  <p className="text-xs text-green-600 flex items-center gap-1 mt-1">
+                    <FiCheck className="text-xs" />
+                    Document uploaded: {selectedFile.name}
+                  </p>
+                )}
               </div>
             </div>
 
@@ -635,6 +797,18 @@ const RequestLeaveForEmployee = () => {
                 </span>
               </p>
             </div>
+
+            {isSickLeave && (
+              <div className="p-3 bg-red-50 dark:bg-red-900/20 rounded-lg border border-red-200 dark:border-red-800">
+                <p className="text-xs text-red-600 dark:text-red-400 flex items-start gap-2">
+                  <FiFile className="text-sm mt-0.5 flex-shrink-0" />
+                  <span>
+                    <strong>Note:</strong> Medical certificate is required for
+                    sick leave requests.
+                  </span>
+                </p>
+              </div>
+            )}
           </div>
         </div>
       </div>
