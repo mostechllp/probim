@@ -2,9 +2,7 @@ import React, { useEffect, useState } from "react";
 import { useDispatch, useSelector } from "react-redux";
 import { Link, useLocation } from "react-router-dom";
 import SearchBar from "../common/SearchBar";
-import EntriesSelector from "../common/EntriesSelector";
 import { showToast } from "../../../components/common/Toast";
-import Pagination from "../common/Paginations";
 import {
   exportReport,
   fetchAllAttendanceReport,
@@ -37,9 +35,9 @@ const AttendanceReport = () => {
     employeesList = [],
   } = useSelector((state) => state.reports || {});
 
-  // Local state for filters (these will be applied when "Apply" is clicked)
-  const [currentPage, setCurrentPage] = useState(1);
-  const [perPage, setPerPage] = useState(10);
+  // Set large perPage to get all records since pagination is removed
+  const perPage = 10000;
+  const currentPage = 1;
 
   // Filter values that are displayed in the UI
   const [searchTerm, setSearchTerm] = useState("");
@@ -51,9 +49,7 @@ const AttendanceReport = () => {
   const [appliedEmployeeFilter, setAppliedEmployeeFilter] = useState("all");
 
   const [showExportModal, setShowExportModal] = useState(false);
-  const [exportType, setExportType] = useState("all");
-
-
+  const exportType = "all";
 
   // Date range state
   const [startDate, setStartDate] = useState(() => {
@@ -106,16 +102,7 @@ const AttendanceReport = () => {
     appliedEndDate,
   ]);
 
-  // Reset to first page when applied filters change
-  useEffect(() => {
-    setCurrentPage(1);
-  }, [
-    appliedEmployeeFilter,
-    appliedSearchTerm,
-    perPage,
-    appliedStartDate,
-    appliedEndDate,
-  ]);
+  // Pagination is removed, no need to reset page
 
   // Add this useEffect after the other useEffects
   useEffect(() => {
@@ -179,8 +166,9 @@ const AttendanceReport = () => {
     );
 
     if (matchedEmployee) {
-      // Navigate to the employee attendance page with the numeric ID
-      navigate(`${basePath}/reports/attendance/employee/${matchedEmployee.id}`);
+      navigate(`${basePath}/reports/attendance/employee/${matchedEmployee.id}`, {
+        state: { date: appliedStartDate }
+      });
     } else {
       // Fallback: try to use the record's employee_id
       console.warn("Employee not found in list, using record data:", record);
@@ -189,7 +177,9 @@ const AttendanceReport = () => {
         (emp) => emp.name === (record.employeeName || record.name),
       );
       if (fallbackEmployee) {
-        navigate(`${basePath}/reports/attendance/employee/${fallbackEmployee.id}`);
+        navigate(`${basePath}/reports/attendance/employee/${fallbackEmployee.id}`, {
+          state: { date: appliedStartDate }
+        });
       } else {
         showToast("Employee not found", "error");
       }
@@ -249,7 +239,6 @@ const AttendanceReport = () => {
     setAppliedSearchTerm(searchTerm);
     setAppliedStartDate(startDate);
     setAppliedEndDate(endDate);
-    setCurrentPage(1);
 
     // Force a re-fetch by dispatching with a timestamp
     // This ensures the API call is made with fresh parameters
@@ -282,7 +271,6 @@ const AttendanceReport = () => {
     setEmployeeFilter("all");
     setSearchTerm("");
     setDatePreset("custom");
-    setCurrentPage(1);
 
     // Reset the applied filters
     setAppliedEmployeeFilter("all");
@@ -504,8 +492,6 @@ const AttendanceReport = () => {
 
   const filteredRecords = allEmployees;
   const totalFiltered = totalCount || filteredRecords.length;
-  const totalPages = lastPage || Math.ceil(totalFiltered / perPage);
-  const start = (currentPage - 1) * perPage;
 
   return (
     <div className="w-full overflow-x-hidden">
@@ -694,24 +680,8 @@ const AttendanceReport = () => {
           </div>
         </div>
         {/* Actions Bar */}
-        <div className="flex flex-col sm:flex-row justify-between items-stretch sm:items-center gap-4 mb-5">
-          <EntriesSelector
-            value={perPage}
-            onChange={(val) => {
-              setPerPage(val);
-              setCurrentPage(1);
-            }}
-          />
+        <div className="flex flex-col sm:flex-row justify-end items-stretch sm:items-center gap-4 mb-5">
           <div className="flex flex-col sm:flex-row gap-3 w-full sm:w-auto">
-            <select
-              value={exportType}
-              onChange={(e) => setExportType(e.target.value)}
-              className="px-3 py-2 bg-gray-100 dark:bg-gray-700 border border-gray-200 dark:border-gray-600 rounded-full text-xs md:text-sm text-gray-700 dark:text-gray-300 focus:outline-none focus:border-green-500"
-            >
-              <option value="all">Export All Data</option>
-              <option value="current">Export Current Page</option>
-            </select>
-
             <button
               onClick={() => setShowExportModal(true)}
               className="bg-green-500 hover:bg-green-600 text-white px-4 py-2 rounded-full text-sm font-semibold flex items-center justify-center gap-2 transition-all shadow-md hover:shadow-lg w-full sm:w-auto"
@@ -818,16 +788,6 @@ const AttendanceReport = () => {
               </div>
             </div>
 
-            {/* Pagination */}
-            {totalFiltered > 0 && (
-              <Pagination
-                currentPage={currentPage}
-                totalPages={totalPages}
-                onPageChange={setCurrentPage}
-                totalItems={totalFiltered}
-                itemsPerPage={perPage}
-              />
-            )}
           </>
         )}
       </main>
@@ -841,11 +801,7 @@ const AttendanceReport = () => {
         totalRecords={exportType === "all" ? totalCount : records.length}
         formats={["csv", "pdf", "xlsx"]}
         defaultFormat="csv"
-        subtitle={
-          exportType === "all"
-            ? `Exporting all ${totalCount} records across all pages`
-            : `Exporting ${records.length} records from current page`
-        }
+        subtitle={`Exporting all ${totalCount} records`}
         isLoading={exportLoading}
       />
     </div>

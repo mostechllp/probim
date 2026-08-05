@@ -1,6 +1,16 @@
 // src/admin/components/leaves/LeaveModal.jsx
 
+import { useSelector } from "react-redux";
+
 const LeaveModal = ({ isOpen, leave, onClose, onViewDocument }) => {
+  const { user } = useSelector((state) => state.auth);
+  
+  // Check user role
+  const userType = user?.type || '';
+  const isAdminOrHR = userType === 'admin' || userType === 'hr';
+  const isManager = userType === 'manager';
+  const isTeamLead = userType === 'team_lead';
+
   if (!isOpen || !leave) return null;
 
   const getStatusClass = (status) => {
@@ -17,6 +27,41 @@ const LeaveModal = ({ isOpen, leave, onClose, onViewDocument }) => {
     }
   };
 
+  const getApprovalBadge = (status, remark = null) => {
+    if (status === "approved") {
+      return (
+        <div className="flex flex-col items-center">
+          <span className="inline-flex items-center px-3 py-1 rounded-full text-xs font-medium bg-green-100 text-green-800 dark:bg-green-900/30 dark:text-green-400">
+            <i className="fas fa-check-circle mr-1.5 text-xs"></i> Approved
+          </span>
+          {remark && (
+            <span className="text-xs text-gray-500 dark:text-gray-400 mt-1 italic max-w-[120px] truncate">
+              "{remark}"
+            </span>
+          )}
+        </div>
+      );
+    } else if (status === "rejected") {
+      return (
+        <div className="flex flex-col items-center">
+          <span className="inline-flex items-center px-3 py-1 rounded-full text-xs font-medium bg-red-100 text-red-800 dark:bg-red-900/30 dark:text-red-400">
+            <i className="fas fa-times-circle mr-1.5 text-xs"></i> Rejected
+          </span>
+          {remark && (
+            <span className="text-xs text-red-500 dark:text-red-400 mt-1 italic max-w-[120px] truncate">
+              "{remark}"
+            </span>
+          )}
+        </div>
+      );
+    }
+    return (
+      <span className="inline-flex items-center px-3 py-1 rounded-full text-xs font-medium bg-gray-100 text-gray-600 dark:bg-gray-700 dark:text-gray-400">
+        <i className="fas fa-clock mr-1.5 text-xs"></i> Pending
+      </span>
+    );
+  };
+
   const formatDate = (dateString) => {
     if (!dateString) return '-';
     try {
@@ -27,7 +72,7 @@ const LeaveModal = ({ isOpen, leave, onClose, onViewDocument }) => {
     }
   };
 
-  // Helper to get the raw document value (not formatted)
+  // Helper to get the raw document value
   const getRawDoc = () => {
     return leave.document_path || leave.document || leave.doc || null;
   };
@@ -87,6 +132,14 @@ const LeaveModal = ({ isOpen, leave, onClose, onViewDocument }) => {
       role: role,
       userId: approver.id || null,
     };
+  };
+
+  // Get approval from specific level
+  const getApprovalByLevel = (level) => {
+    if (!leave.approvals || !Array.isArray(leave.approvals)) {
+      return null;
+    }
+    return leave.approvals.find(a => a.approver_level === level);
   };
 
   // Helper to check if applied by is self
@@ -151,9 +204,81 @@ const LeaveModal = ({ isOpen, leave, onClose, onViewDocument }) => {
   const rawDoc = getRawDoc();
   const status = getField('status');
 
+  // Get approval data
+  const teamLeadApproval = getApprovalByLevel('team_lead');
+  const managerApproval = getApprovalByLevel('manager');
+  const hrApproval = getApprovalByLevel('hr');
+
+  // Determine which approval sections to show
+  const showTeamLeadApproval = true; // Everyone sees team lead approval
+  const showManagerApproval = isAdminOrHR || isManager; // Admin/HR and Managers see manager approval
+  const showHrApproval = isAdminOrHR; // Only Admin/HR see HR approval
+
+  // Get approver name for each level
+  const getApproverName = (approval) => {
+    if (!approval?.approver?.employee) return null;
+    const emp = approval.approver.employee;
+    return `${emp.first_name || ''} ${emp.last_name || ''}`.trim() || emp.name;
+  };
+
+  // Get approval status icon
+  const getStatusIcon = (approval) => {
+    if (!approval) return 'fa-hourglass-half';
+    if (approval.status === 'approved') return 'fa-check-circle';
+    if (approval.status === 'rejected') return 'fa-times-circle';
+    return 'fa-hourglass-half';
+  };
+
+  // Get approval status color
+  const getStatusColor = (approval) => {
+    if (!approval) return 'text-gray-400 dark:text-gray-500';
+    if (approval.status === 'approved') return 'text-green-500';
+    if (approval.status === 'rejected') return 'text-red-500';
+    return 'text-amber-500';
+  };
+
+  // Build approval chain array
+  const getApprovalChain = () => {
+    const chain = [];
+    
+    if (showTeamLeadApproval) {
+      chain.push({
+        level: 'Team Lead',
+        icon: 'fa-user-tie',
+        approval: teamLeadApproval,
+        name: getApproverName(teamLeadApproval),
+        status: teamLeadApproval?.status || 'pending'
+      });
+    }
+    
+    if (showManagerApproval) {
+      chain.push({
+        level: 'Manager',
+        icon: 'fa-user-cog',
+        approval: managerApproval,
+        name: getApproverName(managerApproval),
+        status: managerApproval?.status || 'pending'
+      });
+    }
+    
+    if (showHrApproval) {
+      chain.push({
+        level: 'HR',
+        icon: 'fa-user-shield',
+        approval: hrApproval,
+        name: getApproverName(hrApproval),
+        status: hrApproval?.status || 'pending'
+      });
+    }
+    
+    return chain;
+  };
+
+  const approvalChain = getApprovalChain();
+
   return (
     <div className="fixed inset-0 bg-black/50 backdrop-blur-sm flex items-center justify-center z-[1000] p-4">
-      <div className="bg-white dark:bg-gray-800 rounded-2xl max-w-2xl w-full p-6 shadow-soft-lg border border-gray-200 dark:border-gray-700 max-h-[80vh] overflow-y-auto">
+      <div className="bg-white dark:bg-gray-800 rounded-2xl max-w-4xl w-full p-6 shadow-soft-lg border border-gray-200 dark:border-gray-700 max-h-[80vh] overflow-y-auto">
         <h3 className="text-xl font-bold text-gray-800 dark:text-gray-200 mb-4 flex items-center gap-2">
           <i className="fas fa-eye text-green-500"></i>
           Leave Request Details
@@ -252,7 +377,7 @@ const LeaveModal = ({ isOpen, leave, onClose, onViewDocument }) => {
             </span>
           </div>
 
-          {/* ✅ Reason - spans full width with proper text wrapping */}
+          {/* Reason - spans full width with proper text wrapping */}
           <div className="flex py-2 border-b border-gray-200 dark:border-gray-700 col-span-1 sm:col-span-2 items-start">
             <span className="font-semibold text-gray-700 dark:text-gray-300 w-28 flex-shrink-0 pt-0.5">
               Reason:
@@ -311,6 +436,102 @@ const LeaveModal = ({ isOpen, leave, onClose, onViewDocument }) => {
             </div>
           )}
         </div>
+
+        {/* Horizontal Approval Chain */}
+        {approvalChain.length > 0 && (
+          <div className="mt-6 pt-4 border-t border-gray-200 dark:border-gray-700">
+            <h4 className="text-sm font-semibold text-gray-700 dark:text-gray-300 mb-4 flex items-center gap-2">
+              <i className="fas fa-sitemap text-green-500"></i>
+              Approval Chain
+            </h4>
+            
+            <div className="flex items-center justify-center gap-0 py-4 overflow-x-auto px-2">
+              {approvalChain.map((item, index) => (
+                <div key={item.level} className="flex items-center">
+                  {/* Approval Card */}
+                  <div className={`relative flex flex-col items-center min-w-[140px] p-4 rounded-xl border-2 transition-all duration-200 ${
+                    item.status === 'approved' 
+                      ? 'border-green-500 bg-green-50 dark:bg-green-900/20 shadow-md shadow-green-100 dark:shadow-green-900/20' 
+                      : item.status === 'rejected'
+                      ? 'border-red-500 bg-red-50 dark:bg-red-900/20 shadow-md shadow-red-100 dark:shadow-red-900/20'
+                      : 'border-gray-200 dark:border-gray-600 bg-gray-50 dark:bg-gray-700/30 hover:border-gray-300 dark:hover:border-gray-500'
+                  }`}>
+                    {/* Status Indicator Dot */}
+                    <div className="absolute -top-2 -right-2">
+                      <div className={`w-6 h-6 rounded-full flex items-center justify-center shadow-md ${
+                        item.status === 'approved' 
+                          ? 'bg-green-500 text-white' 
+                          : item.status === 'rejected'
+                          ? 'bg-red-500 text-white'
+                          : 'bg-amber-500 text-white animate-pulse'
+                      }`}>
+                        <i className={`fas ${getStatusIcon(item.approval)} text-xs`}></i>
+                      </div>
+                    </div>
+
+                    {/* Icon */}
+                    <div className={`w-12 h-12 rounded-full flex items-center justify-center mb-2 transition-all duration-200 ${
+                      item.status === 'approved' 
+                        ? 'bg-green-100 text-green-600 dark:bg-green-900/40 dark:text-green-400' 
+                        : item.status === 'rejected'
+                        ? 'bg-red-100 text-red-600 dark:bg-red-900/40 dark:text-red-400'
+                        : 'bg-blue-100 text-blue-600 dark:bg-blue-900/40 dark:text-blue-400'
+                    }`}>
+                      <i className={`fas ${item.icon} text-xl`}></i>
+                    </div>
+
+                    {/* Level Name */}
+                    <div className="text-sm font-bold text-gray-800 dark:text-gray-200">
+                      {item.level}
+                    </div>
+
+                    {/* Approver Name */}
+                    {item.name && (
+                      <div className="text-xs text-gray-500 dark:text-gray-400 mt-0.5">
+                        {item.name}
+                      </div>
+                    )}
+
+                    {/* Status Badge */}
+                    <div className="mt-2">
+                      {item.status === 'approved' && (
+                        <span className="inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium bg-green-100 text-green-800 dark:bg-green-900/30 dark:text-green-400">
+                          <i className="fas fa-check mr-1"></i> Approved
+                        </span>
+                      )}
+                      {item.status === 'rejected' && (
+                        <span className="inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium bg-red-100 text-red-800 dark:bg-red-900/30 dark:text-red-400">
+                          <i className="fas fa-times mr-1"></i> Rejected
+                        </span>
+                      )}
+                      {item.status === 'pending' && (
+                        <span className="inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium bg-amber-100 text-amber-800 dark:bg-amber-900/30 dark:text-amber-400">
+                          <i className="fas fa-clock mr-1"></i> Pending
+                        </span>
+                      )}
+                    </div>
+
+                    {/* Remark */}
+                    {item.approval?.remark && (
+                      <div className="mt-1 text-xs text-gray-500 dark:text-gray-400 italic max-w-[120px] truncate">
+                        "{item.approval.remark}"
+                      </div>
+                    )}
+                  </div>
+
+                  {/* Arrow between cards */}
+                  {index < approvalChain.length - 1 && (
+                    <div className="flex items-center px-3 text-gray-400 dark:text-gray-500">
+                      <svg className="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M13 7l5 5m0 0l-5 5m5-5H6" />
+                      </svg>
+                    </div>
+                  )}
+                </div>
+              ))}
+            </div>
+          </div>
+        )}
 
         <div className="flex justify-end mt-6 pt-4 border-t border-gray-200 dark:border-gray-700">
           <button

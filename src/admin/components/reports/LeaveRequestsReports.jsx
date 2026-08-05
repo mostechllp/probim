@@ -94,12 +94,11 @@ const LeaveRequestReports = () => {
       request_date: formatDate(leave.created_at || leave.request_date),
       employee_name: leave.employee_name ||
         leave.employee?.name ||
-        leave.employee?.first_name ||
-        "-",
+        (leave.employee?.first_name ? `${leave.employee.first_name} ${leave.employee.last_name || ""}`.trim() : "-"),
       leave_type: leave.leave_type?.name || leave.type || "-",
-      from_date: formatDate(leave.from_date || leave.fromDate),
-      to_date: formatDate(leave.to_date || leave.toDate),
-      days: leave.number_of_days || leave.days || "-",
+      from_date: formatDate(leave.from_date || leave.fromDate || leave.start_date),
+      to_date: formatDate(leave.to_date || leave.toDate || leave.end_date),
+      days: leave.number_of_days || leave.days || leave.duration_days || "-",
       status: leave.status || "-",
     }));
   };
@@ -177,7 +176,7 @@ const LeaveRequestReports = () => {
           (
             leave.employee_name ||
             leave.employee?.name ||
-            leave.employee?.first_name ||
+            (leave.employee?.first_name ? `${leave.employee.first_name} ${leave.employee.last_name || ""}`.trim() : "") ||
             ""
           )
             .toLowerCase()
@@ -570,20 +569,19 @@ const LeaveRequestReports = () => {
                           <td className="px-3 md:px-4 py-2 md:py-3 text-xs md:text-sm font-semibold text-gray-800 dark:text-gray-200">
                             {leave.employee_name ||
                               leave.employee?.name ||
-                              leave.employee?.first_name ||
-                              "-"}
+                              (leave.employee?.first_name ? `${leave.employee.first_name} ${leave.employee.last_name || ""}`.trim() : "-")}
                           </td>
                           <td className="px-3 md:px-4 py-2 md:py-3 text-xs md:text-sm text-gray-600 dark:text-gray-400 whitespace-nowrap">
                             {leave.leave_type?.name || leave.type || "-"}
                           </td>
                           <td className="px-3 md:px-4 py-2 md:py-3 text-xs md:text-sm text-gray-600 dark:text-gray-400 whitespace-nowrap">
-                            {formatDate(leave.from_date || leave.fromDate)}
+                            {formatDate(leave.from_date || leave.fromDate || leave.start_date)}
                           </td>
                           <td className="px-3 md:px-4 py-2 md:py-3 text-xs md:text-sm text-gray-600 dark:text-gray-400 whitespace-nowrap">
-                            {formatDate(leave.to_date || leave.toDate)}
+                            {formatDate(leave.to_date || leave.toDate || leave.end_date)}
                           </td>
                           <td className="px-3 md:px-4 py-2 md:py-3 text-xs md:text-sm text-gray-600 dark:text-gray-400 text-center">
-                            {leave.number_of_days || leave.days || "-"}
+                            {leave.number_of_days || leave.days || leave.duration_days || "-"}
                           </td>
                           <td className="px-3 md:px-4 py-2 md:py-3">
                             {getStatusBadge(leave.status)}

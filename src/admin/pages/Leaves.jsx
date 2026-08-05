@@ -28,13 +28,18 @@ const Leaves = () => {
 
   // Determine base path from current route
   const getBasePath = () => {
-    if (location.pathname.startsWith('/admin')) return '/admin';
-    if (location.pathname.startsWith('/employee')) return '/employee';
-    return '';
+    if (location.pathname.startsWith("/admin")) return "/admin";
+    if (location.pathname.startsWith("/employee")) return "/employee";
+    return "";
   };
   const basePath = getBasePath();
 
-  const { leaves = [], error = null, loading = false, leaveTypes = [] } = useSelector((state) => {
+  const {
+    leaves = [],
+    error = null,
+    loading = false,
+    leaveTypes = [],
+  } = useSelector((state) => {
     return state.leaves || { leaves: [] };
   });
   console.log(leaves);
@@ -69,9 +74,37 @@ const Leaves = () => {
   const [rejectionReason, setRejectionReason] = useState("");
   const [actionLoading, setActionLoading] = useState(false);
 
+  // NEW: Manager/Team Lead approve/reject modal states
+  const [managerActionModalOpen, setManagerActionModalOpen] = useState(false);
+  const [managerActionType, setManagerActionType] = useState(null); // "approve" or "reject"
+  const [managerActionLeave, setManagerActionLeave] = useState(null);
+  const [managerRemark, setManagerRemark] = useState("");
+  const [managerActionLoading, setManagerActionLoading] = useState(false);
+  const [remarkError, setRemarkError] = useState("");
+
   // Delete confirm states
   const [deleteConfirmOpen, setDeleteConfirmOpen] = useState(false);
   const [leaveToDelete, setLeaveToDelete] = useState(null);
+
+  // Check if user is manager or team lead
+  const isManagerOrTeamLead =
+    user?.type === "manager" ||
+    user?.type === "team_lead" ||
+    user?.role?.name?.toLowerCase().includes("manager") ||
+    user?.role?.name?.toLowerCase().includes("team lead");
+
+  // Check if user is manager specifically
+  const isManager =
+    user?.type === "manager" ||
+    user?.role?.name?.toLowerCase().includes("manager");
+
+  // Check if user is team lead specifically
+  const isTeamLead =
+    user?.type === "team_lead" ||
+    user?.role?.name?.toLowerCase().includes("team lead");
+
+  // Check if user is admin or HR (has full permissions)
+  const isAdminOrHR = user?.type === "admin" || user?.type === "hr";
 
   // ✅ Get API base URL from environment
   const getBaseUrl = () => {
@@ -85,22 +118,22 @@ const Leaves = () => {
   // ✅ Helper to get full document URL
   const getDocumentUrl = (docPath) => {
     if (!docPath) return null;
-    
-    if (docPath.startsWith('http://') || docPath.startsWith('https://')) {
+
+    if (docPath.startsWith("http://") || docPath.startsWith("https://")) {
       return docPath;
     }
-    
+
     const baseUrl = getBaseUrl();
-    const cleanPath = docPath.replace(/^\/+/, '');
-    
-    if (cleanPath.startsWith('storage/')) {
+    const cleanPath = docPath.replace(/^\/+/, "");
+
+    if (cleanPath.startsWith("storage/")) {
       return `${baseUrl}/${cleanPath}`;
     }
-    
-    if (cleanPath.startsWith('leaves/documents/')) {
+
+    if (cleanPath.startsWith("leaves/documents/")) {
       return `${baseUrl}/storage/${cleanPath}`;
     }
-    
+
     return `${baseUrl}/storage/${cleanPath}`;
   };
 
@@ -128,9 +161,9 @@ const Leaves = () => {
     }
 
     const appliedBy = leave.applied_by;
-    
+
     let name = appliedBy.employee_name || appliedBy.name || "-";
-    
+
     let role = "-";
     if (appliedBy.role) {
       role = appliedBy.role.name || appliedBy.role || "-";
@@ -172,16 +205,14 @@ const Leaves = () => {
           (leave.employee?.first_name || "")
             .toLowerCase()
             .includes(searchLower) ||
-          (leave.employee?.name || "")
-            .toLowerCase()
-            .includes(searchLower) ||
+          (leave.employee?.name || "").toLowerCase().includes(searchLower) ||
           (leave.leave_type?.name || leave.type || "")
             .toLowerCase()
             .includes(searchLower) ||
           (leave.reason || "").toLowerCase().includes(searchLower) ||
           (getAppliedByInfo(leave).name || "")
             .toLowerCase()
-            .includes(searchLower)
+            .includes(searchLower),
       );
     }
     return filtered;
@@ -193,6 +224,71 @@ const Leaves = () => {
   const start = (currentPage - 1) * perPage;
   const pageLeaves = filteredLeaves.slice(start, start + perPage);
 
+  // Manager/Team Lead action handlers
+  const handleManagerActionClick = (leave, action) => {
+    setManagerActionLeave(leave);
+    setManagerActionType(action);
+    setManagerRemark("");
+    setRemarkError("");
+    setManagerActionModalOpen(true);
+  };
+
+  const handleManagerActionConfirm = async () => {
+    if (!managerActionLeave) return;
+
+    // Validate remark is required
+    if (!managerRemark.trim()) {
+      setRemarkError("Remark is required");
+      return;
+    }
+
+    setManagerActionLoading(true);
+
+    const status = managerActionType === "approve" ? "approved" : "rejected";
+
+    // Determine who is approving/rejecting
+    let approvedBy = null;
+    if (isManager) {
+      approvedBy = "manager";
+    } else if (isTeamLead) {
+      approvedBy = "team_lead";
+    } else if (isAdminOrHR) {
+      approvedBy = "admin";
+    }
+
+    const result = await dispatch(
+      updateLeaveStatus({
+        id: managerActionLeave.id,
+        status: status,
+        processedBy: user?.username || user?.name || "Manager",
+        rejection_reason: managerActionType === "reject" ? managerRemark : null,
+        approved_by: approvedBy,
+        remarks: managerRemark,
+      }),
+    );
+
+    if (updateLeaveStatus.fulfilled.match(result)) {
+      showToast(
+        `Leave request ${managerActionType === "approve" ? "approved" : "rejected"} successfully`,
+        "success",
+      );
+      setManagerActionModalOpen(false);
+      setManagerActionLeave(null);
+      setManagerActionType(null);
+      setManagerRemark("");
+      setRemarkError("");
+      dispatch(fetchLeaves());
+    } else {
+      showToast(
+        result.payload || `Failed to ${managerActionType} leave request`,
+        "error",
+      );
+    }
+
+    setManagerActionLoading(false);
+  };
+
+  // Original approve/reject handlers (for HR/Admin)
   const handleApproveClick = (id) => {
     setSelectedLeaveId(id);
     setActionType("approve");
@@ -216,6 +312,9 @@ const Leaves = () => {
         status: actionType === "approve" ? "approved" : "rejected",
         processedBy: user?.username || "HR Admin",
         rejection_reason: actionType === "reject" ? rejectionReason : null,
+        approved_by: "admin",
+        remarks:
+          actionType === "approve" ? "Approved by Admin/HR" : rejectionReason,
       }),
     );
 
@@ -255,15 +354,22 @@ const Leaves = () => {
   // ✅ Helper to check if document exists
   const hasDocument = (leave) => {
     const doc = leave.document_path || leave.document || leave.doc;
-    return !!(doc && doc !== 'null' && doc !== 'undefined' && doc.trim() !== '');
+    return !!(
+      doc &&
+      doc !== "null" &&
+      doc !== "undefined" &&
+      doc.trim() !== ""
+    );
   };
 
   // ✅ Helper to format date for input
   const formatDateForInput = (dateString) => {
     if (!dateString) return "";
     try {
-      // If it's already in YYYY-MM-DD format
-      if (typeof dateString === 'string' && dateString.match(/^\d{4}-\d{2}-\d{2}$/)) {
+      if (
+        typeof dateString === "string" &&
+        dateString.match(/^\d{4}-\d{2}-\d{2}$/)
+      ) {
         return dateString;
       }
       const date = new Date(dateString);
@@ -277,8 +383,14 @@ const Leaves = () => {
     }
   };
 
-  // ✅ Edit Handlers - Updated to fetch by ID
+  // ✅ Edit Handlers - Only for Admin/HR
   const handleEditClick = async (leave) => {
+    // Only allow editing if user is Admin/HR
+    if (!isAdminOrHR) {
+      showToast("You don't have permission to edit leave requests", "error");
+      return;
+    }
+
     // Only allow editing if status is pending
     if ((leave.status || "").toLowerCase() !== "pending") {
       showToast("Only pending leave requests can be edited", "warning");
@@ -291,15 +403,15 @@ const Leaves = () => {
     try {
       // ✅ Fetch the complete leave data by ID
       const result = await dispatch(fetchLeaveById(leave.id)).unwrap();
-      
+
       console.log("Fetched leave data for editing:", result);
 
       const leaveTypeId = result.leave_type_id || result.leave_type?.id;
-      
+
       // Format dates for input
       const startDate = result.start_date || result.from_date;
       const endDate = result.end_date || result.to_date;
-      
+
       const startDateFormatted = startDate ? formatDateForInput(startDate) : "";
       const endDateFormatted = endDate ? formatDateForInput(endDate) : "";
 
@@ -312,7 +424,10 @@ const Leaves = () => {
         start_date: startDateFormatted,
         end_date: endDateFormatted,
         reason: result.reason || "",
-        claim_salary: result.claim_salary === 1 || result.claim_salary === "Yes" ? "1" : "0",
+        claim_salary:
+          result.claim_salary === 1 || result.claim_salary === "Yes"
+            ? "1"
+            : "0",
         session1: session1,
         session2: session2,
       });
@@ -376,7 +491,7 @@ const Leaves = () => {
         updateLeaveRequest({
           id: editingLeave.id,
           formData: formDataToSend,
-        })
+        }),
       );
 
       if (updateLeaveRequest.fulfilled.match(result)) {
@@ -415,8 +530,14 @@ const Leaves = () => {
     setEditFormData({ ...editFormData, end_date: dateValue || "" });
   };
 
-  // ✅ Delete Handlers
+  // ✅ Delete Handlers - Only for Admin/HR
   const handleDeleteClick = (leave) => {
+    // Only allow deletion if user is Admin/HR
+    if (!isAdminOrHR) {
+      showToast("You don't have permission to delete leave requests", "error");
+      return;
+    }
+
     if ((leave.status || "").toLowerCase() !== "pending") {
       showToast("Only pending leave requests can be deleted", "warning");
       return;
@@ -442,6 +563,28 @@ const Leaves = () => {
     }
 
     setActionLoading(false);
+  };
+
+  // Helper to get approval status badge
+  const getApprovalBadge = (isApproved) => {
+    if (isApproved === true) {
+      return (
+        <span className="inline-flex items-center px-2 py-0.5 rounded-full text-xs font-medium bg-green-100 text-green-800 dark:bg-green-900/30 dark:text-green-400">
+          <i className="fas fa-check-circle mr-1 text-xs"></i> Approved
+        </span>
+      );
+    } else if (isApproved === false) {
+      return (
+        <span className="inline-flex items-center px-2 py-0.5 rounded-full text-xs font-medium bg-red-100 text-red-800 dark:bg-red-900/30 dark:text-red-400">
+          <i className="fas fa-times-circle mr-1 text-xs"></i> Rejected
+        </span>
+      );
+    }
+    return (
+      <span className="inline-flex items-center px-2 py-0.5 rounded-full text-xs font-medium bg-gray-100 text-gray-600 dark:bg-gray-700 dark:text-gray-400">
+        <i className="fas fa-clock mr-1 text-xs"></i> Pending
+      </span>
+    );
   };
 
   // Calculate stats
@@ -474,21 +617,24 @@ const Leaves = () => {
   const formatDate = (dateString) => {
     if (!dateString) return "-";
     try {
-      if (typeof dateString === 'string' && dateString.match(/^\d{4}-\d{2}-\d{2}$/)) {
-        const [year, month, day] = dateString.split('-');
+      if (
+        typeof dateString === "string" &&
+        dateString.match(/^\d{4}-\d{2}-\d{2}$/)
+      ) {
+        const [year, month, day] = dateString.split("-");
         const date = new Date(year, month - 1, day);
-        return date.toLocaleDateString('en-GB', {
-          day: '2-digit',
-          month: 'short',
-          year: 'numeric'
+        return date.toLocaleDateString("en-GB", {
+          day: "2-digit",
+          month: "short",
+          year: "numeric",
         });
       }
       const date = new Date(dateString);
       if (!isNaN(date.getTime())) {
-        return date.toLocaleDateString('en-GB', {
-          day: '2-digit',
-          month: 'short',
-          year: 'numeric'
+        return date.toLocaleDateString("en-GB", {
+          day: "2-digit",
+          month: "short",
+          year: "numeric",
         });
       }
       return dateString;
@@ -496,6 +642,46 @@ const Leaves = () => {
       return dateString || "-";
     }
   };
+
+  // Check if user can take action on leave
+const canTakeAction = (leave) => {
+  const isPending = (leave.status || "").toLowerCase() === "pending";
+  
+  if (!isPending) return false;
+  
+  // Check if user is allowed to take action (manager, team lead, admin, hr)
+  const hasRoleAccess = isManagerOrTeamLead || user?.type === "admin" || user?.type === "hr";
+  if (!hasRoleAccess) return false;
+  
+  // For Team Lead: Check if they already approved/rejected
+  if (isTeamLead) {
+    const teamLeadApproval = leave.approvals?.find(a => a.approver_level === "team_lead");
+    if (teamLeadApproval && (teamLeadApproval.status === "approved" || teamLeadApproval.status === "rejected")) {
+      return false; // Team Lead already acted on this
+    }
+  }
+  
+  // For Manager: Check if they already approved/rejected
+  if (isManager) {
+    const managerApproval = leave.approvals?.find(a => a.approver_level === "manager");
+    if (managerApproval && (managerApproval.status === "approved" || managerApproval.status === "rejected")) {
+      return false; // Manager already acted on this
+    }
+  }
+  
+  // For Admin/HR: Always allow action on pending leaves
+  // (They can override or change status even if someone else already acted)
+  if (user?.type === "admin" || user?.type === "hr") {
+    return true;
+  }
+  
+  return true;
+};
+
+  // Determine which approval columns to show
+  const showTeamLeadApproval = true; // Everyone should see Team Lead status
+  const showManagerApproval = isAdminOrHR; // Only Admin/HR see Manager status
+  const showHrApproval = isAdminOrHR; // Only Admin/HR see HR status
 
   return (
     <div className="w-full overflow-x-hidden">
@@ -606,22 +792,29 @@ const Leaves = () => {
               <FiPlus /> Request Leave for Employee
             </Link>
           ) : null}
-          <Link
-            to={`${basePath}/leaves/allocations`}
-            className="bg-blue-500 hover:bg-blue-600 text-white px-4 py-2 rounded-full text-sm font-semibold flex items-center justify-center gap-2 transition-all shadow-md hover:shadow-lg w-full sm:w-auto"
-          >
-            <i className="fas fa-chart-line"></i>
-            <span className="hidden sm:inline">Manage Leave Allocations</span>
-            <span className="sm:hidden">Allocations</span>
-          </Link>
-          <Link
-            to={`${basePath}/leaves/leave-types`}
-            className="bg-green-500 hover:bg-green-600 text-white px-4 py-2 rounded-full text-sm font-semibold flex items-center justify-center gap-2 transition-all shadow-md hover:shadow-lg w-full sm:w-auto"
-          >
-            <i className="fas fa-briefcase"></i>
-            <span className="hidden sm:inline">Manage leave types</span>
-            <span className="sm:hidden">Leave Types</span>
-          </Link>
+          {user?.type === "admin" ? (
+            <>
+              <Link
+                to={`${basePath}/leaves/allocations`}
+                className="bg-blue-500 hover:bg-blue-600 text-white px-4 py-2 rounded-full text-sm font-semibold flex items-center justify-center gap-2 transition-all shadow-md hover:shadow-lg w-full sm:w-auto"
+              >
+                <i className="fas fa-chart-line"></i>
+                <span className="hidden sm:inline">
+                  Manage Leave Allocations
+                </span>
+                <span className="sm:hidden">Allocations</span>
+              </Link>
+
+              <Link
+                to={`${basePath}/leaves/leave-types`}
+                className="bg-green-500 hover:bg-green-600 text-white px-4 py-2 rounded-full text-sm font-semibold flex items-center justify-center gap-2 transition-all shadow-md hover:shadow-lg w-full sm:w-auto"
+              >
+                <i className="fas fa-briefcase"></i>
+                <span className="hidden sm:inline">Manage Leave Types</span>
+                <span className="sm:hidden">Leave Types</span>
+              </Link>
+            </>
+          ) : null}
         </div>
       </div>
 
@@ -664,6 +857,22 @@ const Leaves = () => {
                 <th className="px-3 md:px-4 py-2 md:py-3 text-left text-[10px] md:text-xs font-semibold text-gray-500 dark:text-gray-400">
                   Status
                 </th>
+                {/* Approval columns - conditional */}
+                {showTeamLeadApproval && (
+                  <th className="px-3 md:px-4 py-2 md:py-3 text-left text-[10px] md:text-xs font-semibold text-gray-500 dark:text-gray-400">
+                    Team Lead
+                  </th>
+                )}
+                {showManagerApproval && (
+                  <th className="px-3 md:px-4 py-2 md:py-3 text-left text-[10px] md:text-xs font-semibold text-gray-500 dark:text-gray-400">
+                    Manager
+                  </th>
+                )}
+                {showHrApproval && (
+                  <th className="px-3 md:px-4 py-2 md:py-3 text-left text-[10px] md:text-xs font-semibold text-gray-500 dark:text-gray-400">
+                    HR
+                  </th>
+                )}
                 <th className="px-3 md:px-4 py-2 md:py-3 text-left text-[10px] md:text-xs font-semibold text-gray-500 dark:text-gray-400">
                   Processed By
                 </th>
@@ -677,9 +886,14 @@ const Leaves = () => {
                 pageLeaves.map((leave, idx) => {
                   const appliedByInfo = getAppliedByInfo(leave);
                   const hasDoc = hasDocument(leave);
-                  const docPath = leave.document_path || leave.document || leave.doc;
-                  const isPending = (leave.status || "").toLowerCase() === "pending";
-                  
+                  const docPath =
+                    leave.document_path || leave.document || leave.doc;
+                  const isPending =
+                    (leave.status || "").toLowerCase() === "pending";
+                  const canAct = canTakeAction(leave);
+                  // Only show edit/delete for Admin/HR
+                  const showEditDelete = isPending && isAdminOrHR;
+
                   return (
                     <tr
                       key={leave.id}
@@ -708,7 +922,10 @@ const Leaves = () => {
                         {formatDate(leave.end_date || leave.to_date)}
                       </td>
                       <td className="px-3 md:px-4 py-2 md:py-3 text-xs md:text-sm text-gray-600 dark:text-gray-400 text-center">
-                        {leave.duration_days || leave.number_of_days || leave.days || "-"}
+                        {leave.duration_days ||
+                          leave.number_of_days ||
+                          leave.days ||
+                          "-"}
                       </td>
                       <td className="px-3 md:px-4 py-2 md:py-3">
                         <span
@@ -720,7 +937,9 @@ const Leaves = () => {
                               : "bg-gray-100 text-gray-600 dark:bg-gray-700 dark:text-gray-400"
                           }`}
                         >
-                          {leave.claim_salary === 1 || leave.claim_salary === "1" || leave.claim_salary === "Yes"
+                          {leave.claim_salary === 1 ||
+                          leave.claim_salary === "1" ||
+                          leave.claim_salary === "Yes"
                             ? "Yes"
                             : "No"}
                         </span>
@@ -735,7 +954,9 @@ const Leaves = () => {
                             <span className="hidden sm:inline">View</span>
                           </button>
                         ) : (
-                          <span className="text-gray-400 dark:text-gray-500 text-xs">-</span>
+                          <span className="text-gray-400 dark:text-gray-500 text-xs">
+                            -
+                          </span>
                         )}
                       </td>
                       <td
@@ -751,11 +972,30 @@ const Leaves = () => {
                           {leave.status || "pending"}
                         </span>
                       </td>
+                      {/* Approval columns - conditional */}
+                      {showTeamLeadApproval && (
+                        <td className="px-3 md:px-4 py-2 md:py-3">
+                          {getApprovalBadge(leave.is_team_lead_approved)}
+                        </td>
+                      )}
+                      {showManagerApproval && (
+                        <td className="px-3 md:px-4 py-2 md:py-3">
+                          {getApprovalBadge(leave.is_manager_approved)}
+                        </td>
+                      )}
+                      {showHrApproval && (
+                        <td className="px-3 md:px-4 py-2 md:py-3">
+                          {getApprovalBadge(leave.is_hr_approved)}
+                        </td>
+                      )}
                       <td className="px-3 md:px-4 py-2 md:py-3 text-xs md:text-sm text-gray-600 dark:text-gray-400 whitespace-nowrap">
-                        {leave.processed_by || leave.processedBy || leave.approver?.username || "-"}
+                        {leave.processed_by ||
+                          leave.processedBy ||
+                          leave.approver?.username ||
+                          "-"}
                       </td>
                       <td className="px-3 md:px-4 py-2 md:py-3">
-                        <div className="flex gap-1 md:gap-2">
+                        <div className="flex items-center gap-1 md:gap-2 whitespace-nowrap">
                           <button
                             onClick={() => handleView(leave)}
                             className="p-1.5 rounded-lg hover:bg-gray-100 dark:hover:bg-gray-700 text-blue-500 transition-colors"
@@ -765,34 +1005,48 @@ const Leaves = () => {
                           </button>
                           {isPending && (
                             <>
-                              <button
-                                onClick={() => handleEditClick(leave)}
-                                className="p-1.5 rounded-lg hover:bg-gray-100 dark:hover:bg-gray-700 text-amber-500 transition-colors"
-                                title="Edit Leave Request"
-                              >
-                                <FiEdit2 size={14} />
-                              </button>
-                              <button
-                                onClick={() => handleDeleteClick(leave)}
-                                className="p-1.5 rounded-lg hover:bg-gray-100 dark:hover:bg-gray-700 text-red-500 transition-colors"
-                                title="Delete Leave Request"
-                              >
-                                <FiTrash2 size={14} />
-                              </button>
-                              <button
-                                onClick={() => handleApproveClick(leave.id)}
-                                className="p-1.5 rounded-lg hover:bg-gray-100 dark:hover:bg-gray-700 text-green-500 transition-colors"
-                                title="Approve"
-                              >
-                                <i className="fas fa-check-circle text-xs md:text-sm"></i>
-                              </button>
-                              <button
-                                onClick={() => handleRejectClick(leave.id)}
-                                className="p-1.5 rounded-lg hover:bg-gray-100 dark:hover:bg-gray-700 text-red-500 transition-colors"
-                                title="Reject"
-                              >
-                                <i className="fas fa-times-circle text-xs md:text-sm"></i>
-                              </button>
+                              {/* Edit & Delete - Only for Admin/HR */}
+                              {showEditDelete && (
+                                <>
+                                  <button
+                                    onClick={() => handleEditClick(leave)}
+                                    className="p-1.5 rounded-lg hover:bg-gray-100 dark:hover:bg-gray-700 text-amber-500 transition-colors"
+                                    title="Edit Leave Request"
+                                  >
+                                    <FiEdit2 size={14} />
+                                  </button>
+                                  <button
+                                    onClick={() => handleDeleteClick(leave)}
+                                    className="p-1.5 rounded-lg hover:bg-gray-100 dark:hover:bg-gray-700 text-red-500 transition-colors"
+                                    title="Delete Leave Request"
+                                  >
+                                    <FiTrash2 size={14} />
+                                  </button>
+                                </>
+                              )}
+                              {/* Approve/Reject - For Managers, Team Leads, Admin, and HR */}
+                              {canAct && (
+                                <>
+                                  <button
+                                    onClick={() =>
+                                      handleManagerActionClick(leave, "approve")
+                                    }
+                                    className="p-1.5 rounded-lg hover:bg-gray-100 dark:hover:bg-gray-700 text-green-500 transition-colors"
+                                    title="Approve"
+                                  >
+                                    <i className="fas fa-check-circle text-xs md:text-sm"></i>
+                                  </button>
+                                  <button
+                                    onClick={() =>
+                                      handleManagerActionClick(leave, "reject")
+                                    }
+                                    className="p-1.5 rounded-lg hover:bg-gray-100 dark:hover:bg-gray-700 text-red-500 transition-colors"
+                                    title="Reject"
+                                  >
+                                    <i className="fas fa-times-circle text-xs md:text-sm"></i>
+                                  </button>
+                                </>
+                              )}
                             </>
                           )}
                         </div>
@@ -803,7 +1057,12 @@ const Leaves = () => {
               ) : (
                 <tr>
                   <td
-                    colSpan="13"
+                    colSpan={
+                      13 +
+                      (showTeamLeadApproval ? 1 : 0) +
+                      (showManagerApproval ? 1 : 0) +
+                      (showHrApproval ? 1 : 0)
+                    }
                     className="px-4 py-8 text-center text-gray-500 dark:text-gray-400"
                   >
                     No leave requests found
@@ -833,271 +1092,141 @@ const Leaves = () => {
         onViewDocument={handleViewDocument}
       />
 
-      {/* Edit Modal */}
-      {showEditModal && (
+      {/* Manager/Team Lead Action Modal */}
+      {managerActionModalOpen && (
         <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 p-4">
-          <div className="bg-white dark:bg-gray-800 rounded-2xl max-w-2xl w-full max-h-[90vh] overflow-y-auto p-6">
-            <div className="flex justify-between items-center mb-6">
+          <div className="bg-white dark:bg-gray-800 rounded-2xl max-w-md w-full p-6">
+            <div className="flex justify-between items-center mb-4">
               <h3 className="text-xl font-bold text-gray-800 dark:text-gray-200">
-                <FiEdit2 className="inline mr-2 text-amber-500" />
-                Edit Leave Request
+                {managerActionType === "approve" ? "Approve" : "Reject"} Leave
+                Request
               </h3>
               <button
-                onClick={handleEditClose}
+                onClick={() => {
+                  setManagerActionModalOpen(false);
+                  setManagerActionLeave(null);
+                  setManagerActionType(null);
+                  setManagerRemark("");
+                  setRemarkError("");
+                }}
                 className="p-2 hover:bg-gray-100 dark:hover:bg-gray-700 rounded-lg transition-colors"
               >
                 <FiX size={20} />
               </button>
             </div>
 
-            {fetchingLeave ? (
-              <div className="flex items-center justify-center py-12">
-                <div className="text-center">
-                  <FiLoader className="w-10 h-10 text-amber-500 animate-spin mx-auto mb-4" />
-                  <p className="text-[var(--muted)]">Loading leave details...</p>
-                </div>
-              </div>
-            ) : (
-              <form onSubmit={handleEditSubmit}>
-                <div className="space-y-4">
-                  {/* Leave Type */}
-                  <div>
-                    <label className="block text-sm font-semibold text-gray-700 dark:text-gray-300 mb-1">
-                      Leave Type <span className="text-red-500">*</span>
-                    </label>
-                    <select
-                      value={editFormData.leave_type_id}
-                      onChange={(e) => {
-                        console.log("Leave type selected:", e.target.value);
-                        setEditFormData({
-                          ...editFormData,
-                          leave_type_id: e.target.value,
-                        });
-                      }}
-                      className="w-full px-3 py-2 bg-gray-50 dark:bg-gray-900 border border-gray-200 dark:border-gray-700 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-amber-500"
-                      required
-                    >
-                      <option value="">Select Leave Type</option>
-                      {leaveTypes.map((type) => (
-                        <option key={type.id} value={type.id}>
-                          {type.name}
-                        </option>
-                      ))}
-                    </select>
-                  </div>
+            <div className="mb-4">
+              <p className="text-sm text-gray-600 dark:text-gray-400">
+                <span className="font-semibold">Employee:</span>{" "}
+                {managerActionLeave ? getEmployeeName(managerActionLeave) : "-"}
+              </p>
+              <p className="text-sm text-gray-600 dark:text-gray-400">
+                <span className="font-semibold">Leave Type:</span>{" "}
+                {managerActionLeave?.leave_type?.name ||
+                  managerActionLeave?.type ||
+                  "-"}
+              </p>
+              <p className="text-sm text-gray-600 dark:text-gray-400">
+                <span className="font-semibold">Duration:</span>{" "}
+                {formatDate(
+                  managerActionLeave?.start_date ||
+                    managerActionLeave?.from_date,
+                )}{" "}
+                -{" "}
+                {formatDate(
+                  managerActionLeave?.end_date || managerActionLeave?.to_date,
+                )}
+              </p>
+            </div>
 
-                  {/* Dates */}
-                  <div className="grid grid-cols-2 gap-4">
-                    <div>
-                      <label className="block text-sm font-semibold text-gray-700 dark:text-gray-300 mb-1">
-                        Start Date <span className="text-red-500">*</span>
-                      </label>
-                      <DateInput
-                        value={editFormData.start_date}
-                        onChange={handleStartDateChange}
-                        type="general"
-                        className="w-full"
-                        placeholder="dd/mm/yyyy"
-                        error={false}
-                      />
-                    </div>
-                    <div>
-                      <label className="block text-sm font-semibold text-gray-700 dark:text-gray-300 mb-1">
-                        End Date <span className="text-red-500">*</span>
-                      </label>
-                      <DateInput
-                        value={editFormData.end_date}
-                        onChange={handleEndDateChange}
-                        type="general"
-                        className="w-full"
-                        placeholder="dd/mm/yyyy"
-                        error={false}
-                        minDate={
-                          editFormData.start_date
-                            ? new Date(editFormData.start_date)
-                            : null
-                        }
-                      />
-                    </div>
-                  </div>
+            <div className="mb-4">
+              <label className="block text-sm font-semibold text-gray-700 dark:text-gray-300 mb-2">
+                {managerActionType === "approve" ? "Approval" : "Rejection"}{" "}
+                Remark <span className="text-red-500">*</span>
+              </label>
+              <textarea
+                value={managerRemark}
+                onChange={(e) => {
+                  setManagerRemark(e.target.value);
+                  if (e.target.value.trim()) {
+                    setRemarkError("");
+                  }
+                }}
+                rows="4"
+                className={`w-full px-3 py-2 bg-gray-50 dark:bg-gray-900 border rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-amber-500 ${
+                  remarkError
+                    ? "border-red-500 focus:border-red-500 focus:ring-red-500/20"
+                    : "border-gray-200 dark:border-gray-700"
+                }`}
+                placeholder={
+                  managerActionType === "approve"
+                    ? "Add approval notes (required)..."
+                    : "Provide reason for rejection (required)..."
+                }
+              />
+              {remarkError && (
+                <p className="text-xs text-red-500 mt-1">
+                  <i className="fas fa-exclamation-circle mr-1"></i>
+                  {remarkError}
+                </p>
+              )}
+              {managerActionType === "reject" && (
+                <p className="text-xs text-gray-500 mt-1">
+                  <i className="fas fa-info-circle mr-1"></i>
+                  Rejection reason will be visible to the employee
+                </p>
+              )}
+            </div>
 
-                  {/* Sessions */}
-                  <div className="grid grid-cols-2 gap-4">
-                    <div>
-                      <label className="block text-sm font-semibold text-gray-700 dark:text-gray-300 mb-1">
-                        Start Session <span className="text-red-500">*</span>
-                      </label>
-                      <select
-                        value={editFormData.session1}
-                        onChange={(e) =>
-                          setEditFormData({
-                            ...editFormData,
-                            session1: e.target.value,
-                          })
-                        }
-                        className="w-full px-3 py-2 bg-gray-50 dark:bg-gray-900 border border-gray-200 dark:border-gray-700 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-amber-500"
-                        required
-                      >
-                        <option value="morning">Morning</option>
-                        <option value="afternoon">Afternoon</option>
-                      </select>
-                    </div>
-                    <div>
-                      <label className="block text-sm font-semibold text-gray-700 dark:text-gray-300 mb-1">
-                        End Session <span className="text-red-500">*</span>
-                      </label>
-                      <select
-                        value={editFormData.session2}
-                        onChange={(e) =>
-                          setEditFormData({
-                            ...editFormData,
-                            session2: e.target.value,
-                          })
-                        }
-                        className="w-full px-3 py-2 bg-gray-50 dark:bg-gray-900 border border-gray-200 dark:border-gray-700 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-amber-500"
-                        required
-                      >
-                        <option value="morning">Morning</option>
-                        <option value="afternoon">Afternoon</option>
-                      </select>
-                    </div>
-                  </div>
-
-                  {/* Reason */}
-                  <div>
-                    <label className="block text-sm font-semibold text-gray-700 dark:text-gray-300 mb-1">
-                      Reason <span className="text-red-500">*</span>
-                    </label>
-                    <textarea
-                      value={editFormData.reason}
-                      onChange={(e) =>
-                        setEditFormData({
-                          ...editFormData,
-                          reason: e.target.value,
-                        })
-                      }
-                      rows="3"
-                      className="w-full px-3 py-2 bg-gray-50 dark:bg-gray-900 border border-gray-200 dark:border-gray-700 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-amber-500"
-                      placeholder="Enter reason for leave (min 10 characters)"
-                      required
-                    />
-                  </div>
-
-                  {/* Claim Salary */}
-                  <div>
-                    <label className="block text-sm font-semibold text-gray-700 dark:text-gray-300 mb-1">
-                      Claim Salary
-                    </label>
-                    <div className="flex gap-6">
-                      <label className="flex items-center gap-2">
-                        <input
-                          type="radio"
-                          value="1"
-                          checked={editFormData.claim_salary === "1"}
-                          onChange={() =>
-                            setEditFormData({
-                              ...editFormData,
-                              claim_salary: "1",
-                            })
-                          }
-                          className="text-amber-500 focus:ring-amber-500"
-                        />
-                        <span className="text-sm">Yes</span>
-                      </label>
-                      <label className="flex items-center gap-2">
-                        <input
-                          type="radio"
-                          value="0"
-                          checked={editFormData.claim_salary === "0"}
-                          onChange={() =>
-                            setEditFormData({
-                              ...editFormData,
-                              claim_salary: "0",
-                            })
-                          }
-                          className="text-amber-500 focus:ring-amber-500"
-                        />
-                        <span className="text-sm">No</span>
-                      </label>
-                    </div>
-                  </div>
-
-                  {/* Document Upload */}
-                  <div>
-                    <label className="block text-sm font-semibold text-gray-700 dark:text-gray-300 mb-1">
-                      Upload Document{" "}
-                      <span className="text-gray-400 text-xs">(Optional)</span>
-                    </label>
-                    
-                    {/* Show current document if it exists */}
-                    {editingLeave?.document && !editFile && (
-                      <div className="mb-3 p-3 bg-gray-50 dark:bg-gray-900 rounded-lg border border-gray-200 dark:border-gray-700">
-                        <p className="text-xs text-gray-600 dark:text-gray-400 mb-1">Current Document:</p>
-                        <div className="flex items-center gap-2">
-                          <i className="fas fa-file-pdf text-red-500"></i>
-                          <button
-                            type="button"
-                            onClick={() => handleViewDocument(editingLeave.document)}
-                            className="text-blue-500 hover:text-blue-600 hover:underline text-sm font-medium"
-                          >
-                            {editingLeave.document.split('/').pop()}
-                          </button>
-                          <span className="text-xs text-gray-400">(Click to view)</span>
-                        </div>
-                      </div>
-                    )}
-                    
-                    <input
-                      type="file"
-                      onChange={(e) => setEditFile(e.target.files[0])}
-                      accept=".pdf,.doc,.docx,.jpg,.png"
-                      className="w-full px-3 py-2 bg-gray-50 dark:bg-gray-900 border border-gray-200 dark:border-gray-700 rounded-lg text-sm file:mr-4 file:py-1.5 file:px-3 file:rounded-full file:border-0 file:text-xs file:font-semibold file:bg-amber-500 file:text-white file:cursor-pointer hover:file:bg-amber-600"
-                    />
-                    {editFile && (
-                      <p className="text-xs text-amber-600 mt-1">
-                        File selected: {editFile.name}
-                      </p>
-                    )}
-                    {editingLeave?.document && !editFile && (
-                      <p className="text-xs text-gray-500 mt-1">
-                        Upload a new file to replace the current document
-                      </p>
-                    )}
-                  </div>
-                </div>
-
-                <div className="flex justify-end gap-3 mt-6 pt-4 border-t border-gray-200 dark:border-gray-700">
-                  <button
-                    type="button"
-                    onClick={handleEditClose}
-                    className="px-4 py-2 rounded-lg font-semibold bg-gray-100 dark:bg-gray-700 text-gray-700 dark:text-gray-300 hover:bg-gray-200 dark:hover:bg-gray-600 transition-colors"
-                  >
-                    Cancel
-                  </button>
-                  <button
-                    type="submit"
-                    disabled={submitting}
-                    className="px-4 py-2 rounded-lg font-semibold bg-amber-500 text-white hover:bg-amber-600 transition-colors disabled:opacity-50 flex items-center gap-2"
-                  >
-                    {submitting ? (
+            <div className="flex justify-end gap-3 pt-4 border-t border-gray-200 dark:border-gray-700">
+              <button
+                type="button"
+                onClick={() => {
+                  setManagerActionModalOpen(false);
+                  setManagerActionLeave(null);
+                  setManagerActionType(null);
+                  setManagerRemark("");
+                  setRemarkError("");
+                }}
+                className="px-4 py-2 rounded-lg font-semibold bg-gray-100 dark:bg-gray-700 text-gray-700 dark:text-gray-300 hover:bg-gray-200 dark:hover:bg-gray-600 transition-colors"
+              >
+                Cancel
+              </button>
+              <button
+                type="button"
+                onClick={handleManagerActionConfirm}
+                disabled={managerActionLoading}
+                className={`px-4 py-2 rounded-lg font-semibold text-white transition-colors flex items-center gap-2 ${
+                  managerActionType === "approve"
+                    ? "bg-green-500 hover:bg-green-600"
+                    : "bg-red-500 hover:bg-red-600"
+                } disabled:opacity-50`}
+              >
+                {managerActionLoading ? (
+                  <>
+                    <div className="w-4 h-4 border-2 border-white border-t-transparent rounded-full animate-spin"></div>
+                    Processing...
+                  </>
+                ) : (
+                  <>
+                    {managerActionType === "approve" ? (
                       <>
-                        <div className="w-4 h-4 border-2 border-white border-t-transparent rounded-full animate-spin"></div>
-                        Updating...
+                        <i className="fas fa-check-circle"></i> Approve
                       </>
                     ) : (
                       <>
-                        <FiEdit2 /> Update
+                        <i className="fas fa-times-circle"></i> Reject
                       </>
                     )}
-                  </button>
-                </div>
-              </form>
-            )}
+                  </>
+                )}
+              </button>
+            </div>
           </div>
         </div>
       )}
 
-      {/* Confirm Modal for Approve/Reject */}
+      {/* Confirm Modal for Approve/Reject (HR/Admin) */}
       <ConfirmModal
         isOpen={confirmOpen}
         onClose={() => {
@@ -1119,11 +1248,7 @@ const Leaves = () => {
         }
         confirmText={actionType === "approve" ? "Approve" : "Reject"}
         loading={actionLoading}
-        variant={
-          actionType === "approve"
-          ? "success"
-          : "danger"
-        }
+        variant={actionType === "approve" ? "success" : "danger"}
       >
         {actionType === "reject" && (
           <div className="mt-4">

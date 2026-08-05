@@ -106,7 +106,8 @@ const ProjectReport = () => {
       status: project.status || "Active",
       company_name: project.company_name || "-", 
       totalHours: project.total_hours || project.totalHours || 0,
-      totalEmployees: project.total_employees || project.totalEmployees || 0,
+      // FIXED: Use employee_count from the API response
+      totalEmployees: project.employee_count || project.total_employees || project.totalEmployees || 0,
       hoursByEmployee: project.employees || project.hoursByEmployee || [],
       originalData: project,
       raw: project,
@@ -125,20 +126,26 @@ const ProjectReport = () => {
 
   // Calculate statistics
   const totalProjects = transformedProjects.length;
-  const activeProjects = transformedProjects.filter(p => p.status === "Active").length;
-  const inactiveProjects = transformedProjects.filter(p => p.status === "Inactive" || p.status !== "Active").length;
+  const activeProjects = transformedProjects.filter(p => p.status === "Active" || p.status === "active").length;
+  const inactiveProjects = transformedProjects.filter(p => p.status === "Inactive" || p.status === "inactive" || (p.status !== "Active" && p.status !== "active")).length;
   const totalHoursAllProjects = transformedProjects.reduce((sum, p) => sum + (p.totalHours || 0), 0);
   const projectsWithHours = transformedProjects.filter(p => (p.totalHours || 0) > 0).length;
   const totalEmployeesAcrossProjects = transformedProjects.reduce((sum, p) => sum + (p.totalEmployees || 0), 0);
 
   const getStatusBadge = (status) => {
-    const styles = {
-      Active: "bg-green-100 text-green-700 dark:bg-green-900/30 dark:text-green-400",
-      Inactive: "bg-gray-100 text-gray-700 dark:bg-gray-900/30 dark:text-gray-400",
-      Completed: "bg-blue-100 text-blue-700 dark:bg-blue-900/30 dark:text-blue-400",
-      Archived: "bg-red-100 text-red-700 dark:bg-red-900/30 dark:text-red-400",
-    };
-    return styles[status] || "bg-gray-100 text-gray-700";
+    // Normalize status for comparison
+    const normalizedStatus = status?.toLowerCase() || '';
+    
+    if (normalizedStatus === 'active') {
+      return "bg-green-100 text-green-700 dark:bg-green-900/30 dark:text-green-400";
+    } else if (normalizedStatus === 'inactive') {
+      return "bg-gray-100 text-gray-700 dark:bg-gray-900/30 dark:text-gray-400";
+    } else if (normalizedStatus === 'completed') {
+      return "bg-blue-100 text-blue-700 dark:bg-blue-900/30 dark:text-blue-400";
+    } else if (normalizedStatus === 'archived') {
+      return "bg-red-100 text-red-700 dark:bg-red-900/30 dark:text-red-400";
+    }
+    return "bg-gray-100 text-gray-700 dark:bg-gray-900/30 dark:text-gray-400";
   };
 
   const handleApplyFilters = () => {
@@ -370,10 +377,10 @@ const ProjectReport = () => {
                 className="w-full px-3 py-2 bg-gray-50 dark:bg-gray-700 border border-gray-200 dark:border-gray-600 rounded-lg text-sm text-gray-700 dark:text-gray-300 focus:outline-none focus:border-indigo-500"
               >
                 <option value="all">All Status</option>
-                <option value="Active">Active</option>
-                <option value="Inactive">Inactive</option>
-                <option value="Completed">Completed</option>
-                <option value="Archived">Archived</option>
+                <option value="active">Active</option>
+                <option value="inactive">Inactive</option>
+                <option value="completed">Completed</option>
+                <option value="archived">Archived</option>
               </select>
             </div>
 
@@ -403,7 +410,7 @@ const ProjectReport = () => {
             <div className="flex items-end gap-2 lg:col-span-2">
               <button
                 onClick={handleApplyFilters}
-                className="px-4 py-2 rounded-lg bg-indigo-500 hover:bg-indigo-600 text-white font-medium text-sm flex items-center gap-2 transition-all"
+                className="px-4 py-2 rounded-lg bg-green-500 hover:bg-green-600 text-white font-medium text-sm flex items-center gap-2 transition-all"
               >
                 <i className="fas fa-check"></i> Apply
               </button>
