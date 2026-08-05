@@ -982,7 +982,7 @@ const Dashboard = () => {
         <button
           onClick={handlePunch}
           disabled={isButtonDisabled()}
-          className="punch-btn bg-red-500 border-none text-white py-2 px-6 rounded-full font-semibold text-sm cursor-pointer transition-all flex items-center gap-2 hover:bg-red-600 hover:-translate-y-0.5 hover:shadow-md disabled:opacity-50 disabled:cursor-not-allowed flex-shrink-0"
+          className={`punch-btn border-none text-white py-2 px-6 rounded-full font-semibold text-sm cursor-pointer transition-all flex items-center gap-2 hover:-translate-y-0.5 hover:shadow-md disabled:opacity-50 disabled:cursor-not-allowed flex-shrink-0 ${isActuallyPunchedIn ? "bg-red-500 hover:bg-red-600" : "bg-green-500 hover:bg-green-600"}`}
         >
           <i className="fas fa-fingerprint"></i>
           {getButtonText()}
