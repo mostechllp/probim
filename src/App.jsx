@@ -144,6 +144,7 @@ const RequestLeaveForEmployee = lazy(
   () => import("./employee/pages/RequestLeaveForEmployees"),
 );
 const EmployeeMyPayroll = lazy(() => import("./employee/pages/MyPayroll"));
+const EmployeeMyDocuments = lazy(() => import("./employee/pages/MyDocuments"));
 
 // Helper function to check if user is employee type (includes manager, team_lead, hr)
 const isEmployeeType = (type) => {
@@ -388,6 +389,7 @@ function App() {
           <Route path="my-tasks" element={<EmployeeTaskReports />} />
           <Route path="profile" element={<EmployeeProfile />} />
           <Route path="attendance-requests" element={<AttendanceRequests />} />
+          <Route path="my-documents" element={<EmployeeMyDocuments />} />
 
           <Route path="onboarding" element={<Onboarding />} />
           <Route path="employees" element={<Employees />} />
