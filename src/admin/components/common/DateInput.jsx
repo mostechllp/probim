@@ -221,13 +221,14 @@ const DateInput = forwardRef(
             }}
             placeholder={getPlaceholder()}
             readOnly
-            className={`w-full px-3 md:px-4 py-2 md:py-3 bg-gray-50 dark:bg-gray-800 border rounded-lg text-sm md:text-base text-gray-800 dark:text-gray-200 transition-all focus:outline-none focus:ring-2 cursor-pointer ${
+            className={`w-full pl-3 md:pl-4 pr-10 md:pr-12 py-2 md:py-3 bg-gray-50 dark:bg-gray-800 border rounded-lg text-sm md:text-base text-gray-800 dark:text-gray-200 transition-all focus:outline-none focus:ring-2 cursor-pointer ${
               showError
                 ? "border-red-500 focus:border-red-500 focus:ring-red-500/20"
                 : "border-gray-200 dark:border-gray-700 focus:border-green-500 focus:ring-green-500/20"
             } ${className}`}
             {...props}
           />
+          <i className="fas fa-calendar text-gray-400 dark:text-gray-500 absolute right-3 md:right-4 top-1/2 -translate-y-1/2 pointer-events-none"></i>
           {internalError && errorMessage && (
             <p className="absolute -bottom-5 left-0 text-xs text-red-500 whitespace-nowrap">
               <i className="fas fa-exclamation-circle mr-1"></i>

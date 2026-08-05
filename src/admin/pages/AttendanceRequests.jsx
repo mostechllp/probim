@@ -29,8 +29,8 @@ import {
   setAdminAttendanceFilter,
 } from "../store/slices/attendanceRequestSlice";
 import { getPhotoUrl, getFallbackAvatar } from "../../utils/imageHelper";
-import DatePicker from "react-datepicker";
-import "react-datepicker/dist/react-datepicker.css";
+import DateInput from "../components/common/DateInput";
+
 const AdminAttendanceRequests = () => {
   const dispatch = useDispatch();
   
@@ -74,13 +74,18 @@ const AdminAttendanceRequests = () => {
     }
   }, [error, dispatch]);
 
-  const loadRequests = async () => {
+  const loadRequests = async (overrideParams = {}) => {
     try {
+      const currentStatus = overrideParams.status !== undefined ? overrideParams.status : localStatus;
+      const currentType = overrideParams.type !== undefined ? overrideParams.type : localType;
+      const currentSearch = overrideParams.search !== undefined ? overrideParams.search : localSearch;
+      const currentPageNum = overrideParams.page !== undefined ? overrideParams.page : currentPage;
+
       await dispatch(fetchAttendanceRequests({
-        status: localStatus !== "all" ? localStatus : undefined,
-        type: localType !== "all" ? localType : undefined,
-        search: localSearch || undefined,
-        page: currentPage,
+        status: currentStatus !== "all" ? currentStatus : undefined,
+        type: currentType !== "all" ? currentType : undefined,
+        search: currentSearch || undefined,
+        page: currentPageNum,
         per_page: perPage,
       })).unwrap();
     } catch (error) {
@@ -213,23 +218,23 @@ const AdminAttendanceRequests = () => {
 
   const handleSearch = () => {
     dispatch(setAdminAttendanceFilter({ search: localSearch }));
-    loadRequests();
+    loadRequests({ search: localSearch, page: 1 });
   };
 
   const handleStatusFilter = (status) => {
     setLocalStatus(status);
     dispatch(setAdminAttendanceFilter({ status }));
-    loadRequests();
+    loadRequests({ status, page: 1 });
   };
 
   const handleTypeFilter = (type) => {
     setLocalType(type);
     dispatch(setAdminAttendanceFilter({ type }));
-    loadRequests();
+    loadRequests({ type, page: 1 });
   };
 
   const handlePageChange = (page) => {
-    loadRequests();
+    loadRequests({ page });
   };
 
   const handleViewDetails = (request) => {
@@ -759,24 +764,13 @@ const AdminAttendanceRequests = () => {
                 <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">
                   Date <span className="text-red-500">*</span>
                 </label>
-                <DatePicker
-                  selected={editFormData.request_date ? new Date(editFormData.request_date) : null}
-                  onChange={(date) => {
-                    if (date) {
-                      const localDate = new Date(date.getTime() - date.getTimezoneOffset() * 60000).toISOString().split('T')[0];
-                      setEditFormData({ ...editFormData, request_date: localDate });
-                    } else {
-                      setEditFormData({ ...editFormData, request_date: "" });
-                    }
-                  }}
-                  showMonthDropdown
-                  showYearDropdown
-                  dropdownMode="select"
-                  dateFormat="yyyy-MM-dd"
-                  minDate={new Date("2026-01-01")}
-                  className="w-full px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-lg focus:outline-none focus:ring-2 focus:ring-green-500 focus:border-transparent bg-white dark:bg-gray-700 text-gray-900 dark:text-white"
-                  wrapperClassName="w-full"
-                  required
+                <DateInput
+                  value={editFormData.request_date}
+                  onChange={(dateStr) => setEditFormData({ ...editFormData, request_date: dateStr })}
+                  type="general"
+                  minDate={new Date('2026-01-01')}
+                  className="w-full"
+                  placeholder="Select request date"
                 />
               </div>
               <div>
