@@ -644,19 +644,44 @@ const Leaves = () => {
   };
 
   // Check if user can take action on leave
-  const canTakeAction = (leave) => {
-    const isPending = (leave.status || "").toLowerCase() === "pending";
-    // Managers/Team Leads can take action on any pending leave
-    // HR/Admin can also take action
-    return (
-      isPending &&
-      (isManagerOrTeamLead || user?.type === "admin" || user?.type === "hr")
-    );
-  };
+const canTakeAction = (leave) => {
+  const isPending = (leave.status || "").toLowerCase() === "pending";
+  
+  if (!isPending) return false;
+  
+  // Check if user is allowed to take action (manager, team lead, admin, hr)
+  const hasRoleAccess = isManagerOrTeamLead || user?.type === "admin" || user?.type === "hr";
+  if (!hasRoleAccess) return false;
+  
+  // For Team Lead: Check if they already approved/rejected
+  if (isTeamLead) {
+    const teamLeadApproval = leave.approvals?.find(a => a.approver_level === "team_lead");
+    if (teamLeadApproval && (teamLeadApproval.status === "approved" || teamLeadApproval.status === "rejected")) {
+      return false; // Team Lead already acted on this
+    }
+  }
+  
+  // For Manager: Check if they already approved/rejected
+  if (isManager) {
+    const managerApproval = leave.approvals?.find(a => a.approver_level === "manager");
+    if (managerApproval && (managerApproval.status === "approved" || managerApproval.status === "rejected")) {
+      return false; // Manager already acted on this
+    }
+  }
+  
+  // For Admin/HR: Always allow action on pending leaves
+  // (They can override or change status even if someone else already acted)
+  if (user?.type === "admin" || user?.type === "hr") {
+    return true;
+  }
+  
+  return true;
+};
 
   // Determine which approval columns to show
-  const showTeamLeadApproval = isAdminOrHR || isManager;
-  const showManagerApproval = isAdminOrHR;
+  const showTeamLeadApproval = true; // Everyone should see Team Lead status
+  const showManagerApproval = isAdminOrHR; // Only Admin/HR see Manager status
+  const showHrApproval = isAdminOrHR; // Only Admin/HR see HR status
 
   return (
     <div className="w-full overflow-x-hidden">
@@ -843,6 +868,11 @@ const Leaves = () => {
                     Manager
                   </th>
                 )}
+                {showHrApproval && (
+                  <th className="px-3 md:px-4 py-2 md:py-3 text-left text-[10px] md:text-xs font-semibold text-gray-500 dark:text-gray-400">
+                    HR
+                  </th>
+                )}
                 <th className="px-3 md:px-4 py-2 md:py-3 text-left text-[10px] md:text-xs font-semibold text-gray-500 dark:text-gray-400">
                   Processed By
                 </th>
@@ -953,6 +983,11 @@ const Leaves = () => {
                           {getApprovalBadge(leave.is_manager_approved)}
                         </td>
                       )}
+                      {showHrApproval && (
+                        <td className="px-3 md:px-4 py-2 md:py-3">
+                          {getApprovalBadge(leave.is_hr_approved)}
+                        </td>
+                      )}
                       <td className="px-3 md:px-4 py-2 md:py-3 text-xs md:text-sm text-gray-600 dark:text-gray-400 whitespace-nowrap">
                         {leave.processed_by ||
                           leave.processedBy ||
@@ -1025,7 +1060,8 @@ const Leaves = () => {
                     colSpan={
                       13 +
                       (showTeamLeadApproval ? 1 : 0) +
-                      (showManagerApproval ? 1 : 0)
+                      (showManagerApproval ? 1 : 0) +
+                      (showHrApproval ? 1 : 0)
                     }
                     className="px-4 py-8 text-center text-gray-500 dark:text-gray-400"
                   >

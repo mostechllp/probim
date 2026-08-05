@@ -10,7 +10,6 @@ const transformAdminLeaveData = (leave) => {
   
   // If processed_by is not set but approver exists, use approver's full name
   if (processedBy === "-" && leave.approver) {
-    // Try to get full name from employee relation
     if (leave.approver.employee) {
       const emp = leave.approver.employee;
       processedBy = `${emp.first_name || ''} ${emp.last_name || ''}`.trim() || emp.name || leave.approver.username || "-";
@@ -19,10 +18,71 @@ const transformAdminLeaveData = (leave) => {
     }
   }
   
-  // Get approval statuses
-  // Check if the leave has been approved by team lead or manager
-  const isTeamLeadApproved = leave.is_team_lead_approved === true || leave.is_team_lead_approved === 1;
-  const isManagerApproved = leave.is_manager_approved === true || leave.is_manager_approved === 1;
+  // Get approval statuses from approvals array
+  let isTeamLeadApproved = null;
+  let isManagerApproved = null;
+  let isHrApproved = null;
+  
+  if (leave.approvals && Array.isArray(leave.approvals) && leave.approvals.length > 0) {
+    // Find team lead approval
+    const teamLeadApproval = leave.approvals.find(a => a.approver_level === "team_lead");
+    if (teamLeadApproval) {
+      isTeamLeadApproved = teamLeadApproval.status === "approved";
+    }
+    
+    // Find manager approval
+    const managerApproval = leave.approvals.find(a => a.approver_level === "manager");
+    if (managerApproval) {
+      isManagerApproved = managerApproval.status === "approved";
+    }
+    
+    // Find HR approval
+    const hrApproval = leave.approvals.find(a => a.approver_level === "hr");
+    if (hrApproval) {
+      isHrApproved = hrApproval.status === "approved";
+    }
+  }
+  
+  // If status is approved but no specific approvals found, check the overall status
+  if (leave.status === "approved") {
+    // If there's an approver, try to determine the level
+    if (leave.approver) {
+      const approverType = leave.approver.type || leave.approver.role?.name || "";
+      if (approverType.toLowerCase().includes("team") || approverType.toLowerCase().includes("lead")) {
+        if (isTeamLeadApproved === null) isTeamLeadApproved = true;
+      } else if (approverType.toLowerCase().includes("manager") || approverType.toLowerCase().includes("bim manager")) {
+        if (isManagerApproved === null) isManagerApproved = true;
+      } else {
+        // Admin/HR approval
+        if (isHrApproved === null) isHrApproved = true;
+      }
+    } else {
+      // If approved but no approver, assume it's fully approved
+      if (isTeamLeadApproved === null) isTeamLeadApproved = true;
+      if (isManagerApproved === null) isManagerApproved = true;
+      if (isHrApproved === null) isHrApproved = true;
+    }
+  }
+  
+  // If status is rejected
+  if (leave.status === "rejected") {
+    // Check which level rejected it
+    if (leave.approver) {
+      const approverType = leave.approver.type || leave.approver.role?.name || "";
+      if (approverType.toLowerCase().includes("team") || approverType.toLowerCase().includes("lead")) {
+        isTeamLeadApproved = false;
+      } else if (approverType.toLowerCase().includes("manager") || approverType.toLowerCase().includes("bim manager")) {
+        isManagerApproved = false;
+      } else {
+        isHrApproved = false;
+      }
+    } else {
+      // Default: set all to false if rejected
+      if (isTeamLeadApproved === null) isTeamLeadApproved = false;
+      if (isManagerApproved === null) isManagerApproved = false;
+      if (isHrApproved === null) isHrApproved = false;
+    }
+  }
   
   return {
     id: leave.id,
@@ -57,11 +117,13 @@ const transformAdminLeaveData = (leave) => {
     rejection_reason: leave.rejection_reason || leave.admin_remark || null,
     admin_remark: leave.admin_remark || null,
     applied_by: leave.applied_by || null,
-    // Add approval fields
+    // Approval fields derived from approvals array
     is_team_lead_approved: isTeamLeadApproved,
     is_manager_approved: isManagerApproved,
+    is_hr_approved: isHrApproved,
     approved_by: leave.approved_by || null,
-    remarks: leave.remarks || null,
+    remarks: leave.admin_remark || leave.remarks || null,
+    approvals: leave.approvals || [],
     raw: leave,
   };
 };
