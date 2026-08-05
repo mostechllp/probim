@@ -618,8 +618,193 @@ const Dashboard = () => {
   // Leave data from dashboard
   const recentLeaves = dashboardData?.recent_leaves || [];
   const leaveStats = dashboardData?.leave_stats || {};
-  const pendingLeaves = recentLeaves.filter(
-    (leave) => leave.status?.toLowerCase() === "pending"
+
+  // ─── NEW COMPACT STATS CARDS ──────────────────────────────────────────
+
+  // Leave Stats Card - matches image style
+  const LeaveStatsCard = () => (
+    <div className="bg-[var(--surface)] border border-[var(--border)] rounded-xl p-4">
+      <div className="flex items-center justify-between mb-3">
+        <h3 className="text-sm font-semibold text-[var(--text)] flex items-center gap-2">
+          <i className="fas fa-calendar-alt text-green-500"></i>
+          Leave Status
+        </h3>
+        {recentLeaves.length > 0 && (
+          <button
+            onClick={() => navigate("/employee/leaves")}
+            className="text-xs text-green-500 hover:text-green-600 font-medium"
+          >
+            View All
+          </button>
+        )}
+      </div>
+
+      {/* Stats Row - Three columns like the image */}
+      <div className="grid grid-cols-3 gap-3">
+        <div className="bg-blue-50 dark:bg-blue-900/20 rounded-xl p-3 text-center border border-blue-200 dark:border-blue-800">
+          <div className="text-2xl font-bold text-blue-600 dark:text-blue-400">
+            {leaveStats.allocated || 0}
+          </div>
+          <div className="text-xs text-blue-600/80 dark:text-blue-400/80 font-medium mt-0.5">
+            Allocated
+          </div>
+        </div>
+        
+        <div className="bg-orange-50 dark:bg-orange-900/20 rounded-xl p-3 text-center border border-orange-200 dark:border-orange-800">
+          <div className="text-2xl font-bold text-orange-600 dark:text-orange-400">
+            {leaveStats.total_taken || 0}
+          </div>
+          <div className="text-xs text-orange-600/80 dark:text-orange-400/80 font-medium mt-0.5">
+            Taken
+          </div>
+        </div>
+        
+        <div className="bg-green-50 dark:bg-green-900/20 rounded-xl p-3 text-center border border-green-200 dark:border-green-800">
+          <div className="text-2xl font-bold text-green-600 dark:text-green-400">
+            {leaveStats.balance || 0}
+          </div>
+          <div className="text-xs text-green-600/80 dark:text-green-400/80 font-medium mt-0.5">
+            Balance
+          </div>
+        </div>
+      </div>
+
+      {/* Recent Leave Requests - Optional, shown when there are pending requests */}
+      {recentLeaves.length > 0 && (
+        <div className="mt-3 pt-3 border-t border-[var(--border)]">
+          <div className="text-xs text-[var(--muted)] mb-2">Recent Requests</div>
+          <div className="space-y-1.5">
+            {recentLeaves.slice(0, 2).map((leave, index) => (
+              <div
+                key={index}
+                className="flex items-center justify-between text-xs p-2 bg-[var(--surface2)] rounded-lg"
+              >
+                <div className="flex items-center gap-2">
+                  <span className={`px-1.5 py-0.5 rounded-full text-[10px] font-medium ${getLeaveStatusColor(leave.status)}`}>
+                    {leave.status || "Pending"}
+                  </span>
+                  <span className="text-[var(--text)] truncate max-w-[100px]">
+                    {leave.leave_type?.name || leave.type || "Leave"}
+                  </span>
+                </div>
+                <span className="text-[var(--muted)] text-[10px]">
+                  {formatDateDisplay(leave.start_date || leave.from_date)}
+                </span>
+              </div>
+            ))}
+          </div>
+          {recentLeaves.length > 2 && (
+            <button
+              onClick={() => navigate("/employee/leaves")}
+              className="text-xs text-green-500 hover:text-green-600 font-medium mt-1.5 block"
+            >
+              + {recentLeaves.length - 2} more
+            </button>
+          )}
+        </div>
+      )}
+
+      {/* No recent leaves message - matches image style */}
+      {recentLeaves.length === 0 && (
+        <div className="mt-3 pt-3 border-t border-[var(--border)]">
+          <div className="text-xs text-[var(--text-secondary)] text-center">
+            No recent leave requests
+          </div>
+          <button
+            onClick={() => navigate("/employee/request-leave")}
+            className="text-xs text-green-500 hover:text-green-600 font-medium mt-1.5 block text-center w-full"
+          >
+            + Request
+          </button>
+        </div>
+      )}
+    </div>
+  );
+
+  // Projects Stats Card - matches image style
+  const ProjectsStatsCard = () => (
+    <div className="bg-[var(--surface)] border border-[var(--border)] rounded-xl p-4">
+      <div className="flex items-center justify-between mb-3">
+        <h3 className="text-sm font-semibold text-[var(--text)] flex items-center gap-2">
+          <i className="fas fa-project-diagram text-blue-500"></i>
+          Project Status
+        </h3>
+        {employeeProjects.length > 0 && (
+          <button
+            onClick={() => navigate("/employee/projects")}
+            className="text-xs text-blue-500 hover:text-blue-600 font-medium"
+          >
+            View All
+          </button>
+        )}
+      </div>
+
+      {/* Stats Row - Two columns like the image */}
+      <div className="grid grid-cols-2 gap-3">
+        <div className="bg-purple-50 dark:bg-purple-900/20 rounded-xl p-4 text-center border border-purple-200 dark:border-purple-800">
+          <div className="text-3xl font-bold text-purple-600 dark:text-purple-400">
+            {stats.totalProjects || employeeProjects.length || 0}
+          </div>
+          <div className="text-xs text-purple-600/80 dark:text-purple-400/80 font-medium mt-0.5">
+            Total Projects
+          </div>
+        </div>
+        
+        <div className="bg-green-50 dark:bg-green-900/20 rounded-xl p-4 text-center border border-green-200 dark:border-green-800">
+          <div className="text-3xl font-bold text-green-600 dark:text-green-400">
+            {stats.activeProjects || employeeProjects.filter(p => p.status === "Active").length || 0}
+          </div>
+          <div className="text-xs text-green-600/80 dark:text-green-400/80 font-medium mt-0.5">
+            Active Projects
+          </div>
+        </div>
+      </div>
+
+      {/* Project list preview - shown when there are projects */}
+      {employeeProjects.length > 0 && (
+        <div className="mt-3 pt-3 border-t border-[var(--border)]">
+          <div className="space-y-1.5">
+            {employeeProjects.slice(0, 2).map((project) => (
+              <div
+                key={project.id}
+                className="flex items-center justify-between text-xs p-2 bg-[var(--surface2)] rounded-lg cursor-pointer hover:bg-[var(--surface3)] transition-colors"
+                onClick={() => setSelectedProject(project)}
+              >
+                <div className="flex items-center gap-2 min-w-0">
+                  <span className={`w-1.5 h-1.5 rounded-full flex-shrink-0 ${
+                    project.status === "Active" ? "bg-green-500" : 
+                    project.status === "Completed" ? "bg-blue-500" : "bg-gray-400"
+                  }`}></span>
+                  <span className="text-[var(--text)] truncate max-w-[120px]">
+                    {project.name}
+                  </span>
+                </div>
+                <span className={`px-1.5 py-0.5 rounded-full text-[10px] font-medium ${getPriorityColor(project.priority)}`}>
+                  {project.priority || "Medium"}
+                </span>
+              </div>
+            ))}
+          </div>
+          {employeeProjects.length > 2 && (
+            <button
+              onClick={() => navigate("/employee/projects")}
+              className="text-xs text-blue-500 hover:text-blue-600 font-medium mt-1.5 block"
+            >
+              + {employeeProjects.length - 2} more projects
+            </button>
+          )}
+        </div>
+      )}
+
+      {/* No projects message */}
+      {employeeProjects.length === 0 && (
+        <div className="mt-3 pt-3 border-t border-[var(--border)]">
+          <div className="text-xs text-[var(--text-secondary)] text-center">
+            No projects assigned yet
+          </div>
+        </div>
+      )}
+    </div>
   );
 
   // Render location info - compact
@@ -727,118 +912,6 @@ const Dashboard = () => {
     );
   };
 
-  // Render Leave Status Section - Compact
-  const renderLeaveStatus = () => {
-    const hasLeaves = recentLeaves.length > 0;
-    const hasPending = pendingLeaves.length > 0;
-    const hasStats = leaveStats.total_taken !== undefined || leaveStats.balance !== undefined;
-
-    return (
-      <div className="leave-status-section bg-[var(--surface)] border border-[var(--border)] rounded-xl p-3 mb-4">
-        <div className="flex items-center justify-between mb-2">
-          <h3 className="text-sm font-semibold text-[var(--text)] flex items-center gap-2">
-            <i className="fas fa-calendar-alt text-green-500"></i>
-            Leave Status
-            {hasPending && (
-              <span className="text-xs bg-amber-100 text-amber-700 dark:bg-amber-900/30 dark:text-amber-400 px-2 py-0.5 rounded-full">
-                {pendingLeaves.length} pending
-              </span>
-            )}
-          </h3>
-          {hasLeaves && (
-            <button
-              onClick={() => navigate("/employee/leaves")}
-              className="text-xs text-green-500 hover:text-green-600 font-medium"
-            >
-              View All
-            </button>
-          )}
-        </div>
-
-        <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
-          {/* Leave Stats - Compact */}
-          {hasStats && (
-            <div className="grid grid-cols-3 gap-2">
-              <div className="bg-blue-50 dark:bg-blue-900/20 rounded-lg p-2 text-center border border-blue-200 dark:border-blue-800">
-                <div className="text-lg font-bold text-blue-600 dark:text-blue-400">
-                  {leaveStats.allocated || 0}
-                </div>
-                <div className="text-[10px] text-blue-600/80 dark:text-blue-400/80">Allocated</div>
-              </div>
-              <div className="bg-orange-50 dark:bg-orange-900/20 rounded-lg p-2 text-center border border-orange-200 dark:border-orange-800">
-                <div className="text-lg font-bold text-orange-600 dark:text-orange-400">
-                  {leaveStats.total_taken || 0}
-                </div>
-                <div className="text-[10px] text-orange-600/80 dark:text-orange-400/80">Taken</div>
-              </div>
-              <div className="bg-green-50 dark:bg-green-900/20 rounded-lg p-2 text-center border border-green-200 dark:border-green-800">
-                <div className="text-lg font-bold text-green-600 dark:text-green-400">
-                  {leaveStats.balance || 0}
-                </div>
-                <div className="text-[10px] text-green-600/80 dark:text-green-400/80">Balance</div>
-              </div>
-            </div>
-          )}
-
-          {/* Recent Leaves - Compact List */}
-          {hasLeaves ? (
-            <div className="space-y-1.5 max-h-32 overflow-y-auto">
-              {recentLeaves.slice(0, 3).map((leave, index) => {
-                const statusColor = getLeaveStatusColor(leave.status);
-                const typeIcon = getLeaveTypeIcon(leave.leave_type?.name || leave.type);
-                const fromDate = leave.start_date || leave.from_date || leave.fromDate;
-                const toDate = leave.end_date || leave.to_date || leave.toDate;
-
-                return (
-                  <div
-                    key={index}
-                    className="flex items-center justify-between p-2 bg-[var(--surface2)] rounded-lg border border-[var(--border)]"
-                  >
-                    <div className="flex items-center gap-2 min-w-0 flex-1">
-                      <div className={`w-7 h-7 rounded-lg flex items-center justify-center flex-shrink-0 ${statusColor}`}>
-                        <i className={`fas ${typeIcon} text-xs`}></i>
-                      </div>
-                      <div className="min-w-0 flex-1">
-                        <div className="flex items-center gap-1.5">
-                          <span className="font-medium text-[var(--text)] text-xs truncate">
-                            {leave.leave_type?.name || leave.type || "Leave"}
-                          </span>
-                          <span className={`px-1.5 py-0.5 rounded-full text-[10px] font-medium ${statusColor}`}>
-                            {leave.status || "Pending"}
-                          </span>
-                        </div>
-                        <div className="text-[10px] text-[var(--muted)]">
-                          {fromDate ? formatDateDisplay(fromDate) : "N/A"}
-                          {toDate && fromDate !== toDate && ` - ${formatDateDisplay(toDate)}`}
-                          {leave.duration_days && ` • ${leave.duration_days}d`}
-                        </div>
-                      </div>
-                    </div>
-                    {leave.status?.toLowerCase() === "pending" && (
-                      <span className="text-[10px] text-amber-500 animate-pulse flex-shrink-0 ml-1">
-                        <i className="fas fa-clock mr-0.5"></i>
-                      </span>
-                    )}
-                  </div>
-                );
-              })}
-            </div>
-          ) : (
-            <div className="flex items-center justify-center py-3">
-              <p className="text-xs text-[var(--text-secondary)]">No recent leave requests</p>
-              <button
-                onClick={() => navigate("/employee/request-leave")}
-                className="ml-2 text-xs text-green-500 hover:text-green-600 font-medium"
-              >
-                <i className="fas fa-plus mr-0.5"></i> Request
-              </button>
-            </div>
-          )}
-        </div>
-      </div>
-    );
-  };
-
   return (
     <div className="space-y-3">
       {/* Welcome Banner - Compact */}
@@ -916,36 +989,11 @@ const Dashboard = () => {
         </button>
       </div>
 
-      {/* ─── LEAVE STATUS SECTION ──────────────────────────────────────────── */}
-      {renderLeaveStatus()}
-
-      {/* ─── EMPLOYEE STATS (Only 2 cards for regular employees) ─────────── */}
-      {!showAdminGraphs && (
-        <div className="stats-grid grid grid-cols-2 gap-3 mb-4">
-          <div className="stat-card bg-[var(--surface)] border border-[var(--border)] rounded-xl p-3 text-center hover:-translate-y-0.5 hover:shadow-md transition-all">
-            <div className="stat-icon w-10 h-10 rounded-xl bg-green-500/10 text-green-500 flex items-center justify-center text-xl mx-auto mb-2">
-              <i className="fas fa-project-diagram"></i>
-            </div>
-            <div className="stat-number text-2xl font-extrabold text-green-600">
-              {stats.totalProjects || 0}
-            </div>
-            <div className="stat-label text-[10px] text-[var(--muted)]">
-              Total Projects
-            </div>
-          </div>
-          <div className="stat-card bg-[var(--surface)] border border-[var(--border)] rounded-xl p-3 text-center hover:-translate-y-0.5 hover:shadow-md transition-all">
-            <div className="stat-icon w-10 h-10 rounded-xl bg-blue-500/10 text-blue-500 flex items-center justify-center text-xl mx-auto mb-2">
-              <i className="fas fa-check-circle"></i>
-            </div>
-            <div className="stat-number text-2xl font-extrabold text-blue-500">
-              {stats.activeProjects || 0}
-            </div>
-            <div className="stat-label text-[10px] text-[var(--muted)]">
-              Active Projects
-            </div>
-          </div>
-        </div>
-      )}
+      {/* ─── LEAVE & PROJECTS STATS CARDS ────────────────────────────────── */}
+      <div className="grid grid-cols-1 md:grid-cols-2 gap-4 mb-4">
+        <LeaveStatsCard />
+        <ProjectsStatsCard />
+      </div>
 
       {/* ─── ADMIN/HR GRAPHS ──────────────────────────────────────────────── */}
       {showAdminGraphs && (
@@ -1087,90 +1135,83 @@ const Dashboard = () => {
         </>
       )}
 
-      {/* ─── EMPLOYEE PROJECTS SECTION (Compact) ──────────────────────────── */}
-      <div className="projects-section bg-[var(--surface)] border border-[var(--border)] rounded-xl p-3 mb-4">
-        <div className="flex items-center justify-between mb-2">
-          <h3 className="text-sm font-semibold text-[var(--text)] flex items-center gap-2">
-            <i className="fas fa-project-diagram text-green-500"></i>
-            My Projects
-            <span className="text-xs text-[var(--muted)] font-normal">
-              ({employeeProjects.length})
-            </span>
-          </h3>
-          {employeeProjects.length > 0 && (
+      {/* ─── EMPLOYEE PROJECTS SECTION ──────────────────────────────────── */}
+      {!showAdminGraphs && employeeProjects.length > 0 && (
+        <div className="projects-section bg-[var(--surface)] border border-[var(--border)] rounded-xl p-3 mb-4">
+          <div className="flex items-center justify-between mb-2">
+            <h3 className="text-sm font-semibold text-[var(--text)] flex items-center gap-2">
+              <i className="fas fa-project-diagram text-green-500"></i>
+              My Projects
+              <span className="text-xs text-[var(--muted)] font-normal">
+                ({employeeProjects.length})
+              </span>
+            </h3>
             <button
               onClick={() => navigate("/employee/projects")}
               className="text-xs text-green-500 hover:text-green-600 font-medium"
             >
               View All
             </button>
+          </div>
+
+          {projectsLoading ? (
+            <div className="flex justify-center items-center py-6">
+              <div className="animate-spin rounded-full h-6 w-6 border-b-2 border-green-500"></div>
+            </div>
+          ) : (
+            <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-2">
+              {employeeProjects.slice(0, 4).map((project) => (
+                <div
+                  key={project.id}
+                  className="project-card bg-[var(--surface2)] border border-[var(--border)] rounded-lg p-3 hover:shadow-md transition-all cursor-pointer"
+                  onClick={() => setSelectedProject(project)}
+                >
+                  <div className="flex justify-between items-start mb-1.5">
+                    <h4 className="font-semibold text-[var(--text)] text-sm truncate max-w-[120px]">
+                      {project.name}
+                    </h4>
+                    <span
+                      className={`px-1.5 py-0.5 rounded-full text-[10px] font-semibold ${getPriorityColor(project.priority)}`}
+                    >
+                      {project.priority || "Med"}
+                    </span>
+                  </div>
+
+                  <p className="text-xs text-[var(--text-secondary)] mb-2 line-clamp-1">
+                    {project.description || "No description"}
+                  </p>
+
+                  <div className="flex items-center gap-2 text-[10px] text-[var(--muted)]">
+                    <i className="fas fa-user-tie text-green-500"></i>
+                    <span className="truncate">{project.managerName || "N/A"}</span>
+                  </div>
+
+                  <div className="mt-1.5 pt-1.5 border-t border-[var(--border)] flex justify-between items-center">
+                    <span
+                      className={`px-1.5 py-0.5 rounded-full text-[10px] font-semibold ${getStatusColor(project.status)}`}
+                    >
+                      {project.status || "Active"}
+                    </span>
+                    <span className="text-[10px] text-[var(--muted)]">
+                      {project.assignedDate?.split('-')[0] || ""}
+                    </span>
+                  </div>
+                </div>
+              ))}
+            </div>
+          )}
+          {employeeProjects.length > 4 && (
+            <div className="text-center mt-2">
+              <button
+                onClick={() => navigate("/employee/projects")}
+                className="text-xs text-green-500 hover:text-green-600 font-medium"
+              >
+                + {employeeProjects.length - 4} more projects
+              </button>
+            </div>
           )}
         </div>
-
-        {projectsLoading ? (
-          <div className="flex justify-center items-center py-6">
-            <div className="animate-spin rounded-full h-6 w-6 border-b-2 border-green-500"></div>
-          </div>
-        ) : employeeProjects.length === 0 ? (
-          <div className="text-center py-6">
-            <i className="fas fa-folder-open text-3xl text-[var(--muted)] mb-2 block"></i>
-            <p className="text-xs text-[var(--text-secondary)]">
-              No projects assigned yet
-            </p>
-          </div>
-        ) : (
-          <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-2">
-            {employeeProjects.slice(0, 4).map((project) => (
-              <div
-                key={project.id}
-                className="project-card bg-[var(--surface2)] border border-[var(--border)] rounded-lg p-3 hover:shadow-md transition-all cursor-pointer"
-                onClick={() => setSelectedProject(project)}
-              >
-                <div className="flex justify-between items-start mb-1.5">
-                  <h4 className="font-semibold text-[var(--text)] text-sm truncate max-w-[120px]">
-                    {project.name}
-                  </h4>
-                  <span
-                    className={`px-1.5 py-0.5 rounded-full text-[10px] font-semibold ${getPriorityColor(project.priority)}`}
-                  >
-                    {project.priority || "Med"}
-                  </span>
-                </div>
-
-                <p className="text-xs text-[var(--text-secondary)] mb-2 line-clamp-1">
-                  {project.description || "No description"}
-                </p>
-
-                <div className="flex items-center gap-2 text-[10px] text-[var(--muted)]">
-                  <i className="fas fa-user-tie text-green-500"></i>
-                  <span className="truncate">{project.managerName || "N/A"}</span>
-                </div>
-
-                <div className="mt-1.5 pt-1.5 border-t border-[var(--border)] flex justify-between items-center">
-                  <span
-                    className={`px-1.5 py-0.5 rounded-full text-[10px] font-semibold ${getStatusColor(project.status)}`}
-                  >
-                    {project.status || "Active"}
-                  </span>
-                  <span className="text-[10px] text-[var(--muted)]">
-                    {project.assignedDate?.split('-')[0] || ""}
-                  </span>
-                </div>
-              </div>
-            ))}
-          </div>
-        )}
-        {employeeProjects.length > 4 && (
-          <div className="text-center mt-2">
-            <button
-              onClick={() => navigate("/employee/projects")}
-              className="text-xs text-green-500 hover:text-green-600 font-medium"
-            >
-              + {employeeProjects.length - 4} more projects
-            </button>
-          </div>
-        )}
-      </div>
+      )}
 
       {/* Project Details Modal */}
       {selectedProject && (
