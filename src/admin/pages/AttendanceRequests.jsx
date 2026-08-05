@@ -29,8 +29,8 @@ import {
   setAdminAttendanceFilter,
 } from "../store/slices/attendanceRequestSlice";
 import { getPhotoUrl, getFallbackAvatar } from "../../utils/imageHelper";
-import DatePicker from "react-datepicker";
-import "react-datepicker/dist/react-datepicker.css";
+import DateInput from "../components/common/DateInput";
+
 const AdminAttendanceRequests = () => {
   const dispatch = useDispatch();
   
@@ -759,24 +759,13 @@ const AdminAttendanceRequests = () => {
                 <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">
                   Date <span className="text-red-500">*</span>
                 </label>
-                <DatePicker
-                  selected={editFormData.request_date ? new Date(editFormData.request_date) : null}
-                  onChange={(date) => {
-                    if (date) {
-                      const localDate = new Date(date.getTime() - date.getTimezoneOffset() * 60000).toISOString().split('T')[0];
-                      setEditFormData({ ...editFormData, request_date: localDate });
-                    } else {
-                      setEditFormData({ ...editFormData, request_date: "" });
-                    }
-                  }}
-                  showMonthDropdown
-                  showYearDropdown
-                  dropdownMode="select"
-                  dateFormat="yyyy-MM-dd"
-                  minDate={new Date("2026-01-01")}
-                  className="w-full px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-lg focus:outline-none focus:ring-2 focus:ring-green-500 focus:border-transparent bg-white dark:bg-gray-700 text-gray-900 dark:text-white"
-                  wrapperClassName="w-full"
-                  required
+                <DateInput
+                  value={editFormData.request_date}
+                  onChange={(dateStr) => setEditFormData({ ...editFormData, request_date: dateStr })}
+                  type="general"
+                  minDate={new Date('2026-01-01')}
+                  className="w-full"
+                  placeholder="Select request date"
                 />
               </div>
               <div>
