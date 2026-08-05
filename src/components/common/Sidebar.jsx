@@ -26,7 +26,8 @@ const ADMIN_ROUTE_MAP = {
   "role-management": "/admin/role-management",
   wfh: "/admin/wfh",
   "my-wfh-requests": "/admin/my-wfh-requests",
-  "my-payroll": "/admin/payroll",
+  "my-payroll": "/employee/payroll",
+  "my-documents": "/employee/my-documents",
 };
 
 const EMPLOYEE_ROUTE_MAP = {
@@ -35,7 +36,8 @@ const EMPLOYEE_ROUTE_MAP = {
   employees: "/employee/employees",
   attendance: "/employee/attendance",
   "attendance-requests": "/employee/attendance-requests",
-  documents: "/employee/agreements",
+  documents: "/employee/my-documents",
+  "my-documents": "/employee/my-documents",
   "task-reports": "/employee/task-reports",
   reports: "/employee/reports",
   projects: "/employee/projects",
@@ -63,6 +65,7 @@ const ICON_MAP = {
   "wfh-requests": "fas fa-house-user",
   "my-wfh-requests": "fas fa-house-user",
   documents: "fas fa-file-signature",
+  "my-documents": "fas fa-file-signature",
   leaves: "fas fa-calendar-check",
   "my-leaves": "fas fa-calendar-alt",
   "task-reports": "fas fa-tasks",
@@ -138,6 +141,7 @@ const MODULE_ORDER = {
   settings: 21,
   "role-management": 22,
   "my-profile": 23,
+  "my-documents": 9,
 };
 
 const Sidebar = ({ isOpen, setIsOpen }) => {
@@ -237,7 +241,7 @@ const Sidebar = ({ isOpen, setIsOpen }) => {
   };
 
   // Get all available modules from API and filter
-  const allModules = (user?.sidebar_modules || [])
+  const apiModules = (user?.sidebar_modules || [])
     .filter((mod) => {
       // Must be active
       if (mod.status !== "active") return false;
@@ -254,6 +258,9 @@ const Sidebar = ({ isOpen, setIsOpen }) => {
       return true;
     })
     .map((mod) => mod.slug);
+
+  const allModules = [...apiModules];
+
 
   // Build navigation with submenus
   const buildNavItems = () => {
@@ -328,15 +335,15 @@ const Sidebar = ({ isOpen, setIsOpen }) => {
         }
       });
     } else {
-      // For regular employees, show my-leaves, my-tasks, my-wfh-requests as standalone
-      const employeeStandalone = ["my-leaves", "my-tasks", "my-wfh-requests"];
+      // For regular employees, show my-leaves, my-tasks, my-wfh-requests, my-documents as standalone
+      const employeeStandalone = ["my-leaves", "my-tasks", "my-wfh-requests", "my-documents", "documents"];
       employeeStandalone.forEach(slug => {
         if (allModules.includes(slug) && hasReadPermission(slug)) {
           const module = user?.sidebar_modules?.find(m => m.slug === slug);
           standaloneItems.push({
             type: "single",
             slug: slug,
-            label: module?.name || slug,
+            label: (slug === "my-documents" || (slug === "documents" && userType !== 'admin')) ? "My Documents" : (module?.name || slug),
             path: activeRouteMap[slug],
             icon: ICON_MAP[slug] || "fas fa-circle",
             order: MODULE_ORDER[slug] || 100,
@@ -350,13 +357,11 @@ const Sidebar = ({ isOpen, setIsOpen }) => {
     allModules.forEach((slug) => {
       if (processedSlugs.has(slug)) return;
       
-      
-
       const module = user?.sidebar_modules?.find(m => m.slug === slug);
       standaloneItems.push({
         type: "single",
         slug: slug,
-        label: module?.name || slug,
+        label: (slug === "my-documents" || (slug === "documents" && userType !== 'admin')) ? "My Documents" : (module?.name || slug),
         path: activeRouteMap[slug],
         icon: ICON_MAP[slug] || "fas fa-circle",
         order: MODULE_ORDER[slug] || 100,

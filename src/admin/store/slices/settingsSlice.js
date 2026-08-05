@@ -96,17 +96,10 @@ export const fetchUserProfile = createAsyncThunk(
   "settings/fetchProfile",
   async (_, { rejectWithValue, dispatch }) => {
     try {
-      console.log("=== CALLING /auth/me ===");
       const response = await apiClient.get("/auth/me");
-      
-      console.log("=== RAW /auth/me RESPONSE ===");
-      console.log("Response data:", response.data);
       
       const responseData = response.data.data || response.data;
       const userData = responseData.user || responseData;
-      
-      console.log("Extracted user data:", userData);
-      console.log("User avatar:", userData.avatar);
       
       const formattedUser = {
         id: userData.id,
@@ -120,8 +113,6 @@ export const fetchUserProfile = createAsyncThunk(
         permissions: userData.permissions,
         ...userData
       };
-      
-      console.log("Formatted user with avatar:", formattedUser.avatar);
       
       dispatch({
         type: "auth/updateUser",
