@@ -74,13 +74,18 @@ const AdminAttendanceRequests = () => {
     }
   }, [error, dispatch]);
 
-  const loadRequests = async () => {
+  const loadRequests = async (overrideParams = {}) => {
     try {
+      const currentStatus = overrideParams.status !== undefined ? overrideParams.status : localStatus;
+      const currentType = overrideParams.type !== undefined ? overrideParams.type : localType;
+      const currentSearch = overrideParams.search !== undefined ? overrideParams.search : localSearch;
+      const currentPageNum = overrideParams.page !== undefined ? overrideParams.page : currentPage;
+
       await dispatch(fetchAttendanceRequests({
-        status: localStatus !== "all" ? localStatus : undefined,
-        type: localType !== "all" ? localType : undefined,
-        search: localSearch || undefined,
-        page: currentPage,
+        status: currentStatus !== "all" ? currentStatus : undefined,
+        type: currentType !== "all" ? currentType : undefined,
+        search: currentSearch || undefined,
+        page: currentPageNum,
         per_page: perPage,
       })).unwrap();
     } catch (error) {
@@ -213,23 +218,23 @@ const AdminAttendanceRequests = () => {
 
   const handleSearch = () => {
     dispatch(setAdminAttendanceFilter({ search: localSearch }));
-    loadRequests();
+    loadRequests({ search: localSearch, page: 1 });
   };
 
   const handleStatusFilter = (status) => {
     setLocalStatus(status);
     dispatch(setAdminAttendanceFilter({ status }));
-    loadRequests();
+    loadRequests({ status, page: 1 });
   };
 
   const handleTypeFilter = (type) => {
     setLocalType(type);
     dispatch(setAdminAttendanceFilter({ type }));
-    loadRequests();
+    loadRequests({ type, page: 1 });
   };
 
   const handlePageChange = (page) => {
-    loadRequests();
+    loadRequests({ page });
   };
 
   const handleViewDetails = (request) => {
