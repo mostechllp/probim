@@ -1,6 +1,6 @@
 import { useEffect, useState } from "react";
 import { useDispatch, useSelector } from "react-redux";
-import { FiEye, FiPlus, FiChevronLeft, FiChevronRight, FiSearch, FiSun, FiMoon, FiLogIn, FiClock, FiChevronDown } from "react-icons/fi";
+import { FiEye, FiPlus, FiChevronLeft, FiChevronRight, FiSearch, FiSun, FiMoon, FiLogIn, FiClock, FiChevronDown, FiEdit2, FiTrash2 } from "react-icons/fi";
 import { MdFingerprint } from "react-icons/md";
 import { showToast } from "../components/common/Toast";
 import StatusBadge from "../components/common/StatusBadge";
@@ -8,7 +8,8 @@ import MissedPunchOutModal from "../components/modals/MissedPunchoutModal";
 import MissedPunchInModal from "../components/modals/MissedPunchInModal";
 import LateCheckinModal from "../components/modals/LateCheckinModal";
 import EarlyCheckinModal from "../components/modals/EarlyCheckinModal";
-import { clearAttendanceError, fetchAttendanceRequests } from "../store/slices/attendanceTypeSlice";
+import EditAttendanceRequestModal from "../components/modals/EditAttendanceRequestModal";
+import { clearAttendanceError, fetchAttendanceRequests, deleteAttendanceRequest } from "../store/slices/attendanceTypeSlice";
 
 const AttendanceRequests = () => {
   const dispatch = useDispatch();
@@ -30,6 +31,8 @@ const AttendanceRequests = () => {
   const [showLateCheckin, setShowLateCheckin] = useState(false);
   const [showMissedPunchIn, setShowMissedPunchIn] = useState(false);
   const [showMissedPunchOut, setShowMissedPunchOut] = useState(false);
+  const [showEditModal, setShowEditModal] = useState(false);
+  const [requestToEdit, setRequestToEdit] = useState(null);
   const [showDropdown, setShowDropdown] = useState(false);
   const [localFilter, setLocalFilter] = useState({ status: "all", search: "" });
   const [localPagination, setLocalPagination] = useState({ currentPage: 1, perPage: 10 });
@@ -183,6 +186,26 @@ const AttendanceRequests = () => {
     setShowDetailsModal(true);
   };
 
+  const handleEditRequest = (request) => {
+    setRequestToEdit(request);
+    setShowEditModal(true);
+  };
+
+  const handleDeleteRequest = async (id) => {
+    try {
+      const isConfirmed = window.confirm(
+        "Are you sure you want to delete this attendance request? This action cannot be undone."
+      );
+
+      if (isConfirmed) {
+        await dispatch(deleteAttendanceRequest(id)).unwrap();
+        showToast("Request deleted successfully", "success");
+      }
+    } catch (error) {
+      showToast(error || "Failed to delete request", "error");
+    }
+  };
+
   const stats = {
     total: requests.length,
     pending: requests.filter(r => r.status?.toLowerCase() === "pending").length,
@@ -236,6 +259,8 @@ const AttendanceRequests = () => {
     setShowLateCheckin(false);
     setShowMissedPunchIn(false);
     setShowMissedPunchOut(false);
+    setShowEditModal(false);
+    setRequestToEdit(null);
     loadAttendanceRequests();
   };
 
@@ -532,13 +557,34 @@ const AttendanceRequests = () => {
                     <StatusBadge status={request.status} />
                    </td>
                   <td className="py-3 px-3 md:px-4 border-b border-[var(--border)]">
-                    <button
-                      onClick={() => handleViewDetails(request)}
-                      className="p-1.5 rounded-lg hover:bg-[var(--surface2)] text-green-500 transition-colors"
-                      title="View Details"
-                    >
-                      <FiEye className="text-sm" />
-                    </button>
+                    <div className="flex items-center gap-1">
+                      <button
+                        onClick={() => handleViewDetails(request)}
+                        className="p-1.5 rounded-lg hover:bg-[var(--surface2)] text-green-500 transition-colors"
+                        title="View Details"
+                      >
+                        <FiEye className="text-sm" />
+                      </button>
+                      
+                      {(!request.created_by_admin && !request.is_admin_created && request.created_by !== 'admin') && (
+                        <>
+                          <button
+                            onClick={() => handleEditRequest(request)}
+                            className="p-1.5 rounded-lg hover:bg-[var(--surface2)] text-blue-500 transition-colors"
+                            title="Edit Request"
+                          >
+                            <FiEdit2 className="text-sm" />
+                          </button>
+                          <button
+                            onClick={() => handleDeleteRequest(request.id)}
+                            className="p-1.5 rounded-lg hover:bg-[var(--surface2)] text-red-500 transition-colors"
+                            title="Delete Request"
+                          >
+                            <FiTrash2 className="text-sm" />
+                          </button>
+                        </>
+                      )}
+                    </div>
                    </td>
                  </tr>
               ))
@@ -654,6 +700,11 @@ const AttendanceRequests = () => {
       <MissedPunchOutModal
         isOpen={showMissedPunchOut} 
         onClose={handleModalClose}
+      />
+      <EditAttendanceRequestModal
+        isOpen={showEditModal}
+        onClose={handleModalClose}
+        request={requestToEdit}
       />
     </div>
   );
