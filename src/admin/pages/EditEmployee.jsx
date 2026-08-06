@@ -111,6 +111,15 @@ const EditEmployee = () => {
       type: "employee",
       joining_date: "",
       dob: "",
+      probation_start_date: "",
+      probation_end_date: "",
+      confirmation_date: "",
+      contract_start_date: "",
+      contract_end_date: "",
+      notice_period_start_date: "",
+      last_working_day: "",
+      resignation_date: "",
+      relieving_date: "",
       gender: "male",
       nationality: "",
       marital_status: "",
@@ -544,6 +553,15 @@ const EditEmployee = () => {
         convertToDisplayDate(currentEmployee.joining_date),
       );
       setValue("dob", convertToDisplayDate(currentEmployee.dob));
+      setValue("probation_start_date", convertToDisplayDate(currentEmployee.probation_start_date));
+      setValue("probation_end_date", convertToDisplayDate(currentEmployee.probation_end_date));
+      setValue("confirmation_date", convertToDisplayDate(currentEmployee.confirmation_date));
+      setValue("contract_start_date", convertToDisplayDate(currentEmployee.contract_start_date));
+      setValue("contract_end_date", convertToDisplayDate(currentEmployee.contract_end_date));
+      setValue("notice_period_start_date", convertToDisplayDate(currentEmployee.notice_period_start_date));
+      setValue("last_working_day", convertToDisplayDate(currentEmployee.last_working_day));
+      setValue("resignation_date", convertToDisplayDate(currentEmployee.resignation_date));
+      setValue("relieving_date", convertToDisplayDate(currentEmployee.relieving_date));
       setValue("gender", currentEmployee.gender || "male");
       setValue("nationality", currentEmployee.nationality || "");
       setValue("marital_status", currentEmployee.marital_status || "");
@@ -993,6 +1011,16 @@ const EditEmployee = () => {
     const joiningDate = convertDateToBackend(data.joining_date);
     if (dob) formData.append("dob", dob);
     if (joiningDate) formData.append("joining_date", joiningDate);
+
+    if (data.probation_start_date) formData.append("probation_start_date", convertDateToBackend(data.probation_start_date));
+    if (data.probation_end_date) formData.append("probation_end_date", convertDateToBackend(data.probation_end_date));
+    if (data.confirmation_date) formData.append("confirmation_date", convertDateToBackend(data.confirmation_date));
+    if (data.contract_start_date) formData.append("contract_start_date", convertDateToBackend(data.contract_start_date));
+    if (data.contract_end_date) formData.append("contract_end_date", convertDateToBackend(data.contract_end_date));
+    if (data.notice_period_start_date) formData.append("notice_period_start_date", convertDateToBackend(data.notice_period_start_date));
+    if (data.last_working_day) formData.append("last_working_day", convertDateToBackend(data.last_working_day));
+    if (data.resignation_date) formData.append("resignation_date", convertDateToBackend(data.resignation_date));
+    if (data.relieving_date) formData.append("relieving_date", convertDateToBackend(data.relieving_date));
 
     // Special days
     if (data.special_days && data.special_days.length > 0) {
@@ -2222,6 +2250,140 @@ const EditEmployee = () => {
                             </p>
                           )}
                         </>
+                      )}
+                    />
+                  </div>
+
+                  {/* Employment Timeline & Dates Section */}
+                  <div className="md:col-span-2 mt-6 mb-2">
+                    <h3 className="text-lg font-bold text-gray-800 flex items-center">
+                      <i className="fas fa-calendar-alt text-green-500 mr-2"></i>
+                      Employment Timeline & Dates
+                    </h3>
+                  </div>
+
+                  <div>
+                    <label className="block text-xs md:text-sm font-semibold text-gray-700 mb-1 md:mb-2">
+                      <i className="fas fa-calendar-plus text-green-500 mr-1"></i>
+                      Probation Start Date
+                    </label>
+                    <Controller
+                      name="probation_start_date"
+                      control={control}
+                      render={({ field }) => (
+                        <DateInput {...field} placeholder="dd/mm/yyyy" />
+                      )}
+                    />
+                  </div>
+
+                  <div>
+                    <label className="block text-xs md:text-sm font-semibold text-gray-700 mb-1 md:mb-2">
+                      <i className="fas fa-calendar-minus text-green-500 mr-1"></i>
+                      Probation End Date
+                    </label>
+                    <Controller
+                      name="probation_end_date"
+                      control={control}
+                      render={({ field }) => (
+                        <DateInput {...field} placeholder="dd/mm/yyyy" />
+                      )}
+                    />
+                  </div>
+
+                  <div>
+                    <label className="block text-xs md:text-sm font-semibold text-gray-700 mb-1 md:mb-2">
+                      <i className="fas fa-user-check text-green-500 mr-1"></i>
+                      Confirmation Date
+                    </label>
+                    <Controller
+                      name="confirmation_date"
+                      control={control}
+                      render={({ field }) => (
+                        <DateInput {...field} placeholder="dd/mm/yyyy" />
+                      )}
+                    />
+                  </div>
+
+                  <div>
+                    <label className="block text-xs md:text-sm font-semibold text-gray-700 mb-1 md:mb-2">
+                      <i className="fas fa-file-signature text-green-500 mr-1"></i>
+                      Contract Start Date
+                    </label>
+                    <Controller
+                      name="contract_start_date"
+                      control={control}
+                      render={({ field }) => (
+                        <DateInput {...field} placeholder="dd/mm/yyyy" />
+                      )}
+                    />
+                  </div>
+
+                  <div>
+                    <label className="block text-xs md:text-sm font-semibold text-gray-700 mb-1 md:mb-2">
+                      <i className="fas fa-file-contract text-green-500 mr-1"></i>
+                      Contract End Date
+                    </label>
+                    <Controller
+                      name="contract_end_date"
+                      control={control}
+                      render={({ field }) => (
+                        <DateInput {...field} placeholder="dd/mm/yyyy" />
+                      )}
+                    />
+                  </div>
+
+                  <div>
+                    <label className="block text-xs md:text-sm font-semibold text-gray-700 mb-1 md:mb-2">
+                      <i className="fas fa-sign-out-alt text-green-500 mr-1"></i>
+                      Resignation Date
+                    </label>
+                    <Controller
+                      name="resignation_date"
+                      control={control}
+                      render={({ field }) => (
+                        <DateInput {...field} placeholder="dd/mm/yyyy" />
+                      )}
+                    />
+                  </div>
+
+                  <div>
+                    <label className="block text-xs md:text-sm font-semibold text-gray-700 mb-1 md:mb-2">
+                      <i className="fas fa-hourglass-start text-green-500 mr-1"></i>
+                      Notice Period Start Date
+                    </label>
+                    <Controller
+                      name="notice_period_start_date"
+                      control={control}
+                      render={({ field }) => (
+                        <DateInput {...field} placeholder="dd/mm/yyyy" />
+                      )}
+                    />
+                  </div>
+
+                  <div>
+                    <label className="block text-xs md:text-sm font-semibold text-gray-700 mb-1 md:mb-2">
+                      <i className="fas fa-briefcase text-green-500 mr-1"></i>
+                      Last Working Day (LWD)
+                    </label>
+                    <Controller
+                      name="last_working_day"
+                      control={control}
+                      render={({ field }) => (
+                        <DateInput {...field} placeholder="dd/mm/yyyy" />
+                      )}
+                    />
+                  </div>
+
+                  <div>
+                    <label className="block text-xs md:text-sm font-semibold text-gray-700 mb-1 md:mb-2">
+                      <i className="fas fa-door-open text-green-500 mr-1"></i>
+                      Relieving Date
+                    </label>
+                    <Controller
+                      name="relieving_date"
+                      control={control}
+                      render={({ field }) => (
+                        <DateInput {...field} placeholder="dd/mm/yyyy" />
                       )}
                     />
                   </div>
