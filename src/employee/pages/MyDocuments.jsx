@@ -14,7 +14,7 @@ import apiClient from "../../utils/apiClient";
 const MyDocuments = () => {
   const dispatch = useDispatch();
   const { user: authUser } = useSelector((state) => state.auth);
-  
+
   const [docs, setDocs] = useState({});
   const [loadingDocs, setLoadingDocs] = useState(true);
 
@@ -30,7 +30,7 @@ const MyDocuments = () => {
         setLoadingDocs(true);
         const response = await apiClient.get('/employee/my-documents');
         console.log("Documents API Response:", response.data);
-        
+
         if (response.data?.status === 'success' && response.data?.data?.documents) {
           setDocs(response.data.data.documents);
         } else if (response.data?.documents) {
@@ -42,7 +42,7 @@ const MyDocuments = () => {
         setLoadingDocs(false);
       }
     };
-    
+
     fetchDocuments();
   }, []);
 
@@ -108,12 +108,12 @@ const MyDocuments = () => {
   ];
 
   // Flat list of all personal document fields
-  const allFields = categories.flatMap(cat => 
+  const allFields = categories.flatMap(cat =>
     cat.fields.map(f => {
       let expiryKey = null;
       if (cat.expiryKey) expiryKey = cat.expiryKey;
       else if (cat.expiryKeys && cat.expiryKeys[f.key]) expiryKey = cat.expiryKeys[f.key];
-      
+
       return {
         ...f,
         category: cat.title,
@@ -150,9 +150,9 @@ const MyDocuments = () => {
     today.setHours(0, 0, 0, 0);
     const expiry = new Date(expiryDateStr);
     expiry.setHours(0, 0, 0, 0);
-    
+
     const diffDays = Math.ceil((expiry - today) / (1000 * 60 * 60 * 24));
-    
+
     if (diffDays < 0) {
       return { status: "expired", text: `Expired on ${formatDate(expiryDateStr)}`, colorClass: "text-red-500 bg-red-50 dark:bg-red-950/20 border-red-200 dark:border-red-900/30" };
     }
@@ -204,7 +204,7 @@ const MyDocuments = () => {
 
   return (
     <div>
-      
+
       {/* Expiry Alerts Banner */}
       {expiries.length > 0 && (
         <div className="mb-6 p-4 rounded-2xl bg-red-50 dark:bg-red-950/20 border border-red-200 dark:border-red-900/30">
@@ -219,14 +219,13 @@ const MyDocuments = () => {
               </p>
               <div className="grid grid-cols-1 md:grid-cols-2 gap-3 mt-3">
                 {expiries.map((exp, idx) => (
-                  <div 
-                    key={idx} 
+                  <div
+                    key={idx}
                     className="flex items-center justify-between p-2.5 rounded-xl bg-white dark:bg-gray-900/50 border border-red-100 dark:border-red-900/20 text-xs"
                   >
                     <span className="font-semibold text-gray-700 dark:text-gray-300">{exp.label}</span>
-                    <span className={`px-2 py-0.5 rounded-full font-bold uppercase text-[9px] ${
-                      exp.status === "expired" ? "bg-red-100 text-red-600 dark:bg-red-900/40 dark:text-red-400" : "bg-amber-100 text-amber-600 dark:bg-amber-900/40 dark:text-amber-400"
-                    }`}>
+                    <span className={`px-2 py-0.5 rounded-full font-bold uppercase text-[9px] ${exp.status === "expired" ? "bg-red-100 text-red-600 dark:bg-red-900/40 dark:text-red-400" : "bg-amber-100 text-amber-600 dark:bg-amber-900/40 dark:text-amber-400"
+                      }`}>
                       {exp.text}
                     </span>
                   </div>
@@ -296,99 +295,98 @@ const MyDocuments = () => {
       </div>
       {/* Document Categories */}
       <div className="flex flex-col gap-8">
-          {categories.map((cat) => (
-            <div 
-              key={cat.id} 
-              className="bg-[var(--surface)] border border-[var(--border)] rounded-xl p-4 md:p-6 shadow-sm"
-            >
-              {/* Category Header */}
-              <div className="flex items-center gap-3.5 mb-2 pb-4 border-b border-[var(--border)]">
-                <div className="p-3 bg-[var(--surface2)] border border-[var(--border)] rounded-2xl flex items-center justify-center">
-                  {cat.icon}
-                </div>
-                <div>
-                  <h3 className="text-base font-extrabold text-[var(--text)]">
-                    {cat.title}
-                  </h3>
-                  <p className="text-xs text-[var(--text-secondary)] font-medium">
-                    {cat.description}
-                  </p>
-                </div>
+        {categories.map((cat) => (
+          <div
+            key={cat.id}
+            className="bg-[var(--surface)] border border-[var(--border)] rounded-xl p-4 md:p-6 shadow-sm"
+          >
+            {/* Category Header */}
+            <div className="flex items-center gap-3.5 mb-2 pb-4 border-b border-[var(--border)]">
+              <div className="p-3 bg-[var(--surface2)] border border-[var(--border)] rounded-2xl flex items-center justify-center">
+                {cat.icon}
               </div>
-
-              {/* Grid of Documents */}
-              <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6 mt-6">
-                {cat.fields.map((field) => {
-                  const documentPath = docs[field.key];
-                  const hasDoc = !!documentPath;
-                  
-                  // Get expiry key for this specific field
-                  let expiryKey = cat.expiryKey;
-                  if (cat.expiryKeys && cat.expiryKeys[field.key]) {
-                    expiryKey = cat.expiryKeys[field.key];
-                  }
-                  
-                  const expiryDateVal = expiryKey ? employee[expiryKey] : null;
-                  const expiryInfo = expiryDateVal ? getExpiryStatus(expiryDateVal) : null;
-
-                  return (
-                    <div 
-                      key={field.key}
-                      className="group flex flex-col justify-between p-4 md:p-5 rounded-xl border border-[var(--border)] hover:border-green-500/30 hover:bg-[var(--surface2)]/30 transition-all duration-300"
-                    >
-                      <div>
-                        {/* Status Icon Header */}
-                        <div className="flex justify-between items-start gap-4 mb-4">
-                          <div className="w-10 h-10 bg-green-500/10 dark:bg-green-500/20 text-green-600 dark:text-green-400 rounded-xl flex items-center justify-center flex-shrink-0">
-                            <i className={`${field.icon} text-base`}></i>
-                          </div>
-                          <span className={`px-2.5 py-0.5 rounded-full text-[9px] font-extrabold uppercase tracking-wider ${
-                            hasDoc 
-                              ? "bg-green-100 text-green-700 dark:bg-green-950/40 dark:text-green-400" 
-                              : "bg-amber-100 text-amber-700 dark:bg-amber-950/40 dark:text-amber-400"
-                          }`}>
-                            {hasDoc ? "Uploaded" : "Pending"}
-                          </span>
-                        </div>
-
-                        {/* Title & Desc */}
-                        <h4 className="text-sm font-extrabold text-[var(--text)] group-hover:text-green-600 transition-colors">
-                          {field.label}
-                        </h4>
-                        
-                        {/* Expiry Badge */}
-                        {hasDoc && expiryInfo && (
-                          <div className={`mt-2.5 inline-flex items-center gap-1.5 px-2.5 py-1 rounded-xl text-[10px] font-bold border ${expiryInfo.colorClass}`}>
-                            <FiClock className="flex-shrink-0" />
-                            <span>{expiryInfo.text}</span>
-                          </div>
-                        )}
-                      </div>
-
-                      {/* Card Actions */}
-                      <div className="flex gap-2.5 mt-5 pt-3 border-t border-[var(--border)]/50">
-                        {hasDoc ? (
-                          <a
-                            href={getDocumentUrl(documentPath)}
-                            target="_blank"
-                            rel="noopener noreferrer"
-                            className="w-full py-2 px-3 bg-[var(--surface2)] border border-[var(--border)] hover:bg-[var(--border)] text-[var(--text)] rounded-xl text-xs font-bold transition-all flex items-center justify-center gap-1.5"
-                          >
-                            <FiEye /> View Document
-                          </a>
-                        ) : (
-                          <div className="w-full py-2 bg-[var(--surface2)] text-[var(--text-secondary)] rounded-xl text-xs font-bold text-center border border-dashed border-[var(--border)] flex items-center justify-center gap-1.5">
-                            <FiInfo /> Not Uploaded
-                          </div>
-                        )}
-                      </div>
-                    </div>
-                  );
-                })}
+              <div>
+                <h3 className="text-base font-extrabold text-[var(--text)]">
+                  {cat.title}
+                </h3>
+                <p className="text-xs text-[var(--text-secondary)] font-medium">
+                  {cat.description}
+                </p>
               </div>
             </div>
-          ))}
-        </div>
+
+            {/* Grid of Documents */}
+            <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-4 md:gap-6 mt-6">
+              {cat.fields.map((field) => {
+                const documentPath = docs[field.key];
+                const hasDoc = !!documentPath;
+
+                // Get expiry key for this specific field
+                let expiryKey = cat.expiryKey;
+                if (cat.expiryKeys && cat.expiryKeys[field.key]) {
+                  expiryKey = cat.expiryKeys[field.key];
+                }
+
+                const expiryDateVal = expiryKey ? employee[expiryKey] : null;
+                const expiryInfo = expiryDateVal ? getExpiryStatus(expiryDateVal) : null;
+
+                return (
+                  <div
+                    key={field.key}
+                    className="group flex flex-col justify-between p-4 md:p-5 rounded-xl border border-[var(--border)] hover:border-green-500/30 hover:bg-[var(--surface2)]/30 transition-all duration-300"
+                  >
+                    <div>
+                      {/* Status Icon Header */}
+                      <div className="flex justify-between items-start gap-4 mb-4">
+                        <div className="w-10 h-10 bg-green-500/10 dark:bg-green-500/20 text-green-600 dark:text-green-400 rounded-xl flex items-center justify-center flex-shrink-0">
+                          <i className={`${field.icon} text-base`}></i>
+                        </div>
+                        <span className={`px-2.5 py-0.5 rounded-full text-[9px] font-extrabold uppercase tracking-wider ${hasDoc
+                            ? "bg-green-100 text-green-700 dark:bg-green-950/40 dark:text-green-400"
+                            : "bg-amber-100 text-amber-700 dark:bg-amber-950/40 dark:text-amber-400"
+                          }`}>
+                          {hasDoc ? "Uploaded" : "Pending"}
+                        </span>
+                      </div>
+
+                      {/* Title & Desc */}
+                      <h4 className="text-sm font-extrabold text-[var(--text)] group-hover:text-green-600 transition-colors">
+                        {field.label}
+                      </h4>
+
+                      {/* Expiry Badge */}
+                      {hasDoc && expiryInfo && (
+                        <div className={`mt-2.5 inline-flex items-center gap-1.5 px-2.5 py-1 rounded-xl text-[10px] font-bold border ${expiryInfo.colorClass}`}>
+                          <FiClock className="flex-shrink-0" />
+                          <span>{expiryInfo.text}</span>
+                        </div>
+                      )}
+                    </div>
+
+                    {/* Card Actions */}
+                    <div className="flex gap-2.5 mt-5 pt-3 border-t border-[var(--border)]/50">
+                      {hasDoc ? (
+                        <a
+                          href={getDocumentUrl(documentPath)}
+                          target="_blank"
+                          rel="noopener noreferrer"
+                          className="w-full py-2 px-3 bg-green-50 hover:bg-green-100 dark:bg-green-500/10 dark:hover:bg-green-500/20 border border-green-200 dark:border-green-500/30 text-green-700 dark:text-green-400 rounded-xl text-xs font-bold transition-all flex items-center justify-center gap-1.5 shadow-sm hover:shadow"
+                        >
+                          <FiEye /> View Document
+                        </a>
+                      ) : (
+                        <div className="w-full py-2 bg-[var(--surface2)] text-[var(--text-secondary)] rounded-xl text-xs font-bold text-center border border-dashed border-[var(--border)] flex items-center justify-center gap-1.5">
+                          <FiInfo /> Not Uploaded
+                        </div>
+                      )}
+                    </div>
+                  </div>
+                );
+              })}
+            </div>
+          </div>
+        ))}
+      </div>
 
     </div>
   );
