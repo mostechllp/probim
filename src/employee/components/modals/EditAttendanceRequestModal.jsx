@@ -15,13 +15,11 @@ const EditAttendanceRequestModal = ({ isOpen, onClose, request }) => {
   });
   const [loading, setLoading] = useState(false);
 
+  const [fetchingDetails, setFetchingDetails] = useState(false);
+
   useEffect(() => {
     if (request && isOpen) {
-      setFormData({
-        date: request.request_date || request.date || "",
-        time: request.request_time || request.time || "",
-        reason: request.reason || "",
-      });
+      setFetchingDetails(true);
       
       const fetchDetails = async () => {
         try {
@@ -43,6 +41,14 @@ const EditAttendanceRequestModal = ({ isOpen, onClose, request }) => {
           }
         } catch (error) {
           console.error("Failed to fetch request details for editing:", error);
+          // Fallback to whatever is available
+          setFormData({
+            date: request.request_date || request.date || "",
+            time: request.request_time || request.time || "",
+            reason: request.reason || "",
+          });
+        } finally {
+          setFetchingDetails(false);
         }
       };
       
