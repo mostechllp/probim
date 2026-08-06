@@ -831,9 +831,6 @@ const canTakeAction = (leave) => {
                   Employee
                 </th>
                 <th className="px-3 md:px-4 py-2 md:py-3 text-left text-[10px] md:text-xs font-semibold text-gray-500 dark:text-gray-400">
-                  Applied By
-                </th>
-                <th className="px-3 md:px-4 py-2 md:py-3 text-left text-[10px] md:text-xs font-semibold text-gray-500 dark:text-gray-400">
                   Type
                 </th>
                 <th className="px-3 md:px-4 py-2 md:py-3 text-left text-[10px] md:text-xs font-semibold text-gray-500 dark:text-gray-400">
@@ -850,9 +847,6 @@ const canTakeAction = (leave) => {
                 </th>
                 <th className="px-3 md:px-4 py-2 md:py-3 text-left text-[10px] md:text-xs font-semibold text-gray-500 dark:text-gray-400">
                   Doc
-                </th>
-                <th className="px-3 md:px-4 py-2 md:py-3 text-left text-[10px] md:text-xs font-semibold text-gray-500 dark:text-gray-400">
-                  Reason
                 </th>
                 <th className="px-3 md:px-4 py-2 md:py-3 text-left text-[10px] md:text-xs font-semibold text-gray-500 dark:text-gray-400">
                   Status
@@ -873,9 +867,6 @@ const canTakeAction = (leave) => {
                     HR
                   </th>
                 )}
-                <th className="px-3 md:px-4 py-2 md:py-3 text-left text-[10px] md:text-xs font-semibold text-gray-500 dark:text-gray-400">
-                  Processed By
-                </th>
                 <th className="px-3 md:px-4 py-2 md:py-3 text-left text-[10px] md:text-xs font-semibold text-gray-500 dark:text-gray-400">
                   Action
                 </th>
@@ -904,13 +895,6 @@ const canTakeAction = (leave) => {
                       </td>
                       <td className="px-3 md:px-4 py-2 md:py-3 text-xs md:text-sm font-semibold text-gray-800 dark:text-gray-200 whitespace-nowrap">
                         {getEmployeeName(leave)}
-                      </td>
-                      <td className="px-3 md:px-4 py-2 md:py-3">
-                        <div className="flex flex-col">
-                          <span className="text-xs md:text-sm font-semibold text-blue-600 dark:text-blue-400">
-                            {appliedByInfo.name}
-                          </span>
-                        </div>
                       </td>
                       <td className="px-3 md:px-4 py-2 md:py-3 text-xs md:text-sm text-gray-600 dark:text-gray-400 whitespace-nowrap">
                         {leave.leave_type?.name || leave.type || "-"}
@@ -959,12 +943,6 @@ const canTakeAction = (leave) => {
                           </span>
                         )}
                       </td>
-                      <td
-                        className="px-3 md:px-4 py-2 md:py-3 text-xs md:text-sm text-gray-600 dark:text-gray-400 max-w-[120px] md:max-w-[150px] truncate"
-                        title={leave.reason}
-                      >
-                        {leave.reason || "-"}
-                      </td>
                       <td className="px-3 md:px-4 py-2 md:py-3">
                         <span
                           className={`inline-block px-2 md:px-3 py-0.5 md:py-1 rounded-full text-[9px] md:text-xs font-semibold whitespace-nowrap capitalize ${getStatusClass(leave.status)}`}
@@ -988,12 +966,6 @@ const canTakeAction = (leave) => {
                           {getApprovalBadge(leave.is_hr_approved)}
                         </td>
                       )}
-                      <td className="px-3 md:px-4 py-2 md:py-3 text-xs md:text-sm text-gray-600 dark:text-gray-400 whitespace-nowrap">
-                        {leave.processed_by ||
-                          leave.processedBy ||
-                          leave.approver?.username ||
-                          "-"}
-                      </td>
                       <td className="px-3 md:px-4 py-2 md:py-3">
                         <div className="flex items-center gap-1 md:gap-2 whitespace-nowrap">
                           <button
@@ -1058,7 +1030,7 @@ const canTakeAction = (leave) => {
                 <tr>
                   <td
                     colSpan={
-                      13 +
+                      10 +
                       (showTeamLeadApproval ? 1 : 0) +
                       (showManagerApproval ? 1 : 0) +
                       (showHrApproval ? 1 : 0)

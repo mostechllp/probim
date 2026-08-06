@@ -235,6 +235,8 @@ const Dashboard = () => {
 
   const [showPendingErrorModal, setShowPendingErrorModal] = useState(false);
   const [pendingPunchOutDate, setPendingPunchOutDate] = useState("");
+  const [showBlockedErrorModal, setShowBlockedErrorModal] = useState(false);
+  const [blockedErrorMessage, setBlockedErrorMessage] = useState("");
 
   // Admin graphs states
   const [showProjectHoursModal, setShowProjectHoursModal] = useState(false);
@@ -950,7 +952,7 @@ const handleLocationConfirm = async (locationData) => {
   };
 
   return (
-    <div className="space-y-3">
+    <div className="space-y-3 px-4 md:px-6 lg:px-8 pb-8">
       {/* Welcome Banner - Compact */}
       <div className={`welcome-banner rounded-xl p-4 flex flex-col md:flex-row justify-between items-center gap-3 shadow-lg ${getWelcomeBannerGradient(isDarkMode)}`}>
         <div className="welcome-left flex items-center gap-3">
@@ -1019,7 +1021,7 @@ const handleLocationConfirm = async (locationData) => {
         <button
           onClick={handlePunch}
           disabled={isButtonDisabled()}
-          className="punch-btn bg-red-500 border-none text-white py-2 px-6 rounded-full font-semibold text-sm cursor-pointer transition-all flex items-center gap-2 hover:bg-red-600 hover:-translate-y-0.5 hover:shadow-md disabled:opacity-50 disabled:cursor-not-allowed flex-shrink-0"
+          className={`punch-btn border-none text-white py-2 px-6 rounded-full font-semibold text-sm cursor-pointer transition-all flex items-center gap-2 hover:-translate-y-0.5 hover:shadow-md disabled:opacity-50 disabled:cursor-not-allowed flex-shrink-0 ${isActuallyPunchedIn ? "bg-red-500 hover:bg-red-600" : "bg-green-500 hover:bg-green-600"}`}
         >
           <i className="fas fa-fingerprint"></i>
           {getButtonText()}
@@ -1335,7 +1337,7 @@ const handleLocationConfirm = async (locationData) => {
       {/* Recent Activity Section - Compact */}
       {dashboardData?.attendance_history &&
         dashboardData.attendance_history.length > 0 && (
-          <div className="recent-activity bg-[var(--surface)] border border-[var(--border)] rounded-xl p-3">
+          <div className="recent-activity mt-6 bg-[var(--surface)] border border-[var(--border)] rounded-xl p-3">
             <div className="flex items-center justify-between mb-2">
               <h3 className="text-sm font-semibold text-[var(--text)] flex items-center gap-2">
                 <i className="fas fa-history"></i> Recent Activity
@@ -1350,15 +1352,14 @@ const handleLocationConfirm = async (locationData) => {
                 <table className="w-full text-xs">
                   <thead className="sticky top-0 bg-[var(--surface)] z-10">
                     <tr className="border-b border-[var(--border)]">
-                      <th className="text-left py-1.5 px-2 text-[var(--muted)] font-semibold">Date</th>
-                      <th className="text-left py-1.5 px-2 text-[var(--muted)] font-semibold">In</th>
-                      <th className="text-left py-1.5 px-2 text-[var(--muted)] font-semibold">Location</th>
-                      <th className="text-left py-1.5 px-2 text-[var(--muted)] font-semibold">Out</th>
+                      <th className="text-left py-2 px-2 text-[var(--muted)] font-semibold">Date</th>
+                      <th className="text-left py-2 px-2 text-[var(--muted)] font-semibold">In</th>
+                      <th className="text-left py-2 px-2 text-[var(--muted)] font-semibold">Location</th>
+                      <th className="text-left py-2 px-2 text-[var(--muted)] font-semibold">Out</th>
                     </tr>
                   </thead>
                   <tbody>
                     {dashboardData.attendance_history
-                      .slice(0, 5)
                       .map((attendance, index) => {
                         const locationAddress = attendance.punch_in_address;
 
@@ -1367,13 +1368,13 @@ const handleLocationConfirm = async (locationData) => {
                             key={index}
                             className="border-b border-[var(--border)] hover:bg-[var(--surface2)] transition-colors"
                           >
-                            <td className="py-1.5 px-2 text-[var(--text)] whitespace-nowrap">
+                            <td className="py-3 px-2 text-[var(--text)] whitespace-nowrap">
                               {attendance.log_date}
                             </td>
-                            <td className="py-1.5 px-2 text-[var(--text)] whitespace-nowrap">
+                            <td className="py-3 px-2 text-[var(--text)] whitespace-nowrap">
                               {attendance.punch_in ? formatPunchTime(attendance.punch_in) : "-"}
                             </td>
-                            <td className="py-1.5 px-2">
+                            <td className="py-3 px-2">
                               {locationAddress ? (
                                 <div className="text-[10px] text-[var(--muted)] flex items-start gap-1">
                                   <i className="fas fa-map-marker-alt text-green-500 text-[10px] mt-0.5 flex-shrink-0"></i>
@@ -1387,7 +1388,7 @@ const handleLocationConfirm = async (locationData) => {
                                 <span className="text-[10px] text-[var(--muted)]">-</span>
                               )}
                             </td>
-                            <td className="py-1.5 px-2 text-[var(--text)] whitespace-nowrap">
+                            <td className="py-3 px-2 text-[var(--text)] whitespace-nowrap">
                               {attendance.punch_out ? formatPunchTime(attendance.punch_out) : "-"}
                             </td>
                           </tr>
@@ -1455,6 +1456,32 @@ const handleLocationConfirm = async (locationData) => {
                   className="flex-1 py-2.5 px-4 bg-red-500 text-white rounded-lg font-medium text-sm hover:bg-red-600 transition-colors"
                 >
                   Continue to Punch Out
+                </button>
+              </div>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Blocked Punch-In Error Modal */}
+      {showBlockedErrorModal && (
+        <div className="fixed inset-0 bg-black/70 flex items-center justify-center z-[60] p-4 animate-fade-in">
+          <div className="bg-[var(--surface)] rounded-xl max-w-md w-full p-6 shadow-2xl animate-slide-up">
+            <div className="flex flex-col items-center text-center">
+              <div className="w-16 h-16 bg-orange-100 dark:bg-orange-900/30 text-orange-500 rounded-full flex items-center justify-center text-3xl mb-4">
+                <i className="fas fa-exclamation-circle"></i>
+              </div>
+              <h3 className="text-xl font-bold text-[var(--text)] mb-2">Punch-In Blocked</h3>
+              <p className="text-[var(--text-secondary)] mb-6 text-sm">
+                {blockedErrorMessage}
+              </p>
+              
+              <div className="flex w-full">
+                <button
+                  onClick={() => setShowBlockedErrorModal(false)}
+                  className="flex-1 py-2.5 px-4 bg-[var(--surface2)] border border-[var(--border)] rounded-lg text-[var(--text)] font-medium text-sm hover:bg-[var(--surface3)] transition-colors"
+                >
+                  Close
                 </button>
               </div>
             </div>
