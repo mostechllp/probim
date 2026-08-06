@@ -165,6 +165,26 @@ class ProjectService {
       throw handleError(error, "Failed to fetch project assignments");
     }
   }
+  /**
+   * Fetch all employees for project assignments
+   */
+  async getEmployeesForProjectAssignments() {
+    try {
+      console.log(`[API REQUEST] GET ${BASE_PATH}/project-assignments/employees`);
+      const response = await apiClient.get(`${BASE_PATH}/project-assignments/employees`);
+      console.log(
+        `[API RESPONSE] GET ${BASE_PATH}/project-assignments/employees | Status: ${response.status} | Data length:`,
+        response.data?.data?.length || response.data?.length || 0,
+      );
+      return response.data;
+    } catch (error) {
+      console.error(
+        `[API ERROR] GET ${BASE_PATH}/project-assignments/employees | Error:`,
+        error,
+      );
+      throw handleError(error, "Failed to fetch employees for project assignments");
+    }
+  }
 
   /**
    * Assign projects to an employee
