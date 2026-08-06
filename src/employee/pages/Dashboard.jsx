@@ -362,65 +362,102 @@ const Dashboard = () => {
   };
 
   // Handle location confirmation
-  const handleLocationConfirm = async (locationData) => {
-    setShowLocationModal(false);
-    setIsSubmitting(true);
+  // In Dashboard.jsx, update the handleLocationConfirm function
 
-    if (punchType === "punch-in") {
-      try {
-        await withErrorHandling(
-          async () => {
-            const result = await dispatch(punchIn({ location: locationData })).unwrap();
-            showToastMessage("Punched in successfully!", "success", "Success");
-            await dispatch(fetchDashboardData()).unwrap();
-            return result;
-          }
-        );
-      } catch (err) {
-        const errorMsg = typeof err === "string" ? err : (err?.message || "");
-        if (errorMsg.includes("pending punch-out") || errorMsg.includes("punch out for that day")) {
-          clearError();
-          const match = errorMsg.match(/for (\d{4}-\d{2}-\d{2})/);
-          const date = match ? match[1] : "that day";
-          setPendingPunchOutDate(date);
-          setShowPendingErrorModal(true);
-        }
-      }
-    } else if (punchOutData) {
-      const isPastDatePunchOut = punchType === "punch-out-then-punchin";
+const handleLocationConfirm = async (locationData) => {
+  setShowLocationModal(false);
+  setIsSubmitting(true);
+
+  if (punchType === "punch-in") {
+    try {
       await withErrorHandling(
         async () => {
-          const result = await dispatch(
-            punchOut({
-              ...punchOutData,
-              location: locationData,
-            })
-          ).unwrap();
-          showToastMessage(
-            isPastDatePunchOut
-              ? `Punched out for ${pendingPunchOutDate}! Now punch in for today.`
-              : "Punched out successfully!",
-            "success",
-            "Success"
-          );
-          setShowPunchOutModal(false);
-          setPunchOutData(null);
+          const result = await dispatch(punchIn({ location: locationData })).unwrap();
+          showToastMessage("Punched in successfully!", "success", "Success");
           await dispatch(fetchDashboardData()).unwrap();
-
-          if (isPastDatePunchOut) {
-            setPendingPunchOutDate("");
-            setPunchType("punch-in");
-            setTimeout(() => setShowLocationModal(true), 800);
-          } else {
-            setPendingPunchOutDate("");
-          }
           return result;
+        },
+        {
+          // Custom error handler for punch-in specific errors
+          onError: (err) => {
+            // Extract error message from various formats
+            let errorMsg = '';
+            if (typeof err === 'string') {
+              errorMsg = err;
+            } else if (err?.payload?.message) {
+              errorMsg = err.payload.message;
+            } else if (err?.message) {
+              errorMsg = err.message;
+            } else if (err?.response?.data?.message) {
+              errorMsg = err.response.data.message;
+            } else {
+              errorMsg = String(err);
+            }
+            
+            // Check for pending punch-out error
+            if (errorMsg.includes("pending punch-out") || 
+                errorMsg.includes("punch out for that day") ||
+                errorMsg.includes("Please punch out first")) {
+              clearError();
+              const match = errorMsg.match(/for (\d{4}-\d{2}-\d{2})/);
+              const date = match ? match[1] : "that day";
+              setPendingPunchOutDate(date);
+              setShowPendingErrorModal(true);
+              return true; // Indicates error was handled
+            }
+            
+            // Check for late punch-in with HR approval
+            if (errorMsg.includes("Punch-in blocked") || 
+                errorMsg.includes("pending HR approval") ||
+                errorMsg.includes("late check-in request")) {
+              // This will be displayed by the ErrorToast
+              // Return false to let the error handler show the toast
+              return false;
+            }
+            
+            return false; // Let the error handler show the toast
+          }
         }
       );
+    } catch (err) {
+      // Error is already handled by withErrorHandling
+      console.error("Punch in error:", err);
     }
+  } else if (punchOutData) {
+    const isPastDatePunchOut = punchType === "punch-out-then-punchin";
+    await withErrorHandling(
+      async () => {
+        const result = await dispatch(
+          punchOut({
+            ...punchOutData,
+            location: locationData,
+          })
+        ).unwrap();
+        showToastMessage(
+          isPastDatePunchOut
+            ? `Punched out for ${pendingPunchOutDate}! Now punch in for today.`
+            : "Punched out successfully!",
+          "success",
+          "Success"
+        );
+        setShowPunchOutModal(false);
+        setPunchOutData(null);
+        await dispatch(fetchDashboardData()).unwrap();
 
-    setIsSubmitting(false);
-  };
+        if (isPastDatePunchOut) {
+          setPendingPunchOutDate("");
+          setPunchType("punch-in");
+          setTimeout(() => setShowLocationModal(true), 800);
+        } else {
+          setPendingPunchOutDate("");
+        }
+        return result;
+      }
+    );
+  }
+
+  setIsSubmitting(false);
+};
 
   const handlePunchOutSubmit = async (data) => {
     setPunchOutData({
@@ -1429,21 +1466,28 @@ const Dashboard = () => {
 
       {/* Error Toast */}
       {error && (
-        <ErrorToast
-          error={error}
-          onClose={clearError}
-          onAction={(actionType) => {
-            if (actionType === 'login') {
-              window.location.href = '/login';
-            } else if (actionType === 'retry') {
-              window.location.reload();
-            } else if (actionType === 'contact') {
-              window.location.href = 'mailto:support@company.com';
-            }
-            clearError();
-          }}
-        />
-      )}
+  <ErrorToast
+    error={error}
+    onClose={clearError}
+    onAction={(actionType) => {
+      if (actionType === 'login') {
+        window.location.href = '/login';
+      } else if (actionType === 'retry') {
+        window.location.reload();
+      } else if (actionType === 'contact') {
+        window.location.href = 'mailto:support@company.com';
+      } else if (actionType === 'punch_out') {
+        setShowPunchOutModal(true);
+        clearError();
+      } else if (actionType === 'wait') {
+        clearError();
+        // Optionally show a message that they're waiting
+        showToastMessage("We'll notify you when HR approves your request", "info");
+      }
+      clearError();
+    }}
+  />
+)}
 
       {/* Success Toast */}
       {toast && (

@@ -9,8 +9,8 @@ import {
   saveAssignment,
   deleteAllEmployeeProjects,
   clearAssignmentError,
+  fetchEmployeesForAssignments
 } from "../store/slices/projectAssignmentSlice";
-import { fetchEmployees } from "../store/slices/employeeSlice";
 import { fetchProjects } from "../store/slices/projectSlice";
 
 // Components
@@ -32,10 +32,10 @@ const ProjectAssignments = () => {
   const dispatch = useDispatch();
 
   // Redux States
-  const { assignments, loading, actionLoading, error } = useSelector(
+  const { assignments, loading, actionLoading, error, employeesForAssignment  } = useSelector(
     (state) => state.projectAssignments,
   );
-  const { employees } = useSelector((state) => state.employees);
+  const employees = employeesForAssignment;
   const { projects } = useSelector((state) => state.projects);
 
   // Local UI States
@@ -46,7 +46,7 @@ const ProjectAssignments = () => {
   // Load Initial Data on Mount
   useEffect(() => {
     dispatch(fetchAssignments());
-    dispatch(fetchEmployees());
+    dispatch(fetchEmployeesForAssignments());
     dispatch(fetchProjects());
   }, [dispatch]);
 
