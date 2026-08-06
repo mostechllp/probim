@@ -114,8 +114,11 @@ const MyPayroll = () => {
 
   // Latest Payroll for the Hero Section
   const latestPayroll = payrolls && payrolls.length > 0 ? payrolls[0] : null;
-  const totalAmountYTD = stats?.total_amount || 0;
-  const totalPaidMonths = stats?.total_paid || 0;
+  const fallbackTotalAmount = payrolls?.reduce((sum, p) => sum + (Number(p.net_pay) || 0), 0) || 0;
+  const fallbackPaidMonths = payrolls?.filter(p => ['paid', 'completed'].includes(p.status?.toLowerCase())).length || 0;
+
+  const totalAmountYTD = stats?.total_amount || stats?.totalAmount || fallbackTotalAmount;
+  const totalPaidMonths = stats?.total_paid || stats?.paidCount || stats?.totalPayrolls || fallbackPaidMonths;
 
   return (
     <div className="w-full overflow-x-hidden px-4 md:px-6 pb-10">

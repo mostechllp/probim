@@ -27,6 +27,7 @@ import {
   deleteAttendanceRequest,
   clearAdminAttendanceError,
   setAdminAttendanceFilter,
+  fetchAttendanceRequestDetails,
 } from "../store/slices/attendanceRequestSlice";
 import { getPhotoUrl, getFallbackAvatar } from "../../utils/imageHelper";
 import DateInput from "../components/common/DateInput";
@@ -254,14 +255,37 @@ const AdminAttendanceRequests = () => {
     }
   };
 
-  const handleEdit = (request) => {
+  const handleEdit = async (request) => {
     setSelectedRequest(request);
+    // Show what we have initially while loading
     setEditFormData({
       request_date: request.request_date || request.date || "",
       request_time: request.request_time || request.time || "",
       reason: request.reason || "",
     });
     setShowEditModal(true);
+
+    try {
+      const details = await dispatch(fetchAttendanceRequestDetails(request.id)).unwrap();
+      if (details) {
+        // Format time to HH:MM if it has seconds
+        let formattedTime = details.request_time || details.time || request.request_time || request.time || "";
+        if (formattedTime && formattedTime.includes(':')) {
+          const parts = formattedTime.split(':');
+          if (parts.length >= 2) {
+            formattedTime = `${parts[0]}:${parts[1]}`;
+          }
+        }
+        
+        setEditFormData({
+          request_date: details.request_date || details.date || request.request_date || request.date || "",
+          request_time: formattedTime,
+          reason: details.reason || request.reason || "",
+        });
+      }
+    } catch (error) {
+      console.error("Failed to fetch full request details:", error);
+    }
   };
 
   const handleEditSubmit = async (e) => {
