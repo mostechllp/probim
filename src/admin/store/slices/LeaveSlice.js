@@ -222,6 +222,8 @@ export const updateLeaveStatus = createAsyncThunk(
   },
 );
 
+// src/admin/store/slices/LeaveSlice.js
+
 export const fetchLeaveBalances = createAsyncThunk(
   "leaves/fetchBalances",
   async ({ employee_id }, { rejectWithValue }) => {
@@ -229,8 +231,14 @@ export const fetchLeaveBalances = createAsyncThunk(
       const response = await apiClient.get(
         `/admin/leave-allocations/${employee_id}`,
       );
-      return response.data.data;
+      console.log("Fetch leave balances response:", response.data);
+      
+      if (response.data && response.data.status === "success") {
+        return response.data.data;
+      }
+      return response.data;
     } catch (error) {
+      console.error("Fetch leave balances error:", error);
       return rejectWithValue(
         error.response?.data?.message || "Failed to fetch leave balances",
       );

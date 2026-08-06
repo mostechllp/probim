@@ -313,27 +313,31 @@ const RequestLeave = () => {
     }
   };
 
-  // Get balance for selected leave type
-  const getSelectedLeaveBalance = () => {
-    if (!formData.leave_type_id)
-      return { allocated: 0, used: 0, pending: 0, remaining: 0 };
-
-    const selectedType = leaveTypes.find(
-      (lt) => lt.id === parseInt(formData.leave_type_id),
-    );
-    if (selectedType) {
-      const balance = leaveBalances[selectedType.name];
-      if (balance) {
-        return {
-          allocated: balance.allocated || 0,
-          used: balance.taken || balance.used || 0,
-          pending: balance.pending || 0,
-          remaining: balance.remaining || 0,
-        };
-      }
-    }
+  // In RequestLeave.jsx, the balance access should work like this:
+const getSelectedLeaveBalance = () => {
+  if (!formData.leave_type_id) {
     return { allocated: 0, used: 0, pending: 0, remaining: 0 };
-  };
+  }
+
+  const selectedType = leaveTypes.find(
+    (lt) => lt.id === parseInt(formData.leave_type_id),
+  );
+  
+  if (selectedType) {
+    // Access by leave type name from the leaveBalances object
+    const balance = leaveBalances[selectedType.name];
+    if (balance) {
+      return {
+        allocated: balance.allocated || 0,
+        used: balance.taken || balance.used || 0,
+        pending: balance.pending || 0,
+        remaining: balance.remaining || 0,
+      };
+    }
+  }
+  
+  return { allocated: 0, used: 0, pending: 0, remaining: 0 };
+};
 
   const selectedBalance = getSelectedLeaveBalance();
   const remaining = selectedBalance?.remaining ?? 0;
