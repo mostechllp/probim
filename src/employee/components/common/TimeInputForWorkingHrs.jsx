@@ -1,65 +1,160 @@
-import { useRef, useState } from "react";
+// components/common/TimeInputForWorkingHrs.jsx
+import React, { useState, useEffect, useRef } from "react";
 
-export const TimeInputWorking = ({ value, onChange, className = "", required = false }) => {
-  const inputRef = useRef(null);
+export const TimeInputWorking = ({
+  value,
+  onChange,
+  className = "",
+  required = false,
+  maxHours = 24,
+  disabled = false,
+}) => {
+  const [hours, setHours] = useState(0);
+  const [minutes, setMinutes] = useState(0);
   const [error, setError] = useState("");
+  const hoursRef = useRef(null);
+  const minutesRef = useRef(null);
 
-  const handleChange = (e) => {
-    let v = e.target.value.replace(/[^0-9.]/g, "");
-    const parts = v.split(".");
-    if (parts.length > 2) v = parts[0] + "." + parts.slice(1).join("");
-    if (parts.length === 2 && parts[1].length > 2) {
-      v = parts[0] + "." + parts[1].slice(0, 2);
-    }
+  // Parse the value (which could be in decimal hours like "2.42")
+  const parseTime = (val) => {
+    if (!val || val === "" || val === "0") return { hours: 0, minutes: 0 };
 
-    e.target.value = v;
+    const num = parseFloat(val);
+    if (isNaN(num) || num <= 0) return { hours: 0, minutes: 0 };
 
-    const n = parseFloat(v);
-    if (v === "" || v === ".") {
-      setError("");
-    } else if (isNaN(n) || n < 0) {
-      setError("Enter a positive number");
-    } else if (n > 24) {
-      setError("Max 24 hrs");
-    } else {
-      setError("");
-    }
-
-    onChange({ ...e, target: { ...e.target, value: v } });
+    const h = Math.floor(num);
+    const m = Math.round((num - h) * 60);
+    return { hours: h, minutes: m };
   };
 
-  const handleBlur = (e) => {
-    const n = parseFloat(e.target.value);
-    if (!isNaN(n) && n >= 0 && n <= 24) {
-      const cleaned = n.toString();
-      inputRef.current.value = cleaned;
-      onChange({ ...e, target: { ...e.target, value: cleaned } });
+  // Update internal state when value changes externally
+  useEffect(() => {
+    const parsed = parseTime(value);
+    setHours(parsed.hours);
+    setMinutes(parsed.minutes);
+  }, [value]);
+
+  // Convert hours and minutes to decimal for parent
+  const updateParent = (h, m) => {
+    const totalMinutes = h * 60 + m;
+    const decimalHours = totalMinutes / 60;
+    const rounded = Math.round(decimalHours * 100) / 100;
+    onChange?.({ target: { value: String(rounded) } });
+  };
+
+  const handleHoursChange = (e) => {
+    let val = e.target.value;
+    if (val === "") {
+      setHours(0);
+      updateParent(0, minutes);
+      return;
+    }
+
+    let h = parseInt(val);
+    if (isNaN(h)) h = 0;
+    if (h < 0) h = 0;
+
+    const maxH = Math.floor(maxHours);
+    if (h > maxH) h = maxH;
+
+    setHours(h);
+    updateParent(h, minutes);
+    setError("");
+  };
+
+  const handleMinutesChange = (e) => {
+    let val = e.target.value;
+    if (val === "") {
+      setMinutes(0);
+      updateParent(hours, 0);
+      return;
+    }
+
+    let m = parseInt(val);
+    if (isNaN(m)) m = 0;
+    if (m < 0) m = 0;
+    if (m > 59) m = 59;
+
+    const totalMinutes = hours * 60 + m;
+    const maxTotalMinutes = Math.floor(maxHours * 60);
+    if (totalMinutes > maxTotalMinutes && maxHours > 0) {
+      setError(`Max ${maxHours} hrs`);
+      const cappedMinutes = maxTotalMinutes - hours * 60;
+      if (cappedMinutes >= 0) {
+        setMinutes(cappedMinutes);
+        updateParent(hours, cappedMinutes);
+      }
+      return;
+    }
+
+    setMinutes(m);
+    updateParent(hours, m);
+    setError("");
+  };
+
+  const handleHoursBlur = () => {
+    if (isNaN(hours) || hours < 0) {
+      setHours(0);
+      updateParent(0, minutes);
+    }
+    const maxH = Math.floor(maxHours);
+    if (hours > maxH) {
+      setHours(maxH);
+      updateParent(maxH, minutes);
     }
     setError("");
   };
 
+  const handleMinutesBlur = () => {
+    if (isNaN(minutes) || minutes < 0) {
+      setMinutes(0);
+      updateParent(hours, 0);
+    }
+    if (minutes > 59) {
+      setMinutes(59);
+      updateParent(hours, 59);
+    }
+    setError("");
+  };
+
+  const isMaxedOut =
+    maxHours > 0 && hours * 60 + minutes >= Math.floor(maxHours * 60);
+
   return (
-    <div className="relative w-full">
-      <input
-        ref={inputRef}
-        type="text"
-        inputMode="decimal"
-        defaultValue={value}
-        placeholder="0"
-        onChange={handleChange}
-        onBlur={handleBlur}
-        className={`w-full px-3 py-2 pr-10 border rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent bg-white dark:bg-gray-700 text-gray-900 dark:text-white
-          ${error ? "border-red-400 dark:border-red-500" : "border-gray-300 dark:border-gray-600"}
-          ${className}`}
-        required={required}
-      />
-      <div className="absolute right-3 top-1/2 -translate-y-1/2 text-gray-400 dark:text-gray-500 pointer-events-none">
-        <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 8v4l3 3m6-3a9 9 0 11-18 0 9 9 0 0118 0z" />
-        </svg>
+    <div className={`relative w-full ${className}`}>
+      <div className="flex items-center gap-1 bg-[var(--surface2)] border border-[var(--border)] rounded-lg focus-within:border-green-500 focus-within:ring-2 focus-within:ring-green-500/20 transition-all">
+        <input
+          ref={hoursRef}
+          type="number"
+          value={hours}
+          onChange={handleHoursChange}
+          onBlur={handleHoursBlur}
+          min="0"
+          max={Math.floor(maxHours)}
+          disabled={disabled}
+          className="w-12 px-1 py-2 bg-transparent border-0 text-center text-sm text-[var(--text)] focus:outline-none [appearance:textfield] [&::-webkit-outer-spin-button]:appearance-none [&::-webkit-inner-spin-button]:appearance-none"
+          placeholder="0"
+        />
+        <span className="text-xs text-[var(--muted)]">h</span>
+        <input
+          ref={minutesRef}
+          type="number"
+          value={minutes}
+          onChange={handleMinutesChange}
+          onBlur={handleMinutesBlur}
+          min="0"
+          max="59"
+          disabled={disabled || isMaxedOut}
+          className="w-12 px-1 py-2 bg-transparent border-0 text-center text-sm text-[var(--text)] focus:outline-none [appearance:textfield] [&::-webkit-outer-spin-button]:appearance-none [&::-webkit-inner-spin-button]:appearance-none"
+          placeholder="00"
+        />
+        <span className="text-xs text-[var(--muted)]">m</span>
       </div>
+
       {error && (
-        <p className="absolute -bottom-5 left-0 text-xs text-red-500">{error}</p>
+        <p className="absolute -bottom-5 left-0 text-xs text-red-500">
+          {error}
+        </p>
       )}
     </div>
   );
