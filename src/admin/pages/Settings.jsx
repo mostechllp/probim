@@ -1,5 +1,6 @@
-// Settings.jsx
-import { useState } from "react";
+// Settings.jsx - Using useSearchParams
+import { useState, useEffect } from "react";
+import { useSearchParams } from "react-router-dom";
 import ProfileTab from "../components/settings/ProfileTab";
 import SecurityTab from "../components/settings/SecurityTab";
 import ThemeTab from "../components/settings/ThemeTab";
@@ -7,7 +8,16 @@ import WorkingHoursTab from "../components/settings/WorkingHoursTab";
 import PublicHolidaysTab from "../components/settings/PublicHolidaysTab";
 
 const Settings = () => {
-  const [activeTab, setActiveTab] = useState("profile");
+  const [searchParams, setSearchParams] = useSearchParams();
+  
+  // Get tab from URL query parameter or default to "profile"
+  const getTabFromUrl = () => {
+    const tab = searchParams.get("tab");
+    const validTabs = ["profile", "security", "working-hours", "public-holidays", "theme"];
+    return tab && validTabs.includes(tab) ? tab : "profile";
+  };
+
+  const [activeTab, setActiveTab] = useState(getTabFromUrl());
 
   const tabs = [
     { id: "profile", label: "Profile", icon: "fas fa-user", color: "blue" },
@@ -16,6 +26,20 @@ const Settings = () => {
     { id: "public-holidays", label: "Public Holidays", icon: "fas fa-calendar-alt", color: "red" },
     { id: "theme", label: "Others", icon: "fas fa-palette", color: "orange" },
   ];
+
+  // Update URL when tab changes
+  const handleTabChange = (tabId) => {
+    setActiveTab(tabId);
+    setSearchParams({ tab: tabId });
+  };
+
+  // Sync state with URL when back/forward buttons are used
+  useEffect(() => {
+    const tabFromUrl = getTabFromUrl();
+    if (tabFromUrl !== activeTab) {
+      setActiveTab(tabFromUrl);
+    }
+  }, [searchParams]);
 
   const getColorClasses = (color, isActive) => {
     if (isActive) {
@@ -61,7 +85,7 @@ const Settings = () => {
             {tabs.map((tab) => (
               <button
                 key={tab.id}
-                onClick={() => setActiveTab(tab.id)}
+                onClick={() => handleTabChange(tab.id)}
                 className={`w-full flex items-center gap-3 p-4 transition-all border-b border-gray-100 dark:border-gray-700 last:border-0 ${
                   activeTab === tab.id
                     ? "bg-green-50 dark:bg-green-900/20"

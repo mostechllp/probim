@@ -9,6 +9,8 @@ import {
   FiX,
   FiCheck,
   FiAlertCircle,
+  FiChevronLeft,
+  FiChevronRight,
 } from "react-icons/fi";
 import { showToast } from "../../components/common/Toast";
 import DateInput from "../../components/common/DateInput";
@@ -40,22 +42,15 @@ const Calendar = ({
 
   const { daysInMonth, firstDayOfMonth } = getDaysInMonth(currentMonth);
 
-  // In the Calendar component, update the getHolidayForDate function:
-const getHolidayForDate = (day) => {
-  const year = currentMonth.getFullYear();
-  const month = String(currentMonth.getMonth() + 1).padStart(2, "0");
-  const dayStr = String(day).padStart(2, "0");
-  const dateStr = `${year}-${month}-${dayStr}`;
-  
-  console.log("🔍 Looking for holiday on:", dateStr);
-  console.log("📋 Available holidays:", holidays);
-  console.log("📋 Holiday dates:", holidays.map(h => h.date));
-  
-  const found = holidays.find((h) => h.date === dateStr);
-  console.log("✅ Found holiday:", found);
-  
-  return found;
-};
+  // Get ALL holidays for a specific date (returns array)
+  const getHolidaysForDate = (day) => {
+    const year = currentMonth.getFullYear();
+    const month = String(currentMonth.getMonth() + 1).padStart(2, "0");
+    const dayStr = String(day).padStart(2, "0");
+    const dateStr = `${year}-${month}-${dayStr}`;
+    
+    return holidays.filter((h) => h.date === dateStr);
+  };
 
   const isToday = (day) => {
     const today = new Date();
@@ -88,18 +83,8 @@ const getHolidayForDate = (day) => {
   };
 
   const monthNames = [
-    "January",
-    "February",
-    "March",
-    "April",
-    "May",
-    "June",
-    "July",
-    "August",
-    "September",
-    "October",
-    "November",
-    "December",
+    "January", "February", "March", "April", "May", "June",
+    "July", "August", "September", "October", "November", "December",
   ];
 
   const dayNames = ["Sun", "Mon", "Tue", "Wed", "Thu", "Fri", "Sat"];
@@ -112,7 +97,7 @@ const getHolidayForDate = (day) => {
           onClick={handlePrevMonth}
           className="p-2 hover:bg-gray-100 dark:hover:bg-gray-700 rounded-lg transition-colors"
         >
-          <i className="fas fa-chevron-left"></i>
+          <FiChevronLeft />
         </button>
         <div className="flex items-center gap-3">
           <h3 className="text-lg font-semibold text-gray-800 dark:text-gray-200">
@@ -135,7 +120,7 @@ const getHolidayForDate = (day) => {
           onClick={handleNextMonth}
           className="p-2 hover:bg-gray-100 dark:hover:bg-gray-700 rounded-lg transition-colors"
         >
-          <i className="fas fa-chevron-right"></i>
+          <FiChevronRight />
         </button>
       </div>
 
@@ -158,7 +143,7 @@ const getHolidayForDate = (day) => {
         ))}
         {Array.from({ length: daysInMonth }, (_, i) => {
           const day = i + 1;
-          const holiday = getHolidayForDate(day);
+          const holidaysForDate = getHolidaysForDate(day);
           const isSelected =
             selectedDate &&
             selectedDate.getDate() === day &&
@@ -183,8 +168,16 @@ const getHolidayForDate = (day) => {
                   {day}
                 </span>
               </div>
-              {holiday && (
-                <div className="absolute bottom-0 left-1/2 transform -translate-x-1/2 w-1.5 h-1.5 bg-red-500 rounded-full"></div>
+              {/* Show multiple dots if there are multiple holidays */}
+              {holidaysForDate.length > 0 && (
+                <div className="absolute bottom-0 left-1/2 transform -translate-x-1/2 flex gap-0.5">
+                  {holidaysForDate.map((_, index) => (
+                    <div
+                      key={index}
+                      className="w-1.5 h-1.5 bg-red-500 rounded-full"
+                    ></div>
+                  ))}
+                </div>
               )}
             </div>
           );
@@ -194,8 +187,8 @@ const getHolidayForDate = (day) => {
       {/* Holiday Details for Selected Date */}
       <div className="p-4 border-t border-gray-200 dark:border-gray-700">
         {selectedDate ? (
-          <div className="flex items-center justify-between">
-            <div>
+          <div className="flex items-start justify-between">
+            <div className="flex-1">
               <div className="text-sm font-medium text-gray-700 dark:text-gray-300">
                 {selectedDate.toLocaleDateString("en-US", {
                   weekday: "long",
@@ -206,24 +199,34 @@ const getHolidayForDate = (day) => {
               </div>
               {(() => {
                 const dateStr = `${selectedDate.getFullYear()}-${String(selectedDate.getMonth() + 1).padStart(2, "0")}-${String(selectedDate.getDate()).padStart(2, "0")}`;
-                const holiday = holidays.find((h) => h.date === dateStr);
-                return holiday ? (
-                  <div className="flex items-center gap-2 mt-1">
-                    <span className="text-sm text-red-500 font-medium">
-                      🎉 {holiday.name}
-                    </span>
-                    <button
-                      onClick={() => onEditHoliday(holiday)}
-                      className="p-1 text-blue-500 hover:bg-blue-50 dark:hover:bg-blue-900/20 rounded transition-colors"
-                    >
-                      <FiEdit2 size={14} />
-                    </button>
-                  </div>
-                ) : (
-                  <div className="text-xs text-gray-400 mt-1">
-                    No holiday on this date
-                  </div>
-                );
+                const holidaysForDate = holidays.filter((h) => h.date === dateStr);
+                
+                if (holidaysForDate.length > 0) {
+                  return (
+                    <div className="mt-1 space-y-1">
+                      {holidaysForDate.map((holiday, index) => (
+                        <div key={holiday.id} className="flex items-center gap-2">
+                          <span className="text-sm text-red-500 font-medium">
+                            🎉 {holiday.name}
+                          </span>
+                          <button
+                            onClick={() => onEditHoliday(holiday)}
+                            className="p-1 text-blue-500 hover:bg-blue-50 dark:hover:bg-blue-900/20 rounded transition-colors"
+                            title="Edit"
+                          >
+                            <FiEdit2 size={14} />
+                          </button>
+                        </div>
+                      ))}
+                    </div>
+                  );
+                } else {
+                  return (
+                    <div className="text-xs text-gray-400 mt-1">
+                      No holiday on this date
+                    </div>
+                  );
+                }
               })()}
             </div>
             <button
@@ -231,7 +234,7 @@ const getHolidayForDate = (day) => {
                 onDateSelect(selectedDate);
                 onAddClick();
               }}
-              className="px-3 py-1.5 bg-green-500 text-white rounded-lg text-sm font-medium hover:bg-green-600 transition-colors flex items-center gap-1"
+              className="px-3 py-1.5 bg-green-500 text-white rounded-lg text-sm font-medium hover:bg-green-600 transition-colors flex items-center gap-1 flex-shrink-0 ml-2"
             >
               <FiPlus size={14} />
               Add Holiday
@@ -247,7 +250,7 @@ const getHolidayForDate = (day) => {
   );
 };
 
-// Holiday Modal Component
+// Holiday Modal Component - Keep as is
 const HolidayModal = ({ isOpen, onClose, onSave, holiday, loading }) => {
   const [formData, setFormData] = useState({
     name: "",
@@ -379,7 +382,7 @@ const HolidayModal = ({ isOpen, onClose, onSave, holiday, loading }) => {
   );
 };
 
-// Delete Confirmation Modal
+// Delete Confirmation Modal - Keep as is
 const DeleteConfirmModal = ({
   isOpen,
   onClose,
@@ -442,7 +445,7 @@ const DeleteConfirmModal = ({
   );
 };
 
-// Main PublicHolidaysTab Component
+// Main PublicHolidaysTab Component - Keep as is
 const PublicHolidaysTab = () => {
   const dispatch = useDispatch();
   const { holidays, loading } = useSelector(
