@@ -18,7 +18,6 @@ import {
   updatePublicHoliday,
   deletePublicHoliday,
 } from "../../store/slices/publicHolidaySlice";
-import { createPortal } from "react-dom";
 
 // Calendar Component
 const Calendar = ({
@@ -40,10 +39,22 @@ const Calendar = ({
 
   const { daysInMonth, firstDayOfMonth } = getDaysInMonth(currentMonth);
 
-  const getHolidayForDate = (day) => {
-    const dateStr = `${currentMonth.getFullYear()}-${String(currentMonth.getMonth() + 1).padStart(2, "0")}-${String(day).padStart(2, "0")}`;
-    return holidays.find((h) => h.date === dateStr);
-  };
+  // In the Calendar component, update the getHolidayForDate function:
+const getHolidayForDate = (day) => {
+  const year = currentMonth.getFullYear();
+  const month = String(currentMonth.getMonth() + 1).padStart(2, "0");
+  const dayStr = String(day).padStart(2, "0");
+  const dateStr = `${year}-${month}-${dayStr}`;
+  
+  console.log("🔍 Looking for holiday on:", dateStr);
+  console.log("📋 Available holidays:", holidays);
+  console.log("📋 Holiday dates:", holidays.map(h => h.date));
+  
+  const found = holidays.find((h) => h.date === dateStr);
+  console.log("✅ Found holiday:", found);
+  
+  return found;
+};
 
   const isToday = (day) => {
     const today = new Date();
@@ -236,7 +247,6 @@ const Calendar = ({
 };
 
 // Holiday Modal Component
-// Holiday Modal Component - Updated to fill entire blur
 const HolidayModal = ({ isOpen, onClose, onSave, holiday, loading }) => {
   const [formData, setFormData] = useState({
     name: "",
@@ -275,10 +285,9 @@ const HolidayModal = ({ isOpen, onClose, onSave, holiday, loading }) => {
 
   if (!isOpen) return null;
 
-  return createPortal(
+  return (
     <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 backdrop-blur-sm animate-fade-in">
       <div className="bg-white dark:bg-gray-800 rounded-xl w-full max-w-md shadow-2xl animate-slide-up mx-4">
-        {/* Modal Header */}
         <div className="flex justify-between items-center p-5 border-b border-gray-200 dark:border-gray-700">
           <h3 className="text-lg font-bold text-gray-800 dark:text-gray-200">
             {holiday ? "Edit Holiday" : "Add New Holiday"}
@@ -291,7 +300,6 @@ const HolidayModal = ({ isOpen, onClose, onSave, holiday, loading }) => {
           </button>
         </div>
 
-        {/* Modal Body */}
         <form onSubmit={handleSubmit} className="p-5 space-y-4">
           <div>
             <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">
@@ -337,7 +345,6 @@ const HolidayModal = ({ isOpen, onClose, onSave, holiday, loading }) => {
             />
           </div>
 
-          {/* Modal Footer */}
           <div className="flex justify-end gap-3 pt-4 border-t border-gray-200 dark:border-gray-700">
             <button
               type="button"
@@ -366,8 +373,7 @@ const HolidayModal = ({ isOpen, onClose, onSave, holiday, loading }) => {
           </div>
         </form>
       </div>
-    </div>,
-    document.body
+    </div>
   );
 };
 
@@ -381,7 +387,7 @@ const DeleteConfirmModal = ({
 }) => {
   if (!isOpen) return null;
 
-  return createPortal(
+  return (
     <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 backdrop-blur-sm animate-fade-in p-4">
       <div className="bg-white dark:bg-gray-800 rounded-xl w-full max-w-md shadow-2xl animate-slide-up">
         <div className="p-6">
@@ -429,8 +435,7 @@ const DeleteConfirmModal = ({
           </div>
         </div>
       </div>
-    </div>,
-    document.body
+    </div>
   );
 };
 
@@ -510,6 +515,7 @@ const PublicHolidaysTab = () => {
     const month = selectedDate.getMonth() + 1;
     const year = selectedDate.getFullYear();
     return holidays.filter((h) => {
+      if (!h.date) return false;
       const date = new Date(h.date);
       return date.getMonth() + 1 === month && date.getFullYear() === year;
     });
