@@ -5,9 +5,11 @@ import {
   fetchUnreadNotifications,
   markNotificationAsRead,
   markAllNotificationsAsRead,
+  clearSelectedNotification,
 } from "../../store/slices/notificationSlice";
 import { logoutUser } from "../../store/slices/authSlice";
 import ConfirmModal from "./ConfirmModal";
+import { showToast } from "../common/Toast";
 
 const Header = ({ onMenuClick }) => {
   const [showNotifications, setShowNotifications] = useState(false);
@@ -17,6 +19,7 @@ const Header = ({ onMenuClick }) => {
   const [avatarError, setAvatarError] = useState(false);
   const [logoutLoading, setLogoutLoading] = useState(false);
   const [markingAll, setMarkingAll] = useState(false);
+  const [markingId, setMarkingId] = useState(null);
   const notificationRef = useRef(null);
   const profileRef = useRef(null);
   const dispatch = useDispatch();
@@ -140,25 +143,36 @@ const Header = ({ onMenuClick }) => {
     return () => document.removeEventListener("mousedown", handleClickOutside);
   }, []);
 
+  // Handle marking a single notification as read
   const handleMarkAsRead = async (id) => {
+    if (markingId === id) return; // Prevent double click
+    
+    setMarkingId(id);
     console.log("Marking notification as read:", id);
+    
     try {
       await dispatch(markNotificationAsRead(id)).unwrap();
-      // After marking as read, refresh unread notifications
-      dispatch(fetchUnreadNotifications());
+      // Show toast notification
+      showToast("Notification marked as read", "success");
     } catch (error) {
       console.error("Failed to mark notification as read:", error);
+      showToast("Failed to mark notification as read", "error");
+    } finally {
+      setMarkingId(null);
     }
   };
 
+  // Handle marking all notifications as read
   const handleMarkAllRead = async () => {
+    if (markingAll) return; // Prevent double click
+    
     setMarkingAll(true);
     try {
       await dispatch(markAllNotificationsAsRead()).unwrap();
-      // After marking all as read, refresh unread notifications
-      dispatch(fetchUnreadNotifications());
+      showToast("All notifications marked as read", "success");
     } catch (error) {
       console.error("Failed to mark all as read:", error);
+      showToast("Failed to mark all as read", "error");
     } finally {
       setMarkingAll(false);
     }
@@ -300,7 +314,7 @@ const Header = ({ onMenuClick }) => {
               </button>
 
               {showNotifications && (
-                <div className="absolute top-12 right-0 w-80 bg-white dark:bg-gray-800 rounded-2xl shadow-soft-lg border border-gray-200 dark:border-gray-700 z-50 overflow-hidden">
+                <div className="absolute top-12 right-0 w-96 bg-white dark:bg-gray-800 rounded-2xl shadow-soft-lg border border-gray-200 dark:border-gray-700 z-50 overflow-hidden">
                   <div className="p-4 border-b border-gray-200 dark:border-gray-700 flex justify-between items-center">
                     <h3 className="font-semibold text-gray-800 dark:text-gray-200 flex items-center gap-2">
                       <i className="fas fa-bell text-green-500"></i>
@@ -315,10 +329,10 @@ const Header = ({ onMenuClick }) => {
                       <button
                         onClick={handleMarkAllRead}
                         disabled={markingAll}
-                        className="text-xs text-green-500 hover:text-green-600 disabled:opacity-50 disabled:cursor-not-allowed"
+                        className="text-xs text-green-500 hover:text-green-600 disabled:opacity-50 disabled:cursor-not-allowed flex items-center gap-1"
                       >
                         {markingAll ? (
-                          <i className="fas fa-spinner fa-spin mr-1"></i>
+                          <i className="fas fa-spinner fa-spin"></i>
                         ) : null}
                         Mark all as read
                       </button>
@@ -341,7 +355,9 @@ const Header = ({ onMenuClick }) => {
                       notifications.map((notification) => (
                         <div
                           key={notification.id}
-                          className="p-3 border-b border-gray-200 dark:border-gray-700 cursor-pointer transition-colors hover:bg-gray-50 dark:hover:bg-gray-700"
+                          className={`p-3 border-b border-gray-200 dark:border-gray-700 cursor-pointer transition-colors hover:bg-gray-50 dark:hover:bg-gray-700 ${
+                            !notification.read ? "bg-green-50 dark:bg-green-900/20" : ""
+                          } ${markingId === notification.id ? "opacity-50" : ""}`}
                           onClick={() => handleMarkAsRead(notification.id)}
                         >
                           <div className="flex items-start gap-3">
@@ -360,7 +376,12 @@ const Header = ({ onMenuClick }) => {
                                 <small className="text-xs text-gray-400">
                                   {formatNotificationTime(notification.created_at)}
                                 </small>
-                                <span className="w-1.5 h-1.5 bg-green-500 rounded-full flex-shrink-0 animate-pulse"></span>
+                                {!notification.read && markingId !== notification.id && (
+                                  <span className="w-1.5 h-1.5 bg-green-500 rounded-full flex-shrink-0 animate-pulse"></span>
+                                )}
+                                {markingId === notification.id && (
+                                  <i className="fas fa-spinner fa-spin text-xs text-green-500"></i>
+                                )}
                               </div>
                             </div>
                           </div>
