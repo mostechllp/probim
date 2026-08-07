@@ -377,7 +377,7 @@ const Notifications = () => {
                     <div className="flex items-center gap-2 flex-shrink-0">
                       <button
                         onClick={() => handleViewNotification(notification)}
-                        className="px-3 py-1.5 bg-blue-500 text-white rounded-lg text-xs font-medium hover:bg-blue-600 transition-colors flex items-center gap-1"
+                        className="px-3 py-1.5 bg-green-500 text-white rounded-lg text-xs font-medium hover:bg-blue-600 transition-colors flex items-center gap-1"
                       >
                         <FiEye className="text-xs" />
                         View

@@ -31,7 +31,7 @@ export const fetchUnreadNotifications = createAsyncThunk(
   "notifications/fetchUnreadNotifications",
   async (_, { rejectWithValue }) => {
     try {
-      const res = await apiClient.get("/admin/notifications/unread");
+      const res = await apiClient.get("/admin/notifications");
       console.log("Unread notifications API response:", res.data);
       
       let notificationsData = [];
@@ -89,21 +89,21 @@ export const fetchNotificationById = createAsyncThunk(
   },
 );
 
-// Mark a notification as read
+// Mark a notification as read - REMOVE it from the list instead of just marking
 export const markNotificationAsRead = createAsyncThunk(
   "notifications/markNotificationAsRead",
   async (id, { rejectWithValue }) => {
     try {
       const res = await apiClient.post(`/admin/notifications/${id}/mark-as-read`);
       console.log("Mark as read response:", res.data);
-      return { id, data: res.data?.data || res.data };
+      return id; // Just return the ID to remove it from the list
     } catch (err) {
       return rejectWithValue(err.response?.data || "Error");
     }
   },
 );
 
-// Mark all notifications as read
+// Mark all notifications as read - CLEAR the list
 export const markAllNotificationsAsRead = createAsyncThunk(
   "notifications/markAllNotificationsAsRead",
   async (_, { rejectWithValue }) => {
@@ -128,23 +128,15 @@ const notificationSlice = createSlice({
   name: "notifications",
   initialState,
   reducers: {
-    markAsRead: (state, action) => {
-      const notification = state.notifications.find(
-        (n) => n.id === action.payload,
-      );
-      if (notification && !notification.read) {
-        notification.read = true;
-        notification.read_at = new Date().toISOString();
-        state.unreadCount = Math.max(0, state.unreadCount - 1);
-      }
+    // Remove a notification from the list
+    removeNotification: (state, action) => {
+      const id = action.payload;
+      state.notifications = state.notifications.filter((n) => n.id !== id);
+      state.unreadCount = state.notifications.length;
     },
-    markAllRead: (state) => {
-      state.notifications.forEach((n) => {
-        if (!n.read) {
-          n.read = true;
-          n.read_at = new Date().toISOString();
-        }
-      });
+    // Clear all notifications
+    clearAllNotifications: (state) => {
+      state.notifications = [];
       state.unreadCount = 0;
     },
     clearSelectedNotification: (state) => {
@@ -189,7 +181,6 @@ const notificationSlice = createSlice({
             message = `Notification for employee ${notificationData.employee}`;
           }
           
-          // Check if notification is read
           const isRead = !!n.read_at;
           
           return {
@@ -208,25 +199,23 @@ const notificationSlice = createSlice({
         });
         
         state.unreadCount = state.notifications.filter((n) => !n.read).length;
-        console.log("Processed notifications:", state.notifications);
-        console.log("Unread count:", state.unreadCount);
       })
       .addCase(fetchNotifications.rejected, (state, action) => {
         state.loading = false;
         console.error("Fetch notifications rejected:", action.payload);
       })
 
-      // Fetch unread notifications
+      // Fetch unread notifications - REPLACE the list with unread ones
       .addCase(fetchUnreadNotifications.pending, (state) => {
         state.loading = true;
       })
       .addCase(fetchUnreadNotifications.fulfilled, (state, action) => {
         state.loading = false;
         const rawNotifications = action.payload || [];
-        const unreadIds = new Set(rawNotifications.map(n => n.id));
-        state.notifications = state.notifications.filter(n => !unreadIds.has(n.id));
+        console.log("Raw unread notifications:", rawNotifications);
         
-        const newNotifications = rawNotifications.map((n) => {
+        // Transform notifications
+        const transformedNotifications = rawNotifications.map((n) => {
           const notificationData = n.data || {};
           const notificationType = notificationData.type || 'general';
           
@@ -254,15 +243,14 @@ const notificationSlice = createSlice({
             message = `Notification for employee ${notificationData.employee}`;
           }
           
-          const isRead = !!n.read_at;
-          
+          // All notifications from this endpoint are unread
           return {
             id: n.id,
             title: title,
             message: message,
             time: n.created_at ? new Date(n.created_at).toLocaleString() : 'Just now',
-            read: isRead,
-            read_at: n.read_at || null,
+            read: false,
+            read_at: null,
             created_at: n.created_at,
             updated_at: n.updated_at,
             data: notificationData,
@@ -270,8 +258,11 @@ const notificationSlice = createSlice({
             raw: n,
           };
         });
-        state.notifications = [...newNotifications, ...state.notifications];
-        state.unreadCount = state.notifications.filter((n) => !n.read).length;
+        
+        state.notifications = transformedNotifications;
+        state.unreadCount = transformedNotifications.length;
+        console.log("Processed unread notifications:", state.notifications);
+        console.log("Unread count:", state.unreadCount);
       })
       .addCase(fetchUnreadNotifications.rejected, (state, action) => {
         state.loading = false;
@@ -333,48 +324,33 @@ const notificationSlice = createSlice({
         console.error("Fetch notification by ID rejected:", action.payload);
       })
 
-      // Mark notification as read
+      // Mark notification as read - REMOVE it from the list
       .addCase(markNotificationAsRead.fulfilled, (state, action) => {
-        const { id, data } = action.payload;
-        const notification = state.notifications.find(
-          (n) => n.id === id,
-        );
-        if (notification && !notification.read) {
-          notification.read = true;
-          notification.read_at = data?.read_at || new Date().toISOString();
-          state.unreadCount = Math.max(0, state.unreadCount - 1);
-        }
-        // Also update selected notification if it's the same
+        const id = action.payload;
+        // Remove the notification from the list
+        state.notifications = state.notifications.filter((n) => n.id !== id);
+        state.unreadCount = state.notifications.length;
+        
+        // Also clear selected notification if it's the same
         if (state.selectedNotification?.id === id) {
-          state.selectedNotification.read = true;
-          state.selectedNotification.read_at = data?.read_at || new Date().toISOString();
+          state.selectedNotification = null;
         }
-        console.log("Notification marked as read:", id);
-        console.log("Updated unread count:", state.unreadCount);
+        console.log("Notification removed (marked as read):", id);
+        console.log("Remaining unread count:", state.unreadCount);
       })
       .addCase(markNotificationAsRead.rejected, (state, action) => {
         console.error("Mark notification as read failed:", action.payload);
       })
 
-      // Mark all notifications as read
+      // Mark all notifications as read - CLEAR the list
       .addCase(markAllNotificationsAsRead.pending, (state) => {
         state.loading = true;
       })
       .addCase(markAllNotificationsAsRead.fulfilled, (state) => {
         state.loading = false;
-        const now = new Date().toISOString();
-        state.notifications.forEach((n) => {
-          if (!n.read) {
-            n.read = true;
-            n.read_at = now;
-          }
-        });
+        state.notifications = [];
         state.unreadCount = 0;
-        if (state.selectedNotification && !state.selectedNotification.read) {
-          state.selectedNotification.read = true;
-          state.selectedNotification.read_at = now;
-        }
-        console.log("All notifications marked as read");
+        console.log("All notifications cleared (marked all as read)");
       })
       .addCase(markAllNotificationsAsRead.rejected, (state, action) => {
         state.loading = false;
@@ -383,5 +359,9 @@ const notificationSlice = createSlice({
   },
 });
 
-export const { markAsRead, markAllRead, clearSelectedNotification } = notificationSlice.actions;
+export const { 
+  removeNotification,
+  clearAllNotifications,
+  clearSelectedNotification,
+} = notificationSlice.actions;
 export default notificationSlice.reducer;
