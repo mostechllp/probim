@@ -129,6 +129,9 @@ const LettersAndClearance = lazy(
 const ChecklistCategories = lazy(
   () => import("./admin/pages/ChecklistCategoriesManagement"),
 );
+const Notifications = lazy(
+  () => import("./admin/pages/Notifications"),
+);
 
 // Lazy load pages - Employee
 const EmployeeDashboard = lazy(() => import("./employee/pages/Dashboard"));
@@ -226,6 +229,7 @@ function App() {
           <Route path="employees/edit/:id" element={<EditEmployee />} />
           <Route path="employees/:id" element={<EmployeeDetails />} />
           <Route path="organizations" element={<Organizations />} />
+          <Route path="notifications" element={<Notifications />} />
           <Route
             path="organizations/add-organization"
             element={<AddOrganization />}
