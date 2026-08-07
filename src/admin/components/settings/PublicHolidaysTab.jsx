@@ -231,8 +231,8 @@ const Calendar = ({
             </div>
             <button
               onClick={() => {
-                onDateSelect(selectedDate);
-                onAddClick();
+                // Pass the selected date to prefilled
+                onAddClick(selectedDate, true);
               }}
               className="px-3 py-1.5 bg-green-500 text-white rounded-lg text-sm font-medium hover:bg-green-600 transition-colors flex items-center gap-1 flex-shrink-0 ml-2"
             >
@@ -250,8 +250,8 @@ const Calendar = ({
   );
 };
 
-// Holiday Modal Component - Keep as is
-const HolidayModal = ({ isOpen, onClose, onSave, holiday, loading }) => {
+// Holiday Modal Component - Updated to accept prefilled date
+const HolidayModal = ({ isOpen, onClose, onSave, holiday, loading, prefilledDate }) => {
   const [formData, setFormData] = useState({
     name: "",
     date: "",
@@ -265,14 +265,26 @@ const HolidayModal = ({ isOpen, onClose, onSave, holiday, loading }) => {
         date: holiday.date || "",
         description: holiday.description || "",
       });
+    } else if (prefilledDate) {
+      // Prefill the date when adding a new holiday from selected date
+      const year = prefilledDate.getFullYear();
+      const month = String(prefilledDate.getMonth() + 1).padStart(2, "0");
+      const day = String(prefilledDate.getDate()).padStart(2, "0");
+      const dateStr = `${year}-${month}-${day}`;
+      setFormData({
+        name: "",
+        date: dateStr,
+        description: "",
+      });
     } else {
+      // No prefilled date - user selects from date picker
       setFormData({
         name: "",
         date: "",
         description: "",
       });
     }
-  }, [holiday, isOpen]);
+  }, [holiday, prefilledDate, isOpen]);
 
   const handleDateChange = (dateValue) => {
     setFormData({ ...formData, date: dateValue });
@@ -445,7 +457,7 @@ const DeleteConfirmModal = ({
   );
 };
 
-// Main PublicHolidaysTab Component - Keep as is
+// Main PublicHolidaysTab Component
 const PublicHolidaysTab = () => {
   const dispatch = useDispatch();
   const { holidays, loading } = useSelector(
@@ -454,6 +466,7 @@ const PublicHolidaysTab = () => {
   const [selectedDate, setSelectedDate] = useState(new Date());
   const [showModal, setShowModal] = useState(false);
   const [editingHoliday, setEditingHoliday] = useState(null);
+  const [prefilledDate, setPrefilledDate] = useState(null);
   const [showDeleteModal, setShowDeleteModal] = useState(false);
   const [deletingHoliday, setDeletingHoliday] = useState(null);
   const [saving, setSaving] = useState(false);
@@ -463,13 +476,16 @@ const PublicHolidaysTab = () => {
     dispatch(fetchPublicHolidays());
   }, [dispatch]);
 
-  const handleAddClick = () => {
+  const handleAddClick = (date, shouldPrefill = false) => {
     setEditingHoliday(null);
+    // Only prefill if shouldPrefill is true and a date is provided
+    setPrefilledDate(shouldPrefill && date ? date : null);
     setShowModal(true);
   };
 
   const handleEditHoliday = (holiday) => {
     setEditingHoliday(holiday);
+    setPrefilledDate(null);
     setShowModal(true);
   };
 
@@ -487,6 +503,7 @@ const PublicHolidaysTab = () => {
       }
       setShowModal(false);
       setEditingHoliday(null);
+      setPrefilledDate(null);
       dispatch(fetchPublicHolidays());
     } catch (error) {
       showToast(error || "Failed to save holiday", "error");
@@ -543,7 +560,7 @@ const PublicHolidaysTab = () => {
           </p>
         </div>
         <button
-          onClick={handleAddClick}
+          onClick={() => handleAddClick(null, false)} // No date prefilled
           className="px-4 py-2 bg-green-500 text-white rounded-lg text-sm font-semibold hover:bg-green-600 transition-colors flex items-center gap-2"
         >
           <FiPlus size={16} />
@@ -589,7 +606,7 @@ const PublicHolidaysTab = () => {
               <FiCalendar className="text-4xl mx-auto mb-2 opacity-50" />
               <p className="text-sm">No holidays this month</p>
               <button
-                onClick={handleAddClick}
+                onClick={() => handleAddClick(selectedDate, true)}
                 className="mt-2 text-sm text-green-500 hover:text-green-600 font-medium"
               >
                 Add a holiday
@@ -652,10 +669,12 @@ const PublicHolidaysTab = () => {
         onClose={() => {
           setShowModal(false);
           setEditingHoliday(null);
+          setPrefilledDate(null);
         }}
         onSave={handleSaveHoliday}
         holiday={editingHoliday}
         loading={saving}
+        prefilledDate={prefilledDate}
       />
 
       {/* Delete Confirmation Modal */}
