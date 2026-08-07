@@ -18,6 +18,7 @@ import {
   updatePublicHoliday,
   deletePublicHoliday,
 } from "../../store/slices/publicHolidaySlice";
+import { createPortal } from "react-dom";
 
 // Calendar Component
 const Calendar = ({
@@ -285,7 +286,7 @@ const HolidayModal = ({ isOpen, onClose, onSave, holiday, loading }) => {
 
   if (!isOpen) return null;
 
-  return (
+  return createPortal(
     <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 backdrop-blur-sm animate-fade-in">
       <div className="bg-white dark:bg-gray-800 rounded-xl w-full max-w-md shadow-2xl animate-slide-up mx-4">
         <div className="flex justify-between items-center p-5 border-b border-gray-200 dark:border-gray-700">
@@ -373,7 +374,8 @@ const HolidayModal = ({ isOpen, onClose, onSave, holiday, loading }) => {
           </div>
         </form>
       </div>
-    </div>
+    </div>,
+    document.body
   );
 };
 
@@ -387,7 +389,7 @@ const DeleteConfirmModal = ({
 }) => {
   if (!isOpen) return null;
 
-  return (
+  return createPortal(
     <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 backdrop-blur-sm animate-fade-in p-4">
       <div className="bg-white dark:bg-gray-800 rounded-xl w-full max-w-md shadow-2xl animate-slide-up">
         <div className="p-6">
@@ -435,7 +437,8 @@ const DeleteConfirmModal = ({
           </div>
         </div>
       </div>
-    </div>
+    </div>,
+    document.body
   );
 };
 
