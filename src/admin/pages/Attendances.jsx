@@ -189,192 +189,176 @@ const Attendances = () => {
     }
   }, [records, pendingDate, pendingDayModal]);
 
+  const formatStatus = (status) => {
+  if (!status) return "";
+
+  const normalized = String(status).trim().toLowerCase();
+
+  if (normalized === "weeklyoff" || normalized === "weekly off") {
+    return "Weekly Off";
+  }
+
+  if (normalized === "halfday" || normalized === "half day") {
+    return "Half Day";
+  }
+
+  if (normalized === "fullday" || normalized === "full day") {
+    return "Full Day";
+  }
+
+  return normalized.charAt(0).toUpperCase() + normalized.slice(1);
+};
+
   const { getDayStatus, tileContent, tileClassName } = useMemo(() => {
     const getDayStatusFn = (date) => {
-      const dateStrDDMMYYYY = formatDateToDDMMYYYY(date);
-      const year = date.getFullYear();
-      const month = String(date.getMonth() + 1).padStart(2, "0");
-      const day = String(date.getDate()).padStart(2, "0");
-      const dateStrApi = `${year}-${month}-${day}`;
+  const dateStrDDMMYYYY = formatDateToDDMMYYYY(date);
 
-      // Filter records by date - DON'T filter out future dates
-      const dayRecords = records.filter((r) => {
-        const recordDate = r.date || r.log_date || r.attendance_date;
-        if (!recordDate) return false;
+  const year = date.getFullYear();
+  const month = String(date.getMonth() + 1).padStart(2, "0");
+  const day = String(date.getDate()).padStart(2, "0");
+  const dateStrApi = `${year}-${month}-${day}`;
 
-        const recordDateStr = String(recordDate);
-        if (recordDateStr === dateStrDDMMYYYY) return true;
-        if (recordDateStr === dateStrApi) return true;
-        if (formatDateToDDMMYYYY(recordDateStr) === dateStrDDMMYYYY)
-          return true;
-        return false;
-      });
+  // Find records for this date
+  const dayRecords = records.filter((r) => {
+    const recordDate = r.date || r.log_date || r.attendance_date;
 
-      if (dayRecords.length === 0) {
-        return { status: "no-data", count: 0, records: [] };
-      }
+    if (!recordDate) return false;
 
-      // Check for holiday first
-      const statuses = dayRecords.map((r) => {
-        const status = (r.status || r.attendance_status || "")
-          .toLowerCase()
-          .trim();
+    const recordDateStr = String(recordDate);
 
-        if (status === "holiday") return "holiday";
-        if (status === "weekly off" || status === "weeklyoff")
-          return "weeklyoff";
-        if (
-          status === "present" ||
-          status === "presentt" ||
-          status === "ontime" ||
-          status === "on time"
-        )
-          return "present";
-        if (status === "late") return "late";
-        if (status === "absent" || status === "absentee") return "absent";
-        if (status === "half day" || status === "halfday") return "halfday";
-        if (status === "full day" || status === "fullday") return "full day";
-        if (status === "leave") return "leave";
-        return "absent";
-      });
+    return (
+      recordDateStr === dateStrDDMMYYYY ||
+      recordDateStr === dateStrApi ||
+      formatDateToDDMMYYYY(recordDateStr) === dateStrDDMMYYYY
+    );
+  });
 
-      const uniqueStatuses = [...new Set(statuses)];
-
-      // If any record is holiday, mark the day as holiday
-      if (uniqueStatuses.includes("holiday")) {
-        return {
-          status: "holiday",
-          count: dayRecords.length,
-          records: dayRecords,
-        };
-      }
-
-      if (uniqueStatuses.length === 1) {
-        return {
-          status: uniqueStatuses[0],
-          count: dayRecords.length,
-          records: dayRecords,
-        };
-      }
-
-      return { status: "mixed", count: dayRecords.length, records: dayRecords };
+  if (dayRecords.length === 0) {
+    return {
+      status: "no-data",
+      count: 0,
+      records: [],
     };
+  }
+
+  // Get status directly from API
+  const apiStatus =
+    dayRecords[0].status ||
+    dayRecords[0].attendance_status ||
+    "";
+
+  return {
+    status: apiStatus,
+    displayStatus: formatStatus(apiStatus),
+    count: dayRecords.length,
+    records: dayRecords,
+  };
+};
 
     const tileContentFn = ({ date, view }) => {
-      if (view !== "month") return null;
+  if (view !== "month") return null;
 
-      const dayInfo = getDayStatusFn(date);
+  const dayInfo = getDayStatusFn(date);
 
-      const status = dayInfo.status;
+  if (dayInfo.status === "no-data") {
+    return null;
+  }
 
-      // No attendance record
-      if (status === "no-data") {
-        return null;
-      }
+  const status = String(dayInfo.status).toLowerCase().trim();
+  const displayStatus = formatStatus(dayInfo.status);
 
-      // Weekend
-      const dayOfWeek = date.getDay();
+  // Weekly Off
+  if (status === "weeklyoff" || status === "weekly off") {
+    return (
+      <div className="attendance-status attendance-status-weekend">
+        <span className="attendance-status-icon">○</span>
+        <span>{displayStatus}</span>
+      </div>
+    );
+  }
 
-      if (status === "weeklyoff" || dayOfWeek === 0) {
-        return (
-          <div className="attendance-status attendance-status-weekend">
-            <span className="attendance-status-icon">○</span>
+  // Holiday
+  if (status === "holiday") {
+    return (
+      <div className="attendance-status attendance-status-holiday">
+        <span className="attendance-status-icon">•</span>
+        <span>{displayStatus}</span>
+      </div>
+    );
+  }
 
-            <span>Weekend</span>
-          </div>
-        );
-      }
+  // Present
+  if (
+    status === "present" ||
+    status === "presentt" ||
+    status === "ontime" ||
+    status === "on time"
+  ) {
+    return (
+      <div className="attendance-status attendance-status-present">
+        <span className="attendance-status-icon">✓</span>
+        <span>{displayStatus}</span>
+      </div>
+    );
+  }
 
-      // Holiday
-      if (status === "holiday") {
-        return (
-          <div className="attendance-status attendance-status-holiday">
-            <span className="attendance-status-icon">•</span>
+  // Absent
+  if (status === "absent" || status === "absentee") {
+    return (
+      <div className="attendance-status attendance-status-absent">
+        <span className="attendance-status-icon">×</span>
+        <span>{displayStatus}</span>
+      </div>
+    );
+  }
 
-            <span>Holiday</span>
-          </div>
-        );
-      }
+  // Late
+  if (status === "late") {
+    return (
+      <div className="attendance-status attendance-status-late">
+        <span className="attendance-status-icon">!</span>
+        <span>{displayStatus}</span>
+      </div>
+    );
+  }
 
-      // Present
-      if (status === "present") {
-        return (
-          <div className="attendance-status attendance-status-present">
-            <span className="attendance-status-icon">✓</span>
+  // Half Day
+  if (status === "halfday" || status === "half day") {
+    return (
+      <div className="attendance-status attendance-status-halfday">
+        <span className="attendance-status-icon">½</span>
+        <span>{displayStatus}</span>
+      </div>
+    );
+  }
 
-            <span>Attend</span>
-          </div>
-        );
-      }
+  // Full Day
+  if (status === "fullday" || status === "full day") {
+    return (
+      <div className="attendance-status attendance-status-present">
+        <span className="attendance-status-icon">✓</span>
+        <span>{displayStatus}</span>
+      </div>
+    );
+  }
 
-      // Absent
-      if (status === "absent") {
-        return (
-          <div className="attendance-status attendance-status-absent">
-            <span className="attendance-status-icon">×</span>
+  // Leave
+  if (status === "leave") {
+    return (
+      <div className="attendance-status attendance-status-leave">
+        <span className="attendance-status-icon">L</span>
+        <span>{displayStatus}</span>
+      </div>
+    );
+  }
 
-            <span>Non Present</span>
-          </div>
-        );
-      }
-
-      // Late
-      if (status === "late") {
-        return (
-          <div className="attendance-status attendance-status-late">
-            <span className="attendance-status-icon">!</span>
-
-            <span>Late</span>
-          </div>
-        );
-      }
-
-      // Half day
-      if (status === "halfday") {
-        return (
-          <div className="attendance-status attendance-status-halfday">
-            <span className="attendance-status-icon">½</span>
-
-            <span>Half Day</span>
-          </div>
-        );
-      }
-
-      // Full day
-      if (status === "full day") {
-        return (
-          <div className="attendance-status attendance-status-present">
-            <span className="attendance-status-icon">✓</span>
-
-            <span>Full Day</span>
-          </div>
-        );
-      }
-
-      // Leave
-      if (status === "leave") {
-        return (
-          <div className="attendance-status attendance-status-leave">
-            <span className="attendance-status-icon">L</span>
-
-            <span>Leave</span>
-          </div>
-        );
-      }
-
-      // Mixed
-      if (status === "mixed") {
-        return (
-          <div className="attendance-status attendance-status-halfday">
-            <span className="attendance-status-icon">•</span>
-
-            <span>Mixed</span>
-          </div>
-        );
-      }
-
-      return null;
-    };
+  // Any other status returned by API
+  return (
+    <div className="attendance-status">
+      <span>{displayStatus}</span>
+    </div>
+  );
+};
     const tileClassNameFn = ({ date, view }) => {
       if (view !== "month") return "";
 
@@ -406,9 +390,6 @@ const Attendances = () => {
               break;
             case "late":
               classes += " tile-late";
-              break;
-            case "mixed":
-              classes += " tile-mixed";
               break;
             case "halfday":
               classes += " tile-halfday";
@@ -565,8 +546,8 @@ const Attendances = () => {
     }
 
     if (statusLower === "holiday") {
-  return "bg-orange-100 dark:bg-orange-900/30 text-orange-600 dark:text-orange-400";
-}
+      return "bg-orange-100 dark:bg-orange-900/30 text-orange-600 dark:text-orange-400";
+    }
 
     if (statusLower === "leave") {
       return "bg-orange-100 dark:bg-orange-900/30 text-orange-600 dark:text-orange-400";
