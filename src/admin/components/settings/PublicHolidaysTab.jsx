@@ -23,6 +23,7 @@ import {
 import { createPortal } from "react-dom";
 
 // Calendar Component
+// Calendar Component
 const Calendar = ({
   selectedDate,
   onDateSelect,
@@ -30,30 +31,58 @@ const Calendar = ({
   onAddClick,
   onEditHoliday,
 }) => {
-  const [currentMonth, setCurrentMonth] = useState(new Date());
+  const [currentMonth, setCurrentMonth] = useState(
+    selectedDate ? new Date(selectedDate) : new Date()
+  );
 
   const getDaysInMonth = (date) => {
     const year = date.getFullYear();
     const month = date.getMonth();
-    const daysInMonth = new Date(year, month + 1, 0).getDate();
-    const firstDayOfMonth = new Date(year, month, 1).getDay();
-    return { daysInMonth, firstDayOfMonth };
+
+    return {
+      daysInMonth: new Date(year, month + 1, 0).getDate(),
+      firstDayOfMonth: new Date(year, month, 1).getDay(),
+    };
   };
 
   const { daysInMonth, firstDayOfMonth } = getDaysInMonth(currentMonth);
 
-  // Get ALL holidays for a specific date (returns array)
+  const monthNames = [
+    "January",
+    "February",
+    "March",
+    "April",
+    "May",
+    "June",
+    "July",
+    "August",
+    "September",
+    "October",
+    "November",
+    "December",
+  ];
+
+  const dayNames = ["Sun", "Mon", "Tue", "Wed", "Thu", "Fri", "Sat"];
+
+  // Get holidays for a particular day
   const getHolidaysForDate = (day) => {
     const year = currentMonth.getFullYear();
     const month = String(currentMonth.getMonth() + 1).padStart(2, "0");
     const dayStr = String(day).padStart(2, "0");
+
     const dateStr = `${year}-${month}-${dayStr}`;
-    
-    return holidays.filter((h) => h.date === dateStr);
+
+    return holidays.filter((holiday) => {
+      if (!holiday.date) return false;
+
+      // Handles YYYY-MM-DD values safely
+      return holiday.date.slice(0, 10) === dateStr;
+    });
   };
 
   const isToday = (day) => {
     const today = new Date();
+
     return (
       today.getDate() === day &&
       today.getMonth() === currentMonth.getMonth() &&
@@ -61,134 +90,251 @@ const Calendar = ({
     );
   };
 
-  const handlePrevMonth = () => {
-    setCurrentMonth(
-      new Date(currentMonth.getFullYear(), currentMonth.getMonth() - 1, 1),
+  const isSelected = (day) => {
+    if (!selectedDate) return false;
+
+    return (
+      selectedDate.getDate() === day &&
+      selectedDate.getMonth() === currentMonth.getMonth() &&
+      selectedDate.getFullYear() === currentMonth.getFullYear()
     );
   };
 
-  const handleNextMonth = () => {
-    setCurrentMonth(
-      new Date(currentMonth.getFullYear(), currentMonth.getMonth() + 1, 1),
+  const handlePrevMonth = () => {
+    const newMonth = new Date(
+      currentMonth.getFullYear(),
+      currentMonth.getMonth() - 1,
+      1
     );
+
+    setCurrentMonth(newMonth);
+
+    // Select first day of new month
+    onDateSelect(newMonth);
+  };
+
+  const handleNextMonth = () => {
+    const newMonth = new Date(
+      currentMonth.getFullYear(),
+      currentMonth.getMonth() + 1,
+      1
+    );
+
+    setCurrentMonth(newMonth);
+
+    // Select first day of new month
+    onDateSelect(newMonth);
+  };
+
+  const handleToday = () => {
+    const today = new Date();
+
+    setCurrentMonth(
+      new Date(today.getFullYear(), today.getMonth(), 1)
+    );
+
+    onDateSelect(today);
   };
 
   const handleDateClick = (day) => {
     const dateObj = new Date(
       currentMonth.getFullYear(),
       currentMonth.getMonth(),
-      day,
+      day
     );
+
     onDateSelect(dateObj);
   };
 
-  const monthNames = [
-    "January", "February", "March", "April", "May", "June",
-    "July", "August", "September", "October", "November", "December",
-  ];
-
-  const dayNames = ["Sun", "Mon", "Tue", "Wed", "Thu", "Fri", "Sat"];
-
   return (
     <div className="bg-white dark:bg-gray-800 rounded-xl border border-gray-200 dark:border-gray-700 overflow-hidden">
-      {/* Calendar Header */}
-      <div className="flex items-center justify-between p-4 border-b border-gray-200 dark:border-gray-700">
-        <button
-          onClick={handlePrevMonth}
-          className="p-2 hover:bg-gray-100 dark:hover:bg-gray-700 rounded-lg transition-colors"
-        >
-          <FiChevronLeft />
-        </button>
+
+      {/* ================= HEADER ================= */}
+      <div className="flex items-center justify-between px-5 py-4 border-b border-gray-200 dark:border-gray-700">
         <div className="flex items-center gap-3">
-          <h3 className="text-lg font-semibold text-gray-800 dark:text-gray-200">
-            {monthNames[currentMonth.getMonth()]} {currentMonth.getFullYear()}
+          <h3 className="text-base font-semibold text-gray-800 dark:text-gray-200">
+            {monthNames[currentMonth.getMonth()]}{" "}
+            {currentMonth.getFullYear()}
           </h3>
+
           <button
-            onClick={() => {
-              const today = new Date();
-              setCurrentMonth(
-                new Date(today.getFullYear(), today.getMonth(), 1),
-              );
-              onDateSelect(today);
-            }}
-            className="px-3 py-1 text-xs bg-green-500 text-white rounded-lg hover:bg-green-600 transition-colors"
+            onClick={handleToday}
+            className="px-2.5 py-1 text-xs font-medium text-green-600 bg-green-50 hover:bg-green-100 dark:bg-green-900/20 dark:hover:bg-green-900/30 rounded-md transition-colors"
           >
             Today
           </button>
         </div>
-        <button
-          onClick={handleNextMonth}
-          className="p-2 hover:bg-gray-100 dark:hover:bg-gray-700 rounded-lg transition-colors"
-        >
-          <FiChevronRight />
-        </button>
+
+        <div className="flex items-center gap-1">
+          <button
+            onClick={handlePrevMonth}
+            className="w-8 h-8 flex items-center justify-center rounded-lg text-gray-500 hover:bg-gray-100 dark:hover:bg-gray-700 transition-colors"
+          >
+            <FiChevronLeft size={18} />
+          </button>
+
+          <button
+            onClick={handleNextMonth}
+            className="w-8 h-8 flex items-center justify-center rounded-lg text-gray-500 hover:bg-gray-100 dark:hover:bg-gray-700 transition-colors"
+          >
+            <FiChevronRight size={18} />
+          </button>
+        </div>
       </div>
 
-      {/* Day Names */}
-      <div className="grid grid-cols-7 gap-1 p-2">
+      {/* ================= DAY NAMES ================= */}
+      <div className="grid grid-cols-7 border-b border-gray-200 dark:border-gray-700">
         {dayNames.map((day) => (
           <div
             key={day}
-            className="text-center text-xs font-semibold text-gray-500 dark:text-gray-400 py-2"
+            className="py-3 text-center text-xs font-semibold text-gray-500 dark:text-gray-400"
           >
             {day}
           </div>
         ))}
       </div>
 
-      {/* Calendar Grid */}
-      <div className="grid grid-cols-7 gap-1 p-2">
-        {Array.from({ length: firstDayOfMonth }, (_, i) => (
-          <div key={`empty-${i}`} className="aspect-square"></div>
+      {/* ================= CALENDAR GRID ================= */}
+      <div className="grid grid-cols-7">
+
+        {/* Empty cells before first day */}
+        {Array.from({ length: firstDayOfMonth }, (_, index) => (
+          <div
+            key={`empty-${index}`}
+            className="min-h-[110px] border-r border-b border-gray-100 dark:border-gray-700/50"
+          />
         ))}
-        {Array.from({ length: daysInMonth }, (_, i) => {
-          const day = i + 1;
+
+        {/* Days */}
+        {Array.from({ length: daysInMonth }, (_, index) => {
+          const day = index + 1;
+
           const holidaysForDate = getHolidaysForDate(day);
-          const isSelected =
-            selectedDate &&
-            selectedDate.getDate() === day &&
-            selectedDate.getMonth() === currentMonth.getMonth() &&
-            selectedDate.getFullYear() === currentMonth.getFullYear();
-          const isTodayDate = isToday(day);
+          const today = isToday(day);
+          const selected = isSelected(day);
 
           return (
             <div
               key={day}
-              className={`aspect-square relative cursor-pointer rounded-lg transition-all hover:bg-gray-100 dark:hover:bg-gray-700 ${
-                isSelected
-                  ? "ring-2 ring-green-500 bg-green-50 dark:bg-green-900/20"
-                  : ""
-              } ${isTodayDate ? "border-2 border-green-500" : ""}`}
               onClick={() => handleDateClick(day)}
+              className={`
+                group
+                relative
+                min-h-[110px]
+                p-2
+                border-r border-b border-gray-100
+                dark:border-gray-700/50
+                cursor-pointer
+                transition-colors
+
+                hover:bg-gray-50
+                dark:hover:bg-gray-700/30
+
+                ${selected ? "bg-gray-50/70 dark:bg-gray-700/20" : ""}
+              `}
             >
-              <div className="flex items-center justify-center h-full">
+
+              {/* ================= DATE NUMBER ================= */}
+              <div className="flex justify-center">
                 <span
-                  className={`text-sm ${isTodayDate ? "font-bold text-green-500" : "text-gray-700 dark:text-gray-300"}`}
+                  className={`
+                    w-7 h-7
+                    flex items-center justify-center
+                    rounded-full
+                    text-sm
+                    transition-colors
+
+                    ${
+                      today
+                        ? "bg-green-500 text-white font-bold"
+                        : "text-gray-700 dark:text-gray-300"
+                    }
+                  `}
                 >
                   {day}
                 </span>
               </div>
-              {/* Show multiple dots if there are multiple holidays */}
+
+              {/* ================= HOLIDAYS ================= */}
               {holidaysForDate.length > 0 && (
-                <div className="absolute bottom-0 left-1/2 transform -translate-x-1/2 flex gap-0.5">
-                  {holidaysForDate.map((_, index) => (
-                    <div
-                      key={index}
-                      className="w-1.5 h-1.5 bg-red-500 rounded-full"
-                    ></div>
+                <div className="mt-2 space-y-1">
+                  {holidaysForDate.map((holiday) => (
+                    <button
+                      key={holiday.id}
+                      onClick={(e) => {
+                        // Don't trigger the calendar date click
+                        e.stopPropagation();
+
+                        // Open edit modal
+                        onEditHoliday(holiday);
+                      }}
+                      className="
+                        group
+                        w-full
+                        text-left
+                        px-2
+                        py-1
+                        rounded-md
+                        bg-green-100
+                        hover:bg-green-200
+                        dark:bg-green-900/30
+                        dark:hover:bg-green-900/50
+                        text-green-700
+                        dark:text-green-300
+                        text-[11px]
+                        font-medium
+                        truncate
+                        transition-colors
+                      "
+                      title={`${holiday.name} - Click to edit`}
+                    >
+                      <span className="inline-block w-1.5 h-1.5 bg-green-500 rounded-full mr-1.5" />
+
+                      {holiday.name}
+                    </button>
                   ))}
                 </div>
               )}
+
+              {/* ================= ADD HOLIDAY ON HOVER ================= */}
+              <button
+                onClick={(e) => {
+                  e.stopPropagation();
+
+                  const dateObj = new Date(
+                    currentMonth.getFullYear(),
+                    currentMonth.getMonth(),
+                    day
+                  );
+
+                  onAddClick(dateObj, true);
+                }}
+                className="
+                  absolute
+                  bottom-1
+                  right-1
+                  opacity-0
+                  hover:opacity-100
+                  group-hover:opacity-100
+                  text-[10px]
+                  text-green-500
+                  hover:text-green-600
+                  transition-opacity
+                "
+              >
+                +
+              </button>
             </div>
           );
         })}
       </div>
 
-      {/* Holiday Details for Selected Date */}
+      {/* ================= SELECTED DATE DETAILS ================= */}
       <div className="p-4 border-t border-gray-200 dark:border-gray-700">
         {selectedDate ? (
-          <div className="flex items-start justify-between">
-            <div className="flex-1">
+          <div className="flex items-start justify-between gap-4">
+
+            <div className="flex-1 min-w-0">
               <div className="text-sm font-medium text-gray-700 dark:text-gray-300">
                 {selectedDate.toLocaleDateString("en-US", {
                   weekday: "long",
@@ -197,44 +343,76 @@ const Calendar = ({
                   year: "numeric",
                 })}
               </div>
+
               {(() => {
-                const dateStr = `${selectedDate.getFullYear()}-${String(selectedDate.getMonth() + 1).padStart(2, "0")}-${String(selectedDate.getDate()).padStart(2, "0")}`;
-                const holidaysForDate = holidays.filter((h) => h.date === dateStr);
-                
+                const dateStr = `${selectedDate.getFullYear()}-${String(
+                  selectedDate.getMonth() + 1
+                ).padStart(2, "0")}-${String(
+                  selectedDate.getDate()
+                ).padStart(2, "0")}`;
+
+                const holidaysForDate = holidays.filter(
+                  (holiday) =>
+                    holiday.date &&
+                    holiday.date.slice(0, 10) === dateStr
+                );
+
                 if (holidaysForDate.length > 0) {
                   return (
-                    <div className="mt-1 space-y-1">
-                      {holidaysForDate.map((holiday, index) => (
-                        <div key={holiday.id} className="flex items-center gap-2">
-                          <span className="text-sm text-red-500 font-medium">
-                            🎉 {holiday.name}
+                    <div className="mt-2 space-y-1.5">
+                      {holidaysForDate.map((holiday) => (
+                        <div
+                          key={holiday.id}
+                          className="flex items-center gap-2"
+                        >
+                          <span className="w-2 h-2 bg-green-500 rounded-full" />
+
+                          <span className="text-sm text-green-600 dark:text-green-400 font-medium">
+                            {holiday.name}
                           </span>
+
                           <button
-                            onClick={() => onEditHoliday(holiday)}
-                            className="p-1 text-blue-500 hover:bg-blue-50 dark:hover:bg-blue-900/20 rounded transition-colors"
+                            onClick={() =>
+                              onEditHoliday(holiday)
+                            }
+                            className="p-1 text-blue-500 hover:bg-blue-50 dark:hover:bg-blue-900/20 rounded"
                             title="Edit"
                           >
-                            <FiEdit2 size={14} />
+                            <FiEdit2 size={13} />
                           </button>
                         </div>
                       ))}
                     </div>
                   );
-                } else {
-                  return (
-                    <div className="text-xs text-gray-400 mt-1">
-                      No holiday on this date
-                    </div>
-                  );
                 }
+
+                return (
+                  <div className="text-xs text-gray-400 mt-1">
+                    No holiday on this date
+                  </div>
+                );
               })()}
             </div>
+
             <button
-              onClick={() => {
-                // Pass the selected date to prefilled
-                onAddClick(selectedDate, true);
-              }}
-              className="px-3 py-1.5 bg-green-500 text-white rounded-lg text-sm font-medium hover:bg-green-600 transition-colors flex items-center gap-1 flex-shrink-0 ml-2"
+              onClick={() =>
+                onAddClick(selectedDate, true)
+              }
+              className="
+                px-3
+                py-1.5
+                bg-green-500
+                text-white
+                rounded-lg
+                text-sm
+                font-medium
+                hover:bg-green-600
+                transition-colors
+                flex
+                items-center
+                gap-1
+                flex-shrink-0
+              "
             >
               <FiPlus size={14} />
               Add Holiday
