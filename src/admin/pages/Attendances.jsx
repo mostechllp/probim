@@ -38,11 +38,12 @@ const getStatusColor = (status) => {
     return "bg-purple-500";
   if (statusLower === "weekly off" || statusLower === "weeklyoff")
     return "bg-pink-500";
-  if (statusLower === "holiday") return "bg-indigo-500";
+  if (statusLower === "holiday") return "bg-emerald-500"; // Changed to emerald for better visibility
   if (statusLower === "leave") return "bg-orange-500";
 
   return "bg-gray-400";
 };
+
 
 // Helper to parse date from DD/MM/YYYY to Date object
 const parseDateFromString = (dateStr) => {
@@ -339,111 +340,104 @@ const Attendances = () => {
       .slice(0, 2);
   };
 
-  // COMPACT CALENDAR - Smaller tiles and dots
   const tileContent = ({ date, view }) => {
-    if (view !== "month") return null;
+  if (view !== "month") return null;
 
-    const dayInfo = getDayStatus(date);
-    if (dayInfo.status === "no-data" || dayInfo.status === "future")
-      return null;
+  const dayInfo = getDayStatus(date);
+  if (dayInfo.status === "no-data" || dayInfo.status === "future")
+    return null;
 
-    return (
-      <div className="flex justify-center mt-0.5">
-        <div
-          className={`w-1.5 h-1.5 rounded-full ${getStatusColor(dayInfo.status)}`}
-        ></div>
-      </div>
-    );
-  };
+  // Use different dot for holidays
+  const isHoliday = dayInfo.status === "holiday";
+  
+  return (
+    <div className="flex justify-center mt-0.5">
+      <div
+        className={`${isHoliday ? 'holiday-dot' : 'status-dot'} ${getStatusColor(dayInfo.status)}`}
+      ></div>
+    </div>
+  );
+};
 
-  const tileClassName = ({ date, view }) => {
-    if (view !== "month") return "";
+ const tileClassName = ({ date, view }) => {
+  if (view !== "month") return "";
 
-    const dayInfo = getDayStatus(date);
-    const today = isToday(date);
+  const dayInfo = getDayStatus(date);
+  const today = isToday(date);
 
-    let classes = "transition-colors text-xs";
+  let classes = "react-calendar__tile";
 
-    if (today) {
-      classes +=
-        " today-highlight !bg-green-500 !text-white hover:!bg-green-600 rounded-md";
-      return classes;
-    }
-
-    if (dayInfo.status === "future") {
-      return classes + " text-gray-300 dark:text-gray-600";
-    }
-
-    if (dayInfo.status !== "no-data") {
-      classes += " hover:bg-gray-100 dark:hover:bg-gray-700 rounded-md";
-      if (dayInfo.status === "present")
-        classes += " bg-green-50 dark:bg-green-900/20";
-      else if (dayInfo.status === "absent")
-        classes += " bg-red-50 dark:bg-red-900/20";
-      else if (dayInfo.status === "late")
-        classes += " bg-yellow-50 dark:bg-yellow-900/20";
-      else if (dayInfo.status === "mixed")
-        classes += " bg-blue-50 dark:bg-blue-900/20";
-      else if (dayInfo.status === "halfday")
-        classes += " bg-purple-50 dark:bg-purple-900/20";
-      else if (dayInfo.status === "full day")
-        classes += " bg-purple-50 dark:bg-purple-900/20";
-      else if (dayInfo.status === "leave")
-        classes += " bg-pink-50 dark:bg-pink-900/20";
-      else if (dayInfo.status === "holiday")
-        classes += " bg-indigo-50 dark:bg-indigo-900/20";
-    }
-
+  if (today) {
+    classes += " today-highlight";
     return classes;
-  };
+  }
+
+  if (dayInfo.status === "future") {
+    return classes + " text-gray-300 dark:text-gray-600";
+  }
+
+  if (dayInfo.status !== "no-data") {
+    if (dayInfo.status === "present") classes += " tile-present";
+    else if (dayInfo.status === "absent") classes += " tile-absent";
+    else if (dayInfo.status === "late") classes += " tile-late";
+    else if (dayInfo.status === "mixed") classes += " tile-mixed";
+    else if (dayInfo.status === "halfday") classes += " tile-halfday";
+    else if (dayInfo.status === "full day") classes += " tile-full-day";
+    else if (dayInfo.status === "leave") classes += " tile-leave";
+    else if (dayInfo.status === "holiday") classes += " tile-holiday";
+    else if (dayInfo.status === "weeklyoff") classes += " tile-weekly-off";
+  }
+
+  return classes;
+};
 
   // Update the getStatusColorClass function in the Attendances component:
 
-  const getStatusColorClass = (status) => {
-    if (!status)
-      return "bg-gray-100 dark:bg-gray-700/30 text-gray-600 dark:text-gray-400";
-
-    const statusLower = status.toLowerCase().trim();
-
-    if (
-      statusLower === "present" ||
-      statusLower === "presentt" ||
-      statusLower === "ontime" ||
-      statusLower === "on time"
-    ) {
-      return "bg-green-100 dark:bg-green-900/30 text-green-600 dark:text-green-400";
-    }
-
-    if (statusLower === "full day" || statusLower === "fullday") {
-      return "bg-purple-100 dark:bg-purple-900/30 text-purple-600 dark:text-purple-400";
-    }
-
-    if (statusLower === "half day" || statusLower === "halfday") {
-      return "bg-blue-100 dark:bg-blue-900/30 text-blue-600 dark:text-blue-400";
-    }
-
-    if (statusLower === "late") {
-      return "bg-yellow-100 dark:bg-yellow-900/30 text-yellow-600 dark:text-yellow-400";
-    }
-
-    if (statusLower === "weekly off" || statusLower === "weeklyoff") {
-      return "bg-pink-100 dark:bg-pink-900/30 text-pink-600 dark:text-pink-400";
-    }
-
-    if (statusLower === "holiday") {
-      return "bg-indigo-100 dark:bg-indigo-900/30 text-indigo-600 dark:text-indigo-400";
-    }
-
-    if (statusLower === "leave") {
-      return "bg-orange-100 dark:bg-orange-900/30 text-orange-600 dark:text-orange-400";
-    }
-
-    if (statusLower === "absent" || statusLower === "absentee") {
-      return "bg-red-100 dark:bg-red-900/30 text-red-600 dark:text-red-400";
-    }
-
+ const getStatusColorClass = (status) => {
+  if (!status)
     return "bg-gray-100 dark:bg-gray-700/30 text-gray-600 dark:text-gray-400";
-  };
+
+  const statusLower = status.toLowerCase().trim();
+
+  if (
+    statusLower === "present" ||
+    statusLower === "presentt" ||
+    statusLower === "ontime" ||
+    statusLower === "on time"
+  ) {
+    return "bg-green-100 dark:bg-green-900/30 text-green-600 dark:text-green-400";
+  }
+
+  if (statusLower === "full day" || statusLower === "fullday") {
+    return "bg-purple-100 dark:bg-purple-900/30 text-purple-600 dark:text-purple-400";
+  }
+
+  if (statusLower === "half day" || statusLower === "halfday") {
+    return "bg-blue-100 dark:bg-blue-900/30 text-blue-600 dark:text-blue-400";
+  }
+
+  if (statusLower === "late") {
+    return "bg-yellow-100 dark:bg-yellow-900/30 text-yellow-600 dark:text-yellow-400";
+  }
+
+  if (statusLower === "weekly off" || statusLower === "weeklyoff") {
+    return "bg-pink-100 dark:bg-pink-900/30 text-pink-600 dark:text-pink-400";
+  }
+
+  if (statusLower === "holiday") {
+    return "bg-emerald-100 dark:bg-emerald-900/30 text-emerald-600 dark:text-emerald-400";
+  }
+
+  if (statusLower === "leave") {
+    return "bg-orange-100 dark:bg-orange-900/30 text-orange-600 dark:text-orange-400";
+  }
+
+  if (statusLower === "absent" || statusLower === "absentee") {
+    return "bg-red-100 dark:bg-red-900/30 text-red-600 dark:text-red-400";
+  }
+
+  return "bg-gray-100 dark:bg-gray-700/30 text-gray-600 dark:text-gray-400";
+};
   const isToday = (date) => {
     const today = new Date();
     return (
@@ -1208,6 +1202,76 @@ const Attendances = () => {
         .react-calendar__month-view__days {
           background: transparent !important;
         }
+
+        /* Holiday tile - distinctive emerald/green highlight */
+.tile-holiday {
+  background: linear-gradient(135deg, rgba(16, 185, 129, 0.2), rgba(16, 185, 129, 0.08)) !important;
+  border: 2px solid #10b981 !important;
+  border-radius: 12px !important;
+  position: relative !important;
+}
+
+.tile-holiday:hover {
+  background: linear-gradient(135deg, rgba(16, 185, 129, 0.3), rgba(16, 185, 129, 0.15)) !important;
+  border-color: #059669 !important;
+}
+
+.tile-holiday abbr {
+  color: #065f46 !important;
+  font-weight: 600 !important;
+}
+
+.dark .tile-holiday {
+  background: linear-gradient(135deg, rgba(52, 211, 153, 0.2), rgba(52, 211, 153, 0.08)) !important;
+  border-color: #34d399 !important;
+}
+
+.dark .tile-holiday abbr {
+  color: #34d399 !important;
+}
+
+/* Weekly Off tile - soft pink */
+.tile-weekly-off {
+  background: linear-gradient(135deg, rgba(236, 72, 153, 0.12), rgba(236, 72, 153, 0.05)) !important;
+  border: 1px solid #ec4899 !important;
+  border-radius: 12px !important;
+}
+
+.tile-weekly-off:hover {
+  background: linear-gradient(135deg, rgba(236, 72, 153, 0.2), rgba(236, 72, 153, 0.1)) !important;
+}
+
+.dark .tile-weekly-off {
+  background: linear-gradient(135deg, rgba(244, 114, 182, 0.15), rgba(244, 114, 182, 0.05)) !important;
+  border-color: #f472b6 !important;
+}
+
+/* Holiday dot styling */
+.holiday-dot {
+  width: 6px !important;
+  height: 6px !important;
+  border-radius: 50% !important;
+  background: #10b981 !important;
+  margin-top: 1px !important;
+  box-shadow: 0 0 8px rgba(16, 185, 129, 0.4) !important;
+  animation: pulse-holiday 2s ease-in-out infinite !important;
+}
+
+@keyframes pulse-holiday {
+  0%, 100% {
+    transform: scale(1);
+    opacity: 1;
+  }
+  50% {
+    transform: scale(1.3);
+    opacity: 0.7;
+  }
+}
+
+.dark .holiday-dot {
+  background: #34d399 !important;
+  box-shadow: 0 0 8px rgba(52, 211, 153, 0.4) !important;
+}
         
         /* Responsive adjustments */
         @media (max-width: 640px) {
