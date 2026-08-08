@@ -123,11 +123,61 @@ const Payroll = () => {
     dispatch(fetchPayrollStats(params));
   }, [dispatch, monthFilter, yearFilter, statusFilter]);
 
-  // Stats
+  // Stats from API
   const totalPayrolls = stats?.total_generated || 0;
-  const totalAmount = stats?.total_amount || 0;
-  const paidCount = stats?.total_paid || 0;
   const pendingCount = stats?.total_pending || 0;
+  
+  // Get paid count (total_generated - total_pending)
+  const paidCount = totalPayrolls - pendingCount;
+
+  // Get currencies and their amounts
+  const currencies = stats?.amounts_by_currency || {};
+
+  // Get specific currency data
+  const aedData = currencies?.AED || { total_amount: 0, total_paid: 0 };
+  const inrData = currencies?.INR || { total_amount: 0, total_paid: 0 };
+
+  // Format currency with proper symbol
+  const formatCurrency = (amount, currencyCode = "INR") => {
+    const currencyMap = {
+      AED: { locale: "en-AE", currency: "AED" },
+      INR: { locale: "en-IN", currency: "INR" },
+      USD: { locale: "en-US", currency: "USD" },
+      EUR: { locale: "de-DE", currency: "EUR" },
+      GBP: { locale: "en-GB", currency: "GBP" },
+      SGD: { locale: "en-SG", currency: "SGD" },
+      JPY: { locale: "ja-JP", currency: "JPY" },
+      CNY: { locale: "zh-CN", currency: "CNY" },
+    };
+
+    const config = currencyMap[currencyCode] || currencyMap.INR;
+    
+    try {
+      return new Intl.NumberFormat(config.locale, {
+        style: "currency",
+        currency: config.currency,
+        minimumFractionDigits: 2,
+        maximumFractionDigits: 2,
+      }).format(amount || 0);
+    } catch {
+      return `${currencyCode} ${(amount || 0).toFixed(2)}`;
+    }
+  };
+
+  // Get currency badge color
+  const getCurrencyBadgeColor = (currency) => {
+    const colors = {
+      AED: "bg-green-50 dark:bg-green-900/20 text-green-600 dark:text-green-400 border-green-200 dark:border-green-800",
+      INR: "bg-blue-50 dark:bg-blue-900/20 text-blue-600 dark:text-blue-400 border-blue-200 dark:border-blue-800",
+      USD: "bg-emerald-50 dark:bg-emerald-900/20 text-emerald-600 dark:text-emerald-400 border-emerald-200 dark:border-emerald-800",
+      EUR: "bg-purple-50 dark:bg-purple-900/20 text-purple-600 dark:text-purple-400 border-purple-200 dark:border-purple-800",
+      GBP: "bg-red-50 dark:bg-red-900/20 text-red-600 dark:text-red-400 border-red-200 dark:border-red-800",
+      SGD: "bg-orange-50 dark:bg-orange-900/20 text-orange-600 dark:text-orange-400 border-orange-200 dark:border-orange-800",
+      JPY: "bg-pink-50 dark:bg-pink-900/20 text-pink-600 dark:text-pink-400 border-pink-200 dark:border-pink-800",
+      CNY: "bg-yellow-50 dark:bg-yellow-900/20 text-yellow-600 dark:text-yellow-400 border-yellow-200 dark:border-yellow-800",
+    };
+    return colors[currency] || "bg-gray-50 dark:bg-gray-900/20 text-gray-600 dark:text-gray-400 border-gray-200 dark:border-gray-800";
+  };
 
   // Handlers
   const handlePageChange = (page) => {
@@ -176,24 +226,14 @@ const Payroll = () => {
     }
   };
 
- const handleGeneratePayslip = async (payrollId) => {
-  try {
-    // The thunk now handles the download directly
-    await dispatch(generatePayslip(payrollId)).unwrap();
-    showToast("Payslip downloaded successfully!", "success");
-  } catch (error) {
-    showToast(error || "Failed to generate payslip", "error");
-  }
-};
-
-  const formatCurrency = (amount, currencyCode = "INR") => {
-  return new Intl.NumberFormat("en-IN", {
-    style: "currency",
-    currency: currencyCode,
-    minimumFractionDigits: 2,
-    maximumFractionDigits: 2,
-  }).format(amount || 0);
-};
+  const handleGeneratePayslip = async (payrollId) => {
+    try {
+      await dispatch(generatePayslip(payrollId)).unwrap();
+      showToast("Payslip downloaded successfully!", "success");
+    } catch (error) {
+      showToast(error || "Failed to generate payslip", "error");
+    }
+  };
 
   const getStatusBadge = (status) => {
     const statusMap = {
@@ -314,19 +354,7 @@ const Payroll = () => {
           </div>
         </div>
 
-        <div className="bg-white dark:bg-gray-800 rounded-xl p-3 md:p-4 border border-gray-200 dark:border-gray-700 transition-all hover:-translate-y-0.5 hover:shadow-soft">
-          <div className="w-8 h-8 md:w-10 md:h-10 bg-green-100 dark:bg-green-900/30 rounded-xl flex items-center justify-center mb-1 md:mb-2">
-            <i className="fas fa-money-bill-wave text-green-600 dark:text-green-400 text-sm md:text-lg"></i>
-          </div>
-          <div className="text-xl md:text-2xl font-bold text-green-600 dark:text-green-400">
-            {formatCurrency(totalAmount)}
-          </div>
-          <div className="text-[10px] md:text-xs text-gray-500 dark:text-gray-400 font-medium">
-            Total Amount
-          </div>
-        </div>
-
-        <div className="bg-white dark:bg-gray-800 rounded-xl p-3 md:p-4 border border-gray-200 dark:border-gray-700 transition-all hover:-translate-y-0.5 hover:shadow-soft">
+        {/* <div className="bg-white dark:bg-gray-800 rounded-xl p-3 md:p-4 border border-gray-200 dark:border-gray-700 transition-all hover:-translate-y-0.5 hover:shadow-soft">
           <div className="w-8 h-8 md:w-10 md:h-10 bg-emerald-100 dark:bg-emerald-900/30 rounded-xl flex items-center justify-center mb-1 md:mb-2">
             <i className="fas fa-check-circle text-emerald-600 dark:text-emerald-400 text-sm md:text-lg"></i>
           </div>
@@ -336,7 +364,7 @@ const Payroll = () => {
           <div className="text-[10px] md:text-xs text-gray-500 dark:text-gray-400 font-medium">
             Paid
           </div>
-        </div>
+        </div> */}
 
         <div className="bg-white dark:bg-gray-800 rounded-xl p-3 md:p-4 border border-gray-200 dark:border-gray-700 transition-all hover:-translate-y-0.5 hover:shadow-soft">
           <div className="w-8 h-8 md:w-10 md:h-10 bg-yellow-100 dark:bg-yellow-900/30 rounded-xl flex items-center justify-center mb-1 md:mb-2">
@@ -347,6 +375,30 @@ const Payroll = () => {
           </div>
           <div className="text-[10px] md:text-xs text-gray-500 dark:text-gray-400 font-medium">
             Pending
+          </div>
+        </div>
+
+        {/* AED Total Amount Card */}
+        <div className="bg-white dark:bg-gray-800 rounded-xl p-3 md:p-4 border border-gray-200 dark:border-gray-700 transition-all hover:-translate-y-0.5 hover:shadow-soft">
+          <div className="w-8 h-8 md:w-10 md:h-10 bg-green-100 dark:bg-green-900/30 rounded-xl flex items-center justify-center mb-1 md:mb-2">
+            <span className="text-sm md:text-lg font-bold text-green-600 dark:text-green-400">AED</span>
+          </div>
+          <div className="text-xl md:text-2xl font-bold text-green-600 dark:text-green-400">
+            {formatCurrency(aedData.total_amount || 0, "AED")}
+          </div>
+          <div className="text-[10px] md:text-xs text-gray-500 dark:text-gray-400 font-medium">
+            AED Total Amount
+          </div>
+        </div>
+        <div className="bg-white dark:bg-gray-800 rounded-xl p-3 md:p-4 border border-gray-200 dark:border-gray-700 transition-all hover:-translate-y-0.5 hover:shadow-soft">
+          <div className="w-8 h-8 md:w-10 md:h-10 bg-blue-100 dark:bg-blue-900/30 rounded-xl flex items-center justify-center mb-1 md:mb-2">
+            <span className="text-sm md:text-lg font-bold text-blue-600 dark:text-blue-400">INR</span>
+          </div>
+          <div className="text-xl md:text-2xl font-bold text-blue-600 dark:text-blue-400">
+            {formatCurrency(inrData.total_amount || 0, "INR")}
+          </div>
+          <div className="text-[10px] md:text-xs text-gray-500 dark:text-gray-400 font-medium">
+            INR Total Amount
           </div>
         </div>
       </div>
@@ -572,7 +624,9 @@ const Payroll = () => {
                             )}
                           </td>
                           <td className="px-3 md:px-4 py-2 md:py-3 text-center">
-                            <span className="inline-block px-2 py-1 rounded-full text-xs font-semibold bg-blue-50 dark:bg-blue-900/20 text-blue-600 dark:text-blue-400 border border-blue-200 dark:border-blue-800">
+                            <span
+                              className={`inline-block px-2 py-1 rounded-full text-xs font-semibold border ${getCurrencyBadgeColor(currency)}`}
+                            >
                               {currency}
                             </span>
                           </td>

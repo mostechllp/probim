@@ -1,4 +1,4 @@
-// src/admin/pages/AddPayroll.js - Updated with DateInput
+// src/admin/pages/AddPayroll.js - Updated with working days API integration
 
 import { useState, useEffect } from "react";
 import { useDispatch, useSelector } from "react-redux";
@@ -40,6 +40,7 @@ import {
   clearEmployeePackages,
   convertSalary,
   generatePayslip,
+  fetchWorkingDays, // Add this import
 } from "../store/slices/payrollSlice";
 
 import {
@@ -129,6 +130,7 @@ function AddPayroll() {
   const [paymentMode, setPaymentMode] = useState(null);
   const [totalWorkingDays, setTotalWorkingDays] = useState("");
   const [daysPresent, setDaysPresent] = useState("");
+  const [workingDaysLoading, setWorkingDaysLoading] = useState(false);
 
   // Step 2 - Country Split
   const [countries, setCountries] = useState([]);
@@ -217,6 +219,22 @@ function AddPayroll() {
     December: 12,
   };
 
+  // Month number to name mapping
+  const monthNumberToName = {
+    1: "January",
+    2: "February",
+    3: "March",
+    4: "April",
+    5: "May",
+    6: "June",
+    7: "July",
+    8: "August",
+    9: "September",
+    10: "October",
+    11: "November",
+    12: "December",
+  };
+
   // Available currencies
   const currencies = ["AED", "INR", "USD", "EUR", "GBP", "PHP", "LKR"];
 
@@ -247,6 +265,75 @@ function AddPayroll() {
       // Clean up
     };
   }, [dispatch]);
+
+  // --- Fetch Working Days when employee and month are selected ---
+  useEffect(() => {
+    const fetchWorkingDaysData = async () => {
+      if (!selectedUserId || !payPeriodMonth || !payPeriodYear) {
+        return;
+      }
+
+      const monthNumber = monthNames[payPeriodMonth];
+      if (!monthNumber) return;
+
+      const monthFormatted = `${payPeriodYear}-${String(monthNumber).padStart(2, "0")}`;
+      
+      setWorkingDaysLoading(true);
+      try {
+        const result = await dispatch(
+          fetchWorkingDays({
+            employeeId: selectedUserId,
+            month: monthFormatted,
+          })
+        ).unwrap();
+
+        console.log("Working days data:", result);
+
+        if (result) {
+          // Update total working days
+          if (result.total_working_days) {
+            setTotalWorkingDays(String(result.total_working_days));
+          }
+
+          // Update present days
+          if (result.present_days) {
+            setDaysPresent(String(result.present_days));
+          }
+
+          // Auto-calculate period dates based on month
+          const monthNumberVal = monthNames[payPeriodMonth];
+          const yearVal = parseInt(payPeriodYear);
+          const monthNumStr = String(monthNumberVal).padStart(2, "0");
+          const lastDay = new Date(yearVal, monthNumberVal, 0).getDate();
+
+          setPeriodStart(`${yearVal}-${monthNumStr}-01`);
+          setPeriodEnd(`${yearVal}-${monthNumStr}-${String(lastDay).padStart(2, "0")}`);
+          setPaymentDate(`${yearVal}-${monthNumStr}-25`);
+
+          // Show success message with details
+          const holidayInfo = result.holidays_count > 0 
+            ? `${result.holidays_count} holiday${result.holidays_count > 1 ? 's' : ''}` 
+            : 'no holidays';
+          const sundayInfo = `${result.sundays_count} Sunday${result.sundays_count > 1 ? 's' : ''}`;
+          
+          showToast(
+            `Working days loaded: ${result.total_working_days} working days, ${sundayInfo}, ${holidayInfo}`,
+            "success"
+          );
+        }
+      } catch (error) {
+        console.error("Failed to fetch working days:", error);
+        // Don't show error toast if it's just that the API isn't ready
+        if (!error.includes("not found")) {
+          showToast(error || "Failed to fetch working days", "warning");
+        }
+      } finally {
+        setWorkingDaysLoading(false);
+      }
+    };
+
+    fetchWorkingDaysData();
+  }, [selectedUserId, payPeriodMonth, payPeriodYear, dispatch]);
 
   const formatDate = (dateString) => {
     if (!dateString) return "-";
@@ -496,6 +583,8 @@ function AddPayroll() {
       setAvailablePackages([]);
       setSelectedPackageIds([]);
       dispatch(clearEmployeePackages());
+      setTotalWorkingDays("");
+      setDaysPresent("");
     }
   };
 
@@ -589,8 +678,6 @@ function AddPayroll() {
           `${currentYear}-${monthNum}-${String(lastDay).padStart(2, "0")}`,
         );
         setPaymentDate(`${currentYear}-${monthNum}-25`);
-        setTotalWorkingDays("26");
-        setDaysPresent("30");
         setPaymentMode(null);
       }
     }
@@ -631,21 +718,21 @@ function AddPayroll() {
         // Update payment date (25th of the month, but can be customized)
         setPaymentDate(`${year}-${monthNum}-25`);
 
-        // Update working days based on month
-        // Calculate working days (Mon-Fri) - approximate
-        let workingDays = 0;
-        for (let day = 1; day <= lastDay; day++) {
-          const date = new Date(year, monthNumber - 1, day);
-          const dayOfWeek = date.getDay();
-          // Monday to Friday (1-5)
-          if (dayOfWeek >= 1 && dayOfWeek <= 5) {
-            workingDays++;
+        // Only update working days if they haven't been set by the API
+        if (!totalWorkingDays) {
+          // Calculate working days (Mon-Fri) - approximate
+          let workingDays = 0;
+          for (let day = 1; day <= lastDay; day++) {
+            const date = new Date(year, monthNumber - 1, day);
+            const dayOfWeek = date.getDay();
+            // Monday to Friday (1-5)
+            if (dayOfWeek >= 1 && dayOfWeek <= 5) {
+              workingDays++;
+            }
           }
+          setTotalWorkingDays(String(workingDays));
+          setDaysPresent(String(workingDays));
         }
-        setTotalWorkingDays(String(workingDays));
-
-        // Set days present to same as working days (by default)
-        setDaysPresent(String(workingDays));
       }
     }
   }, [payPeriodMonth, payPeriodYear]);
@@ -654,6 +741,9 @@ function AddPayroll() {
   const handleMonthChange = (e) => {
     const newMonth = e.target.value;
     setPayPeriodMonth(newMonth);
+    // Clear working days so they get refetched
+    setTotalWorkingDays("");
+    setDaysPresent("");
     // Dates will be auto-updated by the useEffect above
   };
 
@@ -661,6 +751,9 @@ function AddPayroll() {
   const handleYearChange = (e) => {
     const newYear = e.target.value;
     setPayPeriodYear(newYear);
+    // Clear working days so they get refetched
+    setTotalWorkingDays("");
+    setDaysPresent("");
     // Dates will be auto-updated by the useEffect above
   };
 
@@ -1734,6 +1827,11 @@ function AddPayroll() {
                   <h3 className="text-base md:text-lg font-bold text-gray-800 dark:text-gray-200">
                     Pay Period
                   </h3>
+                  {workingDaysLoading && (
+                    <span className="ml-2 text-xs text-blue-500">
+                      <i className="fas fa-spinner fa-spin mr-1"></i> Loading working days...
+                    </span>
+                  )}
                 </div>
 
                 <div className="grid grid-cols-1 md:grid-cols-2 gap-4 md:gap-5">
@@ -1745,7 +1843,7 @@ function AddPayroll() {
                     <select
                       className="w-full px-3 md:px-4 py-2 md:py-3 bg-gray-50 dark:bg-gray-800 border border-gray-200 dark:border-gray-700 rounded-lg text-sm md:text-base text-gray-800 dark:text-gray-200 focus:outline-none focus:border-green-500 focus:ring-2 focus:ring-green-500/20"
                       value={payPeriodMonth}
-                      onChange={handleMonthChange} // Changed from setPayPeriodMonth
+                      onChange={handleMonthChange}
                       disabled={!selectedUserId}
                     >
                       <option value="">Select Month</option>
@@ -1771,7 +1869,7 @@ function AddPayroll() {
                     <select
                       className="w-full px-3 md:px-4 py-2 md:py-3 bg-gray-50 dark:bg-gray-800 border border-gray-200 dark:border-gray-700 rounded-lg text-sm md:text-base text-gray-800 dark:text-gray-200 focus:outline-none focus:border-green-500 focus:ring-2 focus:ring-green-500/20"
                       value={payPeriodYear}
-                      onChange={handleYearChange} // Changed from setPayPeriodYear
+                      onChange={handleYearChange}
                       disabled={!selectedUserId}
                     >
                       <option value="">Select Year</option>
@@ -1840,26 +1938,38 @@ function AddPayroll() {
                     <label className="block text-xs md:text-sm font-semibold text-gray-700 dark:text-gray-300 mb-1 md:mb-2">
                       <i className="fas fa-calendar-week text-green-500 mr-1"></i>
                       Total Working Days
+                      {workingDaysLoading && (
+                        <span className="ml-1 text-blue-500">
+                          <i className="fas fa-spinner fa-spin"></i>
+                        </span>
+                      )}
                     </label>
                     <input
                       type="text"
                       value={totalWorkingDays}
                       onChange={(e) => setTotalWorkingDays(e.target.value)}
                       className="w-full px-3 md:px-4 py-2 md:py-3 bg-gray-50 dark:bg-gray-800 border border-gray-200 dark:border-gray-700 rounded-lg text-sm md:text-base text-gray-800 dark:text-gray-200 focus:outline-none focus:border-green-500 focus:ring-2 focus:ring-green-500/20"
-                      disabled={!selectedUserId}
+                      disabled={!selectedUserId || workingDaysLoading}
+                      placeholder={workingDaysLoading ? "Loading..." : "Auto-filled from API"}
                     />
                   </div>
                   <div>
                     <label className="block text-xs md:text-sm font-semibold text-gray-700 dark:text-gray-300 mb-1 md:mb-2">
                       <i className="fas fa-calendar-check text-green-500 mr-1"></i>
                       Days Present
+                      {workingDaysLoading && (
+                        <span className="ml-1 text-blue-500">
+                          <i className="fas fa-spinner fa-spin"></i>
+                        </span>
+                      )}
                     </label>
                     <input
                       type="text"
                       value={daysPresent}
                       onChange={(e) => setDaysPresent(e.target.value)}
                       className="w-full px-3 md:px-4 py-2 md:py-3 bg-gray-50 dark:bg-gray-800 border border-gray-200 dark:border-gray-700 rounded-lg text-sm md:text-base text-gray-800 dark:text-gray-200 focus:outline-none focus:border-green-500 focus:ring-2 focus:ring-green-500/20"
-                      disabled={!selectedUserId}
+                      disabled={!selectedUserId || workingDaysLoading}
+                      placeholder={workingDaysLoading ? "Loading..." : "Auto-filled from API"}
                     />
                   </div>
                 </div>
