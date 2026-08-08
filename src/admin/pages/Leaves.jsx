@@ -441,77 +441,88 @@ const Leaves = () => {
     }
   };
 
-  const handleEditSubmit = async (e) => {
-    e.preventDefault();
+  // In Leaves.js - Update handleEditSubmit
 
-    console.log("Submitting edit form with data:", editFormData);
+const handleEditSubmit = async (e) => {
+  e.preventDefault();
 
-    // Validate form data
-    if (!editFormData.leave_type_id) {
-      showToast("Please select a leave type", "error");
-      return;
+  console.log("Submitting edit form with data:", editFormData);
+
+  // Validate form data
+  if (!editFormData.leave_type_id) {
+    showToast("Please select a leave type", "error");
+    return;
+  }
+  if (!editFormData.start_date || editFormData.start_date === "") {
+    showToast("Please select a start date", "error");
+    return;
+  }
+  if (!editFormData.end_date || editFormData.end_date === "") {
+    showToast("Please select an end date", "error");
+    return;
+  }
+  if (editFormData.reason.length < 10) {
+    showToast("Reason must be at least 10 characters", "error");
+    return;
+  }
+
+  setSubmitting(true);
+
+  try {
+    // Create FormData
+    const formDataToSend = new FormData();
+    formDataToSend.append("leave_type_id", editFormData.leave_type_id);
+    formDataToSend.append("start_date", editFormData.start_date);
+    formDataToSend.append("end_date", editFormData.end_date);
+    formDataToSend.append("reason", editFormData.reason);
+    formDataToSend.append("claim_salary", editFormData.claim_salary);
+    formDataToSend.append("session1", editFormData.session1);
+    formDataToSend.append("session2", editFormData.session2);
+
+    // ✅ Add document if selected - THIS IS THE KEY PART
+    if (editFile) {
+      formDataToSend.append("document", editFile);
+      console.log("Document attached:", editFile.name, editFile.size, editFile.type);
     }
-    if (!editFormData.start_date || editFormData.start_date === "") {
-      showToast("Please select a start date", "error");
-      return;
-    }
-    if (!editFormData.end_date || editFormData.end_date === "") {
-      showToast("Please select an end date", "error");
-      return;
-    }
-    if (editFormData.reason.length < 10) {
-      showToast("Reason must be at least 10 characters", "error");
-      return;
-    }
 
-    setSubmitting(true);
+    // ✅ If no new document but there's an existing one, we might want to keep it
+    // If you want to allow removing the document, add a flag
+    // For now, if no new file, we don't send anything (keep existing)
 
-    try {
-      // Create FormData
-      const formDataToSend = new FormData();
-      formDataToSend.append("leave_type_id", editFormData.leave_type_id);
-      formDataToSend.append("start_date", editFormData.start_date);
-      formDataToSend.append("end_date", editFormData.end_date);
-      formDataToSend.append("reason", editFormData.reason);
-      formDataToSend.append("claim_salary", editFormData.claim_salary);
-      formDataToSend.append("session1", editFormData.session1);
-      formDataToSend.append("session2", editFormData.session2);
-
-      if (editFile) {
-        formDataToSend.append("document", editFile);
-      }
-
-      // Log FormData contents for debugging
-      console.log("FormData contents:");
-      for (let [key, value] of formDataToSend.entries()) {
+    // Log FormData contents for debugging
+    console.log("FormData contents:");
+    for (let [key, value] of formDataToSend.entries()) {
+      if (key === 'document' && value instanceof File) {
+        console.log(`${key}: ${value.name} (${value.size} bytes, ${value.type})`);
+      } else {
         console.log(`${key}: ${value}`);
       }
-
-      const result = await dispatch(
-        updateLeaveRequest({
-          id: editingLeave.id,
-          formData: formDataToSend,
-        }),
-      );
-
-      if (updateLeaveRequest.fulfilled.match(result)) {
-        showToast("Leave request updated successfully!", "success");
-        setShowEditModal(false);
-        setEditingLeave(null);
-        setEditFile(null);
-        dispatch(fetchLeaves());
-      } else {
-        console.error("Update failed:", result.payload);
-        showToast(result.payload || "Failed to update leave request", "error");
-      }
-    } catch (error) {
-      console.error("Error submitting form:", error);
-      showToast("An error occurred while updating", "error");
-    } finally {
-      setSubmitting(false);
     }
-  };
 
+    const result = await dispatch(
+      updateLeaveRequest({
+        id: editingLeave.id,
+        formData: formDataToSend,
+      })
+    );
+
+    if (updateLeaveRequest.fulfilled.match(result)) {
+      showToast("Leave request updated successfully!", "success");
+      setShowEditModal(false);
+      setEditingLeave(null);
+      setEditFile(null);
+      dispatch(fetchLeaves());
+    } else {
+      console.error("Update failed:", result.payload);
+      showToast(result.payload || "Failed to update leave request", "error");
+    }
+  } catch (error) {
+    console.error("Error submitting form:", error);
+    showToast("An error occurred while updating", "error");
+  } finally {
+    setSubmitting(false);
+  }
+};
   const handleEditClose = () => {
     setShowEditModal(false);
     setEditingLeave(null);
@@ -644,39 +655,52 @@ const Leaves = () => {
   };
 
   // Check if user can take action on leave
-const canTakeAction = (leave) => {
-  const isPending = (leave.status || "").toLowerCase() === "pending";
-  
-  if (!isPending) return false;
-  
-  // Check if user is allowed to take action (manager, team lead, admin, hr)
-  const hasRoleAccess = isManagerOrTeamLead || user?.type === "admin" || user?.type === "hr";
-  if (!hasRoleAccess) return false;
-  
-  // For Team Lead: Check if they already approved/rejected
-  if (isTeamLead) {
-    const teamLeadApproval = leave.approvals?.find(a => a.approver_level === "team_lead");
-    if (teamLeadApproval && (teamLeadApproval.status === "approved" || teamLeadApproval.status === "rejected")) {
-      return false; // Team Lead already acted on this
+  const canTakeAction = (leave) => {
+    const isPending = (leave.status || "").toLowerCase() === "pending";
+
+    if (!isPending) return false;
+
+    // Check if user is allowed to take action (manager, team lead, admin, hr)
+    const hasRoleAccess =
+      isManagerOrTeamLead || user?.type === "admin" || user?.type === "hr";
+    if (!hasRoleAccess) return false;
+
+    // For Team Lead: Check if they already approved/rejected
+    if (isTeamLead) {
+      const teamLeadApproval = leave.approvals?.find(
+        (a) => a.approver_level === "team_lead",
+      );
+      if (
+        teamLeadApproval &&
+        (teamLeadApproval.status === "approved" ||
+          teamLeadApproval.status === "rejected")
+      ) {
+        return false; // Team Lead already acted on this
+      }
     }
-  }
-  
-  // For Manager: Check if they already approved/rejected
-  if (isManager) {
-    const managerApproval = leave.approvals?.find(a => a.approver_level === "manager");
-    if (managerApproval && (managerApproval.status === "approved" || managerApproval.status === "rejected")) {
-      return false; // Manager already acted on this
+
+    // For Manager: Check if they already approved/rejected
+    if (isManager) {
+      const managerApproval = leave.approvals?.find(
+        (a) => a.approver_level === "manager",
+      );
+      if (
+        managerApproval &&
+        (managerApproval.status === "approved" ||
+          managerApproval.status === "rejected")
+      ) {
+        return false; // Manager already acted on this
+      }
     }
-  }
-  
-  // For Admin/HR: Always allow action on pending leaves
-  // (They can override or change status even if someone else already acted)
-  if (user?.type === "admin" || user?.type === "hr") {
+
+    // For Admin/HR: Always allow action on pending leaves
+    // (They can override or change status even if someone else already acted)
+    if (user?.type === "admin" || user?.type === "hr") {
+      return true;
+    }
+
     return true;
-  }
-  
-  return true;
-};
+  };
 
   // Determine which approval columns to show
   const showTeamLeadApproval = true; // Everyone should see Team Lead status
@@ -1063,6 +1087,254 @@ const canTakeAction = (leave) => {
         onClose={() => setShowModal(false)}
         onViewDocument={handleViewDocument}
       />
+
+      {showEditModal && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 p-4">
+          <div className="bg-white dark:bg-gray-800 rounded-2xl max-w-2xl w-full max-h-[90vh] overflow-y-auto p-6">
+            <div className="flex justify-between items-center mb-4">
+              <h3 className="text-xl font-bold text-gray-800 dark:text-gray-200">
+                Edit Leave Request
+              </h3>
+              <button
+                onClick={handleEditClose}
+                className="p-2 hover:bg-gray-100 dark:hover:bg-gray-700 rounded-lg transition-colors"
+              >
+                <FiX size={20} />
+              </button>
+            </div>
+
+            {fetchingLeave ? (
+              <div className="flex items-center justify-center py-8">
+                <div className="flex items-center gap-3">
+                  <FiLoader className="animate-spin text-green-500 text-2xl" />
+                  <span className="text-gray-600 dark:text-gray-400">
+                    Loading leave details...
+                  </span>
+                </div>
+              </div>
+            ) : (
+              <form onSubmit={handleEditSubmit}>
+                <div className="space-y-4">
+                  {/* Employee Info - Read Only */}
+                  <div className="bg-gray-50 dark:bg-gray-700/30 rounded-lg p-3 mb-4">
+                    <div className="grid grid-cols-2 gap-3">
+                      <div>
+                        <label className="block text-xs text-gray-500 dark:text-gray-400 font-medium">
+                          Employee
+                        </label>
+                        <p className="text-sm font-semibold text-gray-800 dark:text-gray-200">
+                          {editingLeave ? getEmployeeName(editingLeave) : "-"}
+                        </p>
+                      </div>
+                      <div>
+                        <label className="block text-xs text-gray-500 dark:text-gray-400 font-medium">
+                          Leave Type
+                        </label>
+                        <p className="text-sm font-semibold text-gray-800 dark:text-gray-200">
+                          {editingLeave?.leave_type?.name ||
+                            editingLeave?.type ||
+                            "-"}
+                        </p>
+                      </div>
+                    </div>
+                  </div>
+
+                  {/* Leave Type - Editable */}
+                  <div>
+                    <label className="block text-sm font-semibold text-gray-700 dark:text-gray-300 mb-1">
+                      Leave Type <span className="text-red-500">*</span>
+                    </label>
+                    <select
+                      value={editFormData.leave_type_id}
+                      onChange={(e) =>
+                        setEditFormData({
+                          ...editFormData,
+                          leave_type_id: e.target.value,
+                        })
+                      }
+                      className="w-full px-3 py-2 bg-gray-50 dark:bg-gray-900 border border-gray-200 dark:border-gray-700 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-green-500"
+                      required
+                    >
+                      <option value="">Select Leave Type</option>
+                      {leaveTypes.map((type) => (
+                        <option key={type.id} value={type.id}>
+                          {type.name}
+                        </option>
+                      ))}
+                    </select>
+                  </div>
+
+                  {/* Start Date */}
+                  <div>
+                    <label className="block text-sm font-semibold text-gray-700 dark:text-gray-300 mb-1">
+                      Start Date <span className="text-red-500">*</span>
+                    </label>
+                    <DateInput
+                      value={editFormData.start_date}
+                      onChange={handleStartDateChange}
+                      placeholder="dd/mm/yyyy"
+                      required
+                    />
+                  </div>
+
+                  {/* End Date */}
+                  <div>
+                    <label className="block text-sm font-semibold text-gray-700 dark:text-gray-300 mb-1">
+                      End Date <span className="text-red-500">*</span>
+                    </label>
+                    <DateInput
+                      value={editFormData.end_date}
+                      onChange={handleEndDateChange}
+                      placeholder="dd/mm/yyyy"
+                      required
+                    />
+                  </div>
+
+                  {/* Session 1 */}
+                  <div>
+                    <label className="block text-sm font-semibold text-gray-700 dark:text-gray-300 mb-1">
+                      Session 1
+                    </label>
+                    <select
+                      value={editFormData.session1}
+                      onChange={(e) =>
+                        setEditFormData({
+                          ...editFormData,
+                          session1: e.target.value,
+                        })
+                      }
+                      className="w-full px-3 py-2 bg-gray-50 dark:bg-gray-900 border border-gray-200 dark:border-gray-700 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-green-500"
+                    >
+                      <option value="morning">Morning</option>
+                      <option value="afternoon">Afternoon</option>
+                    </select>
+                  </div>
+
+                  {/* Session 2 */}
+                  <div>
+                    <label className="block text-sm font-semibold text-gray-700 dark:text-gray-300 mb-1">
+                      Session 2
+                    </label>
+                    <select
+                      value={editFormData.session2}
+                      onChange={(e) =>
+                        setEditFormData({
+                          ...editFormData,
+                          session2: e.target.value,
+                        })
+                      }
+                      className="w-full px-3 py-2 bg-gray-50 dark:bg-gray-900 border border-gray-200 dark:border-gray-700 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-green-500"
+                    >
+                      <option value="morning">Morning</option>
+                      <option value="afternoon">Afternoon</option>
+                    </select>
+                  </div>
+
+                  {/* Claim Salary */}
+                  <div>
+                    <label className="block text-sm font-semibold text-gray-700 dark:text-gray-300 mb-1">
+                      Claim Salary
+                    </label>
+                    <select
+                      value={editFormData.claim_salary}
+                      onChange={(e) =>
+                        setEditFormData({
+                          ...editFormData,
+                          claim_salary: e.target.value,
+                        })
+                      }
+                      className="w-full px-3 py-2 bg-gray-50 dark:bg-gray-900 border border-gray-200 dark:border-gray-700 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-green-500"
+                    >
+                      <option value="0">No</option>
+                      <option value="1">Yes</option>
+                    </select>
+                  </div>
+
+                  {/* Reason */}
+                  <div>
+                    <label className="block text-sm font-semibold text-gray-700 dark:text-gray-300 mb-1">
+                      Reason <span className="text-red-500">*</span>
+                    </label>
+                    <textarea
+                      value={editFormData.reason}
+                      onChange={(e) =>
+                        setEditFormData({
+                          ...editFormData,
+                          reason: e.target.value,
+                        })
+                      }
+                      rows="3"
+                      className="w-full px-3 py-2 bg-gray-50 dark:bg-gray-900 border border-gray-200 dark:border-gray-700 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-green-500"
+                      placeholder="Enter reason for leave..."
+                      required
+                      minLength="10"
+                    />
+                    {editFormData.reason && editFormData.reason.length < 10 && (
+                      <p className="text-xs text-red-500 mt-1">
+                        Reason must be at least 10 characters
+                      </p>
+                    )}
+                  </div>
+
+                  {/* Document Upload */}
+                  <div>
+                    <label className="block text-sm font-semibold text-gray-700 dark:text-gray-300 mb-1">
+                      Document (Optional)
+                    </label>
+                    <input
+                      type="file"
+                      onChange={(e) => setEditFile(e.target.files[0])}
+                      className="w-full px-3 py-2 bg-gray-50 dark:bg-gray-900 border border-gray-200 dark:border-gray-700 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-green-500 file:mr-4 file:py-2 file:px-4 file:rounded-full file:border-0 file:text-sm file:font-semibold file:bg-green-50 file:text-green-700 hover:file:bg-green-100"
+                      accept=".pdf,.doc,.docx,.jpg,.jpeg,.png"
+                    />
+                    {editFile && (
+                      <p className="text-xs text-green-600 dark:text-green-400 mt-1">
+                        <i className="fas fa-check-circle mr-1"></i>
+                        Selected: {editFile.name}
+                      </p>
+                    )}
+                    {editingLeave?.document_path && !editFile && (
+                      <p className="text-xs text-gray-500 dark:text-gray-400 mt-1">
+                        <i className="fas fa-file mr-1"></i>
+                        Current document attached. Upload a new file to replace
+                        it.
+                      </p>
+                    )}
+                  </div>
+                </div>
+
+                {/* Action Buttons */}
+                <div className="flex justify-end gap-3 pt-4 mt-4 border-t border-gray-200 dark:border-gray-700">
+                  <button
+                    type="button"
+                    onClick={handleEditClose}
+                    className="px-4 py-2 rounded-lg font-semibold bg-gray-100 dark:bg-gray-700 text-gray-700 dark:text-gray-300 hover:bg-gray-200 dark:hover:bg-gray-600 transition-colors"
+                  >
+                    Cancel
+                  </button>
+                  <button
+                    type="submit"
+                    disabled={submitting}
+                    className="px-4 py-2 rounded-lg font-semibold bg-green-500 text-white hover:bg-green-600 transition-colors flex items-center gap-2 disabled:opacity-50"
+                  >
+                    {submitting ? (
+                      <>
+                        <FiLoader className="animate-spin" />
+                        Updating...
+                      </>
+                    ) : (
+                      <>
+                        <i className="fas fa-save"></i>
+                        Update Leave
+                      </>
+                    )}
+                  </button>
+                </div>
+              </form>
+            )}
+          </div>
+        </div>
+      )}
 
       {/* Manager/Team Lead Action Modal */}
       {managerActionModalOpen && (
