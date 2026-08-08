@@ -1,5 +1,5 @@
 /* eslint-disable react-hooks/exhaustive-deps */
-import { useEffect, useRef, useState, useCallback } from "react";
+import { useEffect, useRef, useState, useCallback, useMemo } from "react";
 import { useDispatch, useSelector } from "react-redux";
 import Calendar from "react-calendar";
 import "react-calendar/dist/Calendar.css";
@@ -15,13 +15,12 @@ import {
 } from "../store/slices/attendanceSlice";
 import { fetchEmployees } from "../store/slices/employeeSlice";
 
-// Update the getStatusColor function at the top of the file:
+// Update the getStatusColor function
 const getStatusColor = (status) => {
   if (!status) return "bg-gray-200 dark:bg-gray-600";
 
   const statusLower = status.toLowerCase().trim();
 
-  // Map all possible status values
   if (
     statusLower === "present" ||
     statusLower === "presentt" ||
@@ -38,12 +37,11 @@ const getStatusColor = (status) => {
     return "bg-purple-500";
   if (statusLower === "weekly off" || statusLower === "weeklyoff")
     return "bg-pink-500";
-  if (statusLower === "holiday") return "bg-emerald-500"; // Changed to emerald for better visibility
+  if (statusLower === "holiday") return "bg-emerald-500";
   if (statusLower === "leave") return "bg-orange-500";
 
   return "bg-gray-400";
 };
-
 
 // Helper to parse date from DD/MM/YYYY to Date object
 const parseDateFromString = (dateStr) => {
@@ -140,6 +138,7 @@ const Attendances = () => {
   });
 
   const uniqueEmployees = Array.from(uniqueEmployeesMap.values());
+
   // Fetch attendance data on mount and when month changes
   useEffect(() => {
     const year = selectedMonth.getFullYear();
@@ -190,74 +189,267 @@ const Attendances = () => {
     }
   }, [records, pendingDate, pendingDayModal]);
 
-  // Update the status detection in getDayStatus function:
-  const getDayStatus = (date) => {
-    const dateStr = formatDateToDDMMYYYY(date);
-    const today = new Date();
-    today.setHours(0, 0, 0, 0);
+  const { getDayStatus, tileContent, tileClassName } = useMemo(() => {
+    const getDayStatusFn = (date) => {
+      const dateStrDDMMYYYY = formatDateToDDMMYYYY(date);
+      const year = date.getFullYear();
+      const month = String(date.getMonth() + 1).padStart(2, "0");
+      const day = String(date.getDate()).padStart(2, "0");
+      const dateStrApi = `${year}-${month}-${day}`;
 
-    const checkDate = new Date(date);
-    checkDate.setHours(0, 0, 0, 0);
-    if (checkDate > today) {
-      return { status: "future", count: 0, records: [] };
-    }
+      // Filter records by date - DON'T filter out future dates
+      const dayRecords = records.filter((r) => {
+        const recordDate = r.date || r.log_date || r.attendance_date;
+        if (!recordDate) return false;
 
-    const dayRecords = records.filter((r) => {
-      const recordDate = r.date || r.log_date || r.attendance_date;
-      return (
-        recordDate === dateStr || formatDateToDDMMYYYY(recordDate) === dateStr
-      );
-    });
+        const recordDateStr = String(recordDate);
+        if (recordDateStr === dateStrDDMMYYYY) return true;
+        if (recordDateStr === dateStrApi) return true;
+        if (formatDateToDDMMYYYY(recordDateStr) === dateStrDDMMYYYY)
+          return true;
+        return false;
+      });
 
-    if (dayRecords.length === 0) {
-      return { status: "no-data", count: 0, records: [] };
-    }
-
-    const statuses = dayRecords.map((r) => {
-      const status = (r.status || r.attendance_status || "")
-        .toLowerCase()
-        .trim();
-
-      if (
-        status === "present" ||
-        status === "presentt" ||
-        status === "ontime" ||
-        status === "on time"
-      )
-        return "present";
-      if (status === "late") return "late";
-      if (status === "absent" || status === "absentee") return "absent";
-      if (status === "half day" || status === "halfday") return "halfday";
-      if (status === "full day" || status === "fullday") return "full day";
-      if (status === "leave") return "leave";
-      if (status === "holiday") return "holiday";
-      if (status === "weekly off" || status === "weeklyoff") return "weeklyoff";
-
-      if (
-        r.punch_in &&
-        r.punch_in !== "--" &&
-        r.punch_in !== "-" &&
-        r.punch_in !== ""
-      ) {
-        if (r.late_by && r.late_by > 0) return "late";
-        if (status === "late") return "late";
-        return "present";
+      if (dayRecords.length === 0) {
+        return { status: "no-data", count: 0, records: [] };
       }
-      return "absent";
-    });
 
-    const uniqueStatuses = [...new Set(statuses)];
+      // Check for holiday first
+      const statuses = dayRecords.map((r) => {
+        const status = (r.status || r.attendance_status || "")
+          .toLowerCase()
+          .trim();
 
-    if (uniqueStatuses.length === 1) {
-      return {
-        status: uniqueStatuses[0],
-        count: dayRecords.length,
-        records: dayRecords,
-      };
-    }
+        if (status === "holiday") return "holiday";
+        if (status === "weekly off" || status === "weeklyoff")
+          return "weeklyoff";
+        if (
+          status === "present" ||
+          status === "presentt" ||
+          status === "ontime" ||
+          status === "on time"
+        )
+          return "present";
+        if (status === "late") return "late";
+        if (status === "absent" || status === "absentee") return "absent";
+        if (status === "half day" || status === "halfday") return "halfday";
+        if (status === "full day" || status === "fullday") return "full day";
+        if (status === "leave") return "leave";
+        return "absent";
+      });
 
-    return { status: "mixed", count: dayRecords.length, records: dayRecords };
-  };
+      const uniqueStatuses = [...new Set(statuses)];
+
+      // If any record is holiday, mark the day as holiday
+      if (uniqueStatuses.includes("holiday")) {
+        return {
+          status: "holiday",
+          count: dayRecords.length,
+          records: dayRecords,
+        };
+      }
+
+      if (uniqueStatuses.length === 1) {
+        return {
+          status: uniqueStatuses[0],
+          count: dayRecords.length,
+          records: dayRecords,
+        };
+      }
+
+      return { status: "mixed", count: dayRecords.length, records: dayRecords };
+    };
+
+    const tileContentFn = ({ date, view }) => {
+      if (view !== "month") return null;
+
+      const dayInfo = getDayStatusFn(date);
+
+      const status = dayInfo.status;
+
+      // No attendance record
+      if (status === "no-data") {
+        return null;
+      }
+
+      // Weekend
+      const dayOfWeek = date.getDay();
+
+      if (status === "weeklyoff" || dayOfWeek === 0) {
+        return (
+          <div className="attendance-status attendance-status-weekend">
+            <span className="attendance-status-icon">○</span>
+
+            <span>Weekend</span>
+          </div>
+        );
+      }
+
+      // Holiday
+      if (status === "holiday") {
+        return (
+          <div className="attendance-status attendance-status-holiday">
+            <span className="attendance-status-icon">•</span>
+
+            <span>Holiday</span>
+          </div>
+        );
+      }
+
+      // Present
+      if (status === "present") {
+        return (
+          <div className="attendance-status attendance-status-present">
+            <span className="attendance-status-icon">✓</span>
+
+            <span>Attend</span>
+          </div>
+        );
+      }
+
+      // Absent
+      if (status === "absent") {
+        return (
+          <div className="attendance-status attendance-status-absent">
+            <span className="attendance-status-icon">×</span>
+
+            <span>Non Present</span>
+          </div>
+        );
+      }
+
+      // Late
+      if (status === "late") {
+        return (
+          <div className="attendance-status attendance-status-late">
+            <span className="attendance-status-icon">!</span>
+
+            <span>Late</span>
+          </div>
+        );
+      }
+
+      // Half day
+      if (status === "halfday") {
+        return (
+          <div className="attendance-status attendance-status-halfday">
+            <span className="attendance-status-icon">½</span>
+
+            <span>Half Day</span>
+          </div>
+        );
+      }
+
+      // Full day
+      if (status === "full day") {
+        return (
+          <div className="attendance-status attendance-status-present">
+            <span className="attendance-status-icon">✓</span>
+
+            <span>Full Day</span>
+          </div>
+        );
+      }
+
+      // Leave
+      if (status === "leave") {
+        return (
+          <div className="attendance-status attendance-status-leave">
+            <span className="attendance-status-icon">L</span>
+
+            <span>Leave</span>
+          </div>
+        );
+      }
+
+      // Mixed
+      if (status === "mixed") {
+        return (
+          <div className="attendance-status attendance-status-halfday">
+            <span className="attendance-status-icon">•</span>
+
+            <span>Mixed</span>
+          </div>
+        );
+      }
+
+      return null;
+    };
+    const tileClassNameFn = ({ date, view }) => {
+      if (view !== "month") return "";
+
+      const dayInfo = getDayStatusFn(date);
+      const today = isToday(date);
+
+      let classes = "react-calendar__tile";
+
+      if (today) {
+        classes += " today-highlight";
+        // Still apply holiday class if today is a holiday
+        if (dayInfo.status === "holiday") {
+          classes += " tile-holiday";
+        }
+        return classes;
+      }
+
+      // Don't filter out any dates - let all dates with data get styling
+      if (dayInfo.status !== "no-data") {
+        if (dayInfo.status === "holiday") {
+          classes += " tile-holiday";
+        } else {
+          switch (dayInfo.status) {
+            case "present":
+              classes += " tile-present";
+              break;
+            case "absent":
+              classes += " tile-absent";
+              break;
+            case "late":
+              classes += " tile-late";
+              break;
+            case "mixed":
+              classes += " tile-mixed";
+              break;
+            case "halfday":
+              classes += " tile-halfday";
+              break;
+            case "full day":
+              classes += " tile-full-day";
+              break;
+            case "leave":
+              classes += " tile-leave";
+              break;
+            case "weeklyoff":
+              classes += " tile-weeklyoff";
+              break;
+            default:
+              break;
+          }
+        }
+      }
+
+      return classes;
+    };
+
+    return {
+      getDayStatus: getDayStatusFn,
+      tileContent: tileContentFn,
+      tileClassName: tileClassNameFn,
+    };
+  }, [records]);
+
+  // Add this useEffect in the component to debug
+  useEffect(() => {
+    console.log("All records:", records);
+    console.log(
+      "Records with Holiday status:",
+      records.filter(
+        (r) =>
+          r.status?.toLowerCase() === "holiday" ||
+          r.attendance_status?.toLowerCase() === "holiday",
+      ),
+    );
+  }, [records]);
 
   const getEmployeeAvatarUrl = (record, employees) => {
     if (!employees || !employees.length) return null;
@@ -340,104 +532,53 @@ const Attendances = () => {
       .slice(0, 2);
   };
 
-  const tileContent = ({ date, view }) => {
-  if (view !== "month") return null;
+  // Update the getStatusColorClass function
+  const getStatusColorClass = (status) => {
+    if (!status)
+      return "bg-gray-100 dark:bg-gray-700/30 text-gray-600 dark:text-gray-400";
 
-  const dayInfo = getDayStatus(date);
-  if (dayInfo.status === "no-data" || dayInfo.status === "future")
-    return null;
+    const statusLower = status.toLowerCase().trim();
 
-  // Use different dot for holidays
-  const isHoliday = dayInfo.status === "holiday";
-  
-  return (
-    <div className="flex justify-center mt-0.5">
-      <div
-        className={`${isHoliday ? 'holiday-dot' : 'status-dot'} ${getStatusColor(dayInfo.status)}`}
-      ></div>
-    </div>
-  );
-};
+    if (
+      statusLower === "present" ||
+      statusLower === "presentt" ||
+      statusLower === "ontime" ||
+      statusLower === "on time"
+    ) {
+      return "bg-green-100 dark:bg-green-900/30 text-green-600 dark:text-green-400";
+    }
 
- const tileClassName = ({ date, view }) => {
-  if (view !== "month") return "";
+    if (statusLower === "full day" || statusLower === "fullday") {
+      return "bg-purple-100 dark:bg-purple-900/30 text-purple-600 dark:text-purple-400";
+    }
 
-  const dayInfo = getDayStatus(date);
-  const today = isToday(date);
+    if (statusLower === "half day" || statusLower === "halfday") {
+      return "bg-blue-100 dark:bg-blue-900/30 text-blue-600 dark:text-blue-400";
+    }
 
-  let classes = "react-calendar__tile";
+    if (statusLower === "late") {
+      return "bg-yellow-100 dark:bg-yellow-900/30 text-yellow-600 dark:text-yellow-400";
+    }
 
-  if (today) {
-    classes += " today-highlight";
-    return classes;
-  }
+    if (statusLower === "weekly off" || statusLower === "weeklyoff") {
+      return "bg-pink-100 dark:bg-pink-900/30 text-pink-600 dark:text-pink-400";
+    }
 
-  if (dayInfo.status === "future") {
-    return classes + " text-gray-300 dark:text-gray-600";
-  }
+    if (statusLower === "holiday") {
+  return "bg-orange-100 dark:bg-orange-900/30 text-orange-600 dark:text-orange-400";
+}
 
-  if (dayInfo.status !== "no-data") {
-    if (dayInfo.status === "present") classes += " tile-present";
-    else if (dayInfo.status === "absent") classes += " tile-absent";
-    else if (dayInfo.status === "late") classes += " tile-late";
-    else if (dayInfo.status === "mixed") classes += " tile-mixed";
-    else if (dayInfo.status === "halfday") classes += " tile-halfday";
-    else if (dayInfo.status === "full day") classes += " tile-full-day";
-    else if (dayInfo.status === "leave") classes += " tile-leave";
-    else if (dayInfo.status === "holiday") classes += " tile-holiday";
-    else if (dayInfo.status === "weeklyoff") classes += " tile-weekly-off";
-  }
+    if (statusLower === "leave") {
+      return "bg-orange-100 dark:bg-orange-900/30 text-orange-600 dark:text-orange-400";
+    }
 
-  return classes;
-};
+    if (statusLower === "absent" || statusLower === "absentee") {
+      return "bg-red-100 dark:bg-red-900/30 text-red-600 dark:text-red-400";
+    }
 
-  // Update the getStatusColorClass function in the Attendances component:
-
- const getStatusColorClass = (status) => {
-  if (!status)
     return "bg-gray-100 dark:bg-gray-700/30 text-gray-600 dark:text-gray-400";
+  };
 
-  const statusLower = status.toLowerCase().trim();
-
-  if (
-    statusLower === "present" ||
-    statusLower === "presentt" ||
-    statusLower === "ontime" ||
-    statusLower === "on time"
-  ) {
-    return "bg-green-100 dark:bg-green-900/30 text-green-600 dark:text-green-400";
-  }
-
-  if (statusLower === "full day" || statusLower === "fullday") {
-    return "bg-purple-100 dark:bg-purple-900/30 text-purple-600 dark:text-purple-400";
-  }
-
-  if (statusLower === "half day" || statusLower === "halfday") {
-    return "bg-blue-100 dark:bg-blue-900/30 text-blue-600 dark:text-blue-400";
-  }
-
-  if (statusLower === "late") {
-    return "bg-yellow-100 dark:bg-yellow-900/30 text-yellow-600 dark:text-yellow-400";
-  }
-
-  if (statusLower === "weekly off" || statusLower === "weeklyoff") {
-    return "bg-pink-100 dark:bg-pink-900/30 text-pink-600 dark:text-pink-400";
-  }
-
-  if (statusLower === "holiday") {
-    return "bg-emerald-100 dark:bg-emerald-900/30 text-emerald-600 dark:text-emerald-400";
-  }
-
-  if (statusLower === "leave") {
-    return "bg-orange-100 dark:bg-orange-900/30 text-orange-600 dark:text-orange-400";
-  }
-
-  if (statusLower === "absent" || statusLower === "absentee") {
-    return "bg-red-100 dark:bg-red-900/30 text-red-600 dark:text-red-400";
-  }
-
-  return "bg-gray-100 dark:bg-gray-700/30 text-gray-600 dark:text-gray-400";
-};
   const isToday = (date) => {
     const today = new Date();
     return (
@@ -912,455 +1053,598 @@ const Attendances = () => {
         </div>
       </div>
 
-      {/* Compact Calendar Navigation */}
-      <div className="flex flex-wrap items-center justify-between gap-2 mb-3 bg-white dark:bg-gray-800 rounded-xl border border-gray-200 dark:border-gray-700 p-2 md:p-3">
-        <div className="flex items-center gap-1">
+      {/* Calendar with Navigation - Clean Classic Style */}
+      <div className="bg-white dark:bg-gray-800 rounded-xl border border-gray-200 dark:border-gray-700 shadow-sm overflow-hidden">
+        {/* Calendar Navigation - Like image style */}
+        <div className="flex items-center justify-between px-4 py-3 border-b border-gray-200 dark:border-gray-700">
           <button
             onClick={goToPrevMonth}
-            className="p-1.5 hover:bg-gray-100 dark:hover:bg-gray-700 rounded-lg transition-colors"
+            className="p-1.5 hover:bg-gray-100 dark:hover:bg-gray-700 rounded transition-colors"
           >
-            <i className="fas fa-chevron-left text-gray-600 dark:text-gray-400 text-xs"></i>
+            <svg
+              className="w-4 h-4 text-gray-600 dark:text-gray-400"
+              fill="none"
+              stroke="currentColor"
+              viewBox="0 0 24 24"
+            >
+              <path
+                strokeLinecap="round"
+                strokeLinejoin="round"
+                strokeWidth={2}
+                d="M15 19l-7-7 7-7"
+              />
+            </svg>
           </button>
-          <span className="text-sm font-semibold text-gray-800 dark:text-gray-200 min-w-[100px] text-center">
+          <span className="text-sm font-semibold text-gray-800 dark:text-gray-200">
             {selectedMonth.toLocaleString("default", {
-              month: "short",
+              month: "long",
               year: "numeric",
             })}
           </span>
           <button
             onClick={goToNextMonth}
-            className="p-1.5 hover:bg-gray-100 dark:hover:bg-gray-700 rounded-lg transition-colors"
+            className="p-1.5 hover:bg-gray-100 dark:hover:bg-gray-700 rounded transition-colors"
           >
-            <i className="fas fa-chevron-right text-gray-600 dark:text-gray-400 text-xs"></i>
+            <svg
+              className="w-4 h-4 text-gray-600 dark:text-gray-400"
+              fill="none"
+              stroke="currentColor"
+              viewBox="0 0 24 24"
+            >
+              <path
+                strokeLinecap="round"
+                strokeLinejoin="round"
+                strokeWidth={2}
+                d="M9 5l7 7-7 7"
+              />
+            </svg>
           </button>
         </div>
-        <div className="flex flex-wrap items-center gap-2">
-          <button
-            onClick={handleMonthClick}
-            className="px-2 py-1 bg-green-500 hover:bg-green-600 text-white rounded-lg text-[10px] font-semibold transition-all shadow-md hover:shadow-lg"
-          >
-            <i className="fas fa-list mr-0.5 text-[8px]"></i> List
-          </button>
-        </div>
+
+        {/* RESTYLED CALENDAR - CLASSIC IMAGE STYLE */}
+        {loading && records.length === 0 ? (
+          <div className="p-8 text-center">
+            <i className="fas fa-spinner fa-spin text-2xl text-green-500 mb-2"></i>
+            <p className="text-xs text-gray-500 dark:text-gray-400">
+              Loading...
+            </p>
+          </div>
+        ) : (
+          <div className="p-2">
+            <style>
+              {`
+    /* =========================================================
+       ATTENDANCE CALENDAR - DASHBOARD STYLE
+       ========================================================= */
+
+    .attendance-calendar.react-calendar {
+      width: 100% !important;
+      max-width: none !important;
+      border: none !important;
+      background: transparent !important;
+      font-family:
+        -apple-system,
+        BlinkMacSystemFont,
+        "Segoe UI",
+        Roboto,
+        "Helvetica Neue",
+        Arial,
+        sans-serif !important;
+    }
+
+    /* Hide react-calendar navigation because
+       we already have our own month navigation */
+    .attendance-calendar .react-calendar__navigation {
+      display: none !important;
+    }
+
+    /* =========================================================
+       WEEKDAY HEADER
+       ========================================================= */
+
+    .attendance-calendar .react-calendar__month-view__weekdays {
+      display: grid !important;
+      grid-template-columns: repeat(7, 1fr) !important;
+
+      padding: 0 8px !important;
+      margin: 0 !important;
+
+      border-bottom: 1px solid #f1f1f1 !important;
+
+      color: #777 !important;
+      background: transparent !important;
+
+      font-size: 10px !important;
+      font-weight: 600 !important;
+      text-transform: none !important;
+      letter-spacing: 0 !important;
+    }
+
+    .attendance-calendar
+      .react-calendar__month-view__weekdays__weekday {
+      padding: 12px 4px !important;
+      text-align: center !important;
+    }
+
+    .attendance-calendar
+      .react-calendar__month-view__weekdays
+      abbr {
+      text-decoration: none !important;
+      color: #777 !important;
+      font-size: 10px !important;
+    }
+
+    /* =========================================================
+       DAYS GRID
+       ========================================================= */
+
+    .attendance-calendar .react-calendar__month-view__days {
+      display: grid !important;
+      grid-template-columns: repeat(7, 1fr) !important;
+
+      padding: 0 8px !important;
+
+      background: white !important;
+    }
+
+    .dark .attendance-calendar .react-calendar__month-view__days {
+      background: #1f2937 !important;
+    }
+
+    /* =========================================================
+       DAY TILE
+       ========================================================= */
+
+    .attendance-calendar .react-calendar__tile {
+      position: relative !important;
+
+      min-height: 92px !important;
+      max-height: none !important;
+
+      padding: 8px 7px !important;
+
+      border: none !important;
+      border-bottom: 1px solid #f4f4f4 !important;
+      border-radius: 0 !important;
+
+      background: transparent !important;
+
+      text-align: left !important;
+      vertical-align: top !important;
+
+      cursor: pointer !important;
+
+      transition:
+        background 0.15s ease,
+        box-shadow 0.15s ease !important;
+    }
+
+    .dark .attendance-calendar .react-calendar__tile {
+      border-bottom-color: #374151 !important;
+      background: transparent !important;
+    }
+
+    .attendance-calendar .react-calendar__tile:hover {
+      background: #fafafa !important;
+    }
+
+    .dark .attendance-calendar .react-calendar__tile:hover {
+      background: #273244 !important;
+    }
+
+    /* Remove react-calendar's blue/green active background */
+    .attendance-calendar .react-calendar__tile--active {
+      background: transparent !important;
+      color: inherit !important;
+    }
+
+    .attendance-calendar .react-calendar__tile--active:hover {
+      background: #fafafa !important;
+    }
+
+    /* =========================================================
+       DATE NUMBER
+       ========================================================= */
+
+    .attendance-calendar
+      .react-calendar__tile
+      abbr {
+      display: block !important;
+
+      width: 22px !important;
+      height: 22px !important;
+
+      line-height: 22px !important;
+
+      margin-bottom: 5px !important;
+
+      color: #777 !important;
+
+      font-size: 10px !important;
+      font-weight: 500 !important;
+
+      text-align: center !important;
+
+      text-decoration: none !important;
+    }
+
+    .dark .attendance-calendar
+      .react-calendar__tile
+      abbr {
+      color: #d1d5db !important;
+    }
+
+    /* =========================================================
+       TODAY
+       ========================================================= */
+
+    .attendance-calendar .today-highlight {
+      background: transparent !important;
+    }
+
+    .attendance-calendar .today-highlight abbr {
+      background: #6b4385 !important;
+      color: white !important;
+
+      border-radius: 50% !important;
+
+      font-weight: 700 !important;
+    }
+
+    /* =========================================================
+       NEIGHBOURING MONTH
+       ========================================================= */
+
+    .attendance-calendar
+      .react-calendar__month-view__days__day--neighboringMonth {
+      opacity: 0.35 !important;
+    }
+
+    /* =========================================================
+       STATUS AREA
+       ========================================================= */
+
+    .attendance-status {
+      display: flex !important;
+      align-items: center !important;
+
+      gap: 4px !important;
+
+      margin-top: 2px !important;
+
+      white-space: nowrap !important;
+      overflow: hidden !important;
+
+      font-size: 8px !important;
+      line-height: 12px !important;
+
+      font-weight: 500 !important;
+    }
+
+    /* =========================================================
+       STATUS ICON
+       ========================================================= */
+
+    .attendance-status-icon {
+      width: 11px !important;
+      height: 11px !important;
+
+      flex-shrink: 0 !important;
+
+      display: flex !important;
+      align-items: center !important;
+      justify-content: center !important;
+
+      border-radius: 50% !important;
+
+      font-size: 7px !important;
+      font-weight: 700 !important;
+    }
+
+    /* PRESENT */
+
+    .attendance-status-present {
+      color: #62a982 !important;
+    }
+
+    .attendance-status-present
+      .attendance-status-icon {
+      background: #dff2e7 !important;
+      color: #4d996e !important;
+    }
+
+    /* ABSENT */
+
+    .attendance-status-absent {
+      color: #d96b73 !important;
+    }
+
+    .attendance-status-absent
+      .attendance-status-icon {
+      background: #fde3e5 !important;
+      color: #e15b65 !important;
+    }
+
+    /* LATE */
+
+    .attendance-status-late {
+      color: #d89b43 !important;
+    }
+
+    .attendance-status-late
+      .attendance-status-icon {
+      background: #fff0d6 !important;
+      color: #d98b24 !important;
+    }
+
+    /* HALF DAY */
+
+    .attendance-status-halfday {
+      color: #6f8fc4 !important;
+    }
+
+    .attendance-status-halfday
+      .attendance-status-icon {
+      background: #e5edfa !important;
+      color: #5c7fb7 !important;
+    }
+
+    /* LEAVE */
+
+    .attendance-status-leave {
+      color: #bd6b9a !important;
+    }
+
+    .attendance-status-leave
+      .attendance-status-icon {
+      background: #f8e4ef !important;
+      color: #b85f92 !important;
+    }
+
+   /* =========================================================
+   HOLIDAY - SOFT CORAL / ORANGE
+   ========================================================= */
+
+.attendance-calendar .react-calendar__tile .attendance-status-holiday {
+  color: #e58a72 !important;
+}
+
+.attendance-calendar .react-calendar__tile .attendance-status-holiday span {
+  color: #e58a72 !important;
+}
+
+.attendance-calendar
+  .react-calendar__tile
+  .attendance-status-holiday
+  .attendance-status-icon {
+  background: #fff0eb !important;
+  color: #e58a72 !important;
+}
+
+
+/* =========================================================
+   WEEKEND - SOFT CORAL / ORANGE
+   ========================================================= */
+
+.attendance-calendar .react-calendar__tile .attendance-status-weekend {
+  color: #e58a72 !important;
+}
+
+.attendance-calendar .react-calendar__tile .attendance-status-weekend span {
+  color: #e58a72 !important;
+}
+
+.attendance-calendar
+  .react-calendar__tile
+  .attendance-status-weekend
+  .attendance-status-icon {
+  background: #fff0eb !important;
+  color: #e58a72 !important;
+}
+
+    /* =========================================================
+       EVENT / TASK BARS
+       ========================================================= */
+
+    .attendance-event {
+      display: block !important;
+
+      width: 100% !important;
+
+      margin-top: 5px !important;
+
+      padding: 4px 6px !important;
+
+      border-radius: 2px !important;
+
+      font-size: 8px !important;
+      line-height: 11px !important;
+
+      font-weight: 500 !important;
+
+      text-align: left !important;
+
+      white-space: nowrap !important;
+      overflow: hidden !important;
+      text-overflow: ellipsis !important;
+    }
+
+    .attendance-event-blue {
+      background: #dceeff !important;
+      color: #5790c4 !important;
+    }
+
+    .attendance-event-green {
+      background: #e1f3dc !important;
+      color: #6b9d62 !important;
+    }
+
+    .attendance-event-yellow {
+      background: #fff0d4 !important;
+      color: #c28b39 !important;
+    }
+
+    .attendance-event-pink {
+      background: #f9ddea !important;
+      color: #c46d95 !important;
+    }
+
+    .attendance-event-purple {
+      background: #e9def7 !important;
+      color: #8662a7 !important;
+    }
+
+    /* =========================================================
+       REMOVE OLD STATUS TILE BACKGROUNDS
+       ========================================================= */
+
+    .attendance-calendar .tile-present,
+.attendance-calendar .tile-absent,
+.attendance-calendar .tile-late,
+.attendance-calendar .tile-mixed,
+.attendance-calendar .tile-halfday,
+.attendance-calendar .tile-full-day,
+.attendance-calendar .tile-leave,
+.attendance-calendar .tile-weeklyoff {
+  background: transparent !important;
+  color: inherit !important;
+}
+    /* =========================================================
+   HOLIDAY TILE - HIGHLIGHT THE WHOLE DAY
+   ========================================================= */
+
+.attendance-calendar .react-calendar__tile.tile-holiday {
+  background: #fff4ed !important;
+  color: #d97757 !important;
+  box-shadow: inset 0 0 0 1px #f6cfc0 !important;
+  border-radius: 6px !important;
+}
+
+/* Holiday date number */
+.attendance-calendar .react-calendar__tile.tile-holiday abbr {
+  color: #d97757 !important;
+  font-weight: 700 !important;
+}
+
+/* Holiday status text */
+.attendance-calendar
+  .react-calendar__tile.tile-holiday
+  .attendance-status-holiday {
+  color: #d97757 !important;
+}
+
+/* Holiday icon */
+.attendance-calendar
+  .react-calendar__tile.tile-holiday
+  .attendance-status-holiday
+  .attendance-status-icon {
+  background: #ffe1d5 !important;
+  color: #d97757 !important;
+}
+
+/* Hover holiday */
+.attendance-calendar .react-calendar__tile.tile-holiday:hover {
+  background: #ffebe2 !important;
+}
+
+/* =========================================================
+   TODAY + HOLIDAY
+   ========================================================= */
+
+.attendance-calendar
+  .react-calendar__tile.today-highlight.tile-holiday {
+  background: #fff4ed !important;
+  box-shadow: inset 0 0 0 2px #e9a98f !important;
+}
+
+/* Keep today's circle visible */
+.attendance-calendar
+  .react-calendar__tile.today-highlight.tile-holiday
+  abbr {
+  background: #d97757 !important;
+  color: white !important;
+}
+
+    /* =========================================================
+       MOBILE
+       ========================================================= */
+
+    @media (max-width: 768px) {
+
+      .attendance-calendar .react-calendar__tile {
+        min-height: 72px !important;
+        padding: 6px 4px !important;
+      }
+
+      .attendance-calendar
+        .react-calendar__tile
+        abbr {
+        font-size: 9px !important;
+        width: 20px !important;
+        height: 20px !important;
+        line-height: 20px !important;
+      }
+
+      .attendance-status {
+        font-size: 7px !important;
+      }
+
+      .attendance-event {
+        font-size: 7px !important;
+        padding: 3px 4px !important;
+      }
+    }
+
+    @media (max-width: 500px) {
+
+      .attendance-calendar .react-calendar__tile {
+        min-height: 58px !important;
+        padding: 4px 2px !important;
+      }
+
+      .attendance-status {
+        font-size: 6px !important;
+        gap: 2px !important;
+      }
+
+      .attendance-status-icon {
+        width: 9px !important;
+        height: 9px !important;
+        font-size: 6px !important;
+      }
+
+      .attendance-event {
+        display: none !important;
+      }
+    }
+  `}
+            </style>
+            <Calendar
+              className="attendance-calendar"
+              key={records.length}
+              ref={calendarRef}
+              value={null}
+              activeStartDate={selectedMonth}
+              onActiveStartDateChange={({ activeStartDate }) => {
+                setSelectedMonth(activeStartDate);
+              }}
+              tileContent={tileContent}
+              tileClassName={tileClassName}
+              onClickDay={handleDayClick}
+              maxDetail="month"
+              minDetail="month"
+              formatDay={(locale, date) => date.getDate()}
+              navigationLabel={null}
+              prevLabel={null}
+              nextLabel={null}
+              prev2Label={null}
+              next2Label={null}
+              showNavigation={false}
+            />
+          </div>
+        )}
       </div>
 
-      {/* RESTYLED CALENDAR */}
-      {/* RESTYLED CALENDAR */}
-      {loading && records.length === 0 ? (
-        <div className="bg-white dark:bg-gray-800 rounded-xl border border-gray-200 dark:border-gray-700 p-4 text-center ">
-          <i className="fas fa-spinner fa-spin text-2xl text-green-500 mb-2"></i>
-          <p className="text-xs text-gray-500 dark:text-gray-400">Loading...</p>
-        </div>
-      ) : (
-        <div className="bg-gradient-to-br from-white to-gray-50 dark:from-gray-800 dark:to-gray-900 rounded-2xl border border-gray-200/60 dark:border-gray-700/60 p-4 shadow-xl shadow-gray-100/50 dark:shadow-none">
-          <style>
-            {`
-        /* Modern Calendar Styles */
-        .react-calendar {
-          width: 100% !important;
-          border: none !important;
-          background: transparent !important;
-          font-family: 'Inter', -apple-system, BlinkMacSystemFont, sans-serif !important;
-        }
-        
-        /* HIDE the default navigation completely */
-        .react-calendar__navigation {
-          display: none !important;
-        }
-        
-        /* Weekday headers - clean and minimal */
-        .react-calendar__month-view__weekdays {
-          color: #6b7280 !important;
-          font-weight: 600 !important;
-          font-size: 0.65rem !important;
-          text-transform: uppercase !important;
-          letter-spacing: 0.05em !important;
-          margin-bottom: 0.25rem !important;
-          background: transparent !important;
-        }
-        
-        .react-calendar__month-view__weekdays__weekday {
-          padding: 0.5rem 0 !important;
-          text-align: center !important;
-        }
-        
-        .react-calendar__month-view__weekdays abbr {
-          text-decoration: none !important;
-          cursor: default !important;
-          font-size: 0.65rem !important;
-          font-weight: 600 !important;
-          color: #9ca3af !important;
-        }
-        
-        /* Individual day tiles - modern card style */
-        .react-calendar__tile {
-          padding: 0 !important;
-          border-radius: 12px !important;
-          transition: all 0.25s cubic-bezier(0.4, 0, 0.2, 1) !important;
-          position: relative !important;
-          aspect-ratio: 1 !important;
-          display: flex !important;
-          flex-direction: column !important;
-          align-items: center !important;
-          justify-content: center !important;
-          background: transparent !important;
-          color: inherit !important;
-          min-height: 44px !important;
-          max-height: 56px !important;
-          border: none !important;
-          cursor: pointer !important;
-          font-weight: 500 !important;
-          font-size: 0.8rem !important;
-        }
-        
-        .react-calendar__tile:hover {
-          transform: translateY(-2px) scale(1.02) !important;
-          box-shadow: 0 8px 25px rgba(0, 0, 0, 0.08) !important;
-          z-index: 2 !important;
-          background: rgba(255, 255, 255, 0.8) !important;
-        }
-        
-        .dark .react-calendar__tile:hover {
-          background: rgba(255, 255, 255, 0.05) !important;
-          box-shadow: 0 8px 25px rgba(0, 0, 0, 0.3) !important;
-        }
-        
-        /* Active day selection */
-        .react-calendar__tile--active {
-          background: linear-gradient(135deg, #10b981, #059669) !important;
-          color: white !important;
-          box-shadow: 0 4px 15px rgba(16, 185, 129, 0.4) !important;
-          transform: scale(0.95) !important;
-        }
-        
-        .react-calendar__tile--active:hover {
-          background: linear-gradient(135deg, #059669, #047857) !important;
-          box-shadow: 0 6px 20px rgba(16, 185, 129, 0.5) !important;
-        }
-        
-        .react-calendar__tile--active abbr {
-          color: white !important;
-        }
-        
-        /* Today highlight - elegant ring style */
-        .today-highlight {
-          background: transparent !important;
-          color: #10b981 !important;
-          font-weight: 700 !important;
-          position: relative !important;
-        }
-        
-        .today-highlight::before {
-          content: '' !important;
-          position: absolute !important;
-          inset: 2px !important;
-          border-radius: 12px !important;
-          border: 2.5px solid #10b981 !important;
-          background: rgba(16, 185, 129, 0.06) !important;
-          transition: all 0.3s ease !important;
-        }
-        
-        .today-highlight:hover::before {
-          background: rgba(16, 185, 129, 0.12) !important;
-          border-color: #059669 !important;
-        }
-        
-        .today-highlight abbr {
-          color: #10b981 !important;
-          position: relative !important;
-          z-index: 1 !important;
-        }
-        
-        .dark .today-highlight {
-          color: #34d399 !important;
-        }
-        
-        .dark .today-highlight::before {
-          border-color: #34d399 !important;
-          background: rgba(52, 211, 153, 0.08) !important;
-        }
-        
-        .dark .today-highlight abbr {
-          color: #34d399 !important;
-        }
-        
-        /* Status tiles - subtle gradient backgrounds */
-        .tile-present {
-          background: linear-gradient(135deg, rgba(16, 185, 129, 0.08), rgba(16, 185, 129, 0.02)) !important;
-        }
-        .tile-present:hover {
-          background: linear-gradient(135deg, rgba(16, 185, 129, 0.15), rgba(16, 185, 129, 0.05)) !important;
-        }
-        
-        .tile-absent {
-          background: linear-gradient(135deg, rgba(239, 68, 68, 0.08), rgba(239, 68, 68, 0.02)) !important;
-        }
-        .tile-absent:hover {
-          background: linear-gradient(135deg, rgba(239, 68, 68, 0.15), rgba(239, 68, 68, 0.05)) !important;
-        }
-        
-        .tile-late {
-          background: linear-gradient(135deg, rgba(234, 179, 8, 0.08), rgba(234, 179, 8, 0.02)) !important;
-        }
-        .tile-late:hover {
-          background: linear-gradient(135deg, rgba(234, 179, 8, 0.15), rgba(234, 179, 8, 0.05)) !important;
-        }
-        
-        .tile-mixed {
-          background: linear-gradient(135deg, rgba(59, 130, 246, 0.08), rgba(59, 130, 246, 0.02)) !important;
-        }
-        .tile-mixed:hover {
-          background: linear-gradient(135deg, rgba(59, 130, 246, 0.15), rgba(59, 130, 246, 0.05)) !important;
-        }
-        
-        .tile-halfday {
-          background: linear-gradient(135deg, rgba(139, 92, 246, 0.08), rgba(139, 92, 246, 0.02)) !important;
-        }
-        .tile-halfday:hover {
-          background: linear-gradient(135deg, rgba(139, 92, 246, 0.15), rgba(139, 92, 246, 0.05)) !important;
-        }
-        
-        .tile-full-day {
-          background: linear-gradient(135deg, rgba(139, 92, 246, 0.08), rgba(139, 92, 246, 0.02)) !important;
-        }
-        .tile-full-day:hover {
-          background: linear-gradient(135deg, rgba(139, 92, 246, 0.15), rgba(139, 92, 246, 0.05)) !important;
-        }
-        
-        .tile-leave {
-          background: linear-gradient(135deg, rgba(236, 72, 153, 0.08), rgba(236, 72, 153, 0.02)) !important;
-        }
-        .tile-leave:hover {
-          background: linear-gradient(135deg, rgba(236, 72, 153, 0.15), rgba(236, 72, 153, 0.05)) !important;
-        }
-        
-        .tile-holiday {
-          background: linear-gradient(135deg, rgba(99, 102, 241, 0.08), rgba(99, 102, 241, 0.02)) !important;
-        }
-        .tile-holiday:hover {
-          background: linear-gradient(135deg, rgba(99, 102, 241, 0.15), rgba(99, 102, 241, 0.05)) !important;
-        }
-        
-        /* Neighboring month days */
-        .react-calendar__month-view__days__day--neighboringMonth {
-          color: #d1d5db !important;
-          opacity: 0.5 !important;
-        }
-        
-        .dark .react-calendar__month-view__days__day--neighboringMonth {
-          color: #4b5563 !important;
-        }
-        
-        /* Weekend days */
-        .react-calendar__month-view__days__day--weekend {
-          color: #ef4444 !important;
-        }
-        
-        .dark .react-calendar__month-view__days__day--weekend {
-          color: #f87171 !important;
-        }
-        
-        /* Status dot - animated pulse for today */
-        .status-dot {
-          width: 5px !important;
-          height: 5px !important;
-          border-radius: 50% !important;
-          margin-top: 1px !important;
-          transition: all 0.3s ease !important;
-        }
-        
-        .react-calendar__tile:hover .status-dot {
-          transform: scale(1.3) !important;
-        }
-        
-        .today-highlight .status-dot {
-          box-shadow: 0 0 8px rgba(16, 185, 129, 0.4) !important;
-        }
-        
-        /* Dark mode overrides */
-        .dark .react-calendar__tile {
-          color: #e5e7eb !important;
-        }
-        
-        .dark .react-calendar__tile--active {
-          background: linear-gradient(135deg, #059669, #047857) !important;
-        }
-        
-        .dark .react-calendar__tile--active:hover {
-          background: linear-gradient(135deg, #047857, #065f46) !important;
-        }
-        
-        /* Remove the gray background from month view */
-        .react-calendar__month-view {
-          background: transparent !important;
-        }
-        
-        .react-calendar__month-view__weekdays {
-          background: transparent !important;
-        }
-        
-        .react-calendar__month-view__days {
-          background: transparent !important;
-        }
-
-        /* Holiday tile - distinctive emerald/green highlight */
-.tile-holiday {
-  background: linear-gradient(135deg, rgba(16, 185, 129, 0.2), rgba(16, 185, 129, 0.08)) !important;
-  border: 2px solid #10b981 !important;
-  border-radius: 12px !important;
-  position: relative !important;
-}
-
-.tile-holiday:hover {
-  background: linear-gradient(135deg, rgba(16, 185, 129, 0.3), rgba(16, 185, 129, 0.15)) !important;
-  border-color: #059669 !important;
-}
-
-.tile-holiday abbr {
-  color: #065f46 !important;
-  font-weight: 600 !important;
-}
-
-.dark .tile-holiday {
-  background: linear-gradient(135deg, rgba(52, 211, 153, 0.2), rgba(52, 211, 153, 0.08)) !important;
-  border-color: #34d399 !important;
-}
-
-.dark .tile-holiday abbr {
-  color: #34d399 !important;
-}
-
-/* Weekly Off tile - soft pink */
-.tile-weekly-off {
-  background: linear-gradient(135deg, rgba(236, 72, 153, 0.12), rgba(236, 72, 153, 0.05)) !important;
-  border: 1px solid #ec4899 !important;
-  border-radius: 12px !important;
-}
-
-.tile-weekly-off:hover {
-  background: linear-gradient(135deg, rgba(236, 72, 153, 0.2), rgba(236, 72, 153, 0.1)) !important;
-}
-
-.dark .tile-weekly-off {
-  background: linear-gradient(135deg, rgba(244, 114, 182, 0.15), rgba(244, 114, 182, 0.05)) !important;
-  border-color: #f472b6 !important;
-}
-
-/* Holiday dot styling */
-.holiday-dot {
-  width: 6px !important;
-  height: 6px !important;
-  border-radius: 50% !important;
-  background: #10b981 !important;
-  margin-top: 1px !important;
-  box-shadow: 0 0 8px rgba(16, 185, 129, 0.4) !important;
-  animation: pulse-holiday 2s ease-in-out infinite !important;
-}
-
-@keyframes pulse-holiday {
-  0%, 100% {
-    transform: scale(1);
-    opacity: 1;
-  }
-  50% {
-    transform: scale(1.3);
-    opacity: 0.7;
-  }
-}
-
-.dark .holiday-dot {
-  background: #34d399 !important;
-  box-shadow: 0 0 8px rgba(52, 211, 153, 0.4) !important;
-}
-        
-        /* Responsive adjustments */
-        @media (max-width: 640px) {
-          .react-calendar__tile {
-            min-height: 36px !important;
-            max-height: 44px !important;
-            font-size: 0.7rem !important;
-          }
-          .react-calendar__month-view__weekdays {
-            font-size: 0.55rem !important;
-          }
-          .react-calendar__month-view__weekdays abbr {
-            font-size: 0.55rem !important;
-          }
-          .status-dot {
-            width: 4px !important;
-            height: 4px !important;
-          }
-        }
-      `}
-          </style>
-          <Calendar
-            ref={calendarRef}
-            value={null}
-            activeStartDate={selectedMonth}
-            onActiveStartDateChange={({ activeStartDate }) => {
-              setSelectedMonth(activeStartDate);
-            }}
-            tileContent={({ date, view }) => {
-              if (view !== "month") return null;
-
-              const dayInfo = getDayStatus(date);
-              if (dayInfo.status === "no-data" || dayInfo.status === "future")
-                return null;
-
-              return (
-                <div className="flex justify-center mt-0.5">
-                  <div
-                    className={`status-dot ${getStatusColor(dayInfo.status)}`}
-                  ></div>
-                </div>
-              );
-            }}
-            tileClassName={({ date, view }) => {
-              if (view !== "month") return "";
-
-              const dayInfo = getDayStatus(date);
-              const today = isToday(date);
-
-              let classes = "react-calendar__tile";
-
-              if (today) {
-                classes += " today-highlight";
-                return classes;
-              }
-
-              if (dayInfo.status === "future") {
-                return classes + " text-gray-300 dark:text-gray-600";
-              }
-
-              if (dayInfo.status !== "no-data") {
-                if (dayInfo.status === "present") classes += " tile-present";
-                else if (dayInfo.status === "absent") classes += " tile-absent";
-                else if (dayInfo.status === "late") classes += " tile-late";
-                else if (dayInfo.status === "mixed") classes += " tile-mixed";
-                else if (dayInfo.status === "halfday")
-                  classes += " tile-halfday";
-                else if (dayInfo.status === "full day")
-                  classes += " tile-full-day";
-                else if (dayInfo.status === "leave") classes += " tile-leave";
-                else if (dayInfo.status === "holiday")
-                  classes += " tile-holiday";
-              }
-
-              return classes;
-            }}
-            onClickDay={handleDayClick}
-            maxDetail="month"
-            minDetail="month"
-            formatDay={(locale, date) => date.getDate()}
-            navigationLabel={null}
-            prevLabel={null}
-            nextLabel={null}
-            prev2Label={null}
-            next2Label={null}
-            showNavigation={false}
-          />
-        </div>
-      )}
       {/* Compact Legend and Summary */}
       <div className="mt-3 grid grid-cols-1 md:grid-cols-2 gap-2">
         <div className="bg-white dark:bg-gray-800 rounded-xl border border-gray-200 dark:border-gray-700 p-2.5">
@@ -1375,7 +1659,7 @@ const Attendances = () => {
         </div>
       </div>
 
-      {/* Day Modal - Keep same but compact */}
+      {/* Day Modal */}
       {showDayModal && (
         <div
           className="fixed inset-0 bg-black/50 backdrop-blur-sm z-50 flex items-center justify-center p-4"
@@ -1503,7 +1787,7 @@ const Attendances = () => {
         </div>
       )}
 
-      {/* Month Modal - Keep same but compact */}
+      {/* Month Modal */}
       {showMonthModal && (
         <div
           className="fixed inset-0 bg-black/50 backdrop-blur-sm z-50 flex items-center justify-center p-4"
