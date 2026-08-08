@@ -1064,6 +1064,276 @@ const canTakeAction = (leave) => {
         onViewDocument={handleViewDocument}
       />
 
+      {/* Edit Modal */}
+      {showEditModal && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 p-4">
+          <div className="bg-white dark:bg-gray-800 rounded-2xl max-w-2xl w-full max-h-[90vh] overflow-y-auto p-6">
+            <div className="flex justify-between items-center mb-6">
+              <h3 className="text-xl font-bold text-gray-800 dark:text-gray-200">
+                <FiEdit2 className="inline mr-2 text-green-500" />
+                Edit Leave Request
+              </h3>
+              <button
+                onClick={handleEditClose}
+                className="p-2 hover:bg-gray-100 dark:hover:bg-gray-700 rounded-lg transition-colors"
+              >
+                <FiX size={20} />
+              </button>
+            </div>
+
+            {fetchingLeave ? (
+              <div className="flex items-center justify-center py-12">
+                <div className="text-center">
+                  <FiLoader className="w-10 h-10 text-green-500 animate-spin mx-auto mb-4" />
+                  <p className="text-gray-500 dark:text-gray-400">
+                    Loading leave details...
+                  </p>
+                </div>
+              </div>
+            ) : (
+              <form onSubmit={handleEditSubmit}>
+                <div className="space-y-4">
+                  {/* Leave Type */}
+                  <div>
+                    <label className="block text-sm font-semibold text-gray-700 dark:text-gray-300 mb-1">
+                      Leave Type <span className="text-red-500">*</span>
+                    </label>
+                    <select
+                      value={editFormData.leave_type_id}
+                      onChange={(e) =>
+                        setEditFormData({
+                          ...editFormData,
+                          leave_type_id: e.target.value,
+                        })
+                      }
+                      className="w-full px-3 py-2 bg-gray-50 dark:bg-gray-900 border border-gray-200 dark:border-gray-700 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-green-500"
+                      required
+                    >
+                      <option value="">Select Leave Type</option>
+                      {leaveTypes.map((type) => (
+                        <option key={type.id} value={type.id}>
+                          {type.name}
+                        </option>
+                      ))}
+                    </select>
+                  </div>
+
+                  {/* Dates with DateInput */}
+                  <div className="grid grid-cols-2 gap-4">
+                    <div>
+                      <label className="block text-sm font-semibold text-gray-700 dark:text-gray-300 mb-1">
+                        Start Date <span className="text-red-500">*</span>
+                      </label>
+                      <DateInput
+                        value={editFormData.start_date}
+                        onChange={handleStartDateChange}
+                        type="general"
+                        className="w-full"
+                        placeholder="dd/mm/yyyy"
+                        error={false}
+                      />
+                    </div>
+                    <div>
+                      <label className="block text-sm font-semibold text-gray-700 dark:text-gray-300 mb-1">
+                        End Date <span className="text-red-500">*</span>
+                      </label>
+                      <DateInput
+                        value={editFormData.end_date}
+                        onChange={handleEndDateChange}
+                        type="general"
+                        className="w-full"
+                        placeholder="dd/mm/yyyy"
+                        error={false}
+                        minDate={
+                          editFormData.start_date
+                            ? new Date(editFormData.start_date)
+                            : null
+                        }
+                      />
+                    </div>
+                  </div>
+
+                  {/* Sessions */}
+                  <div className="grid grid-cols-2 gap-4">
+                    <div>
+                      <label className="block text-sm font-semibold text-gray-700 dark:text-gray-300 mb-1">
+                        Start Session <span className="text-red-500">*</span>
+                      </label>
+                      <select
+                        value={editFormData.session1}
+                        onChange={(e) =>
+                          setEditFormData({
+                            ...editFormData,
+                            session1: e.target.value,
+                          })
+                        }
+                        className="w-full px-3 py-2 bg-gray-50 dark:bg-gray-900 border border-gray-200 dark:border-gray-700 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-green-500"
+                        required
+                      >
+                        <option value="morning">Morning</option>
+                        <option value="afternoon">Afternoon</option>
+                      </select>
+                    </div>
+                    <div>
+                      <label className="block text-sm font-semibold text-gray-700 dark:text-gray-300 mb-1">
+                        End Session <span className="text-red-500">*</span>
+                      </label>
+                      <select
+                        value={editFormData.session2}
+                        onChange={(e) =>
+                          setEditFormData({
+                            ...editFormData,
+                            session2: e.target.value,
+                          })
+                        }
+                        className="w-full px-3 py-2 bg-gray-50 dark:bg-gray-900 border border-gray-200 dark:border-gray-700 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-green-500"
+                        required
+                      >
+                        <option value="morning">Morning</option>
+                        <option value="afternoon">Afternoon</option>
+                      </select>
+                    </div>
+                  </div>
+
+                  {/* Reason */}
+                  <div>
+                    <label className="block text-sm font-semibold text-gray-700 dark:text-gray-300 mb-1">
+                      Reason <span className="text-red-500">*</span>
+                    </label>
+                    <textarea
+                      value={editFormData.reason}
+                      onChange={(e) =>
+                        setEditFormData({
+                          ...editFormData,
+                          reason: e.target.value,
+                        })
+                      }
+                      rows="3"
+                      className="w-full px-3 py-2 bg-gray-50 dark:bg-gray-900 border border-gray-200 dark:border-gray-700 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-green-500"
+                      placeholder="Enter reason for leave (min 10 characters)"
+                      required
+                    />
+                  </div>
+
+                  {/* Claim Salary */}
+                  <div>
+                    <label className="block text-sm font-semibold text-gray-700 dark:text-gray-300 mb-1">
+                      Claim Salary
+                    </label>
+                    <div className="flex gap-6">
+                      <label className="flex items-center gap-2">
+                        <input
+                          type="radio"
+                          value="1"
+                          checked={editFormData.claim_salary === "1"}
+                          onChange={() =>
+                            setEditFormData({
+                              ...editFormData,
+                              claim_salary: "1",
+                            })
+                          }
+                          className="text-green-500 focus:ring-green-500"
+                        />
+                        <span className="text-sm">Yes</span>
+                      </label>
+                      <label className="flex items-center gap-2">
+                        <input
+                          type="radio"
+                          value="0"
+                          checked={editFormData.claim_salary === "0"}
+                          onChange={() =>
+                            setEditFormData({
+                              ...editFormData,
+                              claim_salary: "0",
+                            })
+                          }
+                          className="text-green-500 focus:ring-green-500"
+                        />
+                        <span className="text-sm">No</span>
+                      </label>
+                    </div>
+                  </div>
+
+                  {/* Document Upload */}
+                  <div>
+                    <label className="block text-sm font-semibold text-gray-700 dark:text-gray-300 mb-1">
+                      Upload Document{" "}
+                      <span className="text-gray-400 text-xs">(Optional)</span>
+                    </label>
+
+                    {editingLeave?.document && !editFile && (
+                      <div className="mb-3 p-3 bg-gray-50 dark:bg-gray-900 rounded-lg border border-gray-200 dark:border-gray-700">
+                        <p className="text-xs text-gray-600 dark:text-gray-400 mb-1">
+                          Current Document:
+                        </p>
+                        <div className="flex items-center gap-2">
+                          <i className="fas fa-file-pdf text-red-500"></i>
+                          <button
+                            type="button"
+                            onClick={() =>
+                              handleViewDocument(editingLeave.document)
+                            }
+                            className="text-blue-500 hover:text-blue-600 hover:underline text-sm font-medium"
+                          >
+                            {editingLeave.document.split("/").pop()}
+                          </button>
+                          <span className="text-xs text-gray-400">
+                            (Click to view)
+                          </span>
+                        </div>
+                      </div>
+                    )}
+
+                    <input
+                      type="file"
+                      onChange={(e) => setEditFile(e.target.files[0])}
+                      accept=".pdf,.doc,.docx,.jpg,.png"
+                      className="w-full px-3 py-2 bg-gray-50 dark:bg-gray-900 border border-gray-200 dark:border-gray-700 rounded-lg text-sm file:mr-4 file:py-1.5 file:px-3 file:rounded-full file:border-0 file:text-xs file:font-semibold file:bg-green-500 file:text-white file:cursor-pointer hover:file:bg-green-600"
+                    />
+                    {editFile && (
+                      <p className="text-xs text-green-600 mt-1">
+                        File selected: {editFile.name}
+                      </p>
+                    )}
+                    {editingLeave?.document && !editFile && (
+                      <p className="text-xs text-gray-500 mt-1">
+                        Upload a new file to replace the current document
+                      </p>
+                    )}
+                  </div>
+                </div>
+
+                <div className="flex justify-end gap-3 mt-6 pt-4 border-t border-gray-200 dark:border-gray-700">
+                  <button
+                    type="button"
+                    onClick={handleEditClose}
+                    className="px-4 py-2 rounded-lg font-semibold bg-gray-100 dark:bg-gray-700 text-gray-700 dark:text-gray-300 hover:bg-gray-200 dark:hover:bg-gray-600 transition-colors"
+                  >
+                    Cancel
+                  </button>
+                  <button
+                    type="submit"
+                    disabled={submitting}
+                    className="px-4 py-2 rounded-lg font-semibold bg-green-500 text-white hover:bg-green-600 transition-colors disabled:opacity-50 flex items-center gap-2"
+                  >
+                    {submitting ? (
+                      <>
+                        <div className="w-4 h-4 border-2 border-white border-t-transparent rounded-full animate-spin"></div>
+                        Updating...
+                      </>
+                    ) : (
+                      <>
+                        <FiEdit2 /> Update
+                      </>
+                    )}
+                  </button>
+                </div>
+              </form>
+            )}
+          </div>
+        </div>
+      )}
+
       {/* Manager/Team Lead Action Modal */}
       {managerActionModalOpen && (
         <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 p-4">
