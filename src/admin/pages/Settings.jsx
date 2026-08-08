@@ -1,40 +1,69 @@
-import { useState } from "react";
+// Settings.jsx - Using useSearchParams
+import { useState, useEffect } from "react";
+import { useSearchParams } from "react-router-dom";
 import ProfileTab from "../components/settings/ProfileTab";
 import SecurityTab from "../components/settings/SecurityTab";
 import ThemeTab from "../components/settings/ThemeTab";
 import WorkingHoursTab from "../components/settings/WorkingHoursTab";
+import PublicHolidaysTab from "../components/settings/PublicHolidaysTab";
 
 const Settings = () => {
-  const [activeTab, setActiveTab] = useState("profile");
+  const [searchParams, setSearchParams] = useSearchParams();
+  
+  // Get tab from URL query parameter or default to "profile"
+  const getTabFromUrl = () => {
+    const tab = searchParams.get("tab");
+    const validTabs = ["profile", "security", "working-hours", "public-holidays", "theme"];
+    return tab && validTabs.includes(tab) ? tab : "profile";
+  };
+
+  const [activeTab, setActiveTab] = useState(getTabFromUrl());
 
   const tabs = [
     { id: "profile", label: "Profile", icon: "fas fa-user", color: "blue" },
     { id: "security", label: "Security", icon: "fas fa-lock", color: "green" },
-    {
-      id: "working-hours",
-      label: "Working Hours",
-      icon: "fas fa-clock",
-      color: "purple",
-    },
+    { id: "working-hours", label: "Working Hours", icon: "fas fa-clock", color: "purple" },
+    { id: "public-holidays", label: "Public Holidays", icon: "fas fa-calendar-alt", color: "red" },
     { id: "theme", label: "Others", icon: "fas fa-palette", color: "orange" },
   ];
+
+  // Update URL when tab changes
+  const handleTabChange = (tabId) => {
+    setActiveTab(tabId);
+    setSearchParams({ tab: tabId });
+  };
+
+  // Sync state with URL when back/forward buttons are used
+  useEffect(() => {
+    const tabFromUrl = getTabFromUrl();
+    if (tabFromUrl !== activeTab) {
+      setActiveTab(tabFromUrl);
+    }
+  }, [searchParams]);
 
   const getColorClasses = (color, isActive) => {
     if (isActive) {
       switch (color) {
-        case "blue":
-          return "bg-blue-500 text-white";
-        case "green":
-          return "bg-green-500 text-white";
-        case "purple":
-          return "bg-purple-500 text-white";
-        case "orange":
-          return "bg-orange-500 text-white";
-        default:
-          return "bg-green-500 text-white";
+        case "blue": return "bg-blue-500 text-white";
+        case "green": return "bg-green-500 text-white";
+        case "purple": return "bg-purple-500 text-white";
+        case "orange": return "bg-orange-500 text-white";
+        case "red": return "bg-red-500 text-white";
+        default: return "bg-green-500 text-white";
       }
     }
     return "bg-gray-100 dark:bg-gray-700 text-gray-600 dark:text-gray-400";
+  };
+
+  const getTabDescription = (id) => {
+    const descriptions = {
+      profile: "Personal information",
+      security: "Password & security",
+      "working-hours": "Manage working hours of employees",
+      "public-holidays": "Manage public holidays",
+      theme: "Theme & appearance",
+    };
+    return descriptions[id] || "";
   };
 
   return (
@@ -56,7 +85,7 @@ const Settings = () => {
             {tabs.map((tab) => (
               <button
                 key={tab.id}
-                onClick={() => setActiveTab(tab.id)}
+                onClick={() => handleTabChange(tab.id)}
                 className={`w-full flex items-center gap-3 p-4 transition-all border-b border-gray-100 dark:border-gray-700 last:border-0 ${
                   activeTab === tab.id
                     ? "bg-green-50 dark:bg-green-900/20"
@@ -73,11 +102,7 @@ const Settings = () => {
                     {tab.label}
                   </div>
                   <div className="text-xs text-gray-500 dark:text-gray-400">
-                    {tab.id === "profile" && "Personal information"}
-                    {tab.id === "security" && "Password & security"}
-                    {tab.id === "app-settings" && "Application settings"}
-                    {tab.id === "working-hours" && "Manage working hours of employees"}
-                    {tab.id === "theme" && "Theme & appearance"}
+                    {getTabDescription(tab.id)}
                   </div>
                 </div>
                 {activeTab === tab.id && (
@@ -94,6 +119,7 @@ const Settings = () => {
             {activeTab === "profile" && <ProfileTab />}
             {activeTab === "security" && <SecurityTab />}
             {activeTab === "working-hours" && <WorkingHoursTab />}
+            {activeTab === "public-holidays" && <PublicHolidaysTab />}
             {activeTab === "theme" && <ThemeTab />}
           </div>
         </div>

@@ -6,8 +6,13 @@ import { useNavigate, Link } from 'react-router-dom';
 import { useAppSelector } from '../../store/hooks';
 import { useAppTheme } from '../../../context/ThemeContext';
 import { logoutUser } from '../../../store/slices/authSlice';
-import { fetchNotifications, markAsRead, markAllRead } from "../../../admin/store/slices/notificationSlice";
-import ConfirmModal from '../../../admin/components/common/ConfirmModal'; // Adjust path as needed
+import { 
+  fetchUnreadNotifications,
+  markNotificationAsRead,
+  markAllNotificationsAsRead,
+} from "../../../admin/store/slices/notificationSlice";
+import { showToast } from '../../../components/common/Toast';
+import ConfirmModal from '../../../admin/components/common/ConfirmModal';
 
 // ─── HELPER FUNCTIONS ──────────────────────────────────────────────────
 // Format user type for display
@@ -28,31 +33,13 @@ const formatUserType = (type) => {
   return typeMap[lowerType] || type;
 };
 
-// Format user type for badge/capitalized display
-const formatUserTypeBadge = (type) => {
-  if (!type) return 'USER';
-  
-  const typeMap = {
-    'employee': 'EMPLOYEE',
-    'admin': 'ADMIN',
-    'hr': 'HR',
-    'manager': 'MANAGER',
-    'team_lead': 'TEAM LEAD',
-    'teamlead': 'TEAM LEAD',
-    'team lead': 'TEAM LEAD',
-  };
-  
-  const lowerType = type.toLowerCase().trim();
-  return typeMap[lowerType] || type.toUpperCase();
-};
-
 const Header = ({ onMenuClick }) => {
   const dispatch = useDispatch();
   const navigate = useNavigate();
   const { user } = useAppSelector((state) => state.auth);
   const { themeMode, setThemeMode } = useAppTheme();
-  const { notifications, unreadCount } = useAppSelector(
-    (state) => state.notifications || { notifications: [], unreadCount: 0 }
+  const { notifications, unreadCount, loading } = useAppSelector(
+    (state) => state.notifications || { notifications: [], unreadCount: 0, loading: false }
   );
   
   const [showProfileMenu, setShowProfileMenu] = useState(false);
@@ -62,14 +49,23 @@ const Header = ({ onMenuClick }) => {
   const [currentDate, setCurrentDate] = useState('');
   const [currentTime, setCurrentTime] = useState('');
   const [avatarError, setAvatarError] = useState(false);
+  const [markingAll, setMarkingAll] = useState(false);
+  const [markingId, setMarkingId] = useState(null);
   
   const notificationRef = useRef(null);
   const profileRef = useRef(null);
 
-  // Fetch notifications on mount
+  // Fetch unread notifications on mount
   useEffect(() => {
-    dispatch(fetchNotifications());
+    dispatch(fetchUnreadNotifications());
   }, [dispatch]);
+
+  // Refresh unread notifications when dropdown is opened
+  useEffect(() => {
+    if (showNotifications) {
+      dispatch(fetchUnreadNotifications());
+    }
+  }, [showNotifications, dispatch]);
 
   // Update date and time
   useEffect(() => {
@@ -125,10 +121,7 @@ const Header = ({ onMenuClick }) => {
 
   // Get raw user role from API
   const rawUserRole = user?.type || user?.role || 'employee';
-  // Format the role for display
   const userRole = formatUserType(rawUserRole);
-  // Format for badge display (uppercase)
-  const userRoleBadge = formatUserTypeBadge(rawUserRole);
   
   const displayName = getUserName();
   const userEmail = getUserEmail();
@@ -159,12 +152,36 @@ const Header = ({ onMenuClick }) => {
   const userAvatar = getUserAvatar();
   const userInitials = displayName?.charAt(0)?.toUpperCase() || "U";
 
-  const handleMarkAsRead = (id) => {
-    dispatch(markAsRead(id));
+  // Handle marking a single notification as read
+  const handleMarkAsRead = async (id) => {
+    if (markingId === id) return;
+    
+    setMarkingId(id);
+    try {
+      await dispatch(markNotificationAsRead(id)).unwrap();
+      showToast("Notification marked as read", "success");
+    } catch (error) {
+      console.error("Failed to mark notification as read:", error);
+      showToast("Failed to mark notification as read", "error");
+    } finally {
+      setMarkingId(null);
+    }
   };
 
-  const handleMarkAllRead = () => {
-    dispatch(markAllRead());
+  // Handle marking all notifications as read
+  const handleMarkAllRead = async () => {
+    if (markingAll) return;
+    
+    setMarkingAll(true);
+    try {
+      await dispatch(markAllNotificationsAsRead()).unwrap();
+      showToast("All notifications marked as read", "success");
+    } catch (error) {
+      console.error("Failed to mark all as read:", error);
+      showToast("Failed to mark all as read", "error");
+    } finally {
+      setMarkingAll(false);
+    }
   };
 
   const handleLogoutClick = () => {
@@ -188,7 +205,6 @@ const Header = ({ onMenuClick }) => {
 
   // Get the base path for navigation
   const getBasePath = () => {
-    // Use raw user type to determine base path
     const rawType = user?.type || user?.role || 'employee';
     return rawType === 'admin' || rawType === 'hr' ? '/admin' : '/employee';
   };
@@ -214,6 +230,47 @@ const Header = ({ onMenuClick }) => {
 
   const showSettings = hasReadPermission("settings");
 
+  // Format time for display
+  const formatNotificationTime = (dateString) => {
+    if (!dateString) return "Just now";
+    const date = new Date(dateString);
+    const now = new Date();
+    const diffMs = now - date;
+    const diffMins = Math.floor(diffMs / 60000);
+    const diffHours = Math.floor(diffMs / 3600000);
+    const diffDays = Math.floor(diffMs / 86400000);
+
+    if (diffMins < 1) return "Just now";
+    if (diffMins < 60) return `${diffMins}m ago`;
+    if (diffHours < 24) return `${diffHours}h ago`;
+    if (diffDays < 7) return `${diffDays}d ago`;
+    return date.toLocaleDateString("en-US", {
+      month: "short",
+      day: "numeric",
+    });
+  };
+
+  // Get notification type icon
+  const getNotificationIcon = (notification) => {
+    const type = notification.type || notification.data?.type || "";
+    
+    if (type.includes("Probation") || type === "probation") {
+      return "fa-clock text-orange-500";
+    }
+    if (type.includes("Leave") || type === "leave") {
+      return "fa-calendar-check text-blue-500";
+    }
+    if (type.includes("Attendance") || type === "attendance") {
+      return "fa-fingerprint text-purple-500";
+    }
+    if (type.includes("Contract") || type === "contract") {
+      return "fa-file-contract text-indigo-500";
+    }
+    if (type.includes("Task") || type === "task") {
+      return "fa-tasks text-green-500";
+    }
+    return "fa-bell text-gray-500";
+  };
 
   return (
     <>
@@ -286,65 +343,97 @@ const Header = ({ onMenuClick }) => {
             >
               <i className="fas fa-bell text-gray-600 dark:text-gray-300 text-sm md:text-base"></i>
               {unreadCount > 0 && (
-                <span className="absolute -top-1 -right-1 bg-red-500 text-white text-xs font-bold rounded-full px-1.5 py-0.5 min-w-[18px] text-center">
+                <span className="absolute -top-1 -right-1 bg-red-500 text-white text-xs font-bold rounded-full px-1.5 py-0.5 min-w-[18px] text-center animate-pulse">
                   {unreadCount}
                 </span>
               )}
             </button>
 
             {showNotifications && (
-              <div className="absolute top-12 right-0 w-80 bg-white dark:bg-gray-800 rounded-2xl shadow-soft-lg border border-gray-200 dark:border-gray-700 z-50 overflow-hidden">
+              <div className="absolute top-12 right-0 w-96 bg-white dark:bg-gray-800 rounded-2xl shadow-soft-lg border border-gray-200 dark:border-gray-700 z-50 overflow-hidden">
                 <div className="p-4 border-b border-gray-200 dark:border-gray-700 flex justify-between items-center">
-                  <h3 className="font-semibold text-gray-800 dark:text-gray-200">
+                  <h3 className="font-semibold text-gray-800 dark:text-gray-200 flex items-center gap-2">
+                    <i className="fas fa-bell text-green-500"></i>
                     Notifications
+                    {unreadCount > 0 && (
+                      <span className="text-xs bg-red-500 text-white px-2 py-0.5 rounded-full">
+                        {unreadCount} unread
+                      </span>
+                    )}
                   </h3>
                   {unreadCount > 0 && (
                     <button
                       onClick={handleMarkAllRead}
-                      className="text-xs text-green-500 hover:text-green-600"
+                      disabled={markingAll}
+                      className="text-xs text-green-500 hover:text-green-600 disabled:opacity-50 disabled:cursor-not-allowed flex items-center gap-1"
                     >
+                      {markingAll ? (
+                        <i className="fas fa-spinner fa-spin"></i>
+                      ) : null}
                       Mark all as read
                     </button>
                   )}
                 </div>
+
                 <div className="max-h-96 overflow-y-auto">
-                  {notifications.length === 0 ? (
+                  {loading && notifications.length === 0 ? (
+                    <div className="p-8 text-center text-gray-500 dark:text-gray-400">
+                      <i className="fas fa-spinner fa-spin text-2xl mb-2"></i>
+                      <p>Loading notifications...</p>
+                    </div>
+                  ) : notifications.length === 0 ? (
                     <div className="p-8 text-center text-gray-500 dark:text-gray-400">
                       <i className="fas fa-bell-slash text-3xl mb-2 opacity-50"></i>
-                      <p>No notifications</p>
+                      <p>All caught up!</p>
+                      <p className="text-xs mt-1">No unread notifications</p>
                     </div>
                   ) : (
                     notifications.map((notification) => (
                       <div
                         key={notification.id}
-                        className={`p-3 border-b border-gray-200 dark:border-gray-700 cursor-pointer transition-colors ${
-                          !notification.read
-                            ? "bg-green-50 dark:bg-green-900/20"
-                            : ""
-                        } hover:bg-gray-50 dark:hover:bg-gray-700`}
+                        className={`p-3 border-b border-gray-200 dark:border-gray-700 cursor-pointer transition-colors hover:bg-gray-50 dark:hover:bg-gray-700 ${
+                          !notification.read ? "bg-green-50 dark:bg-green-900/20" : ""
+                        } ${markingId === notification.id ? "opacity-50" : ""}`}
                         onClick={() => handleMarkAsRead(notification.id)}
                       >
-                        <div className="text-sm font-medium text-gray-800 dark:text-gray-200">
-                          {notification.title}
+                        <div className="flex items-start gap-3">
+                          {/* Notification icon */}
+                          <div className="flex-shrink-0 mt-0.5">
+                            <i className={`fas ${getNotificationIcon(notification)}`}></i>
+                          </div>
+                          <div className="flex-1 min-w-0">
+                            <div className="text-sm font-medium text-gray-800 dark:text-gray-200">
+                              {notification.title}
+                            </div>
+                            <p className="text-xs text-gray-600 dark:text-gray-400 mt-0.5 break-words line-clamp-2">
+                              {notification.message}
+                            </p>
+                            <div className="flex items-center gap-2 mt-1">
+                              <small className="text-xs text-gray-400">
+                                {formatNotificationTime(notification.created_at)}
+                              </small>
+                              {!notification.read && markingId !== notification.id && (
+                                <span className="w-1.5 h-1.5 bg-green-500 rounded-full flex-shrink-0 animate-pulse"></span>
+                              )}
+                              {markingId === notification.id && (
+                                <i className="fas fa-spinner fa-spin text-xs text-green-500"></i>
+                              )}
+                            </div>
+                          </div>
                         </div>
-                        <p className="text-xs text-gray-600 dark:text-gray-400 mt-1">
-                          {notification.message}
-                        </p>
-                        <small className="text-xs text-gray-500 dark:text-gray-400 block mt-1">
-                          {notification.time || "Just now"}
-                        </small>
                       </div>
                     ))
                   )}
                 </div>
+
                 <div className="p-3 border-t border-gray-200 dark:border-gray-700 text-center bg-gray-50 dark:bg-gray-700/50">
-                  <Link
+                  {/* <Link
                     to={`${getBasePath()}/notifications`}
                     onClick={() => setShowNotifications(false)}
-                    className="text-xs text-green-500 hover:text-green-600"
+                    className="text-xs text-green-500 hover:text-green-600 font-medium"
                   >
                     View all notifications
-                  </Link>
+                  </Link> */}
                 </div>
               </div>
             )}

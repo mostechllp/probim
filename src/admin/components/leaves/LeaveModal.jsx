@@ -1,8 +1,14 @@
 // src/admin/components/leaves/LeaveModal.jsx
 
 import { useSelector } from "react-redux";
+import { FiEye } from "react-icons/fi";
 
-const LeaveModal = ({ isOpen, leave, onClose, onViewDocument }) => {
+const LeaveModal = ({ 
+  isOpen, 
+  leave, 
+  onClose, 
+  onViewDocument 
+}) => {
   const { user } = useSelector((state) => state.auth);
   
   // Check user role
@@ -27,41 +33,6 @@ const LeaveModal = ({ isOpen, leave, onClose, onViewDocument }) => {
     }
   };
 
-  const getApprovalBadge = (status, remark = null) => {
-    if (status === "approved") {
-      return (
-        <div className="flex flex-col items-center">
-          <span className="inline-flex items-center px-3 py-1 rounded-full text-xs font-medium bg-green-100 text-green-800 dark:bg-green-900/30 dark:text-green-400">
-            <i className="fas fa-check-circle mr-1.5 text-xs"></i> Approved
-          </span>
-          {remark && (
-            <span className="text-xs text-gray-500 dark:text-gray-400 mt-1 italic max-w-[120px] truncate">
-              "{remark}"
-            </span>
-          )}
-        </div>
-      );
-    } else if (status === "rejected") {
-      return (
-        <div className="flex flex-col items-center">
-          <span className="inline-flex items-center px-3 py-1 rounded-full text-xs font-medium bg-red-100 text-red-800 dark:bg-red-900/30 dark:text-red-400">
-            <i className="fas fa-times-circle mr-1.5 text-xs"></i> Rejected
-          </span>
-          {remark && (
-            <span className="text-xs text-red-500 dark:text-red-400 mt-1 italic max-w-[120px] truncate">
-              "{remark}"
-            </span>
-          )}
-        </div>
-      );
-    }
-    return (
-      <span className="inline-flex items-center px-3 py-1 rounded-full text-xs font-medium bg-gray-100 text-gray-600 dark:bg-gray-700 dark:text-gray-400">
-        <i className="fas fa-clock mr-1.5 text-xs"></i> Pending
-      </span>
-    );
-  };
-
   const formatDate = (dateString) => {
     if (!dateString) return '-';
     try {
@@ -75,6 +46,14 @@ const LeaveModal = ({ isOpen, leave, onClose, onViewDocument }) => {
   // Helper to get the raw document value
   const getRawDoc = () => {
     return leave.document_path || leave.document || leave.doc || null;
+  };
+
+  // Helper to get document name from path
+  const getDocumentName = () => {
+    const docPath = getRawDoc();
+    if (!docPath) return null;
+    const parts = docPath.split('/');
+    return parts[parts.length - 1] || 'document';
   };
 
   // Helper to get applied by info with proper role
@@ -203,6 +182,7 @@ const LeaveModal = ({ isOpen, leave, onClose, onViewDocument }) => {
   const isSelf = isSelfApplied();
   const rawDoc = getRawDoc();
   const status = getField('status');
+  const docName = getDocumentName();
 
   // Get approval data
   const teamLeadApproval = getApprovalByLevel('team_lead');
@@ -210,9 +190,9 @@ const LeaveModal = ({ isOpen, leave, onClose, onViewDocument }) => {
   const hrApproval = getApprovalByLevel('hr');
 
   // Determine which approval sections to show
-  const showTeamLeadApproval = true; // Everyone sees team lead approval
-  const showManagerApproval = isAdminOrHR || isManager; // Admin/HR and Managers see manager approval
-  const showHrApproval = isAdminOrHR; // Only Admin/HR see HR approval
+  const showTeamLeadApproval = true;
+  const showManagerApproval = isAdminOrHR || isManager;
+  const showHrApproval = isAdminOrHR;
 
   // Get approver name for each level
   const getApproverName = (approval) => {
@@ -227,14 +207,6 @@ const LeaveModal = ({ isOpen, leave, onClose, onViewDocument }) => {
     if (approval.status === 'approved') return 'fa-check-circle';
     if (approval.status === 'rejected') return 'fa-times-circle';
     return 'fa-hourglass-half';
-  };
-
-  // Get approval status color
-  const getStatusColor = (approval) => {
-    if (!approval) return 'text-gray-400 dark:text-gray-500';
-    if (approval.status === 'approved') return 'text-green-500';
-    if (approval.status === 'rejected') return 'text-red-500';
-    return 'text-amber-500';
   };
 
   // Build approval chain array
@@ -358,21 +330,29 @@ const LeaveModal = ({ isOpen, leave, onClose, onViewDocument }) => {
             </span>
           </div>
 
+          {/* Document Section - View Only */}
           <div className="flex py-2 border-b border-gray-200 dark:border-gray-700 items-center min-h-[44px]">
             <span className="font-semibold text-gray-700 dark:text-gray-300 w-28 flex-shrink-0">
               Document:
             </span>
-            <span className="text-gray-600 dark:text-gray-400 break-words">
+            <span className="text-gray-600 dark:text-gray-400 break-words flex items-center gap-2 flex-wrap">
               {hasDocument() ? (
-                <button
-                  onClick={() => onViewDocument(rawDoc)}
-                  className="text-blue-500 hover:text-blue-600 dark:text-blue-400 dark:hover:text-blue-300 flex items-center gap-1 transition-colors"
-                >
-                  <i className="fas fa-file-pdf"></i>
-                  View Document
-                </button>
+                <>
+                  <button
+                    onClick={() => onViewDocument(rawDoc)}
+                    className="inline-flex items-center gap-1 px-3 py-1 rounded-lg bg-blue-50 dark:bg-blue-900/20 text-blue-600 dark:text-blue-400 hover:bg-blue-100 dark:hover:bg-blue-900/30 transition-colors text-sm"
+                  >
+                    <FiEye size={14} />
+                    View Document
+                  </button>
+                  {docName && (
+                    <span className="text-xs text-gray-400 dark:text-gray-500">
+                      ({docName})
+                    </span>
+                  )}
+                </>
               ) : (
-                <span className="text-gray-400 dark:text-gray-500">-</span>
+                <span className="text-gray-400 dark:text-gray-500">No document attached</span>
               )}
             </span>
           </div>

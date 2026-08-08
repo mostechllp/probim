@@ -1,14 +1,16 @@
 import { useEffect, useState } from "react";
 import { useDispatch, useSelector } from "react-redux";
-import { FiEye, FiPlus, FiChevronLeft, FiChevronRight, FiSearch, FiSun, FiMoon, FiLogIn, FiClock, FiChevronDown } from "react-icons/fi";
+import { FiEye, FiPlus, FiChevronLeft, FiChevronRight, FiSearch, FiSun, FiMoon, FiLogIn, FiClock, FiChevronDown, FiEdit2, FiTrash2 } from "react-icons/fi";
 import { MdFingerprint } from "react-icons/md";
 import { showToast } from "../components/common/Toast";
 import StatusBadge from "../components/common/StatusBadge";
+import ConfirmModal from "../../admin/components/common/ConfirmModal";
 import MissedPunchOutModal from "../components/modals/MissedPunchoutModal";
 import MissedPunchInModal from "../components/modals/MissedPunchInModal";
 import LateCheckinModal from "../components/modals/LateCheckinModal";
 import EarlyCheckinModal from "../components/modals/EarlyCheckinModal";
-import { clearAttendanceError, fetchAttendanceRequests } from "../store/slices/attendanceTypeSlice";
+import EditAttendanceRequestModal from "../components/modals/EditAttendanceRequestModal";
+import { clearAttendanceError, fetchAttendanceRequests, deleteAttendanceRequest } from "../store/slices/attendanceTypeSlice";
 
 const AttendanceRequests = () => {
   const dispatch = useDispatch();
@@ -16,10 +18,6 @@ const AttendanceRequests = () => {
   // Get state from Redux
   const {
     requests = [],
-    // eslint-disable-next-line no-unused-vars
-    filter = { type: 'all', status: 'all', search: '' },
-    // eslint-disable-next-line no-unused-vars
-    pagination = { currentPage: 1, perPage: 10 },
     loading = false,
     error = null,
   } = useSelector((state) => state.EmpAttendanceType || {});
@@ -30,10 +28,17 @@ const AttendanceRequests = () => {
   const [showLateCheckin, setShowLateCheckin] = useState(false);
   const [showMissedPunchIn, setShowMissedPunchIn] = useState(false);
   const [showMissedPunchOut, setShowMissedPunchOut] = useState(false);
+  const [showEditModal, setShowEditModal] = useState(false);
+  const [requestToEdit, setRequestToEdit] = useState(null);
   const [showDropdown, setShowDropdown] = useState(false);
   const [localFilter, setLocalFilter] = useState({ status: "all", search: "" });
   const [localPagination, setLocalPagination] = useState({ currentPage: 1, perPage: 10 });
   const [isMobile, setIsMobile] = useState(window.innerWidth < 768);
+  
+  // Delete confirmation modal state
+  const [showDeleteConfirm, setShowDeleteConfirm] = useState(false);
+  const [deleteRequestId, setDeleteRequestId] = useState(null);
+  const [deleteLoading, setDeleteLoading] = useState(false);
 
   // Handle window resize for mobile detection
   useEffect(() => {
@@ -46,7 +51,6 @@ const AttendanceRequests = () => {
 
   // Fetch attendance requests on component mount
   useEffect(() => {
-    // eslint-disable-next-line react-hooks/immutability
     loadAttendanceRequests();
   }, []);
 
@@ -183,6 +187,42 @@ const AttendanceRequests = () => {
     setShowDetailsModal(true);
   };
 
+  const handleEditRequest = (request) => {
+    setRequestToEdit(request);
+    setShowEditModal(true);
+  };
+
+  // Updated delete handler - shows confirm modal
+  const handleDeleteClick = (id) => {
+    setDeleteRequestId(id);
+    setShowDeleteConfirm(true);
+  };
+
+  // Confirm delete
+  const handleConfirmDelete = async () => {
+    if (!deleteRequestId) return;
+    
+    setDeleteLoading(true);
+    try {
+      await dispatch(deleteAttendanceRequest(deleteRequestId)).unwrap();
+      showToast("Request deleted successfully", "success");
+      setShowDeleteConfirm(false);
+      setDeleteRequestId(null);
+      await loadAttendanceRequests();
+    } catch (error) {
+      showToast(error || "Failed to delete request", "error");
+    } finally {
+      setDeleteLoading(false);
+    }
+  };
+
+  // Check if request can be edited or deleted (only pending requests)
+  const canModifyRequest = (request) => {
+    const status = request.status?.toLowerCase();
+    // Only allow modification if status is 'pending'
+    return status === 'pending';
+  };
+
   const stats = {
     total: requests.length,
     pending: requests.filter(r => r.status?.toLowerCase() === "pending").length,
@@ -190,8 +230,22 @@ const AttendanceRequests = () => {
     rejected: requests.filter(r => r.status?.toLowerCase() === "rejected").length,
   };
 
+  // Clear all modal states and reset dropdown
+  const resetAllModals = () => {
+    setShowEarlyCheckin(false);
+    setShowLateCheckin(false);
+    setShowMissedPunchIn(false);
+    setShowMissedPunchOut(false);
+    setShowEditModal(false);
+    setRequestToEdit(null);
+    setSelectedRequest(null);
+    setShowDetailsModal(false);
+    setShowDropdown(false);
+  };
+
   const openRequestModal = (type) => {
     setShowDropdown(false);
+    // Reset any previous modal state
     switch(type) {
       case "early_check_in":
       case "early_checkin":
@@ -212,6 +266,11 @@ const AttendanceRequests = () => {
     }
   };
 
+  const handleModalClose = async () => {
+    resetAllModals();
+    await loadAttendanceRequests();
+  };
+
   const handleSearch = (e) => {
     setLocalFilter({ ...localFilter, search: e.target.value });
     setLocalPagination({ ...localPagination, currentPage: 1 });
@@ -229,14 +288,6 @@ const AttendanceRequests = () => {
   const handlePageChange = (page) => {
     setLocalPagination({ ...localPagination, currentPage: page });
     window.scrollTo({ top: 0, behavior: "smooth" });
-  };
-
-  const handleModalClose = () => {
-    setShowEarlyCheckin(false);
-    setShowLateCheckin(false);
-    setShowMissedPunchIn(false);
-    setShowMissedPunchOut(false);
-    loadAttendanceRequests();
   };
 
   // Show loading state
@@ -304,13 +355,12 @@ const AttendanceRequests = () => {
         </div>
       </div>
 
-      {/* Header with Dropdown - Mobile Friendly */}
+      {/* Header with Dropdown */}
       <div className="attendance-requests-header flex flex-col md:flex-row justify-between items-start md:items-center gap-4 md:gap-5 mb-5 md:mb-7">
         <h2 className="text-lg md:text-2xl font-semibold bg-gradient-to-r from-[var(--text)] to-green-600 bg-clip-text text-transparent">
           My Attendance Requests
         </h2>
         
-        {/* Dropdown Container - Mobile Friendly */}
         <div className="dropdown-container relative w-full md:w-auto">
           <button
             onClick={() => setShowDropdown(!showDropdown)}
@@ -321,10 +371,8 @@ const AttendanceRequests = () => {
             <FiChevronDown className={`text-sm transition-transform duration-200 ${showDropdown ? 'rotate-180' : ''}`} />
           </button>
           
-          {/* Dropdown Menu - Full width on mobile */}
           {showDropdown && (
             <>
-              {/* Backdrop for mobile */}
               <div 
                 className="fixed inset-0 bg-black/30 z-40 md:hidden"
                 onClick={() => setShowDropdown(false)}
@@ -390,7 +438,6 @@ const AttendanceRequests = () => {
                   </button>
                 </div>
                 
-                {/* Close button for mobile */}
                 {isMobile && (
                   <div className="p-3 border-t border-[var(--border)] bg-[var(--surface2)] md:hidden">
                     <button
@@ -407,7 +454,7 @@ const AttendanceRequests = () => {
         </div>
       </div>
 
-      {/* Status Tabs - Scrollable on mobile */}
+      {/* Status Tabs */}
       <div className="overflow-x-auto pb-2 mb-4 md:mb-5 -mx-4 px-4">
         <div className="flex gap-2 min-w-max border-b border-[var(--border)] pb-3">
           {["all", "pending", "approved", "rejected"].map((status) => (
@@ -426,7 +473,7 @@ const AttendanceRequests = () => {
         </div>
       </div>
 
-      {/* Action Bar - Stack on mobile */}
+      {/* Action Bar */}
       <div className="files-actions flex flex-col sm:flex-row justify-between items-start sm:items-center gap-3 md:gap-4 mb-4 md:mb-5">
         <div className="entries-select flex items-center gap-2.5 bg-[var(--surface)] border border-[var(--border)] rounded-full px-3.5 py-1.5 text-xs text-[var(--text-secondary)] w-full sm:w-auto">
           <span className="whitespace-nowrap">Show entries</span>
@@ -455,7 +502,7 @@ const AttendanceRequests = () => {
         </div>
       </div>
 
-      {/* Table - Horizontal scroll on mobile */}
+      {/* Table */}
       <div className="attendance-requests-table-wrapper bg-[var(--surface)] rounded-xl border border-[var(--border)] overflow-x-auto shadow-sm">
         <table className="attendance-requests-table w-full border-collapse text-xs min-w-[700px] md:min-w-[900px]">
           <thead>
@@ -503,51 +550,81 @@ const AttendanceRequests = () => {
                  </td>
               </tr>
             ) : (
-              currentRequests.map((request, idx) => (
-                <tr
-                  key={request.id}
-                  className="hover:bg-[var(--surface2)] transition-colors"
-                >
-                  <td className="py-3 px-3 md:px-4 border-b border-[var(--border)] text-[var(--text-secondary)]">
-                    {start + idx + 1}
-                   </td>
-                  <td className="py-3 px-3 md:px-4 border-b border-[var(--border)]">
-                    <div className="flex items-center gap-2">
-                      {getRequestTypeIcon(request.type)}
-                      <span className="text-[var(--text)] text-xs whitespace-nowrap">
-                        {getRequestTypeLabel(request.type)}
-                      </span>
-                    </div>
-                   </td>
-                  <td className="py-3 px-3 md:px-4 border-b border-[var(--border)] text-[var(--text-secondary)] whitespace-nowrap">
-                    {formatDate(request.request_date || request.date)}
-                   </td>
-                  <td className="py-3 px-3 md:px-4 border-b border-[var(--border)] text-[var(--text-secondary)] whitespace-nowrap">
-                    {formatTime(request.request_time || request.time)}
-                   </td>
-                  <td className="py-3 px-3 md:px-4 border-b border-[var(--border)] text-[var(--text-secondary)] max-w-[150px] truncate hidden sm:table-cell" title={request.reason}>
-                    {request.reason || "-"}
-                   </td>
-                  <td className="py-3 px-3 md:px-4 border-b border-[var(--border)]">
-                    <StatusBadge status={request.status} />
-                   </td>
-                  <td className="py-3 px-3 md:px-4 border-b border-[var(--border)]">
-                    <button
-                      onClick={() => handleViewDetails(request)}
-                      className="p-1.5 rounded-lg hover:bg-[var(--surface2)] text-green-500 transition-colors"
-                      title="View Details"
-                    >
-                      <FiEye className="text-sm" />
-                    </button>
-                   </td>
-                 </tr>
-              ))
+              currentRequests.map((request, idx) => {
+                const isModifiable = canModifyRequest(request);
+                const isAdminCreated = request.created_by_admin || request.is_admin_created || request.created_by === 'admin';
+                
+                return (
+                  <tr
+                    key={request.id}
+                    className="hover:bg-[var(--surface2)] transition-colors"
+                  >
+                    <td className="py-3 px-3 md:px-4 border-b border-[var(--border)] text-[var(--text-secondary)]">
+                      {start + idx + 1}
+                    </td>
+                    <td className="py-3 px-3 md:px-4 border-b border-[var(--border)]">
+                      <div className="flex items-center gap-2">
+                        {getRequestTypeIcon(request.type)}
+                        <span className="text-[var(--text)] text-xs whitespace-nowrap">
+                          {getRequestTypeLabel(request.type)}
+                        </span>
+                      </div>
+                    </td>
+                    <td className="py-3 px-3 md:px-4 border-b border-[var(--border)] text-[var(--text-secondary)] whitespace-nowrap">
+                      {formatDate(request.request_date || request.date)}
+                    </td>
+                    <td className="py-3 px-3 md:px-4 border-b border-[var(--border)] text-[var(--text-secondary)] whitespace-nowrap">
+                      {formatTime(request.request_time || request.time)}
+                    </td>
+                    <td className="py-3 px-3 md:px-4 border-b border-[var(--border)] text-[var(--text-secondary)] max-w-[150px] truncate hidden sm:table-cell" title={request.reason}>
+                      {request.reason || "-"}
+                    </td>
+                    <td className="py-3 px-3 md:px-4 border-b border-[var(--border)]">
+                      <StatusBadge status={request.status} />
+                    </td>
+                    <td className="py-3 px-3 md:px-4 border-b border-[var(--border)]">
+                      <div className="flex items-center gap-1">
+                        {/* View button - always visible */}
+                        <button
+                          onClick={() => handleViewDetails(request)}
+                          className="p-1.5 rounded-lg hover:bg-[var(--surface2)] text-green-500 transition-colors"
+                          title="View Details"
+                        >
+                          <FiEye className="text-sm" />
+                        </button>
+                        
+                        {/* Edit button - only show if modifiable and not admin created */}
+                        {!isAdminCreated && isModifiable && (
+                          <button
+                            onClick={() => handleEditRequest(request)}
+                            className="p-1.5 rounded-lg hover:bg-[var(--surface2)] text-blue-500 transition-colors"
+                            title="Edit Request"
+                          >
+                            <FiEdit2 className="text-sm" />
+                          </button>
+                        )}
+                        
+                        {/* Delete button - only show if modifiable and not admin created */}
+                        {!isAdminCreated && isModifiable && (
+                          <button
+                            onClick={() => handleDeleteClick(request.id)}
+                            className="p-1.5 rounded-lg hover:bg-[var(--surface2)] text-red-500 transition-colors"
+                            title="Delete Request"
+                          >
+                            <FiTrash2 className="text-sm" />
+                          </button>
+                        )}
+                      </div>
+                    </td>
+                  </tr>
+                );
+              })
             )}
           </tbody>
-         </table>
+        </table>
       </div>
 
-      {/* Pagination - Stack on mobile */}
+      {/* Pagination */}
       {filteredRequests.length > 0 && (
         <div className="pagination-container flex flex-col sm:flex-row justify-between items-center gap-3 mt-5">
           <div className="text-xs text-[var(--muted)] text-center sm:text-left">
@@ -590,7 +667,7 @@ const AttendanceRequests = () => {
         </div>
       )}
 
-      {/* Details Modal - Mobile friendly */}
+      {/* Details Modal */}
       {showDetailsModal && selectedRequest && (
         <div className="fixed inset-0 bg-black/50 backdrop-blur-sm z-[1100] flex items-center justify-center p-4" onClick={() => setShowDetailsModal(false)}>
           <div className="bg-[var(--surface)] max-w-md w-full rounded-2xl p-4 md:p-6 shadow-xl border border-[var(--border)] max-h-[90vh] overflow-y-auto" onClick={(e) => e.stopPropagation()}>
@@ -638,22 +715,48 @@ const AttendanceRequests = () => {
         </div>
       )}
 
-      {/* Modals */}
+      {/* Delete Confirmation Modal */}
+      <ConfirmModal
+        isOpen={showDeleteConfirm}
+        onClose={() => {
+          setShowDeleteConfirm(false);
+          setDeleteRequestId(null);
+        }}
+        onConfirm={handleConfirmDelete}
+        title="Delete Attendance Request"
+        message="Are you sure you want to delete this attendance request? This action cannot be undone."
+        confirmText="Delete"
+        cancelText="Cancel"
+        loading={deleteLoading}
+        type="delete"
+      />
+
+      {/* Modals with proper state reset */}
       <EarlyCheckinModal
         isOpen={showEarlyCheckin} 
         onClose={handleModalClose}
+        onSuccess={handleModalClose}
       />
       <LateCheckinModal
         isOpen={showLateCheckin} 
         onClose={handleModalClose}
+        onSuccess={handleModalClose}
       />
       <MissedPunchInModal 
         isOpen={showMissedPunchIn} 
         onClose={handleModalClose}
+        onSuccess={handleModalClose}
       />
       <MissedPunchOutModal
         isOpen={showMissedPunchOut} 
         onClose={handleModalClose}
+        onSuccess={handleModalClose}
+      />
+      <EditAttendanceRequestModal
+        isOpen={showEditModal}
+        onClose={handleModalClose}
+        request={requestToEdit}
+        onSuccess={handleModalClose}
       />
     </div>
   );

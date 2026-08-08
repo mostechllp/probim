@@ -222,6 +222,8 @@ export const updateLeaveStatus = createAsyncThunk(
   },
 );
 
+// src/admin/store/slices/LeaveSlice.js
+
 export const fetchLeaveBalances = createAsyncThunk(
   "leaves/fetchBalances",
   async ({ employee_id }, { rejectWithValue }) => {
@@ -229,8 +231,14 @@ export const fetchLeaveBalances = createAsyncThunk(
       const response = await apiClient.get(
         `/admin/leave-allocations/${employee_id}`,
       );
-      return response.data.data;
+      console.log("Fetch leave balances response:", response.data);
+      
+      if (response.data && response.data.status === "success") {
+        return response.data.data;
+      }
+      return response.data;
     } catch (error) {
+      console.error("Fetch leave balances error:", error);
       return rejectWithValue(
         error.response?.data?.message || "Failed to fetch leave balances",
       );
@@ -383,43 +391,55 @@ export const toggleLeaveTypeStatus = createAsyncThunk(
 
 // src/admin/store/slices/LeaveSlice.js
 
+// src/admin/store/slices/LeaveSlice.js
+
 export const updateLeaveRequest = createAsyncThunk(
   "leaves/updateRequest",
   async ({ id, formData }, { rejectWithValue, dispatch }) => {
     try {
-      // If formData is FormData, convert to plain object
-      let payload = {};
-      
+      // If formData is FormData, send as FormData (not JSON)
       if (formData instanceof FormData) {
+        console.log(`Admin updating leave request ${id} with FormData`);
+        
+        // Log FormData contents for debugging
         for (let [key, value] of formData.entries()) {
-          if (key === 'document') {
-            continue;
-          }
-          if (key === 'leave_type_id' || key === 'claim_salary') {
-            payload[key] = parseInt(value);
-          } else {
-            payload[key] = value;
-          }
+          console.log(`FormData: ${key} =`, value);
+        }
+
+        const response = await apiClient.post(`/admin/leaves/${id}`, formData, {
+          headers: { 
+            "Content-Type": "multipart/form-data" 
+          },
+        });
+        
+        console.log("Admin update leave response:", response.data);
+
+        if (response.data && response.data.status === "success") {
+          await dispatch(fetchLeaves());
+          return transformAdminLeaveData(response.data.data || response.data);
+        } else {
+          return rejectWithValue(
+            response.data?.message || "Failed to update leave request",
+          );
         }
       } else {
-        payload = formData;
-      }
+        // If it's a plain object, send as JSON
+        console.log(`Admin updating leave request ${id} with payload:`, formData);
 
-      console.log(`Admin updating leave request ${id} with payload:`, payload);
+        const response = await apiClient.post(`/admin/leaves/${id}`, formData, {
+          headers: { "Content-Type": "application/json" },
+        });
+        
+        console.log("Admin update leave response:", response.data);
 
-      const response = await apiClient.post(`/admin/leaves/${id}`, payload, {
-        headers: { "Content-Type": "application/json" },
-      });
-      
-      console.log("Admin update leave response:", response.data);
-
-      if (response.data && response.data.status === "success") {
-        await dispatch(fetchLeaves());
-        return transformAdminLeaveData(response.data.data || response.data);
-      } else {
-        return rejectWithValue(
-          response.data?.message || "Failed to update leave request",
-        );
+        if (response.data && response.data.status === "success") {
+          await dispatch(fetchLeaves());
+          return transformAdminLeaveData(response.data.data || response.data);
+        } else {
+          return rejectWithValue(
+            response.data?.message || "Failed to update leave request",
+          );
+        }
       }
     } catch (error) {
       console.error("Admin update leave error:", error);

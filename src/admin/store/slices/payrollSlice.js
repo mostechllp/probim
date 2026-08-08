@@ -354,6 +354,33 @@ export const fetchPayrollHistory = createAsyncThunk(
   },
 );
 
+export const fetchWorkingDays = createAsyncThunk(
+  "payroll/fetchWorkingDays",
+  async ({ employeeId, month }, { rejectWithValue }) => {
+    try {
+      const response = await apiClient.get("/admin/payroll/working-days", {
+        params: {
+          employee_id: employeeId,
+          month: month,
+        },
+      });
+      console.log("Fetch working days response:", response.data);
+
+      if (response.data?.success) {
+        return response.data.data;
+      }
+      return rejectWithValue(
+        response.data?.message || "Failed to fetch working days",
+      );
+    } catch (error) {
+      console.error("Fetch working days error:", error);
+      return rejectWithValue(
+        error.response?.data?.message || "Failed to fetch working days",
+      );
+    }
+  },
+);
+
 // ─── Save Draft Payroll ────────────────────────────────────────────────
 export const saveDraftPayroll = createAsyncThunk(
   "payroll/saveDraft",

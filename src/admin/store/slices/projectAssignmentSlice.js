@@ -15,7 +15,7 @@ const mapAssignmentFromApi = (
 
   // IMPORTANT: Use apiAssign.id as the primary employee ID
   let employeeId = null;
-  
+
   // Primary: Use the employee record ID (apiAssign.id)
   if (apiAssign.id) {
     employeeId = Number(apiAssign.id);
@@ -174,6 +174,28 @@ export const fetchEmployeeProjects = createAsyncThunk(
     }
   },
 );
+export const fetchEmployeesForAssignments = createAsyncThunk(
+  "projectAssignments/fetchEmployeesForAssignments",
+  async (_, { rejectWithValue }) => {
+    try {
+      const response = await projectService.getEmployeesForProjectAssignments();
+      // Handle different response structures
+      if (Array.isArray(response)) {
+        return response;
+      } else if (Array.isArray(response?.data)) {
+        return response.data;
+      } else if (Array.isArray(response?.data?.data)) {
+        return response.data.data;
+      }
+      return [];
+    } catch (error) {
+      console.error("[API ERROR] fetchEmployeesForAssignments:", error);
+      return rejectWithValue(
+        error.message || "Failed to fetch employees for assignments",
+      );
+    }
+  },
+);
 
 export const removeEmployeeSingleProject = createAsyncThunk(
   "projectAssignments/removeEmployeeSingleProject",
@@ -273,6 +295,7 @@ const initialState = {
   assignments: [],
   employeeProjects: [],
   employeeWorkingTime: {},
+  employeesForAssignment: [],
   loading: false,
   actionLoading: false,
   error: null,
@@ -441,6 +464,19 @@ const projectAssignmentSlice = createSlice({
       .addCase(deleteAllEmployeeProjects.rejected, (state, action) => {
         state.actionLoading = false;
         state.error = action.payload || "Failed to delete all assignments";
+      })
+      .addCase(fetchEmployeesForAssignments.pending, (state) => {
+        state.loading = true;
+        state.error = null;
+      })
+      .addCase(fetchEmployeesForAssignments.fulfilled, (state, action) => {
+        state.loading = false;
+        state.employeesForAssignment = action.payload;
+        console.log("Employees loaded:", action.payload); // Debug log
+      })
+      .addCase(fetchEmployeesForAssignments.rejected, (state, action) => {
+        state.loading = false;
+        state.error = action.payload || "Failed to load employees";
       });
   },
 });
