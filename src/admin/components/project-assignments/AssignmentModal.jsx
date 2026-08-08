@@ -227,6 +227,168 @@ const ProjectDropdown = ({ projects, selectedIds, onChange, disabled }) => {
   );
 };
 
+/* ─── EmployeeDropdown ───────────────────────────────────────────── */
+const EmployeeDropdown = ({ employees, selectedId, onChange, disabled }) => {
+  const [open, setOpen] = useState(false);
+  const [search, setSearch] = useState("");
+  const ref = useRef(null);
+
+  useEffect(() => {
+    let timeoutId;
+    const handler = (e) => {
+      if (ref.current && !ref.current.contains(e.target)) {
+        timeoutId = setTimeout(() => {
+          setOpen(false);
+        }, 150);
+      }
+    };
+    document.addEventListener("pointerdown", handler);
+    return () => {
+      document.removeEventListener("pointerdown", handler);
+      if (timeoutId) clearTimeout(timeoutId);
+    };
+  }, []);
+
+  const filtered = useMemo(
+    () =>
+      employees.filter(
+        (e) =>
+          e.name.toLowerCase().includes(search.toLowerCase()) ||
+          (e.designation || "").toLowerCase().includes(search.toLowerCase()) ||
+          (e.department || "").toLowerCase().includes(search.toLowerCase())
+      ),
+    [employees, search]
+  );
+
+  const selected = useMemo(
+    () => employees.find((e) => String(e.id) === String(selectedId)),
+    [employees, selectedId]
+  );
+
+  const selectEmployee = (e, id) => {
+    e.stopPropagation();
+    onChange(String(id));
+    setOpen(false);
+    setSearch("");
+  };
+
+  return (
+    <div className="relative" ref={ref}>
+      <div
+        onClick={() => !disabled && setOpen((v) => !v)}
+        className={`relative min-h-[46px] w-full px-4 py-2.5 pr-10 rounded-xl border bg-white dark:bg-gray-800 flex items-center gap-3 transition-all select-none
+          ${disabled ? "opacity-60 cursor-not-allowed border-gray-200 dark:border-gray-700" : "cursor-pointer border-gray-200 dark:border-gray-655 hover:border-green-400 dark:hover:border-green-500"}
+          ${open ? "border-green-500 ring-2 ring-green-500/20" : ""}
+        `}
+      >
+        {selected ? (
+          <div className="flex items-center gap-2.5 truncate">
+            {selected.avatar ? (
+              <img
+                src={selected.avatar}
+                alt={selected.name}
+                className="w-6 h-6 rounded-full object-cover flex-shrink-0"
+                onError={(e) => {
+                  e.target.onerror = null;
+                  e.target.src = getFallbackAvatar(selected.name);
+                }}
+              />
+            ) : (
+              <div className="w-6 h-6 rounded-full bg-gradient-to-br from-green-400/30 to-teal-500/20 flex items-center justify-center flex-shrink-0">
+                <span className="text-[10px] font-bold text-green-600 dark:text-green-400">
+                  {getInitials(selected.name)}
+                </span>
+              </div>
+            )}
+            <span className="text-sm font-medium text-gray-800 dark:text-gray-200 truncate">
+              {selected.name}
+              {selected.designation && <span className="text-gray-400 ml-1 text-xs font-normal">({selected.designation})</span>}
+            </span>
+          </div>
+        ) : (
+          <span className="text-sm font-medium text-gray-800 dark:text-gray-200">
+            — Choose an employee —
+          </span>
+        )}
+
+        <span className="absolute right-3.5 top-1/2 -translate-y-1/2 text-gray-400 pointer-events-none">
+          <i className={`fas fa-chevron-down text-xs transition-transform duration-200 ${open ? "rotate-180" : ""}`} />
+        </span>
+      </div>
+
+      {open && (
+        <div className="absolute z-50 left-0 right-0 mt-1.5 bg-white dark:bg-gray-800 border border-gray-150 dark:border-gray-700 rounded-2xl shadow-[0_8px_32px_rgba(0,0,0,0.12)] overflow-hidden animate-slideUp">
+          <div className="p-3 border-b border-gray-100 dark:border-gray-700 relative">
+            <i className="fas fa-search absolute left-6 top-[22px] text-gray-400 text-xs pointer-events-none" />
+            <input
+              type="text"
+              placeholder="Search employees…"
+              value={search}
+              onChange={(e) => setSearch(e.target.value)}
+              onPointerDown={(e) => e.stopPropagation()}
+              className="w-full pl-8 pr-3 py-2 text-xs rounded-xl border border-gray-200 dark:border-gray-655 bg-gray-50 dark:bg-gray-750 text-gray-800 dark:text-gray-200 focus:outline-none focus:ring-2 focus:ring-green-500/20 focus:border-green-500 transition-all placeholder:text-gray-400"
+            />
+          </div>
+
+          <div className="max-h-52 overflow-y-auto py-1 scrollbar-thin">
+            {filtered.length === 0 ? (
+              <div className="px-4 py-6 text-center text-gray-400 text-xs italic">
+                No matching employees
+              </div>
+            ) : (
+              filtered.map((emp) => {
+                const isSelected = String(emp.id) === String(selectedId);
+                return (
+                  <div
+                    key={emp.id}
+                    onPointerDown={(e) => selectEmployee(e, emp.id)}
+                    className={`flex items-center gap-3 px-4 py-2.5 cursor-pointer transition-colors select-none ${
+                      isSelected
+                        ? "bg-green-500/5 dark:bg-green-500/10"
+                        : "hover:bg-gray-50 dark:hover:bg-gray-700/40"
+                    }`}
+                  >
+                    <div className="w-8 h-8 rounded-full bg-gradient-to-br from-green-400/30 to-teal-500/20 flex items-center justify-center flex-shrink-0 border border-gray-200 dark:border-gray-700 overflow-hidden">
+                      {emp.avatar ? (
+                        <img
+                          src={emp.avatar}
+                          alt={emp.name}
+                          className="w-full h-full object-cover"
+                          onError={(e) => {
+                            e.target.onerror = null;
+                            e.target.src = getFallbackAvatar(emp.name);
+                          }}
+                        />
+                      ) : (
+                        <span className="text-xs font-bold text-green-600 dark:text-green-400">
+                          {getInitials(emp.name)}
+                        </span>
+                      )}
+                    </div>
+                    <div className="min-w-0 flex-1 pointer-events-none">
+                      <p className={`text-sm font-semibold truncate ${isSelected ? "text-green-600 dark:text-green-400" : "text-gray-700 dark:text-gray-200"}`}>
+                        {emp.name}
+                      </p>
+                      {emp.designation && (
+                        <p className="text-[10px] text-gray-400 truncate mt-0.5 font-medium">
+                          {emp.designation}{emp.department ? ` · ${emp.department}` : ""}
+                        </p>
+                      )}
+                    </div>
+                    {isSelected && (
+                      <i className="fas fa-check text-green-500 text-xs flex-shrink-0" />
+                    )}
+                  </div>
+                );
+              })
+            )}
+          </div>
+        </div>
+      )}
+    </div>
+  );
+};
+
 /* ─── Main Modal ────────────────────────────────────────────────── */
 const AssignmentModal = ({
   isOpen,
@@ -390,25 +552,12 @@ const AssignmentModal = ({
                     <i className="fas fa-lock text-gray-300 dark:text-gray-600 text-xs ml-auto flex-shrink-0" />
                   </div>
                 ) : (
-                  /* native select styled */
-                  <div className="relative">
-                    <select
-                      value={employeeId}
-                      onChange={(e) => setEmployeeId(e.target.value)}
-                      disabled={actionLoading}
-                      className="w-full appearance-none px-4 py-3 pr-10 rounded-xl border border-gray-200 dark:border-gray-650 bg-white dark:bg-gray-800 text-sm font-medium text-gray-800 dark:text-gray-200 focus:outline-none focus:ring-2 focus:ring-green-500/20 focus:border-green-500 transition-all cursor-pointer disabled:opacity-60 disabled:cursor-not-allowed"
-                    >
-                      <option value="">— Choose an employee —</option>
-                      {mappedEmployees.map((emp) => (
-                        <option key={emp.id} value={emp.id}>
-                          {emp.name}{emp.designation ? ` (${emp.designation})` : ""}
-                        </option>
-                      ))}
-                    </select>
-                    <span className="absolute right-3.5 top-1/2 -translate-y-1/2 text-gray-400 pointer-events-none">
-                      <i className="fas fa-chevron-down text-xs" />
-                    </span>
-                  </div>
+                  <EmployeeDropdown
+                    employees={mappedEmployees}
+                    selectedId={employeeId}
+                    onChange={setEmployeeId}
+                    disabled={actionLoading}
+                  />
                 )}
               </div>
 
