@@ -85,7 +85,6 @@ const EmployeeAttendancePage = lazy(
 const AdminWFH = lazy(() => import("./admin/pages/WFH"));
 const Settings = lazy(() => import("./admin/pages/Settings"));
 const RoleManagement = lazy(() => import("./admin/pages/RoleManagement"));
-const Payroll = lazy(() => import("./admin/pages/Payroll"));
 const PayrollCalender = lazy(() => import("./admin/pages/PayrollCalender"));
 const PayrollList = lazy(() => import("./admin/pages/PayrollList"));
 const AddPayroll = lazy(() => import("./admin/pages/AddPayroll"));
