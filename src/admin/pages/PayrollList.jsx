@@ -302,14 +302,20 @@ const PayrollList = () => {
     }
   };
 
-  const handleGeneratePayslip = async (payrollId) => {
-    try {
-      await dispatch(generatePayslip(payrollId)).unwrap();
-      showToast("Payslip downloaded successfully!", "success");
-    } catch (error) {
-      showToast(error || "Failed to generate payslip", "error");
-    }
-  };
+ const handleGeneratePayslip = async (payrollId) => {
+  try {
+    const result = await dispatch(generatePayslip(payrollId)).unwrap();
+    // If successful, show success message
+    showToast("Payslip downloaded successfully!", "success");
+  } catch (error) {
+    // The error comes from the thunk's rejectWithValue
+    // Display the error message from the API response
+    const errorMessage = typeof error === 'string' 
+      ? error 
+      : error?.message || error?.data?.message || "Failed to generate payslip";
+    showToast(errorMessage, "error");
+  }
+};
 
   const getStatusBadge = (status) => {
     const statusMap = {

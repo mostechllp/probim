@@ -1453,37 +1453,36 @@ function EditPayroll() {
     });
   }, [selectedUserId, employeeId, employeeName, payPeriodMonth, payPeriodYear, totalWorkingDays, daysPresent, countries, isDataLoaded, currentPayroll]);
 
-  if (isLoading && !isDataLoaded) {
-    return (
-      <div className="w-full overflow-x-hidden px-4 md:px-6">
-        <div className="flex justify-center items-center h-96">
-          <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-green-500"></div>
-        </div>
+  if (isLoading || !isDataLoaded) {
+  return (
+    <div className="w-full overflow-x-hidden px-4 md:px-6">
+      <div className="flex justify-center items-center h-96">
+        <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-green-500"></div>
       </div>
-    );
-  }
+    </div>
+  );
+}
 
-  if (!currentPayroll && isDataLoaded) {
-    return (
-      <div className="w-full overflow-x-hidden px-4 md:px-6">
-        <div className="text-center py-12 bg-white dark:bg-gray-800 rounded-xl border border-gray-200 dark:border-gray-700">
-          <i className="fas fa-file-invoice text-6xl text-gray-300 dark:text-gray-600 mb-4 block"></i>
-          <h3 className="text-xl font-semibold text-gray-700 dark:text-gray-300">
-            Payroll not found
-          </h3>
-          <button
-            onClick={() => navigate(`${basePath}/payroll`)}
-            className="mt-4 px-4 py-2 bg-green-500 text-white rounded-lg hover:bg-green-600"
-          >
-            Back to Payroll
-          </button>
-        </div>
+// Only show not found after loading is complete AND data is loaded AND no payroll exists
+if (!currentPayroll && !isLoading && isDataLoaded) {
+  return (
+    <div className="w-full overflow-x-hidden px-4 md:px-6">
+      <div className="text-center py-12 bg-white dark:bg-gray-800 rounded-xl border border-gray-200 dark:border-gray-700">
+        <i className="fas fa-file-invoice text-6xl text-gray-300 dark:text-gray-600 mb-4 block"></i>
+        <h3 className="text-xl font-semibold text-gray-700 dark:text-gray-300">
+          Payroll not found
+        </h3>
+        <button
+          onClick={() => navigate(`${basePath}/payroll`)}
+          className="mt-4 px-4 py-2 bg-green-500 text-white rounded-lg hover:bg-green-600"
+        >
+          Back to Payroll
+        </button>
       </div>
-    );
-  }
+    </div>
+  );
+}
 
-  // Rest of the component remains the same...
-  // ... (the JSX render part is unchanged from your version)
   return (
     <div className="w-full overflow-x-hidden px-4 md:px-6">
       {/* Breadcrumbs */}
