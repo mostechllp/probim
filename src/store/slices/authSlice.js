@@ -86,15 +86,17 @@ export const initializeAuth = createAsyncThunk(
       const response = await apiClient.get("/auth/me");
       const userData = response.data.data;
       
+      const resolvedUser = userData.user || userData;
+      
       // Ensure token is stored with proper key
-      const type = userData.user?.type || userType || 'admin';
+      const type = resolvedUser?.type || userType || 'admin';
       const tokenKey = `${type}-token`;
       localStorage.setItem(tokenKey, token);
       localStorage.setItem("active-user-type", type);
       localStorage.setItem("user-type", type);
-      localStorage.setItem("user-data", JSON.stringify(userData));
+      localStorage.setItem("user-data", JSON.stringify(resolvedUser));
       
-      return userData;
+      return resolvedUser;
     } catch {
       // Token is invalid/expired — clear everything
       ['admin-token', 'hr-token', 'employee-token', 'auth-token'].forEach(key => {
@@ -387,10 +389,11 @@ const authSlice = createSlice({
       .addCase(initializeAuth.fulfilled, (state, action) => {
         state.loading = false;
         state.isAuthenticated = true;
-        state.userType = action.payload.user?.type;
+        const resolvedUser = action.payload;
+        state.userType = resolvedUser?.type;
         state.user = {
-          ...action.payload.user,
-          name: action.payload.user?.employee?.name || action.payload.user?.username,
+          ...resolvedUser,
+          name: resolvedUser?.employee?.name || resolvedUser?.username,
         };
       })
       .addCase(initializeAuth.rejected, (state) => {
