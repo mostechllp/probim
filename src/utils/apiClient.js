@@ -17,11 +17,8 @@ const apiClient = axios.create({
 
 /**
  * ============================================================
- * USER TYPES / TOKEN KEYS
+ * USER TYPES
  * ============================================================
- *
- * IMPORTANT:
- * Keep this list as the single source of truth.
  */
 
 export const USER_TYPES = [
@@ -32,6 +29,12 @@ export const USER_TYPES = [
   "team_lead",
 ];
 
+/**
+ * ============================================================
+ * TOKEN KEYS
+ * ============================================================
+ */
+
 export const TOKEN_KEYS = [
   ...USER_TYPES.map((type) => `${type}-token`),
   "auth-token",
@@ -39,17 +42,22 @@ export const TOKEN_KEYS = [
 
 /**
  * ============================================================
- * HELPERS
+ * TOKEN HELPERS
  * ============================================================
  */
 
 const isEmptyToken = (value) => {
   return (
     !value ||
+    typeof value !== "string" ||
+    value.trim() === "" ||
     value === "null" ||
-    value === "undefined" ||
-    value.trim?.() === ""
+    value === "undefined"
   );
+};
+
+const isValidUserType = (type) => {
+  return type && USER_TYPES.includes(type);
 };
 
 /**
@@ -72,7 +80,8 @@ export const getStorageUrl = (path) => {
     return path;
   }
 
-  const baseUrl = API_BASE_URL?.replace(/\/api\/?$/, "") || "";
+  const baseUrl =
+    API_BASE_URL?.replace(/\/api\/?$/, "") || "";
 
   const cleanPath = path.startsWith("/")
     ? path.slice(1)
@@ -92,11 +101,7 @@ export const getActiveUserType = () => {
     "active-user-type"
   );
 
-  if (!activeType) {
-    return null;
-  }
-
-  if (!USER_TYPES.includes(activeType)) {
+  if (!isValidUserType(activeType)) {
     return null;
   }
 
@@ -128,7 +133,7 @@ export const getActiveTokenKey = () => {
 
 /**
  * ============================================================
- * GET ACTIVE TOKEN
+ * ACTIVE TOKEN
  * ============================================================
  */
 
@@ -145,127 +150,10 @@ export const getActiveToken = () => {
 };
 
 /**
- * Internal alias used by refresh logic.
+ * Internal alias
  */
 const getToken = () => {
   return getActiveToken();
-};
-
-/**
- * ============================================================
- * PERSIST TOKEN
- * ============================================================
- */
-
-const persistToken = (newToken) => {
-  if (isEmptyToken(newToken)) {
-    return false;
-  }
-
-  const activeType = getActiveUserType();
-
-  if (!activeType) {
-    return false;
-  }
-
-  const tokenKey = `${activeType}-token`;
-
-  localStorage.setItem(tokenKey, newToken);
-
-  return true;
-};
-
-/**
- * ============================================================
- * REMOVE ALL AUTH DATA
- * ============================================================
- */
-
-export const clearAllTokens = () => {
-  /**
-   * Remove every supported token.
-   */
-  TOKEN_KEYS.forEach((key) => {
-    localStorage.removeItem(key);
-  });
-
-  /**
-   * Remove authentication-related storage.
-   */
-  const authStorageKeys = [
-    "active-user-type",
-    "user-type",
-    "user-data",
-    "userType",
-    "user",
-    "token",
-
-    "admin-user",
-    "hr-user",
-    "employee-user",
-    "manager-user",
-    "team-lead-user",
-
-    "remember-me",
-    "remembered-email",
-  ];
-
-  authStorageKeys.forEach((key) => {
-    localStorage.removeItem(key);
-  });
-
-  /**
-   * Remove Axios default authorization.
-   */
-  delete apiClient.defaults.headers.common.Authorization;
-
-  console.log("🧹 All authentication data cleared");
-};
-
-/**
- * ============================================================
- * AUTH EXPIRED HANDLER
- * ============================================================
- */
-
-let authExpiredHandled = false;
-
-export const clearAuthAndRedirect = () => {
-  /**
-   * Prevent multiple simultaneous expiry events.
-   */
-  if (authExpiredHandled) {
-    return;
-  }
-
-  authExpiredHandled = true;
-
-  clearAllTokens();
-
-  /**
-   * Notify the application.
-   */
-  window.dispatchEvent(
-    new CustomEvent("auth-expired")
-  );
-
-  /**
-   * Give React/router a chance to handle the event.
-   *
-   * If there is no listener, fall back to login.
-   */
-  setTimeout(() => {
-    const currentPath = window.location.pathname;
-
-    if (
-      currentPath !== "/" &&
-      currentPath !== "/login"
-    ) {
-      window.location.href = "/login";
-    }
-
-    authExpiredHandled = false;
-  }, 0);
 };
 
 /**
@@ -293,48 +181,43 @@ const decodeJwt = (token) => {
       .replace(/_/g, "/");
 
     const paddedBase64 =
-      base64 + "=".repeat((4 - (base64.length % 4)) % 4);
+      base64 +
+      "=".repeat(
+        (4 - (base64.length % 4)) % 4
+      );
 
-    const json = decodeURIComponent(
-      atob(paddedBase64)
-        .split("")
-        .map(
-          (character) =>
-            "%" +
-            character
-              .charCodeAt(0)
-              .toString(16)
-              .padStart(2, "0")
-        )
-        .join("")
+    const binary = atob(paddedBase64);
+
+    const bytes = Uint8Array.from(
+      binary,
+      (character) => character.charCodeAt(0)
     );
+
+    const json = new TextDecoder().decode(bytes);
 
     return JSON.parse(json);
   } catch (error) {
-    console.warn("Failed to decode JWT:", error);
+    console.warn(
+      "Failed to decode JWT:",
+      error
+    );
+
     return null;
   }
 };
 
 /**
  * ============================================================
- * CHECK TOKEN EXPIRATION
+ * TOKEN EXPIRATION
  * ============================================================
- *
- * Returns true when the token is already expired or
- * will expire within the specified buffer.
  */
 
 export const isExpiringSoon = (
   token,
-  bufferSeconds = 30
+  bufferSeconds = 60
 ) => {
   const payload = decodeJwt(token);
 
-  /**
-   * If the JWT does not contain exp, we cannot determine
-   * expiration on the client.
-   */
   if (!payload?.exp) {
     return false;
   }
@@ -348,11 +231,285 @@ export const isExpiringSoon = (
 
 /**
  * ============================================================
- * REFRESH STATE
+ * TOKEN EXPIRED
+ * ============================================================
+ */
+
+export const isTokenExpired = (token) => {
+  const payload = decodeJwt(token);
+
+  if (!payload?.exp) {
+    return false;
+  }
+
+  return Date.now() >= payload.exp * 1000;
+};
+
+/**
+ * ============================================================
+ * SAVE AUTH USER
  * ============================================================
  *
- * This prevents multiple API calls from triggering multiple
- * refresh requests simultaneously.
+ * The refresh API returns the complete user object.
+ * Save it so initializeAuth can restore the session.
+ */
+
+const persistUser = (user) => {
+  if (!user) {
+    return;
+  }
+
+  try {
+    localStorage.setItem(
+      "user-data",
+      JSON.stringify(user)
+    );
+
+    localStorage.setItem(
+      "user",
+      JSON.stringify(user)
+    );
+
+    if (user.type) {
+      localStorage.setItem(
+        "user-type",
+        user.type
+      );
+
+      localStorage.setItem(
+        "active-user-type",
+        user.type
+      );
+    }
+  } catch (error) {
+    console.warn(
+      "Unable to persist user:",
+      error
+    );
+  }
+};
+
+/**
+ * ============================================================
+ * PERSIST TOKEN
+ * ============================================================
+ */
+
+const persistToken = (token, userType = null) => {
+  if (isEmptyToken(token)) {
+    return false;
+  }
+
+  const activeType =
+    userType || getActiveUserType();
+
+  if (!isValidUserType(activeType)) {
+    console.warn(
+      "persistToken: No valid user type"
+    );
+
+    return false;
+  }
+
+  const tokenKey = `${activeType}-token`;
+
+  /**
+   * Remove old tokens.
+   *
+   * This prevents multiple user sessions from
+   * accidentally being considered active.
+   */
+  TOKEN_KEYS.forEach((key) => {
+    if (key !== tokenKey) {
+      localStorage.removeItem(key);
+    }
+  });
+
+  localStorage.setItem(
+    tokenKey,
+    token
+  );
+
+  localStorage.setItem(
+    "active-user-type",
+    activeType
+  );
+
+  localStorage.setItem(
+    "user-type",
+    activeType
+  );
+
+  /**
+   * Keep Axios defaults synchronized.
+   */
+  apiClient.defaults.headers.common.Authorization =
+    `Bearer ${token}`;
+
+  return true;
+};
+
+/**
+ * ============================================================
+ * SET AUTH TOKEN
+ * ============================================================
+ */
+
+export const setAuthToken = (
+  token,
+  userType,
+  user = null
+) => {
+  if (
+    isEmptyToken(token) ||
+    !isValidUserType(userType)
+  ) {
+    console.warn(
+      "setAuthToken: Invalid token or user type"
+    );
+
+    return false;
+  }
+
+  const saved = persistToken(
+    token,
+    userType
+  );
+
+  if (!saved) {
+    return false;
+  }
+
+  if (user) {
+    persistUser(user);
+  }
+
+  console.log(
+    `🔐 Authentication stored for ${userType}`
+  );
+
+  return true;
+};
+
+/**
+ * ============================================================
+ * PUBLIC AUTH TOKEN GETTER
+ * ============================================================
+ */
+
+export const getAuthToken = (
+  userType = null
+) => {
+  const activeType =
+    userType || getActiveUserType();
+
+  if (!isValidUserType(activeType)) {
+    return null;
+  }
+
+  const tokenKey = `${activeType}-token`;
+
+  const token =
+    localStorage.getItem(tokenKey);
+
+  return isEmptyToken(token)
+    ? null
+    : token;
+};
+
+/**
+ * ============================================================
+ * CLEAR ALL AUTH DATA
+ * ============================================================
+ */
+
+export const clearAllTokens = () => {
+  /**
+   * Remove all token keys.
+   */
+  TOKEN_KEYS.forEach((key) => {
+    localStorage.removeItem(key);
+  });
+
+  /**
+   * Remove authentication-related data.
+   */
+  const authStorageKeys = [
+    "active-user-type",
+    "user-type",
+    "userType",
+    "user-data",
+    "user",
+    "token",
+
+    "admin-user",
+    "hr-user",
+    "employee-user",
+    "manager-user",
+    "team-lead-user",
+
+    "remember-me",
+    "remembered-email",
+  ];
+
+  authStorageKeys.forEach((key) => {
+    localStorage.removeItem(key);
+  });
+
+  /**
+   * Remove Axios authorization.
+   */
+  delete apiClient.defaults.headers.common.Authorization;
+
+  console.log(
+    "🧹 All authentication data cleared"
+  );
+};
+
+/**
+ * ============================================================
+ * AUTH EXPIRED HANDLER
+ * ============================================================
+ */
+
+let authExpiredHandled = false;
+
+export const clearAuthAndRedirect = () => {
+  if (authExpiredHandled) {
+    return;
+  }
+
+  authExpiredHandled = true;
+
+  console.warn(
+    "🚪 Authentication expired. Logging out."
+  );
+
+  clearAllTokens();
+
+  window.dispatchEvent(
+    new CustomEvent("auth-expired")
+  );
+
+  setTimeout(() => {
+    const currentPath =
+      window.location.pathname;
+
+    if (
+      currentPath !== "/login" &&
+      currentPath !== "/"
+    ) {
+      window.location.href = "/login";
+    }
+
+    authExpiredHandled = false;
+  }, 0);
+};
+
+/**
+ * ============================================================
+ * REFRESH STATE
+ * ============================================================
  */
 
 let refreshPromise = null;
@@ -361,53 +518,155 @@ let refreshPromise = null;
  * ============================================================
  * REFRESH ACCESS TOKEN
  * ============================================================
+ *
+ * IMPORTANT:
+ *
+ * Your backend refresh response is:
+ *
+ * {
+ *   status: "success",
+ *   message: "Login successful",
+ *   data: {
+ *      access_token: "...",
+ *      token_type: "bearer",
+ *      expires_in: 3600,
+ *      user: {...}
+ *   }
+ * }
+ *
+ * Therefore we extract:
+ *
+ * response.data.data.access_token
+ *
+ * and also persist the returned user.
  */
 
 const doRefresh = async () => {
-  const expiredToken = getToken();
+  const activeType =
+    getActiveUserType();
 
-  if (isEmptyToken(expiredToken)) {
-    clearAuthAndRedirect();
+  const currentToken =
+    getToken();
+
+  /**
+   * We need BOTH:
+   *
+   * 1. active user type
+   * 2. current token
+   */
+  if (
+    !isValidUserType(activeType) ||
+    isEmptyToken(currentToken)
+  ) {
+    console.warn(
+      "Refresh aborted: missing active user type or token",
+      {
+        activeType,
+        hasToken: !isEmptyToken(
+          currentToken
+        ),
+      }
+    );
 
     throw new Error(
-      "No token available to refresh"
+      "No valid authentication session"
     );
   }
 
   try {
-    console.log("🔄 Refreshing access token...");
-
-    const response = await axios.post(
-      `${API_BASE_URL}/auth/refresh`,
+    console.log(
+      "🔄 Refreshing access token...",
       {
-        token: expiredToken,
-      },
-      {
-        headers: {
-          Authorization: `Bearer ${expiredToken}`,
-          Accept: "application/json",
-          "Content-Type": "application/json",
-        },
+        userType: activeType,
       }
     );
 
+    /**
+     * IMPORTANT:
+     *
+     * Do NOT use apiClient here.
+     *
+     * Using axios directly prevents the refresh
+     * request from passing through our own interceptors.
+     */
+    const response = await axios.post(
+      `${API_BASE_URL}/auth/refresh`,
+      {
+        token: currentToken,
+      },
+      {
+        headers: {
+          Authorization:
+            `Bearer ${currentToken}`,
+
+          Accept:
+            "application/json",
+
+          "Content-Type":
+            "application/json",
+        },
+
+        /**
+         * Do not allow Axios to transform this
+         * into another authentication flow.
+         */
+        timeout: 15000,
+      }
+    );
+
+    /**
+     * Your backend response:
+     *
+     * response.data.data.access_token
+     */
+    const responseData =
+      response.data?.data;
+
     const newToken =
-      response.data?.data?.access_token ||
+      responseData?.access_token ||
       response.data?.access_token ||
-      response.data?.data?.token ||
+      responseData?.token ||
       response.data?.token;
+
+    const refreshedUser =
+      responseData?.user ||
+      response.data?.user ||
+      null;
 
     if (isEmptyToken(newToken)) {
       throw new Error(
-        "Refresh response did not contain a valid token"
+        "Refresh response did not contain access_token"
       );
     }
 
     /**
-     * Store refreshed token under the currently active
+     * If backend returns user.type,
+     * use it as the authoritative type.
+     *
+     * Otherwise retain current type.
+     */
+    const newUserType =
+      refreshedUser?.type ||
+      activeType;
+
+    if (
+      !isValidUserType(newUserType)
+    ) {
+      throw new Error(
+        "Refresh response contains invalid user type"
+      );
+    }
+
+    /**
+     * Important:
+     *
+     * Store the NEW token under the correct
      * user type.
      */
-    const saved = persistToken(newToken);
+    const saved = persistToken(
+      newToken,
+      newUserType
+    );
 
     if (!saved) {
       throw new Error(
@@ -416,22 +675,35 @@ const doRefresh = async () => {
     }
 
     /**
-     * Update Axios default authorization.
+     * Store refreshed user.
      */
-    apiClient.defaults.headers.common.Authorization =
-      `Bearer ${newToken}`;
+    if (refreshedUser) {
+      persistUser(refreshedUser);
+    }
 
-    console.log("✅ Access token refreshed");
+    console.log(
+      "✅ Access token refreshed successfully",
+      {
+        userType: newUserType,
+        expiresIn:
+          responseData?.expires_in,
+      }
+    );
 
     return newToken;
   } catch (error) {
     console.error(
       "❌ Token refresh failed:",
-      error.response?.data || error.message
+      error.response?.data ||
+        error.message
     );
 
-    clearAuthAndRedirect();
-
+    /**
+     * DO NOT immediately call clearAllTokens here.
+     *
+     * The response interceptor will decide whether
+     * this is a genuine authentication failure.
+     */
     throw error;
   }
 };
@@ -443,108 +715,14 @@ const doRefresh = async () => {
  */
 
 const refreshAccessToken = () => {
-  /**
-   * If refresh is already running, return the existing
-   * promise instead of creating another request.
-   */
   if (!refreshPromise) {
-    refreshPromise = doRefresh().finally(() => {
-      refreshPromise = null;
-    });
+    refreshPromise = doRefresh()
+      .finally(() => {
+        refreshPromise = null;
+      });
   }
 
   return refreshPromise;
-};
-
-/**
- * ============================================================
- * PUBLIC AUTH TOKEN GETTER
- * ============================================================
- */
-
-export const getAuthToken = (userType = null) => {
-  const activeType =
-    userType || getActiveUserType();
-
-  if (!activeType) {
-    return null;
-  }
-
-  if (!USER_TYPES.includes(activeType)) {
-    return null;
-  }
-
-  const tokenKey = `${activeType}-token`;
-  const token = localStorage.getItem(tokenKey);
-
-  return isEmptyToken(token)
-    ? null
-    : token;
-};
-
-/**
- * ============================================================
- * SET AUTH TOKEN
- * ============================================================
- */
-
-export const setAuthToken = (
-  token,
-  userType
-) => {
-  if (
-    isEmptyToken(token) ||
-    !userType ||
-    !USER_TYPES.includes(userType)
-  ) {
-    console.warn(
-      "setAuthToken: Invalid token or user type"
-    );
-
-    return false;
-  }
-
-  /**
-   * Remove old tokens first.
-   */
-  TOKEN_KEYS.forEach((key) => {
-    localStorage.removeItem(key);
-  });
-
-  const tokenKey = `${userType}-token`;
-
-  /**
-   * Store the new token.
-   */
-  localStorage.setItem(
-    tokenKey,
-    token
-  );
-
-  /**
-   * Store active user type.
-   */
-  localStorage.setItem(
-    "active-user-type",
-    userType
-  );
-
-  localStorage.setItem(
-    "user-type",
-    userType
-  );
-
-  /**
-   * Update Axios.
-   */
-  apiClient.defaults.headers.common.Authorization =
-    `Bearer ${token}`;
-
-  console.log(
-    `🔑 Token set for ${userType}`
-  );
-
-  return true;
 };
 
 /**
@@ -555,62 +733,87 @@ export const setAuthToken = (
 
 apiClient.interceptors.request.use(
   async (config) => {
-    /**
-     * Ensure headers exist.
-     */
-    config.headers = config.headers || {};
+    config.headers =
+      config.headers || {};
 
     /**
-     * Don't manually set multipart Content-Type.
-     * Browser/Axios will set the correct boundary.
+     * Multipart request.
+     *
+     * Let browser/Axios create boundary.
      */
-    if (config.data instanceof FormData) {
-      delete config.headers["Content-Type"];
+    if (
+      config.data instanceof FormData
+    ) {
+      delete config.headers[
+        "Content-Type"
+      ];
     } else {
-      config.headers["Content-Type"] =
-        "application/json";
+      config.headers[
+        "Content-Type"
+      ] = "application/json";
     }
 
     /**
-     * Refresh endpoint should not trigger another
-     * refresh.
+     * Never refresh the refresh endpoint.
      */
     if (
-      config.url?.includes("/auth/refresh")
+      config.url?.includes(
+        "/auth/refresh"
+      )
     ) {
       return config;
     }
 
-    let token = getToken();
+    let token =
+      getToken();
 
     /**
-     * If token is close to expiration, refresh it
-     * before making the request.
+     * No token.
+     *
+     * Do not immediately redirect here.
+     *
+     * The API request can still be sent if it
+     * doesn't require authentication.
+     */
+    if (!token) {
+      delete config.headers.Authorization;
+
+      return config;
+    }
+
+    /**
+     * Refresh BEFORE expiration.
+     *
+     * 60 seconds gives us a safe buffer.
      */
     if (
-      token &&
-      isExpiringSoon(token, 30)
+      isExpiringSoon(
+        token,
+        60
+      )
     ) {
       try {
-        token = await refreshAccessToken();
-      } catch (error) {
+        token =
+          await refreshAccessToken();
+      } catch (refreshError) {
         /**
-         * Refresh already clears authentication.
+         * Do NOT destroy the session here.
          *
-         * Do not attach the old token to the request.
+         * Let the server response determine whether
+         * authentication is actually invalid.
          */
-        token = null;
+        console.warn(
+          "Pre-request token refresh failed. Using current token."
+        );
       }
     }
 
     /**
-     * Always use the latest token.
+     * Always attach the latest token.
      */
     if (token) {
       config.headers.Authorization =
         `Bearer ${token}`;
-    } else {
-      delete config.headers.Authorization;
     }
 
     return config;
@@ -635,14 +838,14 @@ apiClient.interceptors.response.use(
   },
 
   /**
-   * Error response.
+   * Failed response.
    */
   async (error) => {
     const originalRequest =
       error.config;
 
     /**
-     * No response or no request configuration.
+     * Network error / malformed request.
      */
     if (
       !error.response ||
@@ -652,7 +855,7 @@ apiClient.interceptors.response.use(
     }
 
     /**
-     * Only handle 401 errors.
+     * Only handle 401.
      */
     if (
       error.response.status !== 401
@@ -661,7 +864,10 @@ apiClient.interceptors.response.use(
     }
 
     /**
-     * Never try to refresh the refresh request itself.
+     * Never refresh the refresh endpoint itself.
+     *
+     * A 401 here means the backend rejected the
+     * authentication session.
      */
     if (
       originalRequest.url?.includes(
@@ -674,9 +880,11 @@ apiClient.interceptors.response.use(
     }
 
     /**
-     * Prevent infinite retry loops.
+     * Prevent infinite retry.
      */
-    if (originalRequest._retry) {
+    if (
+      originalRequest._retry
+    ) {
       clearAuthAndRedirect();
 
       return Promise.reject(error);
@@ -685,20 +893,33 @@ apiClient.interceptors.response.use(
     originalRequest._retry = true;
 
     try {
+      console.log(
+        "🔄 API returned 401. Attempting token refresh..."
+      );
+
       /**
-       * Get a fresh token.
+       * Shared refresh promise.
        *
-       * If another request is already refreshing,
-       * this waits for the same promise.
+       * If multiple requests receive 401 simultaneously,
+       * only ONE refresh request is made.
        */
       const newToken =
         await refreshAccessToken();
 
+      if (
+        isEmptyToken(newToken)
+      ) {
+        throw new Error(
+          "Refresh returned empty token"
+        );
+      }
+
       /**
-       * Make sure headers exist.
+       * Ensure headers exist.
        */
       originalRequest.headers =
-        originalRequest.headers || {};
+        originalRequest.headers ||
+        {};
 
       /**
        * Replace old token.
@@ -709,8 +930,24 @@ apiClient.interceptors.response.use(
       /**
        * Retry original request.
        */
-      return apiClient(originalRequest);
+      return apiClient(
+        originalRequest
+      );
     } catch (refreshError) {
+      console.error(
+        "❌ Unable to recover from 401:",
+        refreshError.response?.data ||
+          refreshError.message
+      );
+
+      /**
+       * Now we KNOW the API rejected the
+       * authentication and refresh failed.
+       *
+       * This is the correct place to logout.
+       */
+      clearAuthAndRedirect();
+
       return Promise.reject(
         refreshError
       );
