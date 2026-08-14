@@ -212,92 +212,98 @@ const OffboardingDashboard = () => {
   }, [dispatch]);
 
   // Track which offboarding IDs we have fetched progress for
-  const fetchedProgressIds = React.useRef(new Set());
+  // Track which offboarding IDs we have fetched progress for
+const fetchedProgressIds = React.useRef(new Set());
 
-  // Fetch progress for each offboarding record
-  useEffect(() => {
-    const fetchProgressForAll = () => {
-      if (offboardings && offboardings.length > 0) {
-        offboardings.forEach(async (offboarding) => {
-          try {
-            // Check if we already have progress for this offboarding to avoid re-fetching
-            if (fetchedProgressIds.current.has(offboarding.id)) return;
-            
-            // Mark as fetching/fetched
-            fetchedProgressIds.current.add(offboarding.id);
+// Fetch progress for each offboarding record
+useEffect(() => {
+  const fetchProgressForAll = async () => {
+    // ✅ FIX: Define progressMap inside the function
+    const progressMap = {};
+    
+    if (offboardings && offboardings.length > 0) {
+      for (const offboarding of offboardings) {
+        try {
+          // Check if we already have progress for this offboarding to avoid re-fetching
+          if (fetchedProgressIds.current.has(offboarding.id)) continue;
+          
+          // Mark as fetching/fetched
+          fetchedProgressIds.current.add(offboarding.id);
 
-            const result = await dispatch(
-              fetchOffboardingProgress(offboarding.id),
-            ).unwrap();
-            
-            if (result) {
-              // ✅ FIX: Create a new object instead of modifying the read-only result
-              let processedResult = { ...result };
+          const result = await dispatch(
+            fetchOffboardingProgress(offboarding.id),
+          ).unwrap();
+          
+          if (result) {
+            // Create a new object instead of modifying the read-only result
+            let processedResult = { ...result };
 
-              // If steps is not an array, create a steps array
-              if (!Array.isArray(processedResult.steps)) {
-                // If steps is a number, create a default steps array
-                const totalSteps = processedResult.steps || 7;
-                const stepOrder = [
-                  "initiation",
-                  "checklist",
-                  "visa",
-                  "assets",
-                  "interview",
-                  "settlement",
-                  "letters",
-                ];
-                const currentStatus =
-                  processedResult.current_status || "initiation";
-                const currentIndex = stepOrder.indexOf(currentStatus);
+            // If steps is not an array, create a steps array
+            if (!Array.isArray(processedResult.steps)) {
+              // If steps is a number, create a default steps array
+              const totalSteps = processedResult.steps || 7;
+              const stepOrder = [
+                "initiation",
+                "checklist",
+                "visa",
+                "assets",
+                "interview",
+                "settlement",
+                "letters",
+              ];
+              const currentStatus =
+                processedResult.current_status || "initiation";
+              const currentIndex = stepOrder.indexOf(currentStatus);
 
-                processedResult.steps = stepOrder.map((stepKey, index) => {
-                  let status = "pending";
-                  if (index < currentIndex) {
-                    status = "completed";
-                  } else if (index === currentIndex) {
-                    status = "in_progress";
-                  }
-                  return {
-                    key: stepKey,
-                    status: status,
-                    name: getStepName(stepKey),
-                  };
-                });
-
-                // Update total_steps if needed
-                if (!processedResult.total_steps) {
-                  processedResult.total_steps = stepOrder.length;
+              processedResult.steps = stepOrder.map((stepKey, index) => {
+                let status = "pending";
+                if (index < currentIndex) {
+                  status = "completed";
+                } else if (index === currentIndex) {
+                  status = "in_progress";
                 }
+                return {
+                  key: stepKey,
+                  status: status,
+                  name: getStepName(stepKey),
+                };
+              });
+
+              // Update total_steps if needed
+              if (!processedResult.total_steps) {
+                processedResult.total_steps = stepOrder.length;
               }
-
-              progressMap[offboarding.id] = processedResult;
             }
-          } catch (error) {
-            // Remove from set if failed so it can be retried if needed
-            fetchedProgressIds.current.delete(offboarding.id);
-            console.error(
-              `Failed to fetch progress for offboarding ${offboarding.id}:`,
-              error,
-            );
-            // Set default progress
-            progressMap[offboarding.id] = {
-              steps: [],
-              progress_percentage: 0,
-              completed_steps: 0,
-              total_steps: 7,
-              current_status: "initiation",
-            };
+
+            progressMap[offboarding.id] = processedResult;
           }
-        });
+        } catch (error) {
+          // Remove from set if failed so it can be retried if needed
+          fetchedProgressIds.current.delete(offboarding.id);
+          console.error(
+            `Failed to fetch progress for offboarding ${offboarding.id}:`,
+            error,
+          );
+          // Set default progress
+          progressMap[offboarding.id] = {
+            steps: [],
+            progress_percentage: 0,
+            completed_steps: 0,
+            total_steps: 7,
+            current_status: "initiation",
+          };
+        }
       }
-    };
+    }
+    
+    // ✅ FIX: Set progress data after all fetches are complete
+    setProgressData(progressMap);
+  };
 
-    fetchProgressForAll();
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [offboardings, dispatch]);
+  fetchProgressForAll();
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+}, [offboardings, dispatch]);
 
-  // Process offboarding data
   // Process offboarding data
   useEffect(() => {
     if (!offboardingLoading && offboardings) {
