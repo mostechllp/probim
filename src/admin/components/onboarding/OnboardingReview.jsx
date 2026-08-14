@@ -333,11 +333,9 @@ const OnboardingReview = () => {
         return;
       }
 
-      // Parse full name
-      const fullName = (employeeDetails.fullName || "").trim();
-      const parts = fullName.split(" ");
-      const first_name = parts[0] || "Unknown";
-      const last_name = parts.slice(1).join(" ") || "";
+      // Retrieve name directly since they are already separated
+      const first_name = employeeDetails.firstName || "Unknown";
+      const last_name = employeeDetails.lastName || "";
 
       // Generate DOB and Employee ID
       let dob = "";
@@ -840,7 +838,7 @@ console.log("[OnboardingReview] hasPackage2:", hasPackage2);
                 </div>
                 <div>
                   <p className="text-lg font-bold text-gray-900 dark:text-white">
-                    {employeeDetails.fullName}
+                    {employeeDetails.firstName} {employeeDetails.lastName}
                   </p>
                   <p className="text-sm text-gray-500">
                     {employeeDetails.designation} • {employeeDetails.department}

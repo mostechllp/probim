@@ -234,44 +234,12 @@ const OffboardingDashboard = () => {
               // ✅ FIX: Create a new object instead of modifying the read-only result
               let processedResult = { ...result };
 
-              // If steps is not an array, create a steps array
-              if (!Array.isArray(processedResult.steps)) {
-                // If steps is a number, create a default steps array
-                const totalSteps = processedResult.steps || 7;
-                const stepOrder = [
-                  "initiation",
-                  "checklist",
-                  "visa",
-                  "assets",
-                  "interview",
-                  "settlement",
-                  "letters",
-                ];
-                const currentStatus =
-                  processedResult.current_status || "initiation";
-                const currentIndex = stepOrder.indexOf(currentStatus);
+              // Removed fake steps array generation that was corrupting progress data
 
-                processedResult.steps = stepOrder.map((stepKey, index) => {
-                  let status = "pending";
-                  if (index < currentIndex) {
-                    status = "completed";
-                  } else if (index === currentIndex) {
-                    status = "in_progress";
-                  }
-                  return {
-                    key: stepKey,
-                    status: status,
-                    name: getStepName(stepKey),
-                  };
-                });
-
-                // Update total_steps if needed
-                if (!processedResult.total_steps) {
-                  processedResult.total_steps = stepOrder.length;
-                }
-              }
-
-              progressMap[offboarding.id] = processedResult;
+              setProgressData(prev => ({
+                ...prev,
+                [offboarding.id]: processedResult
+              }));
             }
           } catch (error) {
             // Remove from set if failed so it can be retried if needed
@@ -281,13 +249,16 @@ const OffboardingDashboard = () => {
               error,
             );
             // Set default progress
-            progressMap[offboarding.id] = {
-              steps: [],
-              progress_percentage: 0,
-              completed_steps: 0,
-              total_steps: 7,
-              current_status: "initiation",
-            };
+            setProgressData(prev => ({
+              ...prev,
+              [offboarding.id]: {
+                steps: [],
+                progress_percentage: 0,
+                completed_steps: 0,
+                total_steps: 7,
+                current_status: "initiation",
+              }
+            }));
           }
         });
       }
@@ -329,38 +300,25 @@ const OffboardingDashboard = () => {
         const combinedStatus = progress?.status ?? off.status;
         let calculatedCurrentStep = off.current_step || "initiation";
 
-        // ✅ FIX: Check if progress and steps exist and is an array
-        if (progress && progress.steps) {
-          // If steps is an array, use it
-          if (Array.isArray(progress.steps) && progress.steps.length > 0) {
-            const inProgressStep = progress.steps.find(
-              (s) => s.status === "in_progress",
-            );
-            if (inProgressStep) {
-              calculatedCurrentStep = inProgressStep.key;
-            } else {
-              const pendingStep = progress.steps.find(
-                (s) => s.status === "pending",
-              );
-              if (pendingStep) {
-                calculatedCurrentStep = pendingStep.key;
-              } else if (
-                progress.progress_percentage === 100 ||
-                off.status === "completed"
-              ) {
-                calculatedCurrentStep = "Completed";
-              }
-            }
-          } else if (typeof progress.steps === "number") {
-            // If steps is a number, use current_status
-            if (progress.current_status) {
-              calculatedCurrentStep = progress.current_status;
+        if (progress && Array.isArray(progress.steps) && progress.steps.length > 0) {
+          const inProgressStep = progress.steps.find((s) => s.status === "in_progress");
+          if (inProgressStep) {
+            calculatedCurrentStep = inProgressStep.key;
+          } else {
+            const pendingStep = progress.steps.find((s) => s.status === "pending");
+            if (pendingStep) {
+              calculatedCurrentStep = pendingStep.key;
+            } else if (progress.progress_percentage === 100 || combinedStatus === "completed") {
+              calculatedCurrentStep = "Completed";
             }
           }
-        } else {
+        } 
+        
+        // If we still don't have a good calculated step (it's initiation or missing), use the combinedStatus parsing
+        if (calculatedCurrentStep === "initiation" || !calculatedCurrentStep) {
            if (progress?.progress_percentage === 100 || combinedStatus === "completed") calculatedCurrentStep = "Completed";
            else if (combinedStatus?.includes("visa")) calculatedCurrentStep = "visa";
-           else if (combinedStatus?.includes("checklist")) calculatedCurrentStep = "checklist";
+           else if (combinedStatus?.includes("checklist") || combinedStatus?.includes("final") || combinedStatus?.includes("clearance")) calculatedCurrentStep = "checklist";
            else if (combinedStatus?.includes("asset")) calculatedCurrentStep = "assets";
            else if (combinedStatus?.includes("interview")) calculatedCurrentStep = "interview";
            else if (combinedStatus?.includes("settlement")) calculatedCurrentStep = "settlement";
@@ -516,102 +474,32 @@ const OffboardingDashboard = () => {
       ).unwrap();
 
       if (progress) {
-        // ✅ FIX: Create a copy of progress to work with
-        let steps = [];
+        let currentStepKey = offboarding.current_step || "initiation";
+        const combinedStatus = progress?.status ?? offboarding.status;
 
-        // If steps is an array, use it
-        if (Array.isArray(progress.steps)) {
-          steps = progress.steps;
-        }
-        // If steps is a number (total steps), we need to construct steps array
-        else if (typeof progress.steps === "number") {
-          // Create a steps array based on the total steps
-          const totalSteps = progress.steps || 7;
-          // Get the current status to determine which step is active
-          const currentStatus = progress.current_status || "initiation";
-
-          // Define step order
-          const stepOrder = [
-            "initiation",
-            "checklist",
-            "visa",
-            "assets",
-            "interview",
-            "settlement",
-            "letters",
-          ];
-
-          // Find the index of the current step
-          const currentIndex = stepOrder.indexOf(currentStatus);
-
-          // Build steps array with statuses
-          steps = stepOrder.map((stepKey, index) => {
-            let status = "pending";
-            if (index < currentIndex) {
-              status = "completed";
-            } else if (index === currentIndex) {
-              status = "in_progress";
-            }
-            return {
-              key: stepKey,
-              status: status,
-              name: getStepName(stepKey),
-            };
-          });
-        } else {
-          // Fallback: use default steps
-          steps = [
-            { key: "initiation", status: "pending", name: "Initiation" },
-            { key: "checklist", status: "pending", name: "General Checklist" },
-            { key: "visa", status: "pending", name: "Visa Cancel" },
-            { key: "assets", status: "pending", name: "Assets" },
-            { key: "interview", status: "pending", name: "Interview" },
-            { key: "settlement", status: "pending", name: "Settlement" },
-            { key: "letters", status: "pending", name: "Letters" },
-          ];
-
-          // If we have a current_status, update the steps
-          if (progress.current_status) {
-            const currentStatus = progress.current_status;
-            let foundActive = false;
-            for (const step of steps) {
-              if (step.key === currentStatus) {
-                step.status = "in_progress";
-                foundActive = true;
-              } else if (!foundActive) {
-                step.status = "completed";
-              }
+        if (Array.isArray(progress.steps) && progress.steps.length > 0) {
+          const inProgressStep = progress.steps.find((s) => s.status === "in_progress");
+          if (inProgressStep) {
+            currentStepKey = inProgressStep.key;
+          } else {
+            const pendingStep = progress.steps.find((s) => s.status === "pending");
+            if (pendingStep) {
+              currentStepKey = pendingStep.key;
+            } else if (progress.progress_percentage === 100 || combinedStatus === "completed") {
+              currentStepKey = "Completed";
             }
           }
-        }
-
-        console.log("Progress data:", progress);
-        console.log("Steps array:", steps);
-
-        // Determine which step is currently in progress or pending
-        let currentStepKey = "initiation"; // default
-
-        // Find the first step that is not completed (in_progress or pending)
-        for (const step of steps) {
-          if (step.status === "in_progress") {
-            currentStepKey = step.key;
-            break;
-          }
-        }
-
-        // If no step is in_progress, find the first pending step
-        if (currentStepKey === "initiation" && steps.length > 0) {
-          for (const step of steps) {
-            if (step.status === "pending") {
-              currentStepKey = step.key;
-              break;
-            }
-          }
-        }
-
-        // If still no step found, use the current_status from API
-        if (currentStepKey === "initiation" && progress.current_status) {
-          currentStepKey = progress.current_status;
+        } 
+        
+        // If we still don't have a good calculated step (it's initiation or missing), use string parsing
+        if (currentStepKey === "initiation" || !currentStepKey) {
+           if (progress?.progress_percentage === 100 || combinedStatus === "completed") currentStepKey = "Completed";
+           else if (combinedStatus?.includes("visa")) currentStepKey = "visa";
+           else if (combinedStatus?.includes("checklist") || combinedStatus?.includes("final") || combinedStatus?.includes("clearance")) currentStepKey = "checklist";
+           else if (combinedStatus?.includes("asset")) currentStepKey = "assets";
+           else if (combinedStatus?.includes("interview")) currentStepKey = "interview";
+           else if (combinedStatus?.includes("settlement")) currentStepKey = "settlement";
+           else if (combinedStatus?.includes("letter")) currentStepKey = "letters";
         }
 
         console.log("Current step to navigate:", currentStepKey);
@@ -647,6 +535,12 @@ const OffboardingDashboard = () => {
     const state = { offboardingData, id: offboardingId, isEdit: true };
 
     switch (stepKey) {
+      case "Completed":
+      case "completed":
+      case "checklist":
+      case "general_checklist":
+        navigate(`${basePath}/offboarding-checklist`, { state });
+        break;
       case "initiation":
       case "initiated":
         navigate(`${basePath}/offboarding-initiation`, { state });
