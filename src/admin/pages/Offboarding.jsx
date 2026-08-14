@@ -191,31 +191,45 @@ const OffboardingDashboard = () => {
     dispatch(fetchAllOffboarding({ page: 1, perPage: 50 }));
   }, [dispatch]);
 
+  // Track which offboarding IDs we have fetched progress for
+  const fetchedProgressIds = React.useRef(new Set());
+
   // Fetch progress for each offboarding record
   useEffect(() => {
-    const fetchProgressForAll = async () => {
+    const fetchProgressForAll = () => {
       if (offboardings && offboardings.length > 0) {
-        const progressMap = {};
-        for (const offboarding of offboardings) {
+        offboardings.forEach(async (offboarding) => {
           try {
+            // Check if we already have progress for this offboarding to avoid re-fetching
+            if (fetchedProgressIds.current.has(offboarding.id)) return;
+            
+            // Mark as fetching/fetched
+            fetchedProgressIds.current.add(offboarding.id);
+
             const result = await dispatch(
               fetchOffboardingProgress(offboarding.id),
             ).unwrap();
+            
             if (result) {
-              progressMap[offboarding.id] = result;
+              setProgressData((prev) => ({
+                ...prev,
+                [offboarding.id]: result,
+              }));
             }
           } catch (error) {
+            // Remove from set if failed so it can be retried if needed
+            fetchedProgressIds.current.delete(offboarding.id);
             console.error(
               `Failed to fetch progress for offboarding ${offboarding.id}:`,
               error,
             );
           }
-        }
-        setProgressData(progressMap);
+        });
       }
     };
 
     fetchProgressForAll();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [offboardings, dispatch]);
 
   // Process offboarding data
@@ -246,9 +260,10 @@ const OffboardingDashboard = () => {
 
         const progress = progressData[off.id];
 
+        const combinedStatus = progress?.status ?? off.status;
         let calculatedCurrentStep = off.current_step || "initiation";
         
-        if (progress && progress.steps && progress.steps.length > 0) {
+        if (progress && Array.isArray(progress.steps) && progress.steps.length > 0) {
           const inProgressStep = progress.steps.find(s => s.status === "in_progress");
           if (inProgressStep) {
             calculatedCurrentStep = inProgressStep.key;
@@ -256,12 +271,18 @@ const OffboardingDashboard = () => {
             const pendingStep = progress.steps.find(s => s.status === "pending");
             if (pendingStep) {
               calculatedCurrentStep = pendingStep.key;
-            } else if (progress.progress_percentage === 100 || off.status === "completed") {
+            } else if (progress.progress_percentage === 100 || combinedStatus === "completed") {
               calculatedCurrentStep = "Completed";
             }
           }
-        } else if (off.status === "completed") {
-          calculatedCurrentStep = "Completed";
+        } else {
+           if (progress?.progress_percentage === 100 || combinedStatus === "completed") calculatedCurrentStep = "Completed";
+           else if (combinedStatus?.includes("visa")) calculatedCurrentStep = "visa";
+           else if (combinedStatus?.includes("checklist")) calculatedCurrentStep = "checklist";
+           else if (combinedStatus?.includes("asset")) calculatedCurrentStep = "assets";
+           else if (combinedStatus?.includes("interview")) calculatedCurrentStep = "interview";
+           else if (combinedStatus?.includes("settlement")) calculatedCurrentStep = "settlement";
+           else if (combinedStatus?.includes("letter")) calculatedCurrentStep = "letters";
         }
 
         return {
@@ -270,12 +291,12 @@ const OffboardingDashboard = () => {
           employeeId: off.employee_id,
           department: department,
           lastDay: off.last_working_day,
-          status: off.status,
+          status: progress?.status ?? off.status,
           currentStep: calculatedCurrentStep,
-          progressPercentage: progress?.progress_percentage || 0,
-          completedSteps: progress?.completed_steps || 0,
-          totalSteps: progress?.total_steps || 7,
-          steps: progress?.steps || [],
+          progressPercentage: progress?.progress_percentage ?? off.progress_percentage ?? 0,
+          completedSteps: progress?.completed_steps ?? off.completed_steps ?? 0,
+          totalSteps: progress?.total_steps ?? off.total_steps ?? 7,
+          steps: Array.isArray(progress?.steps) ? progress.steps : (Array.isArray(off.steps) ? off.steps : []),
         };
       });
 
@@ -403,7 +424,7 @@ const OffboardingDashboard = () => {
 
       if (progress) {
         // Determine which step is currently in progress or pending
-        const steps = progress.steps || [];
+        const steps = Array.isArray(progress.steps) ? progress.steps : [];
 
         // Find the first step that is not completed (in_progress or pending)
         let currentStepKey = "initiation"; // default
@@ -423,6 +444,18 @@ const OffboardingDashboard = () => {
               break;
             }
           }
+        }
+
+        const combinedStatus = progress?.status ?? offboarding.status;
+        if (currentStepKey === "initiation" && combinedStatus) {
+           const s = combinedStatus;
+           if (s.includes("visa")) currentStepKey = "visa";
+           else if (s.includes("checklist")) currentStepKey = "checklist";
+           else if (s.includes("asset")) currentStepKey = "assets";
+           else if (s.includes("interview")) currentStepKey = "interview";
+           else if (s.includes("settlement")) currentStepKey = "settlement";
+           else if (s.includes("letter") || s.includes("clearance")) currentStepKey = "letters";
+           else if (s === "completed" || progress.progress_percentage === 100) currentStepKey = "completed";
         }
 
         console.log("Current step to navigate:", currentStepKey);
@@ -557,17 +590,6 @@ const OffboardingDashboard = () => {
             <FileText size={18} className="text-gray-500" />
             Recent Offboarding Requests
           </h2>
-          <button
-            onClick={() => {
-              localStorage.removeItem("offboarding_id");
-              localStorage.removeItem("offboarding_draft");
-              navigate("/admin/employees/offboarding-initiation");
-            }}
-            className="text-xs md:text-sm font-semibold text-green-600 dark:text-green-400 hover:text-green-700 flex items-center gap-1"
-          >
-            View all
-            <ArrowRight size={12} />
-          </button>
         </div>
 
         <div className="bg-white dark:bg-gray-800 rounded-xl border border-gray-200 dark:border-gray-700 overflow-x-auto shadow-soft">
