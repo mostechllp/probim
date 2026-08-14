@@ -1392,9 +1392,7 @@ apiClient.interceptors.response.use(
     originalRequest._retry =
       true;
 
-    try {rned 401. Attempting token refresh..."
-      );
-
+    try {
       /**
        * One shared refresh request.
        */
