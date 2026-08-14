@@ -42,6 +42,38 @@ export const TOKEN_KEYS = [
 
 /**
  * ============================================================
+ * REFRESH CONFIGURATION
+ * ============================================================
+ *
+ * The refresh buffer is NOT based on the token lifetime.
+ *
+ * We calculate the actual JWT expiry dynamically from `exp`
+ * and refresh 2 seconds BEFORE that expiry.
+ *
+ * Example:
+ *
+ * Token expires at 10:00:00
+ * Refresh scheduled at 09:59:58
+ *
+ * ============================================================
+ */
+
+const REFRESH_BEFORE_EXPIRY_SECONDS = 2;
+
+/**
+ * ============================================================
+ * INTERNAL STATE
+ * ============================================================
+ */
+
+let refreshPromise = null;
+
+let refreshTimer = null;
+
+let authExpiredHandled = false;
+
+/**
+ * ============================================================
  * TOKEN HELPERS
  * ============================================================
  */
@@ -57,7 +89,10 @@ const isEmptyToken = (value) => {
 };
 
 const isValidUserType = (type) => {
-  return type && USER_TYPES.includes(type);
+  return (
+    typeof type === "string" &&
+    USER_TYPES.includes(type)
+  );
 };
 
 /**
@@ -67,7 +102,9 @@ const isValidUserType = (type) => {
  */
 
 export const getStorageUrl = (path) => {
-  if (!path) return null;
+  if (!path) {
+    return null;
+  }
 
   if (
     path.startsWith("http://") ||
@@ -97,9 +134,10 @@ export const getStorageUrl = (path) => {
  */
 
 export const getActiveUserType = () => {
-  const activeType = localStorage.getItem(
-    "active-user-type"
-  );
+  const activeType =
+    localStorage.getItem(
+      "active-user-type"
+    );
 
   if (!isValidUserType(activeType)) {
     return null;
@@ -115,14 +153,18 @@ export const getActiveUserType = () => {
  */
 
 export const getActiveTokenKey = () => {
-  const activeType = getActiveUserType();
+  const activeType =
+    getActiveUserType();
 
   if (!activeType) {
     return null;
   }
 
-  const tokenKey = `${activeType}-token`;
-  const token = localStorage.getItem(tokenKey);
+  const tokenKey =
+    `${activeType}-token`;
+
+  const token =
+    localStorage.getItem(tokenKey);
 
   if (isEmptyToken(token)) {
     return null;
@@ -138,20 +180,25 @@ export const getActiveTokenKey = () => {
  */
 
 export const getActiveToken = () => {
-  const tokenKey = getActiveTokenKey();
+  const tokenKey =
+    getActiveTokenKey();
 
   if (!tokenKey) {
     return null;
   }
 
-  const token = localStorage.getItem(tokenKey);
+  const token =
+    localStorage.getItem(tokenKey);
 
-  return isEmptyToken(token) ? null : token;
+  return isEmptyToken(token)
+    ? null
+    : token;
 };
 
 /**
  * Internal alias
  */
+
 const getToken = () => {
   return getActiveToken();
 };
@@ -168,32 +215,41 @@ const decodeJwt = (token) => {
       return null;
     }
 
-    const parts = token.split(".");
+    const parts =
+      token.split(".");
 
     if (parts.length !== 3) {
       return null;
     }
 
-    const payload = parts[1];
+    const payload =
+      parts[1];
 
-    const base64 = payload
-      .replace(/-/g, "+")
-      .replace(/_/g, "/");
+    const base64 =
+      payload
+        .replace(/-/g, "+")
+        .replace(/_/g, "/");
 
     const paddedBase64 =
       base64 +
       "=".repeat(
-        (4 - (base64.length % 4)) % 4
+        (4 -
+          (base64.length % 4)) %
+          4
       );
 
-    const binary = atob(paddedBase64);
+    const binary =
+      atob(paddedBase64);
 
-    const bytes = Uint8Array.from(
-      binary,
-      (character) => character.charCodeAt(0)
-    );
+    const bytes =
+      Uint8Array.from(
+        binary,
+        (character) =>
+          character.charCodeAt(0)
+      );
 
-    const json = new TextDecoder().decode(bytes);
+    const json =
+      new TextDecoder().decode(bytes);
 
     return JSON.parse(json);
   } catch (error) {
@@ -208,50 +264,116 @@ const decodeJwt = (token) => {
 
 /**
  * ============================================================
- * TOKEN EXPIRATION
+ * GET TOKEN EXPIRATION
+ * ============================================================
+ *
+ * Returns expiry timestamp in milliseconds.
+ *
+ * JWT:
+ *
+ * {
+ *   exp: 1755000000
+ * }
+ *
+ * ============================================================
+ */
+
+export const getTokenExpiration = (
+  token
+) => {
+  const payload =
+    decodeJwt(token);
+
+  if (
+    !payload?.exp ||
+    typeof payload.exp !== "number"
+  ) {
+    return null;
+  }
+
+  return payload.exp * 1000;
+};
+
+/**
+ * ============================================================
+ * GET REMAINING TOKEN TIME
+ * ============================================================
+ *
+ * Returns remaining lifetime in milliseconds.
+ * ============================================================
+ */
+
+export const getTokenRemainingTime = (
+  token
+) => {
+  const expiration =
+    getTokenExpiration(token);
+
+  if (!expiration) {
+    return null;
+  }
+
+  return Math.max(
+    0,
+    expiration - Date.now()
+  );
+};
+
+/**
+ * ============================================================
+ * TOKEN EXPIRATION CHECK
+ * ============================================================
+ */
+
+export const isTokenExpired = (
+  token
+) => {
+  const expiration =
+    getTokenExpiration(token);
+
+  if (!expiration) {
+    return false;
+  }
+
+  return (
+    Date.now() >= expiration
+  );
+};
+
+/**
+ * ============================================================
+ * TOKEN EXPIRING SOON
+ * ============================================================
+ *
+ * This function is kept for compatibility.
+ *
+ * Unlike the old implementation, callers can provide
+ * their own buffer.
  * ============================================================
  */
 
 export const isExpiringSoon = (
   token,
-  bufferSeconds = 60
+  bufferSeconds = 2
 ) => {
-  const payload = decodeJwt(token);
+  const expiration =
+    getTokenExpiration(token);
 
-  if (!payload?.exp) {
+  if (!expiration) {
     return false;
   }
 
   return (
     Date.now() >=
-    payload.exp * 1000 -
+    expiration -
       bufferSeconds * 1000
   );
 };
 
 /**
  * ============================================================
- * TOKEN EXPIRED
+ * PERSIST USER
  * ============================================================
- */
-
-export const isTokenExpired = (token) => {
-  const payload = decodeJwt(token);
-
-  if (!payload?.exp) {
-    return false;
-  }
-
-  return Date.now() >= payload.exp * 1000;
-};
-
-/**
- * ============================================================
- * SAVE AUTH USER
- * ============================================================
- *
- * The refresh API returns the complete user object.
- * Save it so initializeAuth can restore the session.
  */
 
 const persistUser = (user) => {
@@ -295,35 +417,49 @@ const persistUser = (user) => {
  * ============================================================
  */
 
-const persistToken = (token, userType = null) => {
+const persistToken = (
+  token,
+  userType = null
+) => {
   if (isEmptyToken(token)) {
     return false;
   }
 
   const activeType =
-    userType || getActiveUserType();
+    userType ||
+    getActiveUserType();
 
   if (!isValidUserType(activeType)) {
     console.warn(
-      "persistToken: No valid user type"
+      "persistToken: No valid user type",
+      {
+        activeType,
+      }
     );
 
     return false;
   }
 
-  const tokenKey = `${activeType}-token`;
+  const tokenKey =
+    `${activeType}-token`;
 
   /**
-   * Remove old tokens.
-   *
-   * This prevents multiple user sessions from
-   * accidentally being considered active.
+   * Remove other role tokens.
    */
-  TOKEN_KEYS.forEach((key) => {
-    if (key !== tokenKey) {
-      localStorage.removeItem(key);
+
+  TOKEN_KEYS.forEach(
+    (key) => {
+      if (key !== tokenKey) {
+        localStorage.removeItem(
+          key
+        );
+      }
     }
-  });
+  );
+
+  /**
+   * Save new token.
+   */
 
   localStorage.setItem(
     tokenKey,
@@ -341,8 +477,9 @@ const persistToken = (token, userType = null) => {
   );
 
   /**
-   * Keep Axios defaults synchronized.
+   * Synchronize Axios default header.
    */
+
   apiClient.defaults.headers.common.Authorization =
     `Bearer ${token}`;
 
@@ -371,10 +508,11 @@ export const setAuthToken = (
     return false;
   }
 
-  const saved = persistToken(
-    token,
-    userType
-  );
+  const saved =
+    persistToken(
+      token,
+      userType
+    );
 
   if (!saved) {
     return false;
@@ -383,6 +521,14 @@ export const setAuthToken = (
   if (user) {
     persistUser(user);
   }
+
+  /**
+   * Immediately schedule automatic refresh.
+   */
+
+  scheduleTokenRefresh(
+    token
+  );
 
   console.log(
     `🔐 Authentication stored for ${userType}`
@@ -401,20 +547,44 @@ export const getAuthToken = (
   userType = null
 ) => {
   const activeType =
-    userType || getActiveUserType();
+    userType ||
+    getActiveUserType();
 
-  if (!isValidUserType(activeType)) {
+  if (
+    !isValidUserType(
+      activeType
+    )
+  ) {
     return null;
   }
 
-  const tokenKey = `${activeType}-token`;
+  const tokenKey =
+    `${activeType}-token`;
 
   const token =
-    localStorage.getItem(tokenKey);
+    localStorage.getItem(
+      tokenKey
+    );
 
   return isEmptyToken(token)
     ? null
     : token;
+};
+
+/**
+ * ============================================================
+ * CLEAR REFRESH TIMER
+ * ============================================================
+ */
+
+export const clearRefreshTimer = () => {
+  if (refreshTimer) {
+    clearTimeout(
+      refreshTimer
+    );
+
+    refreshTimer = null;
+  }
 };
 
 /**
@@ -425,15 +595,27 @@ export const getAuthToken = (
 
 export const clearAllTokens = () => {
   /**
-   * Remove all token keys.
+   * Stop automatic refresh.
    */
-  TOKEN_KEYS.forEach((key) => {
-    localStorage.removeItem(key);
-  });
+
+  clearRefreshTimer();
 
   /**
-   * Remove authentication-related data.
+   * Remove all token keys.
    */
+
+  TOKEN_KEYS.forEach(
+    (key) => {
+      localStorage.removeItem(
+        key
+      );
+    }
+  );
+
+  /**
+   * Remove authentication data.
+   */
+
   const authStorageKeys = [
     "active-user-type",
     "user-type",
@@ -446,20 +628,28 @@ export const clearAllTokens = () => {
     "hr-user",
     "employee-user",
     "manager-user",
+    "team_lead-user",
     "team-lead-user",
 
     "remember-me",
     "remembered-email",
   ];
 
-  authStorageKeys.forEach((key) => {
-    localStorage.removeItem(key);
-  });
+  authStorageKeys.forEach(
+    (key) => {
+      localStorage.removeItem(
+        key
+      );
+    }
+  );
 
   /**
    * Remove Axios authorization.
    */
-  delete apiClient.defaults.headers.common.Authorization;
+
+  delete apiClient.defaults
+    .headers.common
+    .Authorization;
 
   console.log(
     "🧹 All authentication data cleared"
@@ -472,73 +662,48 @@ export const clearAllTokens = () => {
  * ============================================================
  */
 
-let authExpiredHandled = false;
-
-export const clearAuthAndRedirect = () => {
-  if (authExpiredHandled) {
-    return;
-  }
-
-  authExpiredHandled = true;
-
-  console.warn(
-    "🚪 Authentication expired. Logging out."
-  );
-
-  clearAllTokens();
-
-  window.dispatchEvent(
-    new CustomEvent("auth-expired")
-  );
-
-  setTimeout(() => {
-    const currentPath =
-      window.location.pathname;
-
-    if (
-      currentPath !== "/login" &&
-      currentPath !== "/"
-    ) {
-      window.location.href = "/login";
+export const clearAuthAndRedirect =
+  () => {
+    if (authExpiredHandled) {
+      return;
     }
 
-    authExpiredHandled = false;
-  }, 0);
-};
+    authExpiredHandled =
+      true;
 
-/**
- * ============================================================
- * REFRESH STATE
- * ============================================================
- */
+    console.warn(
+      "🚪 Authentication expired. Logging out."
+    );
 
-let refreshPromise = null;
+    clearAllTokens();
+
+    window.dispatchEvent(
+      new CustomEvent(
+        "auth-expired"
+      )
+    );
+
+    setTimeout(() => {
+      const currentPath =
+        window.location.pathname;
+
+      if (
+        currentPath !== "/login" &&
+        currentPath !== "/"
+      ) {
+        window.location.href =
+          "/login";
+      }
+
+      authExpiredHandled =
+        false;
+    }, 0);
+  };
 
 /**
  * ============================================================
  * REFRESH ACCESS TOKEN
  * ============================================================
- *
- * IMPORTANT:
- *
- * Your backend refresh response is:
- *
- * {
- *   status: "success",
- *   message: "Login successful",
- *   data: {
- *      access_token: "...",
- *      token_type: "bearer",
- *      expires_in: 3600,
- *      user: {...}
- *   }
- * }
- *
- * Therefore we extract:
- *
- * response.data.data.access_token
- *
- * and also persist the returned user.
  */
 
 const doRefresh = async () => {
@@ -549,82 +714,119 @@ const doRefresh = async () => {
     getToken();
 
   /**
-   * We need BOTH:
-   *
-   * 1. active user type
-   * 2. current token
+   * We require both.
    */
-  if (
-    !isValidUserType(activeType) ||
-    isEmptyToken(currentToken)
-  ) {
-    console.warn(
-      "Refresh aborted: missing active user type or token",
-      {
-        activeType,
-        hasToken: !isEmptyToken(
-          currentToken
-        ),
-      }
-    );
 
+  if (
+    !isValidUserType(
+      activeType
+    ) ||
+    isEmptyToken(
+      currentToken
+    )
+  ) {
     throw new Error(
       "No valid authentication session"
     );
   }
 
+  /**
+   * IMPORTANT:
+   *
+   * Do not attempt to refresh an already expired token.
+   *
+   * The backend may blacklist/reject it.
+   */
+
+  if (
+    isTokenExpired(
+      currentToken
+    )
+  ) {
+    throw new Error(
+      "Access token has already expired"
+    );
+  }
+
+  /**
+   * Calculate remaining lifetime.
+   */
+
+  const remainingTime =
+    getTokenRemainingTime(
+      currentToken
+    );
+
+  console.log(
+    "🔄 Refreshing access token...",
+    {
+      userType:
+        activeType,
+
+      remainingSeconds:
+        remainingTime !== null
+          ? Math.round(
+              remainingTime /
+                1000
+            )
+          : null,
+    }
+  );
+
   try {
-    console.log(
-      "🔄 Refreshing access token...",
-      {
-        userType: activeType,
-      }
-    );
-
     /**
-     * IMPORTANT:
+     * Use plain axios.
      *
-     * Do NOT use apiClient here.
-     *
-     * Using axios directly prevents the refresh
-     * request from passing through our own interceptors.
+     * This prevents the refresh request from
+     * triggering our own interceptors.
      */
-    const response = await axios.post(
-      `${API_BASE_URL}/auth/refresh`,
-      {
-        token: currentToken,
-      },
-      {
-        headers: {
-          Authorization:
-            `Bearer ${currentToken}`,
 
-          Accept:
-            "application/json",
-
-          "Content-Type":
-            "application/json",
+    const response =
+      await axios.post(
+        `${API_BASE_URL}/auth/refresh`,
+        {
+          token:
+            currentToken,
         },
+        {
+          headers: {
+            Authorization:
+              `Bearer ${currentToken}`,
 
-        /**
-         * Do not allow Axios to transform this
-         * into another authentication flow.
-         */
-        timeout: 15000,
-      }
-    );
+            Accept:
+              "application/json",
+
+            "Content-Type":
+              "application/json",
+          },
+
+          timeout: 15000,
+        }
+      );
 
     /**
-     * Your backend response:
+     * Backend response:
      *
-     * response.data.data.access_token
+     * {
+     *   status: "success",
+     *   message: "...",
+     *   data: {
+     *      access_token: "...",
+     *      token_type: "bearer",
+     *      expires_in: 3600,
+     *      user: {...}
+     *   }
+     * }
      */
+
     const responseData =
       response.data?.data;
 
     const newToken =
-      responseData?.access_token ||
-      response.data?.access_token ||
+      responseData
+        ?.access_token ||
+      response.data
+        ?.access_token ||
       responseData?.token ||
       response.data?.token;
 
@@ -633,24 +835,28 @@ const doRefresh = async () => {
       response.data?.user ||
       null;
 
-    if (isEmptyToken(newToken)) {
+    if (
+      isEmptyToken(
+        newToken
+      )
+    ) {
       throw new Error(
         "Refresh response did not contain access_token"
       );
     }
 
     /**
-     * If backend returns user.type,
-     * use it as the authoritative type.
-     *
-     * Otherwise retain current type.
+     * Determine user type.
      */
+
     const newUserType =
       refreshedUser?.type ||
       activeType;
 
     if (
-      !isValidUserType(newUserType)
+      !isValidUserType(
+        newUserType
+      )
     ) {
       throw new Error(
         "Refresh response contains invalid user type"
@@ -658,15 +864,14 @@ const doRefresh = async () => {
     }
 
     /**
-     * Important:
-     *
-     * Store the NEW token under the correct
-     * user type.
+     * Save NEW token.
      */
-    const saved = persistToken(
-      newToken,
-      newUserType
-    );
+
+    const saved =
+      persistToken(
+        newToken,
+        newUserType
+      );
 
     if (!saved) {
       throw new Error(
@@ -675,18 +880,51 @@ const doRefresh = async () => {
     }
 
     /**
-     * Store refreshed user.
+     * Save refreshed user.
      */
+
     if (refreshedUser) {
-      persistUser(refreshedUser);
+      persistUser(
+        refreshedUser
+      );
     }
+
+    /**
+     * Immediately schedule refresh
+     * using the NEW token.
+     */
+
+    scheduleTokenRefresh(
+      newToken
+    );
+
+    /**
+     * Log actual new expiry.
+     */
+
+    const newRemainingTime =
+      getTokenRemainingTime(
+        newToken
+      );
 
     console.log(
       "✅ Access token refreshed successfully",
       {
-        userType: newUserType,
-        expiresIn:
-          responseData?.expires_in,
+        userType:
+          newUserType,
+
+        expiresInSeconds:
+          newRemainingTime !==
+          null
+            ? Math.round(
+                newRemainingTime /
+                  1000
+              )
+            : null,
+
+        backendExpiresIn:
+          responseData
+            ?.expires_in,
       }
     );
 
@@ -698,12 +936,6 @@ const doRefresh = async () => {
         error.message
     );
 
-    /**
-     * DO NOT immediately call clearAllTokens here.
-     *
-     * The response interceptor will decide whether
-     * this is a genuine authentication failure.
-     */
     throw error;
   }
 };
@@ -712,18 +944,293 @@ const doRefresh = async () => {
  * ============================================================
  * SHARED REFRESH FUNCTION
  * ============================================================
+ *
+ * Prevents multiple refresh requests.
+ *
+ * If 10 API requests happen at exactly the same time,
+ * only ONE /auth/refresh request is sent.
+ * ============================================================
  */
 
-const refreshAccessToken = () => {
-  if (!refreshPromise) {
-    refreshPromise = doRefresh()
-      .finally(() => {
-        refreshPromise = null;
-      });
+const refreshAccessToken =
+  () => {
+    if (!refreshPromise) {
+      refreshPromise =
+        doRefresh()
+          .finally(() => {
+            refreshPromise =
+              null;
+          });
+    }
+
+    return refreshPromise;
+  };
+
+/**
+ * ============================================================
+ * SCHEDULE AUTOMATIC TOKEN REFRESH
+ * ============================================================
+ *
+ * This is the important part.
+ *
+ * We do NOT assume that tokens live for 3600 seconds.
+ *
+ * Instead:
+ *
+ * JWT exp
+ *   ↓
+ * actual expiration timestamp
+ *   ↓
+ * expiration - 2 seconds
+ *   ↓
+ * setTimeout()
+ *
+ * Example:
+ *
+ * Token expires in 3600 seconds:
+ *
+ * refresh after:
+ * 3598 seconds
+ *
+ * Token expires in 900 seconds:
+ *
+ * refresh after:
+ * 898 seconds
+ *
+ * Token expires in 120 seconds:
+ *
+ * refresh after:
+ * 118 seconds
+ *
+ * ============================================================
+ */
+
+export const scheduleTokenRefresh = (
+  token
+) => {
+  /**
+   * Clear existing timer.
+   */
+
+  clearRefreshTimer();
+
+  if (
+    isEmptyToken(token)
+  ) {
+    return;
   }
 
-  return refreshPromise;
+  const expiration =
+    getTokenExpiration(
+      token
+    );
+
+  if (!expiration) {
+    console.warn(
+      "⚠️ Cannot schedule token refresh: JWT exp not found"
+    );
+
+    return;
+  }
+
+  const now =
+    Date.now();
+
+  const remaining =
+    expiration - now;
+
+  /**
+   * Refresh 2 seconds before expiry.
+   */
+
+  const refreshDelay =
+    Math.max(
+      100,
+      remaining -
+        REFRESH_BEFORE_EXPIRY_SECONDS *
+          1000
+    );
+
+  console.log(
+    "⏰ Token refresh scheduled",
+    {
+      expiresInSeconds:
+        Math.round(
+          remaining / 1000
+        ),
+
+      refreshInSeconds:
+        Math.round(
+          refreshDelay / 1000
+        ),
+
+      refreshBeforeExpiry:
+        REFRESH_BEFORE_EXPIRY_SECONDS,
+    }
+  );
+
+  refreshTimer =
+    setTimeout(
+      async () => {
+        /**
+         * Get the latest token.
+         *
+         * This is important because another request
+         * might already have refreshed it.
+         */
+
+        const latestToken =
+          getToken();
+
+        if (
+          isEmptyToken(
+            latestToken
+          )
+        ) {
+          return;
+        }
+
+        /**
+         * Check whether this timer belongs to
+         * the current token.
+         */
+
+        const latestExpiration =
+          getTokenExpiration(
+            latestToken
+          );
+
+        if (
+          latestExpiration &&
+          latestExpiration !==
+            expiration
+        ) {
+          /**
+           * Another refresh already happened.
+           *
+           * Schedule based on the new token.
+           */
+
+          console.log(
+            "🔁 Token already refreshed by another process. Rescheduling."
+          );
+
+          scheduleTokenRefresh(
+            latestToken
+          );
+
+          return;
+        }
+
+        try {
+          console.log(
+            "⏳ Token approaching expiration. Starting automatic refresh..."
+          );
+
+          await refreshAccessToken();
+        } catch (error) {
+          console.error(
+            "❌ Automatic token refresh failed:",
+            error.response
+              ?.data ||
+              error.message
+          );
+
+          /**
+           * If the token is still valid,
+           * give it another chance shortly.
+           *
+           * If it is already expired,
+           * logout.
+           */
+
+          const currentToken =
+            getToken();
+
+          if (
+            !currentToken ||
+            isTokenExpired(
+              currentToken
+            )
+          ) {
+            clearAuthAndRedirect();
+
+            return;
+          }
+
+          /**
+           * Retry after 1 second.
+           *
+           * This is NOT a fixed token lifetime.
+           * It is only a retry interval.
+           */
+
+          refreshTimer =
+            setTimeout(
+              () => {
+                const retryToken =
+                  getToken();
+
+                if (
+                  retryToken
+                ) {
+                  scheduleTokenRefresh(
+                    retryToken
+                  );
+                }
+              },
+              1000
+            );
+        }
+      },
+      refreshDelay
+    );
 };
+
+/**
+ * ============================================================
+ * INITIALIZE REFRESH TIMER
+ * ============================================================
+ *
+ * Call this after application startup if a token already
+ * exists in localStorage.
+ * ============================================================
+ */
+
+export const initializeTokenRefresh =
+  () => {
+    const token =
+      getToken();
+
+    if (
+      !token
+    ) {
+      return;
+    }
+
+    /**
+     * If already expired, don't attempt to refresh
+     * using an expired token.
+     */
+
+    if (
+      isTokenExpired(
+        token
+      )
+    ) {
+      console.warn(
+        "Stored access token has expired."
+      );
+
+      clearAuthAndRedirect();
+
+      return;
+    }
+
+    scheduleTokenRefresh(
+      token
+    );
+  };
 
 /**
  * ============================================================
@@ -738,24 +1245,27 @@ apiClient.interceptors.request.use(
 
     /**
      * Multipart request.
-     *
-     * Let browser/Axios create boundary.
      */
+
     if (
-      config.data instanceof FormData
+      config.data instanceof
+      FormData
     ) {
-      delete config.headers[
+      delete config
+        .headers[
         "Content-Type"
       ];
     } else {
       config.headers[
         "Content-Type"
-      ] = "application/json";
+      ] =
+        "application/json";
     }
 
     /**
-     * Never refresh the refresh endpoint.
+     * Never intercept refresh endpoint.
      */
+
     if (
       config.url?.includes(
         "/auth/refresh"
@@ -768,49 +1278,79 @@ apiClient.interceptors.request.use(
       getToken();
 
     /**
-     * No token.
+     * No authentication token.
      *
-     * Do not immediately redirect here.
-     *
-     * The API request can still be sent if it
-     * doesn't require authentication.
+     * Allow public APIs.
      */
+
     if (!token) {
-      delete config.headers.Authorization;
+      delete config.headers
+        .Authorization;
 
       return config;
     }
 
     /**
-     * Refresh BEFORE expiration.
+     * ========================================================
+     * LAST-MOMENT SAFETY CHECK
+     * ========================================================
      *
-     * 60 seconds gives us a safe buffer.
+     * Normally the timer will already have refreshed
+     * the token.
+     *
+     * This is only a safety net in case:
+     *
+     * - browser slept
+     * - computer went to sleep
+     * - tab was suspended
+     * - timer was delayed
      */
+
     if (
       isExpiringSoon(
         token,
-        60
+        REFRESH_BEFORE_EXPIRY_SECONDS
       )
     ) {
       try {
         token =
           await refreshAccessToken();
       } catch (refreshError) {
-        /**
-         * Do NOT destroy the session here.
-         *
-         * Let the server response determine whether
-         * authentication is actually invalid.
-         */
-        console.warn(
-          "Pre-request token refresh failed. Using current token."
+        console.error(
+          "❌ Pre-request token refresh failed:",
+          refreshError
+            .response?.data ||
+            refreshError.message
         );
+
+        /**
+         * Don't intentionally send an expired token.
+         */
+
+        if (
+          isTokenExpired(
+            token
+          )
+        ) {
+          clearAuthAndRedirect();
+
+          return Promise.reject(
+            refreshError
+          );
+        }
+
+        /**
+         * If still valid, attach it.
+         *
+         * Response interceptor can handle a 401.
+         */
       }
     }
 
     /**
-     * Always attach the latest token.
+     * Always use latest token.
      */
+
     if (token) {
       config.headers.Authorization =
         `Bearer ${token}`;
@@ -819,7 +1359,9 @@ apiClient.interceptors.request.use(
     return config;
   },
   (error) => {
-    return Promise.reject(error);
+    return Promise.reject(
+      error
+    );
   }
 );
 
@@ -833,6 +1375,7 @@ apiClient.interceptors.response.use(
   /**
    * Successful response.
    */
+
   (response) => {
     return response;
   },
@@ -840,35 +1383,44 @@ apiClient.interceptors.response.use(
   /**
    * Failed response.
    */
+
   async (error) => {
     const originalRequest =
       error.config;
 
     /**
-     * Network error / malformed request.
+     * Network error.
      */
+
     if (
       !error.response ||
       !originalRequest
     ) {
-      return Promise.reject(error);
+      return Promise.reject(
+        error
+      );
     }
 
     /**
      * Only handle 401.
      */
+
     if (
-      error.response.status !== 401
+      error.response.status !==
+      401
     ) {
-      return Promise.reject(error);
+      return Promise.reject(
+        error
+      );
     }
 
     /**
-     * Never refresh the refresh endpoint itself.
+     * Never refresh the refresh endpoint.
      *
-     * A 401 here means the backend rejected the
-     * authentication session.
+     * If refresh itself returns 401,
+     * the refresh token/session is no longer valid.
      */
+
     if (
       originalRequest.url?.includes(
         "/auth/refresh"
@@ -876,21 +1428,27 @@ apiClient.interceptors.response.use(
     ) {
       clearAuthAndRedirect();
 
-      return Promise.reject(error);
+      return Promise.reject(
+        error
+      );
     }
 
     /**
      * Prevent infinite retry.
      */
+
     if (
       originalRequest._retry
     ) {
       clearAuthAndRedirect();
 
-      return Promise.reject(error);
+      return Promise.reject(
+        error
+      );
     }
 
-    originalRequest._retry = true;
+    originalRequest._retry =
+      true;
 
     try {
       console.log(
@@ -898,16 +1456,16 @@ apiClient.interceptors.response.use(
       );
 
       /**
-       * Shared refresh promise.
-       *
-       * If multiple requests receive 401 simultaneously,
-       * only ONE refresh request is made.
+       * One shared refresh request.
        */
+
       const newToken =
         await refreshAccessToken();
 
       if (
-        isEmptyToken(newToken)
+        isEmptyToken(
+          newToken
+        )
       ) {
         throw new Error(
           "Refresh returned empty token"
@@ -917,35 +1475,33 @@ apiClient.interceptors.response.use(
       /**
        * Ensure headers exist.
        */
+
       originalRequest.headers =
-        originalRequest.headers ||
-        {};
+        originalRequest
+          .headers || {};
 
       /**
-       * Replace old token.
+       * Attach NEW token.
        */
+
       originalRequest.headers.Authorization =
         `Bearer ${newToken}`;
 
       /**
-       * Retry original request.
+       * Retry original API request.
        */
+
       return apiClient(
         originalRequest
       );
     } catch (refreshError) {
       console.error(
         "❌ Unable to recover from 401:",
-        refreshError.response?.data ||
+        refreshError
+          .response?.data ||
           refreshError.message
       );
 
-      /**
-       * Now we KNOW the API rejected the
-       * authentication and refresh failed.
-       *
-       * This is the correct place to logout.
-       */
       clearAuthAndRedirect();
 
       return Promise.reject(
