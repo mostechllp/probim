@@ -121,10 +121,6 @@ const ProtectedRoute = ({
         resolvedType
       );
 
-      console.log(
-        "🔄 ProtectedRoute: Restored active user type:",
-        resolvedType
-      );
 
       return resolvedType;
     }
