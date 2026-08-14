@@ -527,8 +527,6 @@ useEffect(() => {
         }
 
 
-        // Determine which step is currently in progress or pending
-        let currentStepKey = "initiation"; // default
 
         // Find the first step that is not completed (in_progress or pending)
         for (const step of steps) {
