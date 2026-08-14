@@ -7,7 +7,7 @@ import {
   markAllNotificationsAsRead,
   clearSelectedNotification,
 } from "../../store/slices/notificationSlice";
-import { logoutUser } from "../../store/slices/authSlice";
+import { logoutUser } from "../../../store/slices/authSlice";
 import ConfirmModal from "./ConfirmModal";
 import { showToast } from "../common/Toast";
 
@@ -180,19 +180,19 @@ const Header = ({ onMenuClick }) => {
     setShowLogoutConfirm(true);
   };
 
-  const handleConfirmLogout = async () => {
-    setLogoutLoading(true);
-    try {
-      await dispatch(logoutUser()).unwrap();
-      setShowLogoutConfirm(false);
-      setTimeout(() => {
-        navigate("/login", { replace: true });
-      }, 100);
-    } catch (err) {
-      console.error("Logout failed", err);
-      setLogoutLoading(false);
-    }
-  };
+const handleConfirmLogout = async () => {
+  setLogoutLoading(true);
+  try {
+    await dispatch(logoutUser()).unwrap();
+    setShowLogoutConfirm(false);
+    setTimeout(() => {
+      navigate("/login", { replace: true });
+    }, 100);
+  } catch (err) {
+    console.error("Logout failed", err);
+    setLogoutLoading(false);
+  }
+};
 
   const userAvatar = getUserAvatar();
   const userInitials = getUserInitials();

@@ -74,6 +74,26 @@ let authExpiredHandled = false;
 
 /**
  * ============================================================
+ * LOGOUT GUARD
+ * ============================================================
+ *
+ * Prevents an in-flight token refresh (scheduled timer OR a
+ * 401-triggered refresh) from writing a token back into
+ * localStorage AFTER the user has logged out.
+ *
+ * Without this, the following race is possible:
+ *
+ * 1. Refresh request is sent (token about to expire).
+ * 2. User clicks logout -> clearAllTokens() wipes storage.
+ * 3. Refresh response arrives -> persistToken() re-saves the
+ *    token -> user appears logged in again after reload.
+ * ============================================================
+ */
+
+let isLoggingOut = false;
+
+/**
+ * ============================================================
  * TOKEN HELPERS
  * ============================================================
  */
@@ -425,6 +445,21 @@ const persistToken = (
     return false;
   }
 
+  /**
+   * A logout happened while this token was in flight
+   * (e.g. a scheduled refresh or a 401 retry that started
+   * before clearAllTokens() ran). Do NOT resurrect the
+   * session.
+   */
+
+  if (isLoggingOut) {
+    console.warn(
+      "persistToken: Ignored token write during/after logout"
+    );
+
+    return false;
+  }
+
   const activeType =
     userType ||
     getActiveUserType();
@@ -508,6 +543,13 @@ export const setAuthToken = (
     return false;
   }
 
+  /**
+   * A fresh, explicit login always wins over any stale
+   * logout state.
+   */
+
+  isLoggingOut = false;
+
   const saved =
     persistToken(
       token,
@@ -528,10 +570,6 @@ export const setAuthToken = (
 
   scheduleTokenRefresh(
     token
-  );
-
-  console.log(
-    `🔐 Authentication stored for ${userType}`
   );
 
   return true;
@@ -594,66 +632,24 @@ export const clearRefreshTimer = () => {
  */
 
 export const clearAllTokens = () => {
-  /**
-   * Stop automatic refresh.
-   */
-
+ 
   clearRefreshTimer();
 
-  /**
-   * Remove all token keys.
-   */
-
-  TOKEN_KEYS.forEach(
-    (key) => {
-      localStorage.removeItem(
-        key
-      );
-    }
-  );
-
-  /**
-   * Remove authentication data.
-   */
-
+  TOKEN_KEYS.forEach((key) => {
+    localStorage.removeItem(key);
+  });
   const authStorageKeys = [
-    "active-user-type",
-    "user-type",
-    "userType",
-    "user-data",
-    "user",
-    "token",
-
-    "admin-user",
-    "hr-user",
-    "employee-user",
-    "manager-user",
-    "team_lead-user",
-    "team-lead-user",
-
-    "remember-me",
-    "remembered-email",
+    "active-user-type", "user-type", "userType", "user-data", "user", "token",
+    "admin-user", "hr-user", "employee-user", "manager-user", "team_lead-user", "team-lead-user",
+    "remember-me", "remembered-email",
   ];
 
-  authStorageKeys.forEach(
-    (key) => {
-      localStorage.removeItem(
-        key
-      );
-    }
-  );
+  authStorageKeys.forEach((key) => {
+    localStorage.removeItem(key);
+  });
 
-  /**
-   * Remove Axios authorization.
-   */
+  delete apiClient.defaults.headers.common.Authorization;
 
-  delete apiClient.defaults
-    .headers.common
-    .Authorization;
-
-  console.log(
-    "🧹 All authentication data cleared"
-  );
 };
 
 /**
@@ -707,6 +703,12 @@ export const clearAuthAndRedirect =
  */
 
 const doRefresh = async () => {
+  if (isLoggingOut) {
+    throw new Error(
+      "Logout in progress; refresh aborted"
+    );
+  }
+
   const activeType =
     getActiveUserType();
 
@@ -757,21 +759,6 @@ const doRefresh = async () => {
       currentToken
     );
 
-  console.log(
-    "🔄 Refreshing access token...",
-    {
-      userType:
-        activeType,
-
-      remainingSeconds:
-        remainingTime !== null
-          ? Math.round(
-              remainingTime /
-                1000
-            )
-          : null,
-    }
-  );
 
   try {
     /**
@@ -907,27 +894,6 @@ const doRefresh = async () => {
         newToken
       );
 
-    console.log(
-      "✅ Access token refreshed successfully",
-      {
-        userType:
-          newUserType,
-
-        expiresInSeconds:
-          newRemainingTime !==
-          null
-            ? Math.round(
-                newRemainingTime /
-                  1000
-              )
-            : null,
-
-        backendExpiresIn:
-          responseData
-            ?.expires_in,
-      }
-    );
-
     return newToken;
   } catch (error) {
     console.error(
@@ -1051,24 +1017,6 @@ export const scheduleTokenRefresh = (
           1000
     );
 
-  console.log(
-    "⏰ Token refresh scheduled",
-    {
-      expiresInSeconds:
-        Math.round(
-          remaining / 1000
-        ),
-
-      refreshInSeconds:
-        Math.round(
-          refreshDelay / 1000
-        ),
-
-      refreshBeforeExpiry:
-        REFRESH_BEFORE_EXPIRY_SECONDS,
-    }
-  );
-
   refreshTimer =
     setTimeout(
       async () => {
@@ -1111,9 +1059,6 @@ export const scheduleTokenRefresh = (
            * Schedule based on the new token.
            */
 
-          console.log(
-            "🔁 Token already refreshed by another process. Rescheduling."
-          );
 
           scheduleTokenRefresh(
             latestToken
@@ -1123,9 +1068,6 @@ export const scheduleTokenRefresh = (
         }
 
         try {
-          console.log(
-            "⏳ Token approaching expiration. Starting automatic refresh..."
-          );
 
           await refreshAccessToken();
         } catch (error) {
@@ -1451,10 +1393,6 @@ apiClient.interceptors.response.use(
       true;
 
     try {
-      console.log(
-        "🔄 API returned 401. Attempting token refresh..."
-      );
-
       /**
        * One shared refresh request.
        */

@@ -529,21 +529,18 @@ export const loginUser =
 // LOGOUT
 // ============================================================
 
-export const logoutUser =
-  createAsyncThunk(
-    "auth/logout",
+export const logoutUser = createAsyncThunk(
+  "auth/logout",
 
-    async () => {
-      /*
-       * If backend logout endpoint is added later,
-       * it can be called here.
-       */
+  async () => {
 
-      clearAuthStorage();
+    clearAuthStorage();
 
-      return null;
-    }
-  );
+   
+
+    return null;
+  }
+);
 
 // ============================================================
 // INITIALIZE AUTH
