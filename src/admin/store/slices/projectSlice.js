@@ -2,33 +2,26 @@ import { createSlice, createAsyncThunk } from "@reduxjs/toolkit";
 import projectService from "../../services/projectService";
 
 // Helper to map backend format to frontend model
+
 const mapProjectFromApi = (apiProj) => {
   if (!apiProj) return null;
   
   const projectData = apiProj.data || apiProj;
   
-  // Helper to extract ID from either a number/string or an object
   const extractId = (value) => {
     if (!value) return null;
     if (typeof value === 'number' || typeof value === 'string') return value;
     if (typeof value === 'object' && value !== null) {
-      // If it's an object with id or user_id
       return value.id || value.user_id || null;
     }
     return null;
   };
   
-  console.log("=== MAPPING PROJECT FROM API ===");
-  console.log("Raw project_manager_id:", projectData.project_manager_id);
-  console.log("Raw team_lead_id:", projectData.team_lead_id);
   
   const managerId = extractId(projectData.project_manager_id) || 
                      extractId(projectData.managerId) || null;
   const teamLeadId = extractId(projectData.team_lead_id) || 
                      extractId(projectData.teamLeadId) || null;
-  
-  console.log("Extracted managerId:", managerId);
-  console.log("Extracted teamLeadId:", teamLeadId);
   
   return {
     id: projectData.id,
@@ -47,6 +40,9 @@ const mapProjectFromApi = (apiProj) => {
     teamLeadId: teamLeadId,
     project_manager_id: managerId,
     team_lead_id: teamLeadId,
+    totalHours: projectData.total_hours || projectData.totalHours || 0,
+    totalCost: projectData.total_cost || projectData.totalCost || 0,
+    currency: projectData.currency || "AED",
     raw: projectData,
   };
 };
@@ -236,19 +232,6 @@ const projectSlice = createSlice({
         state.projects = action.payload;
         state.stats = calculateStats(action.payload);
 
-        // DEBUG: Log what projects were fetched
-        console.log("=== FETCHED PROJECTS FROM API ===");
-        action.payload.forEach((project, index) => {
-          console.log(`Project ${index + 1}:`, {
-            id: project.id,
-            name: project.name,
-            managerId: project.managerId,
-            project_manager_id: project.project_manager_id,
-            teamLeadId: project.teamLeadId,
-            team_lead_id: project.team_lead_id,
-            raw: project.raw,
-          });
-        });
       })
       .addCase(fetchProjects.rejected, (state, action) => {
         state.loading = false;
@@ -294,17 +277,6 @@ const projectSlice = createSlice({
         state.projects.unshift(action.payload);
         state.stats = calculateStats(state.projects);
 
-        // DEBUG: Log what was created
-        console.log("=== PROJECT CREATED ===");
-        console.log("Created project:", {
-          id: action.payload.id,
-          name: action.payload.name,
-          managerId: action.payload.managerId,
-          project_manager_id: action.payload.project_manager_id,
-          teamLeadId: action.payload.teamLeadId,
-          team_lead_id: action.payload.team_lead_id,
-          raw: action.payload.raw,
-        });
       })
       .addCase(addProject.rejected, (state, action) => {
         state.actionLoading = false;

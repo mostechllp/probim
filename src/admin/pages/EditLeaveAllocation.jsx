@@ -2,50 +2,36 @@ import { useEffect, useState } from 'react';
 import { useDispatch, useSelector } from 'react-redux';
 import { useParams, useNavigate, Link } from 'react-router-dom';
 import { showToast } from '../../components/common/Toast';
-import { fetchEmployeeById } from '@admin/store/slices/employeeSlice';
 import { fetchLeaveTypes, fetchLeaveBalances, updateLeaveAllocation } from '@admin/store/slices/LeaveSlice';
 
 const EditLeaveAllocation = () => {
   const { id } = useParams();
   const dispatch = useDispatch();
   const navigate = useNavigate();
-  const { currentEmployee } = useSelector((state) => state.employees || {});
-  const { leaveTypes = [], loading } = useSelector((state) => state.leaves || {});
+  const { leaveTypes = [], leaveAllocations = [], loading } = useSelector((state) => state.leaves || {});
   const [allocations, setAllocations] = useState({});
   const [updating, setUpdating] = useState(false);
   const [leaveBalances, setLeaveBalances] = useState({});
   const [photoError, setPhotoError] = useState(false);
   const [fetchingBalances, setFetchingBalances] = useState(true);
+  const [employeeData, setEmployeeData] = useState(null);
   const { user } = useSelector((state) => state.auth || {});
-  const routePrefix = user?.type === "employee" ? "/employee" : "/admin";
-  const leavesUrl = user?.type === "employee" ? "/employee/leave-management" : "/admin/leaves";
+  const routePrefix = (user?.type === "employee" || user?.type === "hr" || user?.type === "manager" || user?.type === "team_lead") ? "/employee" : "/admin";
+  const leavesUrl = (user?.type === "employee" || user?.type === "hr" || user?.type === "manager" || user?.type === "team_lead") ? "/employee/leave-management" : "/admin/leaves";
   
-  console.log("Employee: ", currentEmployee);
+  // Get employee data from leaveAllocations
+  const employee = leaveAllocations.find(emp => String(emp.employee_id) === String(id));
 
   // Helper function to get employee photo URL
   const getEmployeePhoto = () => {
-    if (!currentEmployee) return null;
+    if (!employeeData && !employee) return null;
     
-    const photoValue = 
-      currentEmployee.avatar ||
-      currentEmployee.avatar_path ||
-      currentEmployee.passport_size_photo ||
-      currentEmployee.profile_photo ||
-      currentEmployee.photo ||
-      currentEmployee.user?.avatar;
+    const empData = employeeData || employee;
+    const photoValue = empData?.avatar;
     
     if (!photoValue || photoError) return null;
     
-    if (typeof photoValue === "object" && photoValue.path) {
-      const baseUrl = import.meta.env.VITE_API_URL?.replace("/api", "") || "";
-      return `${baseUrl}/storage/${photoValue.path}`;
-    }
-    
     if (typeof photoValue === "string") {
-      if (photoValue.startsWith("/tmp/")) {
-        const baseUrl = import.meta.env.VITE_API_URL?.replace("/api", "") || "";
-        return `${baseUrl}/storage/temp/${photoValue.replace("/tmp/", "")}`;
-      }
       if (photoValue.startsWith("data:")) return photoValue;
       if (photoValue.startsWith("http")) return photoValue;
       
@@ -57,10 +43,9 @@ const EditLeaveAllocation = () => {
     return null;
   };
 
-  // Fetch employee and leave types
+  // Fetch leave types only
   useEffect(() => {
     if (id) {
-      dispatch(fetchEmployeeById(id));
       dispatch(fetchLeaveTypes());
     }
   }, [dispatch, id]);
@@ -72,59 +57,53 @@ const EditLeaveAllocation = () => {
         setFetchingBalances(true);
         try {
           const result = await dispatch(fetchLeaveBalances({ employee_id: parseInt(id) })).unwrap();
-          console.log("Fetched leave balances:", result);
           
-          // Initialize allocations object
+          const data = result || {};
+          const employeeInfo = data.employee || null;
+          const leaveTypesBalance = data.leaveTypesBalance || [];
+          
+          if (employeeInfo) {
+            setEmployeeData(employeeInfo);
+          }
+          
           const initialAllocs = {};
           const balances = {};
           
-          // Handle different response structures
-          let allocationsData = [];
-          
-          if (result && result.allocations) {
-            // If result has allocations object
-            allocationsData = Object.values(result.allocations);
-          } else if (result && Array.isArray(result)) {
-            allocationsData = result;
-          } else if (result && result.data && Array.isArray(result.data)) {
-            allocationsData = result.data;
-          }
-          
-          console.log("Processed allocations data:", allocationsData);
-          
-          // Populate allocations and balances
-          allocationsData.forEach(alloc => {
-            const leaveTypeId = alloc.leave_type_id || alloc.leave_type?.id;
-            if (leaveTypeId) {
-              // Get allocated days (handle different field names)
-              const allocatedDays = parseFloat(alloc.allocated_days || alloc.allocated || 0);
-              const usedDays = parseFloat(alloc.used || 0);
-              
-              initialAllocs[leaveTypeId] = allocatedDays;
-              
-              balances[leaveTypeId] = {
-                allocated: allocatedDays,
-                used: usedDays,
-                remaining: allocatedDays - usedDays
-              };
-            }
+          leaveTypesBalance.forEach(item => {
+            const leaveTypeId = item.leave_type_id;
+            const leaveTypeName = item.leave_type;
+            const allocated = parseFloat(item.allocated) || 0;
+            const taken = parseFloat(item.taken) || 0;
+            const balance = parseFloat(item.balance) || 0;
+            
+            initialAllocs[leaveTypeId] = allocated;
+            
+            balances[leaveTypeId] = {
+              allocated: allocated,
+              used: taken,
+              remaining: balance,
+              name: leaveTypeName
+            };
           });
           
-          // Set default 0 for leave types without allocations
           leaveTypes.forEach(type => {
             if (!initialAllocs[type.id]) {
               initialAllocs[type.id] = 0;
             }
+            if (!balances[type.id]) {
+              balances[type.id] = {
+                allocated: 0,
+                used: 0,
+                remaining: 0,
+                name: type.name
+              };
+            }
           });
-          
-          console.log("Final allocations to display:", initialAllocs);
-          console.log("Final balances:", balances);
           
           setAllocations(initialAllocs);
           setLeaveBalances(balances);
         } catch (error) {
           console.error("Failed to fetch leave balances:", error);
-          // Initialize with zeros if fetch fails
           const defaultAllocs = {};
           leaveTypes.forEach(type => {
             defaultAllocs[type.id] = 0;
@@ -151,15 +130,11 @@ const EditLeaveAllocation = () => {
   const handleSave = async () => {
     setUpdating(true);
     try {
-      // Prepare allocations object with leave_type_id as key
       const allocationsData = {};
       Object.entries(allocations).forEach(([leaveTypeId, allocated]) => {
         allocationsData[leaveTypeId] = allocated;
       });
       
-      console.log("Saving allocations:", allocationsData);
-      
-      // Send single request with all allocations
       const result = await dispatch(updateLeaveAllocation({
         employee_id: parseInt(id),
         allocations: allocationsData
@@ -190,8 +165,96 @@ const EditLeaveAllocation = () => {
     return balance?.used || 0;
   };
 
-  // Show loading state while fetching data
-  if (loading || fetchingBalances || !currentEmployee || leaveTypes.length === 0) {
+  const getAllocatedDays = (leaveTypeId) => {
+    const balance = leaveBalances[leaveTypeId];
+    return balance?.allocated || 0;
+  };
+
+  const getEmployeeName = () => {
+    if (employeeData) {
+      return `${employeeData.first_name || ''} ${employeeData.last_name || ''}`.trim() || employeeData.name || 'Employee';
+    }
+    if (employee) {
+      return employee.name || `${employee.first_name || ''} ${employee.last_name || ''}`.trim() || 'Employee';
+    }
+    return 'Employee';
+  };
+
+  const getEmployeeId = () => {
+    if (employeeData) {
+      return employeeData.employee_id || employeeData.id || '-';
+    }
+    if (employee) {
+      return employee.employee_id || employee.id || '-';
+    }
+    return '-';
+  };
+
+  const getEmployeeDesignation = () => {
+    if (employeeData) {
+      return employeeData.user?.designation?.name || employeeData.role || 'N/A';
+    }
+    if (employee) {
+      return employee.designation || employee.role || 'N/A';
+    }
+    return 'N/A';
+  };
+
+  const getEmployeeDepartment = () => {
+    if (employeeData) {
+      return employeeData.user?.department?.name || employeeData.dept || 'N/A';
+    }
+    if (employee) {
+      return employee.department || employee.dept || 'N/A';
+    }
+    return 'N/A';
+  };
+
+  const getEmployeeEmail = () => {
+    if (employeeData) {
+      return employeeData.company_email || employeeData.email || employeeData.personal_email || '-';
+    }
+    if (employee) {
+      return employee.email || employee.company_email || '-';
+    }
+    return '-';
+  };
+
+  const getJoiningDate = () => {
+    if (employeeData) {
+      return employeeData.joining_date || employeeData.hire_date || null;
+    }
+    if (employee) {
+      return employee.joining_date || employee.hire_date || null;
+    }
+    return null;
+  };
+
+  // Get icon for leave type
+  const getLeaveIcon = (typeName) => {
+    const name = typeName?.toLowerCase() || '';
+    if (name.includes('sick')) return 'fas fa-thermometer-half';
+    if (name.includes('casual')) return 'fas fa-umbrella-beach';
+    if (name.includes('annual') || name.includes('vacation')) return 'fas fa-suitcase';
+    if (name.includes('maternity')) return 'fas fa-baby';
+    if (name.includes('paternity')) return 'fas fa-child';
+    if (name.includes('unpaid')) return 'fas fa-clock';
+    return 'fas fa-calendar-alt';
+  };
+
+  // Get color for leave type
+  const getLeaveColor = (typeName) => {
+    const name = typeName?.toLowerCase() || '';
+    if (name.includes('sick')) return 'text-red-500 bg-red-50 dark:bg-red-900/20';
+    if (name.includes('casual')) return 'text-blue-500 bg-blue-50 dark:bg-blue-900/20';
+    if (name.includes('annual') || name.includes('vacation')) return 'text-green-500 bg-green-50 dark:bg-green-900/20';
+    if (name.includes('maternity')) return 'text-pink-500 bg-pink-50 dark:bg-pink-900/20';
+    if (name.includes('paternity')) return 'text-purple-500 bg-purple-50 dark:bg-purple-900/20';
+    if (name.includes('unpaid')) return 'text-orange-500 bg-orange-50 dark:bg-orange-900/20';
+    return 'text-teal-500 bg-teal-50 dark:bg-teal-900/20';
+  };
+
+  if (loading || fetchingBalances || leaveTypes.length === 0) {
     return (
       <div className="w-full px-4 md:px-6">
         <div className="flex justify-center items-center h-64">
@@ -201,8 +264,9 @@ const EditLeaveAllocation = () => {
     );
   }
 
+  const employeeName = getEmployeeName();
+  const employeeInitials = employeeName.split(' ').map(word => word.charAt(0)).join('').toUpperCase() || '?';
   const photoUrl = getEmployeePhoto();
-  const employeeInitials = `${currentEmployee.first_name?.charAt(0) || ''}${currentEmployee.last_name?.charAt(0) || ''}`;
 
   return (
     <div className="w-full px-4 md:px-6">
@@ -245,7 +309,7 @@ const EditLeaveAllocation = () => {
             {photoUrl ? (
               <img
                 src={photoUrl}
-                alt={`${currentEmployee.first_name} ${currentEmployee.last_name}`}
+                alt={employeeName}
                 className="w-12 h-12 rounded-full object-cover border-2 border-green-500 shadow-sm"
                 onError={() => setPhotoError(true)}
               />
@@ -253,19 +317,19 @@ const EditLeaveAllocation = () => {
             
             {(!photoUrl || photoError) && (
               <div className="w-12 h-12 bg-gradient-to-r from-green-500 to-green-600 rounded-full flex items-center justify-center text-white text-lg font-bold shadow-sm">
-                {employeeInitials || '?'}
+                {employeeInitials}
               </div>
             )}
             
             <div>
               <h4 className="text-base font-semibold text-gray-800 dark:text-gray-200">
-                {currentEmployee.first_name} {currentEmployee.last_name}
+                {employeeName}
               </h4>
               <p className="text-xs text-gray-500 dark:text-gray-400">
-                {currentEmployee?.user?.designation?.name || 'N/A'}
+                {getEmployeeDesignation()}
               </p>
               <p className="text-xs text-gray-400 dark:text-gray-500">
-                {currentEmployee.user?.department?.name || 'N/A'}
+                {getEmployeeDepartment()}
               </p>
             </div>
           </div>
@@ -275,31 +339,19 @@ const EditLeaveAllocation = () => {
             <div className="flex justify-between py-1">
               <span className="text-xs text-gray-500">Employee ID</span>
               <span className="text-xs font-medium text-gray-800 dark:text-gray-200">
-                {currentEmployee.employee_id || '-'}
-              </span>
-            </div>
-            <div className="flex justify-between py-1 border-t border-gray-100 dark:border-gray-700">
-              <span className="text-xs text-gray-500">Company</span>
-              <span className="text-xs font-medium text-gray-800 dark:text-gray-200">
-                {currentEmployee.user?.company?.company_name || '-'}
+                {getEmployeeId()}
               </span>
             </div>
             <div className="flex justify-between py-1 border-t border-gray-100 dark:border-gray-700">
               <span className="text-xs text-gray-500">Email</span>
               <span className="text-xs font-medium text-gray-800 dark:text-gray-200 truncate max-w-[180px]">
-                {currentEmployee.personal_email || '-'}
-              </span>
-            </div>
-            <div className="flex justify-between py-1 border-t border-gray-100 dark:border-gray-700">
-              <span className="text-xs text-gray-500">Phone</span>
-              <span className="text-xs font-medium text-gray-800 dark:text-gray-200">
-                {currentEmployee.personal_number || '-'}
+                {getEmployeeEmail()}
               </span>
             </div>
             <div className="flex justify-between py-1 border-t border-gray-100 dark:border-gray-700">
               <span className="text-xs text-gray-500">Joining Date</span>
               <span className="text-xs font-medium text-gray-800 dark:text-gray-200">
-                {currentEmployee.joining_date ? new Date(currentEmployee.joining_date).toLocaleDateString() : '-'}
+                {getJoiningDate() ? new Date(getJoiningDate()).toLocaleDateString() : '-'}
               </span>
             </div>
             <div className="flex justify-between py-1 border-t border-gray-100 dark:border-gray-700">
@@ -320,52 +372,66 @@ const EditLeaveAllocation = () => {
             </h3>
           </div>
 
-          <div className="space-y-3">
+          <div className="space-y-2">
             {leaveTypes.map((type) => {
-              const getIcon = () => {
-                if (type.name === 'Sick Leave') return 'fas fa-thermometer-half';
-                if (type.name === 'Casual Leave') return 'fas fa-umbrella-beach';
-                if (type.name === 'Annual Leave') return 'fas fa-suitcase';
-                return 'fas fa-calendar-alt';
-              };
-              
               const currentAllocation = allocations[type.id] || 0;
               const usedDays = getUsedDays(type.id);
               const balance = getCurrentBalance(type.id);
-              
-              console.log(`Leave type ${type.name} (ID: ${type.id}):`, {
-                currentAllocation,
-                usedDays,
-                balance
-              });
+              const allocated = getAllocatedDays(type.id);
+              const iconClass = getLeaveIcon(type.name);
+              const colorClass = getLeaveColor(type.name);
               
               return (
-                <div key={type.id} className="flex items-center justify-between py-2 border-b border-gray-100 dark:border-gray-700">
-                  <div className="flex items-center gap-2 w-1/3">
-                    <i className={`${getIcon()} text-green-500 text-xs w-4`}></i>
-                    <span className="text-xs font-medium text-gray-700 dark:text-gray-300">
+                <div 
+                  key={type.id} 
+                  className="flex items-center gap-3 p-3 rounded-lg hover:bg-gray-50 dark:hover:bg-gray-700/50 transition-colors border border-gray-100 dark:border-gray-700"
+                >
+                  {/* Leave Type Icon & Name */}
+                  <div className="flex items-center gap-3 w-[140px] flex-shrink-0">
+                    <div className={`w-8 h-8 rounded-full flex items-center justify-center ${colorClass}`}>
+                      <i className={`${iconClass} text-sm`}></i>
+                    </div>
+                    <span className="text-sm font-medium text-gray-700 dark:text-gray-300 truncate">
                       {type.name}
                     </span>
                   </div>
-                  <div className="w-20">
+
+                  {/* Allocation Input */}
+                  <div className="flex-1 min-w-[80px]">
                     <input
                       type="number"
                       value={currentAllocation}
                       onChange={(e) => handleAllocationChange(type.id, e.target.value)}
                       min="0"
-                      className="w-full px-2 py-1 bg-gray-50 dark:bg-gray-800 border border-gray-200 dark:border-gray-700 rounded text-xs text-gray-800 dark:text-gray-200 focus:outline-none focus:border-green-500 focus:ring-1 focus:ring-green-500/20"
-                      placeholder="Days"
+                      className="w-full px-3 py-2 bg-gray-50 dark:bg-gray-800 border border-gray-200 dark:border-gray-700 rounded-lg text-sm text-gray-800 dark:text-gray-200 focus:outline-none focus:border-green-500 focus:ring-2 focus:ring-green-500/20 transition-all"
+                      placeholder="0"
                     />
                   </div>
-                  <div className="w-24 text-right">
-                    <span className="text-xs text-gray-500">
-                      Balance: <span className="font-medium text-green-600">{balance}</span>
+
+                  {/* Balance Badge */}
+                  <div className="flex items-center gap-1 px-3 py-1.5 bg-green-50 dark:bg-green-900/20 rounded-full flex-shrink-0">
+                    <span className="text-xs text-gray-500 dark:text-gray-400">Balance:</span>
+                    <span className="text-sm font-bold text-green-600 dark:text-green-400">
+                      {balance}
                     </span>
                   </div>
+
+                  {/* Used Badge (if used > 0) */}
                   {usedDays > 0 && (
-                    <div className="w-16 text-right">
-                      <span className="text-xs text-gray-400">
-                        Used: {usedDays}
+                    <div className="flex items-center gap-1 px-3 py-1.5 bg-orange-50 dark:bg-orange-900/20 rounded-full flex-shrink-0">
+                      <span className="text-xs text-gray-500 dark:text-gray-400">Used:</span>
+                      <span className="text-sm font-bold text-orange-600 dark:text-orange-400">
+                        {usedDays}
+                      </span>
+                    </div>
+                  )}
+
+                  {/* Allocated Badge */}
+                  {allocated > 0 && (
+                    <div className="flex items-center gap-1 px-3 py-1.5 bg-blue-50 dark:bg-blue-900/20 rounded-full flex-shrink-0">
+                      <span className="text-xs text-gray-500 dark:text-gray-400">Alloc:</span>
+                      <span className="text-sm font-bold text-blue-600 dark:text-blue-400">
+                        {allocated}
                       </span>
                     </div>
                   )}
@@ -378,7 +444,7 @@ const EditLeaveAllocation = () => {
           <div className="flex justify-end gap-3 pt-4 mt-4 border-t border-gray-200 dark:border-gray-700">
             <Link
               to={`${routePrefix}/leaves/allocations`}
-              className="px-4 py-1.5 rounded-full text-xs font-semibold bg-gray-100 dark:bg-gray-700 text-gray-700 dark:text-gray-300 hover:bg-gray-200 dark:hover:bg-gray-600 transition-all"
+              className="px-6 py-2 rounded-lg text-sm font-semibold bg-gray-100 dark:bg-gray-700 text-gray-700 dark:text-gray-300 hover:bg-gray-200 dark:hover:bg-gray-600 transition-all"
             >
               Cancel
             </Link>
@@ -386,12 +452,18 @@ const EditLeaveAllocation = () => {
               type="button"
               onClick={handleSave}
               disabled={updating}
-              className="px-4 py-1.5 rounded-full text-xs font-semibold bg-green-500 text-white hover:bg-green-600 transition-all disabled:opacity-70 flex items-center gap-1"
+              className="px-6 py-2 rounded-lg text-sm font-semibold bg-green-500 text-white hover:bg-green-600 transition-all disabled:opacity-70 flex items-center gap-2 shadow-sm hover:shadow-md"
             >
               {updating ? (
-                <><i className="fas fa-spinner fa-spin text-xs"></i> Saving...</>
+                <>
+                  <i className="fas fa-spinner fa-spin text-sm"></i>
+                  Saving...
+                </>
               ) : (
-                <><i className="fas fa-save text-xs"></i> Save</>
+                <>
+                  <i className="fas fa-save text-sm"></i>
+                  Save
+                </>
               )}
             </button>
           </div>

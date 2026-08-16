@@ -121,15 +121,9 @@ const RequestLeave = () => {
   // Fetch leaves and balance on mount
   useEffect(() => {
     const fetchData = async () => {
-      console.log(
-        "Employee ID from auth.user.employee.id:",
-        authState?.user?.employee?.id,
-      );
-      console.log("Final employeeId:", employeeId);
       // Only fetch balance if we have an employee ID
       if (employeeId || authState?.user?.employee_id) {
         const result = await dispatch(fetchLeaveBalance());
-        console.log("Fetch balance result:", result);
       } else {
         console.warn("No employee ID available, skipping balance fetch");
       }
@@ -150,12 +144,53 @@ const RequestLeave = () => {
     calculateDays();
   }, [formData.start_date, formData.end_date, formData.start_session, formData.end_session]);
 
+  /**
+   * Calculate working days excluding Sundays
+   * @param {Date} startDate - Start date
+   * @param {Date} endDate - End date
+   * @returns {number} Number of days excluding Sundays
+   */
+  const getWorkingDays = (startDate, endDate) => {
+    let count = 0;
+    const current = new Date(startDate);
+    const end = new Date(endDate);
+    
+    // Set time to avoid timezone issues
+    current.setHours(0, 0, 0, 0);
+    end.setHours(0, 0, 0, 0);
+    
+    // If start date is after end date, return 0
+    if (current > end) return 0;
+    
+    while (current <= end) {
+      // Sunday is 0, so exclude Sundays
+      if (current.getDay() !== 0) {
+        count++;
+      }
+      current.setDate(current.getDate() + 1);
+    }
+    
+    return count;
+  };
+
   const calculateDays = () => {
     if (formData.start_date && formData.end_date) {
       const from = new Date(formData.start_date);
       const to = new Date(formData.end_date);
+      
+      // Set time to avoid timezone issues
+      from.setHours(0, 0, 0, 0);
+      to.setHours(0, 0, 0, 0);
+      
       if (to >= from) {
-        let days = Math.ceil((to - from) / (1000 * 60 * 60 * 24)) + 1;
+        // Get working days excluding Sundays
+        let days = getWorkingDays(from, to);
+        
+        // If no working days, set to 0
+        if (days === 0) {
+          setTotalDays(0);
+          return;
+        }
         
         // Adjust for sessions
         if (formData.start_session === "afternoon") {
@@ -258,11 +293,6 @@ const RequestLeave = () => {
       formDataToSend.append("document", selectedFile);
     }
 
-    console.log("Submitting leave request with payload:");
-    for (let pair of formDataToSend.entries()) {
-      console.log(pair[0] + ": " + pair[1]);
-    }
-
     const result = await dispatch(addLeaveRequest(formDataToSend));
 
     if (addLeaveRequest.fulfilled.match(result)) {
@@ -272,27 +302,31 @@ const RequestLeave = () => {
     }
   };
 
-  // Get balance for selected leave type
-  const getSelectedLeaveBalance = () => {
-    if (!formData.leave_type_id)
-      return { allocated: 0, used: 0, pending: 0, remaining: 0 };
-
-    const selectedType = leaveTypes.find(
-      (lt) => lt.id === parseInt(formData.leave_type_id),
-    );
-    if (selectedType) {
-      const balance = leaveBalances[selectedType.name];
-      if (balance) {
-        return {
-          allocated: balance.allocated || 0,
-          used: balance.taken || balance.used || 0,
-          pending: balance.pending || 0,
-          remaining: balance.remaining || 0,
-        };
-      }
-    }
+  // In RequestLeave.jsx, the balance access should work like this:
+const getSelectedLeaveBalance = () => {
+  if (!formData.leave_type_id) {
     return { allocated: 0, used: 0, pending: 0, remaining: 0 };
-  };
+  }
+
+  const selectedType = leaveTypes.find(
+    (lt) => lt.id === parseInt(formData.leave_type_id),
+  );
+  
+  if (selectedType) {
+    // Access by leave type name from the leaveBalances object
+    const balance = leaveBalances[selectedType.name];
+    if (balance) {
+      return {
+        allocated: balance.allocated || 0,
+        used: balance.taken || balance.used || 0,
+        pending: balance.pending || 0,
+        remaining: balance.remaining || 0,
+      };
+    }
+  }
+  
+  return { allocated: 0, used: 0, pending: 0, remaining: 0 };
+};
 
   const selectedBalance = getSelectedLeaveBalance();
   const remaining = selectedBalance?.remaining ?? 0;
@@ -483,7 +517,9 @@ const RequestLeave = () => {
                   >
                     {totalDays}
                   </span>
-                  <small className="text-[11px] text-gray-500">Days</small>
+                  <small className="text-[11px] text-gray-500">
+                    {totalDays === 1 ? "Day" : "Days"} (Excluding Sundays)
+                  </small>
                 </div>
               </div>
 
@@ -681,13 +717,6 @@ const RequestLeave = () => {
               </p>
             </div>
           )}
-
-          <div className="mt-4 p-3 bg-amber-50 dark:bg-amber-900/20 rounded-lg">
-            <p className="text-xs text-amber-600 dark:text-amber-400">
-              <FiCalendar className="inline mr-1" />
-              Plan your leave in advance for better scheduling
-            </p>
-          </div>
         </div>
       </div>
     </div>

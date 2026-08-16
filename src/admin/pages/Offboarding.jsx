@@ -21,8 +21,11 @@ import {
   DollarSign,
   Loader,
   AlertCircleIcon,
+  Trash2,
+  Play,
 } from "lucide-react";
 import { showToast } from "../../components/common/Toast";
+import apiClient from "../../utils/apiClient";
 import { fetchEmployees } from "../store/slices/employeeSlice";
 import {
   deleteOffboarding,
@@ -32,38 +35,67 @@ import {
 } from "../store/slices/offboardingSlice";
 
 // Helper function to get step name
+// Helper function to get step name
 const getStepName = (stepKey) => {
+  if (!stepKey) return "Unknown";
+
+  const key = String(stepKey).toLowerCase();
+
   const stepMap = {
     initiation: "Initiation",
-    visa_cancellation: "Visa Cancellation",
+    initiated: "Initiation",
+    asset: "Assets",
+    assets: "Assets",
+    asset_return: "Assets",
+    settlement: "Settlement",
+    final_settlement: "Settlement",
+    visa: "Visa Cancel",
+    visa_cancellation: "Visa Cancel",
+    interview: "Interview",
+    exit_interview: "Interview",
+    letters: "Letters",
+    letters_documents: "Letters",
+    final_clearance: "Final Clearance",
+    clearance: "Final Clearance",
+    verification: "Final Clearance",
     checklist: "General Checklist",
-    assets: "Asset Return",
-    exit_interview: "Exit Interview",
-    settlement: "Final Settlement",
-    letters: "Letters & Documents",
+    general_checklist: "General Checklist",
+    completed: "Completed",
+    // Additional step keys
+    pending_visa: "Visa Cancel",
+    pending_checklist: "General Checklist",
+    pending_assets: "Assets",
+    pending_interview: "Interview",
+    pending_settlement: "Settlement",
+    pending_letters: "Letters",
+    "in-progress": "In Progress",
   };
-  return stepMap[stepKey] || stepKey || "Unknown";
+  return stepMap[key] || stepKey;
 };
 
 const getStepIcon = (stepKey) => {
-  switch (stepKey) {
-    case "initiation":
-      return <UserPlus size={14} />;
-    case "visa_cancellation":
-      return <ShieldCheck size={14} />;
-    case "checklist":
-      return <ClipboardList size={14} />;
-    case "assets":
-      return <Package size={14} />;
-    case "exit_interview":
-      return <MessageSquareIcon size={14} />;
-    case "settlement":
-      return <DollarSign size={14} />;
-    case "letters":
-      return <FileText size={14} />;
-    default:
-      return <Timer size={14} />;
-  }
+  if (!stepKey) return <Timer size={14} />;
+
+  const key = String(stepKey).toLowerCase();
+
+  if (["initiation", "initiated"].includes(key)) return <UserPlus size={14} />;
+  if (["asset", "assets", "asset_return"].includes(key))
+    return <Package size={14} />;
+  if (["settlement", "final_settlement"].includes(key))
+    return <DollarSign size={14} />;
+  if (["visa", "visa_cancellation"].includes(key))
+    return <ShieldCheck size={14} />;
+  if (["interview", "exit_interview"].includes(key))
+    return <MessageSquareIcon size={14} />;
+  if (["letters", "letters_documents"].includes(key))
+    return <FileText size={14} />;
+  if (["final_clearance", "clearance", "verification"].includes(key))
+    return <CheckCircle2 size={14} />;
+  if (["checklist", "general_checklist"].includes(key))
+    return <ClipboardList size={14} />;
+  if (key === "completed") return <CheckCircle2 size={14} />;
+
+  return <Timer size={14} />;
 };
 
 const MessageSquareIcon = ({ size }) => (
@@ -86,11 +118,34 @@ const OffboardingDashboard = () => {
   const dispatch = useDispatch();
 
   const [stats, setStats] = useState({
-    activeOffboarding: 0,
-    pendingTasks: 0,
-    completedThisMonth: 0,
-    assetsToCollect: 0,
+    total_offboarding: 0,
+    pending_initiation: 0,
+    in_progress: 0,
+    completed_offboarding: 0,
+    pending_asset_return: 0,
+    pending_final_settlement: 0,
+    pending_visa_cancellation: 0,
+    pending_exit_interview: 0,
+    pending_letters_documents: 0,
   });
+
+  useEffect(() => {
+    const fetchStats = async () => {
+      try {
+        const response = await apiClient.get("/admin/offboarding/stats");
+        if (
+          response.data &&
+          response.data.status === "success" &&
+          response.data.data
+        ) {
+          setStats(response.data.data);
+        }
+      } catch (error) {
+        console.error("Failed to fetch stats:", error);
+      }
+    };
+    fetchStats();
+  }, []);
 
   const [recentOffboarding, setRecentOffboarding] = useState([]);
   const [loading, setLoading] = useState(true);
@@ -156,52 +211,105 @@ const OffboardingDashboard = () => {
     dispatch(fetchAllOffboarding({ page: 1, perPage: 50 }));
   }, [dispatch]);
 
-  // Fetch progress for each offboarding record
-  useEffect(() => {
-    const fetchProgressForAll = async () => {
-      if (offboardings && offboardings.length > 0) {
-        const progressMap = {};
-        for (const offboarding of offboardings) {
-          try {
-            const result = await dispatch(
-              fetchOffboardingProgress(offboarding.id),
-            ).unwrap();
-            if (result) {
-              progressMap[offboarding.id] = result;
-            }
-          } catch (error) {
-            console.error(
-              `Failed to fetch progress for offboarding ${offboarding.id}:`,
-              error,
-            );
-          }
-        }
-        setProgressData(progressMap);
-      }
-    };
+  // Track which offboarding IDs we have fetched progress for
+  // Track which offboarding IDs we have fetched progress for
+const fetchedProgressIds = React.useRef(new Set());
 
-    fetchProgressForAll();
-  }, [offboardings, dispatch]);
+// Fetch progress for each offboarding record
+useEffect(() => {
+  const fetchProgressForAll = async () => {
+    // ✅ FIX: Define progressMap inside the function
+    const progressMap = {};
+    
+    if (offboardings && offboardings.length > 0) {
+      for (const offboarding of offboardings) {
+        try {
+          // Check if we already have progress for this offboarding to avoid re-fetching
+          if (fetchedProgressIds.current.has(offboarding.id)) continue;
+          
+          // Mark as fetching/fetched
+          fetchedProgressIds.current.add(offboarding.id);
+
+          const result = await dispatch(
+            fetchOffboardingProgress(offboarding.id),
+          ).unwrap();
+          
+          if (result) {
+            // Create a new object instead of modifying the read-only result
+            let processedResult = { ...result };
+
+            // If steps is not an array, create a steps array
+            if (!Array.isArray(processedResult.steps)) {
+              // If steps is a number, create a default steps array
+              const totalSteps = processedResult.steps || 7;
+              const stepOrder = [
+                "initiation",
+                "checklist",
+                "visa",
+                "assets",
+                "interview",
+                "settlement",
+                "letters",
+              ];
+              const currentStatus =
+                processedResult.current_status || "initiation";
+              const currentIndex = stepOrder.indexOf(currentStatus);
+
+              processedResult.steps = stepOrder.map((stepKey, index) => {
+                let status = "pending";
+                if (index < currentIndex) {
+                  status = "completed";
+                } else if (index === currentIndex) {
+                  status = "in_progress";
+                }
+                return {
+                  key: stepKey,
+                  status: status,
+                  name: getStepName(stepKey),
+                };
+              });
+
+              // Update total_steps if needed
+              if (!processedResult.total_steps) {
+                processedResult.total_steps = stepOrder.length;
+              }
+            }
+
+            progressMap[offboarding.id] = processedResult;
+          }
+        } catch (error) {
+          // Remove from set if failed so it can be retried if needed
+          fetchedProgressIds.current.delete(offboarding.id);
+          console.error(
+            `Failed to fetch progress for offboarding ${offboarding.id}:`,
+            error,
+          );
+          // Set default progress
+          progressMap[offboarding.id] = {
+            steps: [],
+            progress_percentage: 0,
+            completed_steps: 0,
+            total_steps: 7,
+            current_status: "initiation",
+          };
+        }
+      }
+    }
+    
+    // ✅ FIX: Set progress data after all fetches are complete
+    setProgressData(prev => {
+      if (Object.keys(progressMap).length === 0) return prev;
+      return { ...prev, ...progressMap };
+    });
+  };
+
+  fetchProgressForAll();
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+}, [offboardings, dispatch]);
 
   // Process offboarding data
   useEffect(() => {
     if (!offboardingLoading && offboardings) {
-      // Calculate stats
-      const activeCount = offboardings.filter(
-        (off) => off.status !== "completed" && off.status !== "cancelled",
-      ).length;
-
-      const completedCount = offboardings.filter(
-        (off) => off.status === "completed",
-      ).length;
-
-      setStats({
-        activeOffboarding: activeCount,
-        pendingTasks: activeCount * 3,
-        completedThisMonth: completedCount,
-        assetsToCollect: activeCount * 2,
-      });
-
       // Format recent offboarding data with employee names
       const formattedOffboardings = offboardings.map((off) => {
         // Try to find employee by various ID fields
@@ -227,18 +335,58 @@ const OffboardingDashboard = () => {
 
         const progress = progressData[off.id];
 
+        const combinedStatus = progress?.status ?? off.status;
+        let calculatedCurrentStep = off.current_step || "initiation";
+
+        if (progress && Array.isArray(progress.steps) && progress.steps.length > 0) {
+          const inProgressStep = progress.steps.find((s) => s.status === "in_progress");
+          if (inProgressStep) {
+            calculatedCurrentStep = inProgressStep.key;
+          } else {
+            const pendingStep = progress.steps.find((s) => s.status === "pending");
+            if (pendingStep) {
+              calculatedCurrentStep = pendingStep.key;
+            } else if (progress.progress_percentage === 100 || combinedStatus === "completed") {
+              calculatedCurrentStep = "Completed";
+            }
+          }
+        } 
+        
+        // If we still don't have a good calculated step (it's initiation or missing), use the combinedStatus parsing
+        if (calculatedCurrentStep === "initiation" || !calculatedCurrentStep) {
+           if (progress?.progress_percentage === 100 || combinedStatus === "completed") calculatedCurrentStep = "Completed";
+           else if (combinedStatus?.includes("visa")) calculatedCurrentStep = "visa";
+           else if (combinedStatus?.includes("checklist") || combinedStatus?.includes("final") || combinedStatus?.includes("clearance")) calculatedCurrentStep = "checklist";
+           else if (combinedStatus?.includes("asset")) calculatedCurrentStep = "assets";
+           else if (combinedStatus?.includes("interview")) calculatedCurrentStep = "interview";
+           else if (combinedStatus?.includes("settlement")) calculatedCurrentStep = "settlement";
+           else if (combinedStatus?.includes("letter")) calculatedCurrentStep = "letters";
+        }
+
+        // Determine completed steps count
+        let completedSteps = progress?.completed_steps || 0;
+        let totalSteps = progress?.total_steps || 7;
+        let progressPercentage = progress?.progress_percentage || 0;
+
+        // If steps is a number and we have completed steps from progress
+        if (typeof progress?.steps === "number" && progress?.completed_steps) {
+          totalSteps = progress.steps;
+          completedSteps = progress.completed_steps;
+          progressPercentage = Math.round((completedSteps / totalSteps) * 100);
+        }
+
         return {
           id: off.id,
           name: employeeName,
           employeeId: off.employee_id,
           department: department,
           lastDay: off.last_working_day,
-          status: off.status,
-          currentStep: off.current_step || "initiation",
-          progressPercentage: progress?.progress_percentage || 0,
-          completedSteps: progress?.completed_steps || 0,
-          totalSteps: progress?.total_steps || 7,
-          steps: progress?.steps || [],
+          status: progress?.status ?? off.status,
+          currentStep: calculatedCurrentStep,
+          progressPercentage: progressPercentage,
+          completedSteps: completedSteps,
+          totalSteps: totalSteps,
+          steps: Array.isArray(progress?.steps) ? progress.steps : [],
         };
       });
 
@@ -247,71 +395,69 @@ const OffboardingDashboard = () => {
     }
   }, [offboardings, offboardingLoading, employeeMap, progressData]);
 
-  const offboardingCards = [
-    {
-      id: "initiate",
-      title: "Initiate Offboarding",
-      description:
-        "Start the offboarding process for an employee. Fill in employee details, last working day, and separation type.",
-      icon: <UserPlus size={28} />,
-      path: "/admin/employees/offboarding-initiation",
-      color: "blue",
-      bgClass:
-        "bg-blue-50 dark:bg-blue-950/30 text-blue-600 dark:text-blue-400",
-      buttonClass:
-        "bg-blue-50 dark:bg-blue-950/40 text-blue-600 dark:text-blue-400 hover:bg-blue-100 dark:hover:bg-blue-900/50",
-      stats: "Start new process",
-      buttonText: "Initiate Now",
-    },
-    {
-      id: "categories",
-      title: "Checklist Categories",
-      description:
-        "Manage offboarding checklist categories. Create, edit, and organize tasks by categories.",
-      icon: <ClipboardList size={28} />,
-      path: "/admin/employees/checklist-categories",
-      color: "green",
-      bgClass:
-        "bg-green-50 dark:bg-green-950/30 text-green-600 dark:text-green-400",
-      buttonClass:
-        "bg-green-50 dark:bg-green-950/40 text-green-600 dark:text-green-400 hover:bg-green-100 dark:hover:bg-green-900/50",
-      stats: `${categories?.length || 0} categories`,
-      buttonText: "Manage Categories",
-    },
-  ];
-
   const quickStats = [
     {
-      label: "Active Offboarding",
-      value: stats.activeOffboarding,
+      label: "Total Offboarding",
+      value: stats.total_offboarding,
       icon: <Briefcase size={20} />,
-      color: "blue",
       bgClass: "bg-blue-100 dark:bg-blue-900/30",
       textClass: "text-blue-600 dark:text-blue-400",
     },
     {
-      label: "Pending Tasks",
-      value: stats.pendingTasks,
-      icon: <Clock size={20} />,
-      color: "orange",
+      label: "Pending Initiation",
+      value: stats.pending_initiation,
+      icon: <UserPlus size={20} />,
       bgClass: "bg-orange-100 dark:bg-orange-900/30",
       textClass: "text-orange-600 dark:text-orange-400",
     },
     {
-      label: "Completed (Month)",
-      value: stats.completedThisMonth,
+      label: "In Progress",
+      value: stats.in_progress,
+      icon: <TrendingUp size={20} />,
+      bgClass: "bg-yellow-100 dark:bg-yellow-900/30",
+      textClass: "text-yellow-600 dark:text-yellow-400",
+    },
+    {
+      label: "Completed Offboarding",
+      value: stats.completed_offboarding,
       icon: <CheckCircle2 size={20} />,
-      color: "green",
       bgClass: "bg-green-100 dark:bg-green-900/30",
       textClass: "text-green-600 dark:text-green-400",
     },
     {
-      label: "Assets Pending",
-      value: stats.assetsToCollect,
+      label: "Pending Asset Return",
+      value: stats.pending_asset_return,
       icon: <Laptop size={20} />,
-      color: "purple",
       bgClass: "bg-purple-100 dark:bg-purple-900/30",
       textClass: "text-purple-600 dark:text-purple-400",
+    },
+    {
+      label: "Pending Final Settlement",
+      value: stats.pending_final_settlement,
+      icon: <DollarSign size={20} />,
+      bgClass: "bg-teal-100 dark:bg-teal-900/30",
+      textClass: "text-teal-600 dark:text-teal-400",
+    },
+    {
+      label: "Pending Visa Cancellation",
+      value: stats.pending_visa_cancellation,
+      icon: <ShieldCheck size={20} />,
+      bgClass: "bg-red-100 dark:bg-red-900/30",
+      textClass: "text-red-600 dark:text-red-400",
+    },
+    {
+      label: "Pending Exit Interview",
+      value: stats.pending_exit_interview,
+      icon: <MessageSquareIcon size={20} />,
+      bgClass: "bg-indigo-100 dark:bg-indigo-900/30",
+      textClass: "text-indigo-600 dark:text-indigo-400",
+    },
+    {
+      label: "Pending Letters & Documents",
+      value: stats.pending_letters_documents,
+      icon: <FileText size={20} />,
+      bgClass: "bg-pink-100 dark:bg-pink-900/30",
+      textClass: "text-pink-600 dark:text-pink-400",
     },
   ];
 
@@ -358,58 +504,17 @@ const OffboardingDashboard = () => {
   };
 
   const handleContinue = async (offboarding) => {
-    // First fetch the offboarding progress to know which step to go to
     try {
-      // Fetch progress to get current step
-      const progress = await dispatch(
-        fetchOffboardingProgress(offboarding.id),
+      const currentStepKey = offboarding.currentStep || "initiation";
+
+      // Fetch full offboarding data
+      const result = await dispatch(
+        fetchOffboardingById(offboarding.id),
       ).unwrap();
 
-      if (progress) {
-        // Determine which step is currently in progress or pending
-        const steps = progress.steps || [];
-
-        // Find the first step that is not completed (in_progress or pending)
-        let currentStepKey = "initiation"; // default
-
-        for (const step of steps) {
-          if (step.status === "in_progress") {
-            currentStepKey = step.key;
-            break;
-          }
-        }
-
-        // If no step is in_progress, find the first pending step
-        if (currentStepKey === "initiation") {
-          for (const step of steps) {
-            if (step.status === "pending") {
-              currentStepKey = step.key;
-              break;
-            }
-          }
-        }
-
-        console.log("Current step to navigate:", currentStepKey);
-        console.log("Progress steps:", steps);
-
-        // Fetch full offboarding data
-        const result = await dispatch(
-          fetchOffboardingById(offboarding.id),
-        ).unwrap();
-
-        if (result) {
-          // Navigate based on the current step from progress
-          navigateToStep(currentStepKey, offboarding.id, result);
-        }
-      } else {
-        // Fallback: use offboarding.currentStep if progress fetch fails
-        const step = offboarding.currentStep || "initiation";
-        const result = await dispatch(
-          fetchOffboardingById(offboarding.id),
-        ).unwrap();
-        if (result) {
-          navigateToStep(step, offboarding.id, result);
-        }
+      if (result) {
+        // Navigate based on the current step
+        navigateToStep(currentStepKey, offboarding.id, result);
       }
     } catch (error) {
       console.error("Failed to fetch offboarding details:", error);
@@ -423,6 +528,12 @@ const OffboardingDashboard = () => {
     const state = { offboardingData, id: offboardingId, isEdit: true };
 
     switch (stepKey) {
+      case "Completed":
+      case "completed":
+      case "checklist":
+      case "general_checklist":
+        navigate(`${basePath}/offboarding-checklist`, { state });
+        break;
       case "initiation":
       case "initiated":
         navigate(`${basePath}/offboarding-initiation`, { state });
@@ -471,7 +582,7 @@ const OffboardingDashboard = () => {
   return (
     <div className="w-full overflow-x-hidden">
       {/* Stats Cards */}
-      <div className="stats-grid grid grid-cols-2 sm:grid-cols-4 gap-3 md:gap-5 mb-6">
+      <div className="stats-grid grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-5 gap-3 md:gap-5 mb-6">
         {quickStats.map((stat, index) => (
           <div
             key={index}
@@ -497,50 +608,21 @@ const OffboardingDashboard = () => {
       </div>
 
       {/* Page Header */}
-      <div className="mb-6">
+      <div className="mb-6 flex justify-between items-center">
         <h2 className="text-lg md:text-2xl font-bold gradient-heading bg-clip-text text-transparent">
           Offboarding
         </h2>
-      </div>
-
-      {/* Main Cards Grid */}
-      <div className="grid grid-cols-1 lg:grid-cols-2 gap-4 md:gap-6 mb-8">
-        {offboardingCards.map((card) => (
-          <div
-            key={card.id}
-            className="group relative bg-white dark:bg-gray-800 rounded-xl border border-gray-200 dark:border-gray-700 overflow-hidden hover:shadow-soft transition-all duration-300 hover:-translate-y-1 cursor-pointer"
-            onClick={() => navigate(card.path)}
-          >
-            <div className="p-4 md:p-6">
-              <div
-                className={`w-12 h-12 md:w-14 md:h-14 ${card.bgClass} rounded-xl flex items-center justify-center mb-3 md:mb-4`}
-              >
-                {card.icon}
-              </div>
-              <h3 className="text-base md:text-xl font-bold text-gray-900 dark:text-white mb-1 md:mb-2">
-                {card.title}
-              </h3>
-              <p className="text-xs md:text-sm text-gray-500 dark:text-gray-400 leading-relaxed mb-3 md:mb-4">
-                {card.description}
-              </p>
-              <div className="flex items-center justify-between mt-3 md:mt-4 pt-3 md:pt-4 border-t border-gray-100 dark:border-gray-700">
-                <span className="text-[10px] md:text-xs font-semibold text-gray-400 uppercase tracking-wide">
-                  {card.stats}
-                </span>
-                <button
-                  className={`px-3 md:px-4 py-1.5 md:py-2 rounded-lg ${card.buttonClass} font-semibold text-xs md:text-sm flex items-center gap-1 md:gap-2 transition-all group-hover:gap-2 md:group-hover:gap-3`}
-                  onClick={(e) => {
-                    e.stopPropagation();
-                    navigate(card.path);
-                  }}
-                >
-                  {card.buttonText}
-                  <ArrowRight size={14} />
-                </button>
-              </div>
-            </div>
-          </div>
-        ))}
+        <button
+          className="px-4 py-2 rounded-lg bg-blue-600 text-white hover:bg-blue-700 dark:bg-blue-500 dark:hover:bg-blue-600 font-semibold text-sm flex items-center gap-2 transition-all shadow-sm"
+          onClick={() => {
+            localStorage.removeItem("offboarding_id");
+            localStorage.removeItem("offboarding_draft");
+            navigate("/admin/employees/offboarding-initiation");
+          }}
+        >
+          <UserPlus size={16} />
+          Initiate Now
+        </button>
       </div>
 
       {/* Recent Offboarding Section */}
@@ -550,13 +632,6 @@ const OffboardingDashboard = () => {
             <FileText size={18} className="text-gray-500" />
             Recent Offboarding Requests
           </h2>
-          <button
-            onClick={() => navigate("/admin/employees/offboarding-initiation")}
-            className="text-xs md:text-sm font-semibold text-green-600 dark:text-green-400 hover:text-green-700 flex items-center gap-1"
-          >
-            View all
-            <ArrowRight size={12} />
-          </button>
         </div>
 
         <div className="bg-white dark:bg-gray-800 rounded-xl border border-gray-200 dark:border-gray-700 overflow-x-auto shadow-soft">
@@ -604,9 +679,6 @@ const OffboardingDashboard = () => {
                         <div>
                           <p className="text-xs md:text-sm font-semibold text-gray-800 dark:text-gray-200">
                             {item.name}
-                          </p>
-                          <p className="text-[10px] md:text-xs text-gray-500 dark:text-gray-400">
-                            ID: {item.employeeId}
                           </p>
                         </div>
                       </td>
@@ -656,17 +728,21 @@ const OffboardingDashboard = () => {
                       </td>
                       <td className="px-3 md:px-4 py-2 md:py-3 text-right">
                         <div className="flex items-center justify-end gap-2">
-                          <button
-                            onClick={() => handleContinue(item)}
-                            className="text-xs md:text-sm font-semibold text-green-600 dark:text-green-400 hover:text-green-700 flex items-center gap-1"
-                          >
-                            Continue
-                          </button>
+                          {item.status !== "completed" && (
+                            <button
+                              onClick={() => handleContinue(item)}
+                              title="Continue"
+                              className="p-2 rounded-xl bg-blue-50 text-blue-500 hover:bg-blue-100 hover:text-blue-600 transition-colors flex items-center justify-center"
+                            >
+                              <Play size={16} className="ml-0.5" />
+                            </button>
+                          )}
                           <button
                             onClick={() => handleDeleteClick(item)}
-                            className="text-xs md:text-sm font-semibold text-red-600 dark:text-red-400 hover:text-red-700 flex items-center gap-1"
+                            title="Delete"
+                            className="p-2 rounded-xl bg-red-50 text-red-500 hover:bg-red-100 hover:text-red-600 transition-colors flex items-center justify-center"
                           >
-                            Delete
+                            <Trash2 size={16} />
                           </button>
                         </div>
                       </td>

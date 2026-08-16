@@ -2,6 +2,7 @@ import React, { useState, useEffect } from "react";
 import { PROJECT_MODULE_NAME } from "../../utils/constants";
 import EmployeeSearchSelect from "./EmployeeSearchSelect";
 import ProjectMultiSelect from "./ProjectMultiSelect";
+import { createPortal } from "react-dom";
 
 const AssignmentForm = ({
   employees, // List of all employees to choose from
@@ -77,7 +78,7 @@ const AssignmentForm = ({
     setError("");
   };
 
-  return (
+  return createPortal(
     <form onSubmit={handleSubmit} className="space-y-6">
       {error && (
         <div className="p-3.5 bg-red-500/10 border border-red-500/20 text-red-500 text-xs font-semibold rounded-xl flex items-center gap-2.5">
@@ -140,7 +141,8 @@ const AssignmentForm = ({
           )}
         </button>
       </div>
-    </form>
+    </form>,
+    document.body
   );
 };
 

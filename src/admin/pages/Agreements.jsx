@@ -1,6 +1,6 @@
 import { useEffect, useState } from 'react';
 import { useDispatch, useSelector } from 'react-redux';
-import { Link } from 'react-router-dom';
+import { Link, useLocation } from 'react-router-dom';
 import SearchBar from '@admin/components/common/SearchBar';
 import EntriesSelector from '@admin/components/common/EntriesSelector';
 import { showToast } from '../../components/common/Toast';
@@ -10,6 +10,9 @@ import { fetchDocuments, deleteDocument, clearError, fetchDocumentFolders } from
 
 const Agreements = () => {
   const dispatch = useDispatch();
+  const location = useLocation();
+  const { user } = useSelector((state) => state.auth);
+  
   const { documents: documentsState = [], folders = [], error = null } = useSelector(
     (state) => state.documents || { documents: [], folders: [], loading: false, error: null }
   );
@@ -24,6 +27,33 @@ const Agreements = () => {
   const [confirmOpen, setConfirmOpen] = useState(false);
   const [selectedDocument, setSelectedDocument] = useState(null);
   const [deleteLoading, setDeleteLoading] = useState(false);
+
+  // Determine if we're in admin or employee route
+  const isAdminRoute = location.pathname.startsWith('/admin');
+  const isEmployeeRoute = location.pathname.startsWith('/employee');
+  const basePath = isAdminRoute ? '/admin' : '/employee';
+
+  // Get user permissions
+  const permissions = user?.permissions || {};
+  
+  // Check permissions for documents/agreements
+  // For admin route, check 'agreements' permission
+  // For employee route, check 'my-documents' or 'documents' permission
+  const permissionKey = isAdminRoute ? 'agreements' : 'my-documents';
+  const modulePermissions = permissions[permissionKey] || permissions['documents'] || {};
+  
+  const hasEditPermission = modulePermissions?.edit === true;
+  const hasDeletePermission = modulePermissions?.delete === true;
+  const hasReadPermission = modulePermissions?.read === true;
+
+  // Also check if user is admin type or has all permissions
+  const isAdmin = user?.type === 'admin';
+  const hasAllPermissions = user?.permissions?.all === true;
+  
+  // Final permission checks (admin or HR with specific permissions)
+  const canEdit = isAdmin || hasAllPermissions || hasEditPermission;
+  const canDelete = isAdmin || hasAllPermissions || hasDeletePermission;
+  const canView = isAdmin || hasAllPermissions || hasReadPermission;
 
   useEffect(() => {
     dispatch(fetchDocuments());
@@ -43,7 +73,7 @@ const Agreements = () => {
     ...(folders && folders.length > 0
       ? folders.map(folder => ({
         name: folder.name || folder,
-        value: folder.name || folder,
+        value: folder.id || folder.name || folder,
         icon: 'fas fa-folder'
       }))
       : [
@@ -62,16 +92,18 @@ const Agreements = () => {
     let filtered = docsArray;
 
     if (currentFolder !== 'all') {
-      filtered = filtered.filter(doc =>
-        (doc.folder || doc.type || '').toLowerCase() === currentFolder.toLowerCase()
-      );
+      filtered = filtered.filter(doc => {
+        const folderIdMatch = doc.folder_id && String(doc.folder_id) === String(currentFolder);
+        const folderNameMatch = (doc.folder_name || doc.folder || doc.type || '').toLowerCase() === String(currentFolder).toLowerCase();
+        return folderIdMatch || folderNameMatch;
+      });
     }
     if (searchTerm) {
       const searchLower = searchTerm.toLowerCase();
       filtered = filtered.filter(doc =>
         (doc.name || '').toLowerCase().includes(searchLower) ||
         (doc.description || '').toLowerCase().includes(searchLower) ||
-        (doc.folder || '').toLowerCase().includes(searchLower)
+        (doc.folder_name || doc.folder || '').toLowerCase().includes(searchLower)
       );
     }
     return filtered;
@@ -169,6 +201,7 @@ const Agreements = () => {
     }
   });
 
+
   return (
     <div className="w-full overflow-x-hidden">
       {/* Stats Cards */}
@@ -207,7 +240,7 @@ const Agreements = () => {
       {/* Header */}
       <div className="flex flex-wrap justify-between items-center mb-4 md:mb-6">
         <h2 className="text-lg md:text-2xl font-bold gradient-heading bg-clip-text text-transparent">
-          Agreements
+          {isAdminRoute ? 'Agreements' : 'My Documents'}
         </h2>
       </div>
 
@@ -239,12 +272,14 @@ const Agreements = () => {
         <EntriesSelector value={perPage} onChange={setPerPage} />
         <div className="flex flex-col sm:flex-row gap-3 w-full sm:w-auto">
           <SearchBar value={searchTerm} onChange={setSearchTerm} placeholder="Search documents..." />
-          <Link
-            to="/admin/agreements/add-agreement"
-            className="bg-green-500 hover:bg-green-600 text-white px-4 py-2 rounded-full text-sm font-semibold flex items-center justify-center gap-2 transition-all shadow-md hover:shadow-lg w-full sm:w-auto"
-          >
-            <i className="fas fa-plus-circle"></i> Upload Agreement
-          </Link>
+          {isAdminRoute && canEdit && (
+            <Link
+              to="/admin/agreements/add-agreement"
+              className="bg-green-500 hover:bg-green-600 text-white px-4 py-2 rounded-full text-sm font-semibold flex items-center justify-center gap-2 transition-all shadow-md hover:shadow-lg w-full sm:w-auto"
+            >
+              <i className="fas fa-plus-circle"></i> Upload Agreement
+            </Link>
+          )}
         </div>
       </div>
 
@@ -301,6 +336,7 @@ const Agreements = () => {
                     </td>
                     <td className="px-3 md:px-4 py-2 md:py-3">
                       <div className="flex gap-1 md:gap-2">
+                        {/* View button - always visible if user has read permission */}
                         <button
                           onClick={() => handleViewDocument(document.file_path)}
                           className="p-1.5 rounded-lg hover:bg-gray-100 dark:hover:bg-gray-700 text-blue-500 transition-colors"
@@ -308,20 +344,28 @@ const Agreements = () => {
                         >
                           <i className="fas fa-eye text-xs md:text-sm"></i>
                         </button>
-                        <Link
-                          to={`/admin/agreements/edit-agreement/${document.id}`}
-                          className="p-1.5 rounded-lg hover:bg-gray-100 dark:hover:bg-gray-700 text-amber-500 transition-colors"
-                          title="Edit"
-                        >
-                          <i className="fas fa-edit text-xs md:text-sm"></i>
-                        </Link>
-                        <button
-                          onClick={() => handleDeleteClick(document)}
-                          className="p-1.5 rounded-lg hover:bg-gray-100 dark:hover:bg-gray-700 text-red-500 transition-colors"
-                          title="Delete"
-                        >
-                          <i className="fas fa-trash text-xs md:text-sm"></i>
-                        </button>
+                        
+                        {/* Edit button - only show if user has edit permission */}
+                        {canEdit && (
+                          <Link
+                            to={`${basePath}/agreements/edit-agreement/${document.id}`}
+                            className="p-1.5 rounded-lg hover:bg-gray-100 dark:hover:bg-gray-700 text-amber-500 transition-colors"
+                            title="Edit"
+                          >
+                            <i className="fas fa-edit text-xs md:text-sm"></i>
+                          </Link>
+                        )}
+                        
+                        {/* Delete button - only show if user has delete permission */}
+                        {canDelete && (
+                          <button
+                            onClick={() => handleDeleteClick(document)}
+                            className="p-1.5 rounded-lg hover:bg-gray-100 dark:hover:bg-gray-700 text-red-500 transition-colors"
+                            title="Delete"
+                          >
+                            <i className="fas fa-trash text-xs md:text-sm"></i>
+                          </button>
+                        )}
                       </div>
                     </td>
                   </tr>
@@ -329,7 +373,9 @@ const Agreements = () => {
               ) : (
                 <tr>
                   <td colSpan="7" className="px-4 py-8 text-center text-gray-500 dark:text-gray-400">
-                    No documents found. Click "Upload Agreement" to add one.
+                    {isAdminRoute 
+                      ? 'No documents found. Click "Upload Agreement" to add one.'
+                      : 'No documents found.'}
                   </td>
                 </tr>
               )}

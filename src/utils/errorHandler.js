@@ -25,6 +25,8 @@ class ErrorHandler {
       ALREADY_PUNCHED_OUT: 'ALREADY_PUNCHED_OUT',
       OUTSIDE_WORKING_HOURS: 'OUTSIDE_WORKING_HOURS',
       LOCATION_NOT_ALLOWED: 'LOCATION_NOT_ALLOWED',
+      PENDING_PUNCH_OUT: 'PENDING_PUNCH_OUT',
+      LATE_PUNCH_PENDING_APPROVAL: 'LATE_PUNCH_PENDING_APPROVAL',
       
       // Server errors
       SERVER_ERROR: 'SERVER_ERROR',
@@ -107,6 +109,18 @@ class ErrorHandler {
         action: 'Try Again',
         actionType: 'retry'
       },
+      [this.errorTypes.PENDING_PUNCH_OUT]: {
+        title: 'Pending Punch Out',
+        message: 'You have a pending punch out from a previous day. Please complete it first.',
+        action: 'Punch Out Now',
+        actionType: 'punch_out'
+      },
+      [this.errorTypes.LATE_PUNCH_PENDING_APPROVAL]: {
+        title: 'Late Punch In - Pending Approval',
+        message: 'Your late punch-in request is pending HR approval. Please wait.',
+        action: 'Okay, I\'ll Wait',
+        actionType: 'wait'
+      },
       [this.errorTypes.SERVER_ERROR]: {
         title: 'Server Error',
         message: 'Something went wrong on our end. Please try again later.',
@@ -128,14 +142,87 @@ class ErrorHandler {
     };
   }
 
+  // Extract error message from various formats
+  extractErrorMessage(error) {
+    console.log('Extracting message from:', error);
+
+    // If error is a string
+    if (typeof error === 'string') {
+      return error;
+    }
+
+    // If error has payload (Redux thunk rejection)
+    if (error?.payload) {
+      const payload = error.payload;
+      if (typeof payload === 'string') return payload;
+      if (payload?.message) return payload.message;
+      if (payload?.data?.message) return payload.data.message;
+      if (payload?.error) return typeof payload.error === 'string' ? payload.error : payload.error?.message;
+      if (payload?.msg) return payload.msg;
+      if (payload?.detail) return payload.detail;
+    }
+
+    // If error has response data (Axios error)
+    if (error?.response?.data) {
+      const data = error.response.data;
+      if (typeof data === 'string') return data;
+      if (data?.message) return data.message;
+      if (data?.error) return typeof data.error === 'string' ? data.error : data.error?.message;
+      if (data?.msg) return data.msg;
+      if (data?.detail) return data.detail;
+      if (data?.data?.message) return data.data.message;
+    }
+
+    // If error has data property
+    if (error?.data) {
+      if (typeof error.data === 'string') return error.data;
+      if (error.data?.message) return error.data.message;
+      if (error.data?.error) return error.data.error;
+    }
+
+    // If error has message property
+    if (error?.message) {
+      return error.message;
+    }
+
+    // If error has error property
+    if (error?.error) {
+      if (typeof error.error === 'string') return error.error;
+      if (error.error?.message) return error.error.message;
+      if (error.error?.response?.data?.message) return error.error.response.data.message;
+    }
+
+    // Check for nested error structures
+    if (error?.error?.response?.data?.message) {
+      return error.error.response.data.message;
+    }
+
+    // If error is an object, try to stringify it
+    if (typeof error === 'object' && error !== null) {
+      try {
+        const jsonStr = JSON.stringify(error);
+        if (jsonStr && jsonStr !== '{}') {
+          const parsed = JSON.parse(jsonStr);
+          if (parsed?.message) return parsed.message;
+          if (parsed?.error) return typeof parsed.error === 'string' ? parsed.error : parsed.error?.message;
+        }
+        return jsonStr;
+      } catch (e) {
+        return String(error);
+      }
+    }
+
+    return null;
+  }
+
   // Parse error and determine type
   parseError(error) {
-    const errorMessage = typeof error === 'string' 
-      ? error 
-      : error?.response?.data?.message || error?.message || error?.payload || '';
-    
-    const errorData = error?.response?.data || {};
-    const statusCode = error?.response?.status;
+    // Extract the error message
+    const errorMessage = this.extractErrorMessage(error) || '';
+    console.log('Extracted message:', errorMessage);
+
+    const statusCode = error?.response?.status || error?.status || error?.payload?.status || null;
+    const errorData = error?.response?.data || error?.data || error?.payload || {};
 
     // Check for specific SQL errors
     if (errorMessage.includes('foreign key constraint fails') || 
@@ -151,6 +238,23 @@ class ErrorHandler {
     if (errorMessage.includes('cannot be null') || 
         errorMessage.includes('1048')) {
       return this.errorTypes.NOT_NULL_VIOLATION;
+    }
+
+    // Check for pending punch-out error
+    if (errorMessage.includes('pending punch-out') || 
+        errorMessage.includes('punch out for that day') ||
+        errorMessage.includes('Please punch out first') ||
+        errorMessage.includes('You have pending punch out')) {
+      return this.errorTypes.PENDING_PUNCH_OUT;
+    }
+
+    // Check for late punch-in with HR approval
+    if (errorMessage.includes('Punch-in blocked') || 
+        errorMessage.includes('pending HR approval') ||
+        errorMessage.includes('late check-in request') ||
+        errorMessage.includes('late check-in is pending') ||
+        errorMessage.includes('late check-in request is pending')) {
+      return this.errorTypes.LATE_PUNCH_PENDING_APPROVAL;
     }
 
     // Check status codes
@@ -208,10 +312,33 @@ class ErrorHandler {
   // Get user-friendly error object
   getFriendlyError(error) {
     const errorType = this.parseError(error);
-    const defaultError = this.errorMessages[errorType];
+    console.log('Error type determined:', errorType);
+    
+    let defaultError = this.errorMessages[errorType];
+    
+    // If we have a specific error type and it has a dynamic message, use the actual message
+    if (errorType === this.errorTypes.LATE_PUNCH_PENDING_APPROVAL) {
+      const actualMessage = this.extractErrorMessage(error);
+      if (actualMessage && actualMessage.includes('Punch-in blocked')) {
+        defaultError = {
+          ...defaultError,
+          message: actualMessage
+        };
+      }
+    }
+
+    if (errorType === this.errorTypes.PENDING_PUNCH_OUT) {
+      const actualMessage = this.extractErrorMessage(error);
+      if (actualMessage) {
+        defaultError = {
+          ...defaultError,
+          message: actualMessage
+        };
+      }
+    }
     
     // Extract validation errors if present
-    const validationErrors = error?.response?.data?.errors;
+    const validationErrors = error?.response?.data?.errors || error?.data?.errors || error?.payload?.errors;
     if (validationErrors && errorType === this.errorTypes.VALIDATION_ERROR) {
       const fieldErrors = Object.values(validationErrors).flat();
       return {
@@ -222,13 +349,27 @@ class ErrorHandler {
         details: validationErrors
       };
     }
+
+    // If we have a custom message and it's not a known type, use the custom message
+    if (errorType === this.errorTypes.UNKNOWN_ERROR) {
+      const customMessage = this.extractErrorMessage(error);
+      if (customMessage && customMessage.length > 0 && customMessage !== '{}') {
+        return {
+          title: 'Error',
+          message: customMessage,
+          action: 'Try Again',
+          actionType: 'retry'
+        };
+      }
+    }
     
-    return defaultError;
+    return defaultError || this.errorMessages[this.errorTypes.UNKNOWN_ERROR];
   }
 
   // Handle error with callback actions
   handleError(error, callbacks = {}) {
     const friendlyError = this.getFriendlyError(error);
+    console.log('Friendly error:', friendlyError);
     
     // Log error for debugging
     console.error('Error occurred:', {
@@ -255,6 +396,14 @@ class ErrorHandler {
     
     if (friendlyError.actionType === 'schedule' && callbacks.onViewSchedule) {
       callbacks.onViewSchedule();
+    }
+    
+    if (friendlyError.actionType === 'wait' && callbacks.onWait) {
+      callbacks.onWait();
+    }
+    
+    if (friendlyError.actionType === 'fix' && callbacks.onFix) {
+      callbacks.onFix();
     }
     
     return friendlyError;

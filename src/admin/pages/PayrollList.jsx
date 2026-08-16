@@ -1,7 +1,7 @@
-import React, { useEffect, useState, useCallback } from "react";
+import React, { useEffect, useState, useCallback, useRef } from "react";
 import { useDispatch, useSelector } from "react-redux";
-import { Link, useNavigate } from "react-router-dom";
-import { showToast } from "../../components/common/Toast";
+import { Link, useNavigate, useSearchParams } from "react-router-dom";
+import { showToast } from "../components/common/Toast";
 import { format } from "date-fns";
 
 // Redux Actions
@@ -9,9 +9,10 @@ import {
   fetchPayrolls,
   deletePayroll,
   generatePayslip,
+  fetchPayrollStats,
   clearPayrollError,
   clearPayrollSuccess,
-  fetchPayrollStats,
+  clearPayrollList,
 } from "../store/slices/payrollSlice";
 
 // Components
@@ -20,9 +21,14 @@ import EntriesSelector from "../components/common/EntriesSelector";
 import Pagination from "../components/common/Paginations";
 import ConfirmModal from "../components/common/ConfirmModal";
 
-const Payroll = () => {
+const PayrollList = () => {
   const dispatch = useDispatch();
   const navigate = useNavigate();
+  const [searchParams] = useSearchParams();
+
+  // Get month and year from URL params
+  const monthParam = searchParams.get("month");
+  const yearParam = searchParams.get("year");
 
   // Get user role and permissions from Redux
   const { user } = useSelector((state) => state.auth || {});
@@ -35,11 +41,11 @@ const Payroll = () => {
   const hasPayrollEdit = permissions?.payroll?.edit || false;
   const hasPayrollDelete = permissions?.payroll?.delete || false;
 
-  // Check if user is admin (for base path and full access)
+  // Check if user is admin
   const isAdmin =
     userType === "admin" || roleName === "admin" || roleName === "Admin";
 
-  // Check if user has edit/delete permissions (admin or HR with payroll permissions)
+  // Check if user has edit/delete permissions
   const canEdit = isAdmin || hasPayrollEdit;
   const canDelete = isAdmin || hasPayrollDelete;
   const canView = isAdmin || hasPayrollRead;
@@ -58,46 +64,140 @@ const Payroll = () => {
 
   // Local state
   const [searchTerm, setSearchTerm] = useState("");
+  const [debouncedSearchTerm, setDebouncedSearchTerm] = useState("");
   const [statusFilter, setStatusFilter] = useState("all");
-  const [monthFilter, setMonthFilter] = useState("");
-  const [yearFilter, setYearFilter] = useState("");
+  const [selectedMonth] = useState(monthParam || "");
+  const [selectedYear] = useState(yearParam || "");
   const [deleteModalOpen, setDeleteModalOpen] = useState(false);
   const [selectedPayroll, setSelectedPayroll] = useState(null);
   const [currentPageState, setCurrentPageState] = useState(1);
 
-  // Function to fetch payrolls with current filters
+  // Refs
+  const debounceTimerRef = useRef(null);
+  const isInitialMountRef = useRef(true);
+  const prevFiltersRef = useRef({});
+
+  // Debounce search term
+  useEffect(() => {
+    // Clear the previous timer
+    if (debounceTimerRef.current) {
+      clearTimeout(debounceTimerRef.current);
+    }
+
+    // Set a new timer
+    debounceTimerRef.current = setTimeout(() => {
+      setDebouncedSearchTerm(searchTerm);
+    }, 500); // 500ms delay
+
+    // Cleanup on unmount or when searchTerm changes
+    return () => {
+      if (debounceTimerRef.current) {
+        clearTimeout(debounceTimerRef.current);
+      }
+    };
+  }, [searchTerm]);
+
+  // Month options (for display only)
+  const monthOptions = [
+    { value: "01", label: "January" },
+    { value: "02", label: "February" },
+    { value: "03", label: "March" },
+    { value: "04", label: "April" },
+    { value: "05", label: "May" },
+    { value: "06", label: "June" },
+    { value: "07", label: "July" },
+    { value: "08", label: "August" },
+    { value: "09", label: "September" },
+    { value: "10", label: "October" },
+    { value: "11", label: "November" },
+    { value: "12", label: "December" },
+  ];
+
+  // Fetch payrolls with current filters
   const fetchPayrollsData = useCallback(() => {
+    dispatch(clearPayrollList());
+    
     const params = {
       page: currentPageState,
       per_page: perPage || 15,
-      search: searchTerm || undefined,
+      search: debouncedSearchTerm || undefined,
       status: statusFilter !== "all" ? statusFilter : undefined,
-      month: monthFilter || undefined,
-      year: yearFilter || undefined,
     };
+
+    // Always add month and year from URL params
+    if (selectedMonth) {
+      params.month = selectedMonth;
+    }
+    if (selectedYear) {
+      params.year = parseInt(selectedYear);
+    }
+
     dispatch(fetchPayrolls(params));
   }, [
     dispatch,
     currentPageState,
-    searchTerm,
+    debouncedSearchTerm,
     statusFilter,
-    monthFilter,
-    yearFilter,
+    selectedMonth,
+    selectedYear,
     perPage,
   ]);
 
-  // Load payrolls on mount and when filters change
-  useEffect(() => {
-    fetchPayrollsData();
-  }, [fetchPayrollsData]);
+  // Fetch stats with current month/year filters
+  const fetchStatsData = useCallback(() => {
+    const params = {};
+    
+    // Always add month and year from URL params
+    if (selectedMonth) {
+      params.month = selectedMonth;
+    }
+    if (selectedYear) {
+      params.year = parseInt(selectedYear);
+    }
 
-  useEffect(() => {
-    const params = {
-      month: monthFilter || undefined,
-      year: yearFilter || undefined,
-    };
     dispatch(fetchPayrollStats(params));
-  }, [dispatch, monthFilter, yearFilter]);
+  }, [dispatch, selectedMonth, selectedYear]);
+
+  // Load payrolls and stats only when filters actually change
+  useEffect(() => {
+    // Skip the initial mount
+    if (isInitialMountRef.current) {
+      isInitialMountRef.current = false;
+      fetchPayrollsData();
+      fetchStatsData();
+      return;
+    }
+
+    // Check if any filter actually changed
+    const currentFilters = {
+      currentPageState,
+      debouncedSearchTerm,
+      statusFilter,
+      perPage,
+    };
+
+    const prevFilters = prevFiltersRef.current;
+    
+    // Compare current filters with previous filters
+    const hasFilterChanged = Object.keys(currentFilters).some(
+      key => currentFilters[key] !== prevFilters[key]
+    );
+
+    if (hasFilterChanged) {
+      fetchPayrollsData();
+      fetchStatsData();
+    }
+
+    // Update previous filters
+    prevFiltersRef.current = currentFilters;
+  }, [
+    fetchPayrollsData,
+    fetchStatsData,
+    currentPageState,
+    debouncedSearchTerm,
+    statusFilter,
+    perPage,
+  ]);
 
   // Handle errors and success messages
   useEffect(() => {
@@ -114,20 +214,56 @@ const Payroll = () => {
     }
   }, [successMessage, dispatch]);
 
-  useEffect(() => {
-    const params = {};
-    if (monthFilter) params.month = monthFilter;
-    if (yearFilter) params.year = yearFilter;
-    if (statusFilter && statusFilter !== "all") params.status = statusFilter;
-
-    dispatch(fetchPayrollStats(params));
-  }, [dispatch, monthFilter, yearFilter, statusFilter]);
-
-  // Stats
+  // Stats from API
   const totalPayrolls = stats?.total_generated || 0;
-  const totalAmount = stats?.total_amount || 0;
-  const paidCount = stats?.total_paid || 0;
   const pendingCount = stats?.total_pending || 0;
+  const paidCount = totalPayrolls - pendingCount;
+
+  const currencies = stats?.amounts_by_currency || {};
+  const aedData = currencies?.AED || { total_amount: 0, total_paid: 0 };
+  const inrData = currencies?.INR || { total_amount: 0, total_paid: 0 };
+
+  // Format currency
+  const formatCurrency = (amount, currencyCode = "INR") => {
+    const currencyMap = {
+      AED: { locale: "en-AE", currency: "AED" },
+      INR: { locale: "en-IN", currency: "INR" },
+      USD: { locale: "en-US", currency: "USD" },
+      EUR: { locale: "de-DE", currency: "EUR" },
+      GBP: { locale: "en-GB", currency: "GBP" },
+      SGD: { locale: "en-SG", currency: "SGD" },
+      JPY: { locale: "ja-JP", currency: "JPY" },
+      CNY: { locale: "zh-CN", currency: "CNY" },
+    };
+
+    const config = currencyMap[currencyCode] || currencyMap.INR;
+    
+    try {
+      return new Intl.NumberFormat(config.locale, {
+        style: "currency",
+        currency: config.currency,
+        minimumFractionDigits: 2,
+        maximumFractionDigits: 2,
+      }).format(amount || 0);
+    } catch {
+      return `${currencyCode} ${(amount || 0).toFixed(2)}`;
+    }
+  };
+
+  // Get currency badge color
+  const getCurrencyBadgeColor = (currency) => {
+    const colors = {
+      AED: "bg-green-50 dark:bg-green-900/20 text-green-600 dark:text-green-400 border-green-200 dark:border-green-800",
+      INR: "bg-blue-50 dark:bg-blue-900/20 text-blue-600 dark:text-blue-400 border-blue-200 dark:border-blue-800",
+      USD: "bg-emerald-50 dark:bg-emerald-900/20 text-emerald-600 dark:text-emerald-400 border-emerald-200 dark:border-emerald-800",
+      EUR: "bg-purple-50 dark:bg-purple-900/20 text-purple-600 dark:text-purple-400 border-purple-200 dark:border-purple-800",
+      GBP: "bg-red-50 dark:bg-red-900/20 text-red-600 dark:text-red-400 border-red-200 dark:border-red-800",
+      SGD: "bg-orange-50 dark:bg-orange-900/20 text-orange-600 dark:text-orange-400 border-orange-200 dark:border-orange-800",
+      JPY: "bg-pink-50 dark:bg-pink-900/20 text-pink-600 dark:text-pink-400 border-pink-200 dark:border-pink-800",
+      CNY: "bg-yellow-50 dark:bg-yellow-900/20 text-yellow-600 dark:text-yellow-400 border-yellow-200 dark:border-yellow-800",
+    };
+    return colors[currency] || "bg-gray-50 dark:bg-gray-900/20 text-gray-600 dark:text-gray-400 border-gray-200 dark:border-gray-800";
+  };
 
   // Handlers
   const handlePageChange = (page) => {
@@ -136,7 +272,6 @@ const Payroll = () => {
 
   const handlePerPageChange = (value) => {
     setCurrentPageState(1);
-    fetchPayrollsData();
   };
 
   const handleSearchChange = (value) => {
@@ -146,16 +281,6 @@ const Payroll = () => {
 
   const handleStatusFilterChange = (e) => {
     setStatusFilter(e.target.value);
-    setCurrentPageState(1);
-  };
-
-  const handleMonthFilterChange = (e) => {
-    setMonthFilter(e.target.value);
-    setCurrentPageState(1);
-  };
-
-  const handleYearFilterChange = (e) => {
-    setYearFilter(e.target.value);
     setCurrentPageState(1);
   };
 
@@ -171,6 +296,7 @@ const Payroll = () => {
       setDeleteModalOpen(false);
       setSelectedPayroll(null);
       fetchPayrollsData();
+      fetchStatsData();
     } catch (error) {
       // Error is handled by the slice
     }
@@ -178,21 +304,17 @@ const Payroll = () => {
 
  const handleGeneratePayslip = async (payrollId) => {
   try {
-    // The thunk now handles the download directly
-    await dispatch(generatePayslip(payrollId)).unwrap();
+    const result = await dispatch(generatePayslip(payrollId)).unwrap();
+    // If successful, show success message
     showToast("Payslip downloaded successfully!", "success");
   } catch (error) {
-    showToast(error || "Failed to generate payslip", "error");
+    // The error comes from the thunk's rejectWithValue
+    // Display the error message from the API response
+    const errorMessage = typeof error === 'string' 
+      ? error 
+      : error?.message || error?.data?.message || "Failed to generate payslip";
+    showToast(errorMessage, "error");
   }
-};
-
-  const formatCurrency = (amount, currencyCode = "INR") => {
-  return new Intl.NumberFormat("en-IN", {
-    style: "currency",
-    currency: currencyCode,
-    minimumFractionDigits: 2,
-    maximumFractionDigits: 2,
-  }).format(amount || 0);
 };
 
   const getStatusBadge = (status) => {
@@ -219,26 +341,14 @@ const Payroll = () => {
     }
   };
 
-  // Get month name from month number
   const getMonthName = (monthNumber) => {
     const months = [
-      "January",
-      "February",
-      "March",
-      "April",
-      "May",
-      "June",
-      "July",
-      "August",
-      "September",
-      "October",
-      "November",
-      "December",
+      "January", "February", "March", "April", "May", "June",
+      "July", "August", "September", "October", "November", "December"
     ];
     return months[monthNumber - 1] || monthNumber;
   };
 
-  // Get avatar URL
   const getAvatarUrl = (avatar) => {
     if (!avatar) return null;
     if (avatar.startsWith("http://") || avatar.startsWith("https://")) {
@@ -251,35 +361,11 @@ const Payroll = () => {
     return `${baseUrl}/storage/${avatar}`;
   };
 
-  // Generate month options
-  const monthOptions = [
-    { value: "", label: "All Months" },
-    { value: "1", label: "January" },
-    { value: "2", label: "February" },
-    { value: "3", label: "March" },
-    { value: "4", label: "April" },
-    { value: "5", label: "May" },
-    { value: "6", label: "June" },
-    { value: "7", label: "July" },
-    { value: "8", label: "August" },
-    { value: "9", label: "September" },
-    { value: "10", label: "October" },
-    { value: "11", label: "November" },
-    { value: "12", label: "December" },
-  ];
-
-  // Generate year options (last 5 years)
-  const currentYear = new Date().getFullYear();
-  const yearOptions = [
-    { value: "", label: "All Years" },
-    ...Array.from({ length: 5 }, (_, i) => ({
-      value: String(currentYear - i),
-      label: String(currentYear - i),
-    })),
-  ];
-
-  // Get the base path based on user role
   const basePath = isAdmin ? "/admin" : "/employee";
+
+  // Get display month name
+  const displayMonth = monthOptions.find(m => m.value === selectedMonth)?.label || "";
+  const displayYear = selectedYear || "";
 
   // If user doesn't have read permission, show access denied
   if (!canView) {
@@ -300,6 +386,17 @@ const Payroll = () => {
 
   return (
     <div className="w-full overflow-x-hidden px-4 md:px-6">
+      {/* Back to Calendar Button */}
+      <div className="mb-4">
+        <button
+          onClick={() => navigate(`${basePath}/payroll`)}
+          className="inline-flex items-center gap-2 px-4 py-2 text-sm text-gray-600 dark:text-gray-400 hover:text-gray-900 dark:hover:text-gray-200 transition-colors"
+        >
+          <i className="fas fa-arrow-left"></i>
+          Back to Calendar
+        </button>
+      </div>
+
       {/* Stats Cards */}
       <div className="stats-grid grid grid-cols-2 sm:grid-cols-4 gap-3 md:gap-4 mb-6">
         <div className="bg-white dark:bg-gray-800 rounded-xl p-3 md:p-4 border border-gray-200 dark:border-gray-700 transition-all hover:-translate-y-0.5 hover:shadow-soft">
@@ -315,30 +412,6 @@ const Payroll = () => {
         </div>
 
         <div className="bg-white dark:bg-gray-800 rounded-xl p-3 md:p-4 border border-gray-200 dark:border-gray-700 transition-all hover:-translate-y-0.5 hover:shadow-soft">
-          <div className="w-8 h-8 md:w-10 md:h-10 bg-green-100 dark:bg-green-900/30 rounded-xl flex items-center justify-center mb-1 md:mb-2">
-            <i className="fas fa-money-bill-wave text-green-600 dark:text-green-400 text-sm md:text-lg"></i>
-          </div>
-          <div className="text-xl md:text-2xl font-bold text-green-600 dark:text-green-400">
-            {formatCurrency(totalAmount)}
-          </div>
-          <div className="text-[10px] md:text-xs text-gray-500 dark:text-gray-400 font-medium">
-            Total Amount
-          </div>
-        </div>
-
-        <div className="bg-white dark:bg-gray-800 rounded-xl p-3 md:p-4 border border-gray-200 dark:border-gray-700 transition-all hover:-translate-y-0.5 hover:shadow-soft">
-          <div className="w-8 h-8 md:w-10 md:h-10 bg-emerald-100 dark:bg-emerald-900/30 rounded-xl flex items-center justify-center mb-1 md:mb-2">
-            <i className="fas fa-check-circle text-emerald-600 dark:text-emerald-400 text-sm md:text-lg"></i>
-          </div>
-          <div className="text-xl md:text-2xl font-bold text-emerald-600 dark:text-emerald-400">
-            {paidCount}
-          </div>
-          <div className="text-[10px] md:text-xs text-gray-500 dark:text-gray-400 font-medium">
-            Paid
-          </div>
-        </div>
-
-        <div className="bg-white dark:bg-gray-800 rounded-xl p-3 md:p-4 border border-gray-200 dark:border-gray-700 transition-all hover:-translate-y-0.5 hover:shadow-soft">
           <div className="w-8 h-8 md:w-10 md:h-10 bg-yellow-100 dark:bg-yellow-900/30 rounded-xl flex items-center justify-center mb-1 md:mb-2">
             <i className="fas fa-clock text-yellow-600 dark:text-yellow-400 text-sm md:text-lg"></i>
           </div>
@@ -349,17 +422,45 @@ const Payroll = () => {
             Pending
           </div>
         </div>
+
+        <div className="bg-white dark:bg-gray-800 rounded-xl p-3 md:p-4 border border-gray-200 dark:border-gray-700 transition-all hover:-translate-y-0.5 hover:shadow-soft">
+          <div className="w-8 h-8 md:w-10 md:h-10 flex items-center justify-center mb-1 md:mb-2">
+            <span className="text-sm md:text-lg font-bold text-green-600 dark:text-green-400">AED</span>
+          </div>
+          <div className="text-xl md:text-2xl font-bold text-green-600 dark:text-green-400">
+            {formatCurrency(aedData.total_amount || 0, "AED")}
+          </div>
+          <div className="text-[10px] md:text-xs text-gray-500 dark:text-gray-400 font-medium">
+            AED Total Amount
+          </div>
+        </div>
+
+        <div className="bg-white dark:bg-gray-800 rounded-xl p-3 md:p-4 border border-gray-200 dark:border-gray-700 transition-all hover:-translate-y-0.5 hover:shadow-soft">
+          <div className="w-8 h-8 md:w-10 md:h-10 flex items-center justify-center mb-1 md:mb-2">
+            <span className="text-sm md:text-lg font-bold text-blue-600 dark:text-blue-400">INR</span>
+          </div>
+          <div className="text-xl md:text-2xl font-bold text-blue-600 dark:text-blue-400">
+            {formatCurrency(inrData.total_amount || 0, "INR")}
+          </div>
+          <div className="text-[10px] md:text-xs text-gray-500 dark:text-gray-400 font-medium">
+            INR Total Amount
+          </div>
+        </div>
       </div>
 
       {/* Header */}
       <div className="flex flex-wrap justify-between items-center mb-4 md:mb-6">
-        <h2 className="text-lg md:text-2xl font-bold gradient-heading bg-clip-text text-transparent flex items-center gap-2">
-          <i className="fas fa-file-invoice-dollar text-green-500"></i>
-          Payroll
-          <span className="text-[10px] md:text-sm bg-green-100 dark:bg-green-900/30 text-green-600 dark:text-green-400 px-2 md:px-3 py-0.5 md:py-1 rounded-full">
-            <i className="fas fa-calendar-check mr-1"></i> Monthly
-          </span>
-        </h2>
+        <div className="flex items-center gap-3">
+          <h2 className="text-lg md:text-2xl font-bold gradient-heading bg-clip-text text-transparent flex items-center gap-2">
+            <i className="fas fa-list text-green-500"></i>
+            Payroll List
+            {displayMonth && displayYear && (
+              <span className="text-[10px] md:text-sm bg-blue-100 dark:bg-blue-900/30 text-blue-600 dark:text-blue-400 px-2 md:px-3 py-0.5 md:py-1 rounded-full">
+                {displayMonth} {displayYear}
+              </span>
+            )}
+          </h2>
+        </div>
         {(isAdmin || hasPayrollEdit) && (
           <Link
             to={`${basePath}/payroll/add`}
@@ -371,7 +472,7 @@ const Payroll = () => {
         )}
       </div>
 
-      {/* Filters Bar */}
+      {/* Filters Bar - Only search and status */}
       <div className="flex flex-col sm:flex-row justify-between items-stretch sm:items-center gap-4 mb-5">
         <div className="flex flex-wrap items-center gap-3">
           <EntriesSelector
@@ -393,36 +494,20 @@ const Payroll = () => {
             <option value="failed">Failed</option>
           </select>
 
-          <select
-            value={monthFilter}
-            onChange={handleMonthFilterChange}
-            className="px-3 py-2 rounded-lg border border-gray-200 dark:border-gray-700 bg-white dark:bg-gray-800 text-xs text-gray-700 dark:text-gray-200 focus:outline-none focus:border-green-500 focus:ring-2 focus:ring-green-500/20"
-          >
-            {monthOptions.map((option) => (
-              <option key={option.value} value={option.value}>
-                {option.label}
-              </option>
-            ))}
-          </select>
-
-          <select
-            value={yearFilter}
-            onChange={handleYearFilterChange}
-            className="px-3 py-2 rounded-lg border border-gray-200 dark:border-gray-700 bg-white dark:bg-gray-800 text-xs text-gray-700 dark:text-gray-200 focus:outline-none focus:border-green-500 focus:ring-2 focus:ring-green-500/20"
-          >
-            {yearOptions.map((option) => (
-              <option key={option.value} value={option.value}>
-                {option.label}
-              </option>
-            ))}
-          </select>
-
           <SearchBar
             value={searchTerm}
             onChange={handleSearchChange}
             placeholder="Search employee or ID..."
             className="w-full sm:w-56"
           />
+          
+          {/* Show debouncing indicator */}
+          {searchTerm !== debouncedSearchTerm && searchTerm.length > 0 && (
+            <span className="text-xs text-gray-400 dark:text-gray-500 animate-pulse">
+              <i className="fas fa-spinner fa-spin mr-1"></i>
+              Searching...
+            </span>
+          )}
         </div>
       </div>
 
@@ -431,7 +516,7 @@ const Payroll = () => {
         <div className="bg-white dark:bg-gray-800 rounded-xl border border-gray-200 dark:border-gray-700 p-8 text-center">
           <i className="fas fa-spinner fa-spin text-3xl text-green-500 mb-3"></i>
           <p className="text-gray-500 dark:text-gray-400">
-            Loading payroll records...
+            Loading payroll records for {displayMonth} {displayYear}...
           </p>
         </div>
       ) : (
@@ -479,12 +564,9 @@ const Payroll = () => {
                 <tbody className="divide-y divide-gray-100 dark:divide-gray-700/60">
                   {payrolls.length === 0 ? (
                     <tr>
-                      <td
-                        colSpan={11}
-                        className="px-4 py-8 text-center text-gray-500 dark:text-gray-400"
-                      >
+                      <td colSpan={11} className="px-4 py-8 text-center text-gray-500 dark:text-gray-400">
                         <i className="fas fa-inbox text-3xl text-gray-300 dark:text-gray-600 mb-2 block"></i>
-                        No payroll records found
+                        No payroll records found for {displayMonth} {displayYear}
                       </td>
                     </tr>
                   ) : (
@@ -493,20 +575,15 @@ const Payroll = () => {
                       const employeeName =
                         payroll.employee_name ||
                         payroll.employee?.name ||
-                        (payroll.employee?.first_name &&
-                        payroll.employee?.last_name
+                        (payroll.employee?.first_name && payroll.employee?.last_name
                           ? `${payroll.employee.first_name} ${payroll.employee.last_name}`
                           : "-");
                       const monthDisplay = payroll.month
                         ? getMonthName(payroll.month)
                         : payroll.pay_period_month || "-";
-                      const yearDisplay =
-                        payroll.year || payroll.pay_period_year || "-";
+                      const yearDisplay = payroll.year || payroll.pay_period_year || "-";
 
-                      // Calculate serial number based on pagination
-                      const serialNumber =
-                        (currentPageState - 1) * (perPage || 15) + index + 1;
-
+                      const serialNumber = (currentPageState - 1) * (perPage || 15) + index + 1;
                       const currency = payroll.currency || payroll.target_currency || "INR";
 
                       return (
@@ -548,31 +625,21 @@ const Payroll = () => {
                             {`${monthDisplay} ${yearDisplay}`}
                           </td>
                           <td className="px-3 md:px-4 py-2 md:py-3 text-right text-xs md:text-sm font-semibold text-gray-700 dark:text-gray-300">
-                            {formatCurrency(
-                              payroll.gross_salary || 0,
-                              currency
-                            )}
+                            {formatCurrency(payroll.gross_salary || 0, currency)}
                           </td>
                           <td className="px-3 md:px-4 py-2 md:py-3 text-right text-xs md:text-sm font-semibold text-orange-600 dark:text-orange-400">
-                            {formatCurrency(
-                              payroll.overtime || 0,
-                              currency
-                            )}
+                            {formatCurrency(payroll.overtime || 0, currency)}
                           </td>
                           <td className="px-3 md:px-4 py-2 md:py-3 text-right text-xs md:text-sm font-semibold text-red-600 dark:text-red-400">
-                            {formatCurrency(
-                              payroll.deductions || 0,
-                              currency
-                            )}
+                            {formatCurrency(payroll.deductions || 0, currency)}
                           </td>
                           <td className="px-3 md:px-4 py-2 md:py-3 text-right text-xs md:text-sm font-bold text-green-600 dark:text-green-400">
-                            {formatCurrency(
-                              payroll.net_pay || payroll.total_amount || 0,
-                              currency
-                            )}
+                            {formatCurrency(payroll.net_pay || payroll.total_amount || 0, currency)}
                           </td>
                           <td className="px-3 md:px-4 py-2 md:py-3 text-center">
-                            <span className="inline-block px-2 py-1 rounded-full text-xs font-semibold bg-blue-50 dark:bg-blue-900/20 text-blue-600 dark:text-blue-400 border border-blue-200 dark:border-blue-800">
+                            <span
+                              className={`inline-block px-2 py-1 rounded-full text-xs font-semibold border ${getCurrencyBadgeColor(currency)}`}
+                            >
                               {currency}
                             </span>
                           </td>
@@ -581,8 +648,7 @@ const Payroll = () => {
                               className={`inline-block px-2.5 py-1 rounded-full text-[10px] md:text-xs font-semibold ${getStatusBadge(payroll.status)}`}
                             >
                               {payroll.status
-                                ? payroll.status.charAt(0).toUpperCase() +
-                                  payroll.status.slice(1)
+                                ? payroll.status.charAt(0).toUpperCase() + payroll.status.slice(1)
                                 : "Draft"}
                             </span>
                           </td>
@@ -591,46 +657,31 @@ const Payroll = () => {
                           </td>
                           <td className="px-3 md:px-4 py-2 md:py-3 text-right">
                             <div className="flex justify-end items-center gap-2">
-                              {/* View Button - Always show */}
                               <button
-                                onClick={() =>
-                                  navigate(`${basePath}/payroll/${payroll.id}`)
-                                }
+                                onClick={() => navigate(`${basePath}/payroll/${payroll.id}`)}
                                 title="View Payroll"
                                 className="w-8 h-8 rounded-lg bg-blue-500/10 hover:bg-blue-500 text-blue-500 hover:text-white flex items-center justify-center transition-all shadow-sm hover:shadow-soft"
                               >
                                 <i className="fas fa-eye text-xs"></i>
                               </button>
-
-                              {/* Edit Button - Show if user has edit permission */}
-                              {(isAdmin || hasPayrollEdit) && (
+                              {canEdit && (
                                 <button
-                                  onClick={() =>
-                                    navigate(
-                                      `${basePath}/payroll/edit/${payroll.id}`,
-                                    )
-                                  }
+                                  onClick={() => navigate(`${basePath}/payroll/edit/${payroll.id}`)}
                                   title="Edit Payroll"
                                   className="w-8 h-8 rounded-lg bg-green-500/10 hover:bg-green-500 text-green-500 hover:text-white flex items-center justify-center transition-all shadow-sm hover:shadow-soft"
                                 >
                                   <i className="fas fa-pencil-alt text-xs"></i>
                                 </button>
                               )}
-
-                              {/* Payslip Button - Always show with PDF icon */}
                               <button
-                                onClick={() =>
-                                  handleGeneratePayslip(payroll.id)
-                                }
+                                onClick={() => handleGeneratePayslip(payroll.id)}
                                 disabled={actionLoading}
                                 title="Generate Payslip"
                                 className="w-8 h-8 rounded-lg bg-red-500/10 hover:bg-red-500 text-red-500 hover:text-white flex items-center justify-center transition-all shadow-sm hover:shadow-soft disabled:opacity-50 disabled:cursor-not-allowed"
                               >
                                 <i className="fas fa-file-pdf text-xs"></i>
                               </button>
-
-                              {/* Delete Button - Show if user has delete permission */}
-                              {(isAdmin || hasPayrollDelete) && (
+                              {canDelete && (
                                 <button
                                   onClick={() => handleDeleteClick(payroll)}
                                   title="Delete Payroll"
@@ -650,7 +701,6 @@ const Payroll = () => {
             </div>
           </div>
 
-          {/* Pagination */}
           {totalCount > 0 && (
             <Pagination
               currentPage={currentPageState}
@@ -663,8 +713,8 @@ const Payroll = () => {
         </>
       )}
 
-      {/* Delete Confirmation Modal - Show if user has delete permission */}
-      {(isAdmin || hasPayrollDelete) && (
+      {/* Delete Modal */}
+      {canDelete && (
         <ConfirmModal
           isOpen={deleteModalOpen}
           onClose={() => {
@@ -684,4 +734,4 @@ const Payroll = () => {
   );
 };
 
-export default Payroll;
+export default PayrollList;

@@ -1,5 +1,5 @@
-import { createAsyncThunk, createSlice } from '@reduxjs/toolkit';
-import apiClient from '../../../utils/apiClient';
+import { createAsyncThunk, createSlice } from "@reduxjs/toolkit";
+import apiClient from "../../../utils/apiClient";
 
 // Fetch Employee Leaves
 export const fetchEmployeeLeaves = createAsyncThunk(
@@ -7,23 +7,103 @@ export const fetchEmployeeLeaves = createAsyncThunk(
   async (_, { rejectWithValue }) => {
     try {
       const response = await apiClient.get("/employee/leaves");
-      console.log("Fetched leaves response:", response.data);
-      
+
       if (response.data && response.data.status === "success") {
         // The leaves array is inside data.leaves
         const leavesData = response.data.data?.leaves || [];
-        console.log("Leaves data extracted:", leavesData);
         return leavesData;
       } else {
-        return rejectWithValue(response.data?.message || "Failed to fetch leaves");
+        return rejectWithValue(
+          response.data?.message || "Failed to fetch leaves",
+        );
       }
     } catch (error) {
       console.error("Fetch leaves error:", error);
       return rejectWithValue(
-        error.response?.data?.message || "Failed to fetch leaves"
+        error.response?.data?.message || "Failed to fetch leaves",
       );
     }
-  }
+  },
+);
+
+export const fetchLeaveById = createAsyncThunk(
+  "leaves/fetchLeaveById",
+  async (id, { rejectWithValue }) => {
+    try {
+      const response = await apiClient.get(`/employee/leaves/${id}`);
+
+      if (response.data && response.data.status === "success") {
+        const leaveData = response.data.data || response.data;
+        return leaveData;
+      } else {
+        return rejectWithValue(
+          response.data?.message || "Failed to fetch leave details",
+        );
+      }
+    } catch (error) {
+      console.error("Fetch leave by ID error:", error);
+      return rejectWithValue(
+        error.response?.data?.message || "Failed to fetch leave details",
+      );
+    }
+  },
+);
+
+// Fetch all employees (for HR to request leave on behalf)
+// Fetch all employees (for HR to request leave on behalf)
+export const fetchEmployeesForLeave = createAsyncThunk(
+  "leaves/fetchEmployeesForLeave",
+  async (_, { rejectWithValue }) => {
+    try {
+      const response = await apiClient.get("/admin/employees");
+
+      if (response.data && response.data.status === "success") {
+        // The employees array is inside data.data
+        const employeesData = response.data.data?.data || [];
+        return employeesData;
+      } else {
+        return rejectWithValue(
+          response.data?.message || "Failed to fetch employees",
+        );
+      }
+    } catch (error) {
+      console.error("Fetch employees error:", error);
+      return rejectWithValue(
+        error.response?.data?.message || "Failed to fetch employees",
+      );
+    }
+  },
+);
+
+// Store Leave Request for Employee (HR can request on behalf)
+export const addLeaveRequestForEmployee = createAsyncThunk(
+  "leaves/addLeaveRequestForEmployee",
+  async (formData, { rejectWithValue }) => {
+    try {
+      const response = await apiClient.post("/employee/leaves", formData, {
+        headers: { "Content-Type": "multipart/form-data" },
+      });
+
+      if (response.data && response.data.status === "success") {
+        return response.data.data;
+      } else {
+        return rejectWithValue(
+          response.data?.message || "Failed to submit leave request",
+        );
+      }
+    } catch (error) {
+      console.error("Add leave for employee error:", error);
+      if (error.response?.data?.errors) {
+        const errorMessages = Object.values(error.response.data.errors)
+          .flat()
+          .join(", ");
+        return rejectWithValue(errorMessages);
+      }
+      return rejectWithValue(
+        error.response?.data?.message || "Failed to submit leave request",
+      );
+    }
+  },
 );
 
 // Fetch Leave Types
@@ -32,19 +112,35 @@ export const fetchLeaveTypes = createAsyncThunk(
   async (_, { rejectWithValue }) => {
     try {
       const response = await apiClient.get("/employee/leave-types");
-      console.log("Leave types response:", response.data);
-      
+
       if (response.data && response.data.status === "success") {
-        return response.data.data || response.data;
+        // The API might return leave types in different formats
+        // Try to extract the data properly
+        let leaveTypes = [];
+
+        if (Array.isArray(response.data.data)) {
+          leaveTypes = response.data.data;
+        } else if (
+          response.data.data?.data &&
+          Array.isArray(response.data.data.data)
+        ) {
+          leaveTypes = response.data.data.data;
+        } else if (Array.isArray(response.data)) {
+          leaveTypes = response.data;
+        } else {
+          leaveTypes = response.data.data || [];
+        }
+
+        return leaveTypes;
       }
-      return response.data || [];
+      return [];
     } catch (error) {
       console.error("Fetch leave types error:", error);
       return rejectWithValue(
-        error.response?.data?.message || "Failed to fetch leave types"
+        error.response?.data?.message || "Failed to fetch leave types",
       );
     }
-  }
+  },
 );
 
 // Fetch Leave Balance for a specific employee
@@ -53,180 +149,146 @@ export const fetchLeaveBalance = createAsyncThunk(
   async (_, { rejectWithValue, getState }) => {
     try {
       const state = getState();
-      console.log("Current state for leave balance:", state);
-      
+
       let employeeId = null;
-      
+
       // 1. Try from auth.user.employee.id (most reliable)
       if (state.auth?.user?.employee?.id) {
         employeeId = state.auth.user.employee.id;
-        console.log("Found employee ID from auth.user.employee.id:", employeeId);
       }
-      
+
       // 2. Try from auth.user.employee_id (if exists)
       if (!employeeId && state.auth?.user?.employee_id) {
         employeeId = state.auth.user.employee_id;
-        console.log("Found employee_id from auth.user.employee_id:", employeeId);
       }
-      
+
       // 3. Try from employee slice
       if (!employeeId && state.employee?.currentEmployee?.employee_id) {
         employeeId = state.employee.currentEmployee.employee_id;
-        console.log("Found employee_id from employee.currentEmployee.employee_id:", employeeId);
       }
-      
+
       if (!employeeId) {
         console.warn("No employee ID found for fetching leave balance");
         return {};
       }
-      
-      console.log("Fetching leave balance for employee ID:", employeeId);
-      
-      const response = await apiClient.get(`/employee/leave-allocations/${employeeId}`);
-      console.log("Leave balance response:", response.data);
-      
+
+
+      const response = await apiClient.get(
+        `/employee/leave-allocations/${employeeId}`,
+      );
+
       if (response.data && response.data.status === "success") {
         const data = response.data.data;
         return transformLeaveBalanceData(data);
       } else {
-        return rejectWithValue(response.data?.message || "Failed to fetch leave balance");
+        return rejectWithValue(
+          response.data?.message || "Failed to fetch leave balance",
+        );
       }
     } catch (error) {
       console.error("Fetch leave balance error:", error);
       return rejectWithValue(
-        error.response?.data?.message || "Failed to fetch leave balance"
+        error.response?.data?.message || "Failed to fetch leave balance",
       );
     }
-  }
+  },
 );
 
-// Helper function to transform leave balance data
+// Updated transformLeaveBalanceData function for new API structure
 const transformLeaveBalanceData = (data) => {
   const leaveBalances = {};
-  
-  console.log("Transforming leave balance data:", data);
-  
-  // Check if we have allocations
-  if (data.allocations) {
-    const allocations = typeof data.allocations === 'object' && !Array.isArray(data.allocations)
-      ? Object.values(data.allocations)
-      : data.allocations;
-    
-    console.log("Allocations to process:", allocations);
-    
-    // Get leave types from the response
-    const leaveTypes = data.leave_types || [];
-    
-    allocations.forEach(alloc => {
-      // Find the leave type name
-      const leaveType = leaveTypes.find(lt => lt.id === alloc.leave_type_id);
-      const leaveTypeName = leaveType?.name || `Leave Type ${alloc.leave_type_id}`;
-      
-      // Parse allocated days
-      const allocatedDays = parseFloat(alloc.allocated_days) || 0;
-      
-      // For now, used days is 0 since API doesn't return it
-      // We can fetch used days from leave history if needed
-      const usedDays = 0;
-      
-      leaveBalances[leaveTypeName] = {
-        id: alloc.leave_type_id,
-        allocated: allocatedDays,
-        taken: usedDays,
-        pending: 0,
-        remaining: allocatedDays - usedDays,
-        name: leaveTypeName,
-        allocated_days: allocatedDays,
-        used: usedDays
-      };
-    });
-    
-    // Also add leave types that have no allocations (set to 0)
-    leaveTypes.forEach(leaveType => {
-      if (!leaveBalances[leaveType.name]) {
-        leaveBalances[leaveType.name] = {
-          id: leaveType.id,
-          allocated: 0,
-          taken: 0,
-          pending: 0,
-          remaining: 0,
-          name: leaveType.name,
-          allocated_days: 0,
-          used: 0
-        };
-      }
-    });
-  }
-  
-  // Add total balance
-  let totalAllocated = 0;
-  let totalTaken = 0;
-  Object.values(leaveBalances).forEach(balance => {
-    totalAllocated += balance.allocated || 0;
-    totalTaken += balance.taken || 0;
+
+
+  // Get leave types balance from the response
+  const leaveTypesBalance = data.leaveTypesBalance || [];
+
+  // Get total stats from top level
+  const totalAllocated = parseFloat(data.leaves_allocated) || 0;
+  const totalLeavesTaken = parseFloat(data.leaves_taken) || 0;
+  const totalLeaveBalance = parseFloat(data.leave_balance) || 0;
+
+  // Process each leave type from leaveTypesBalance
+  leaveTypesBalance.forEach((item) => {
+    const leaveTypeId = item.leave_type_id;
+    const leaveTypeName = item.leave_type;
+    const allocated = parseFloat(item.allocated) || 0;
+    const taken = parseFloat(item.taken) || 0;
+    const balance = parseFloat(item.balance) || 0;
+
+    leaveBalances[leaveTypeName] = {
+      id: leaveTypeId,
+      allocated: allocated,
+      taken: taken,
+      pending: 0, // API doesn't provide pending, but we can keep it for UI consistency
+      remaining: balance,
+      name: leaveTypeName,
+      allocated_days: allocated,
+      used: taken,
+    };
   });
-  
+
+  // Add total balance using the actual totals from the API
   leaveBalances.total = {
     allocated: totalAllocated,
-    taken: totalTaken,
+    taken: totalLeavesTaken,
     pending: 0,
-    remaining: totalAllocated - totalTaken
+    remaining: totalLeaveBalance,
   };
-  
-  console.log("Processed leave balances:", leaveBalances);
+
   return leaveBalances;
 };
 
-// Store New Leave Request 
+// Store New Leave Request
 export const addLeaveRequest = createAsyncThunk(
   "leaves/storeLeaveRequest",
   async (formData, { rejectWithValue, dispatch, getState }) => {
     try {
       const state = getState();
-      
+
       // Get employee ID from auth state
-      let employeeId = state.auth?.user?.employee?.id || 
-                       state.auth?.user?.employee_id || 
-                       state.employee?.currentEmployee?.employee_id;
-      
+      let employeeId =
+        state.auth?.user?.employee?.id ||
+        state.auth?.user?.employee_id ||
+        state.employee?.currentEmployee?.employee_id;
+
       if (!employeeId) {
         return rejectWithValue("Employee ID not found");
       }
-      
+
       // Extract data from FormData
-      const leaveTypeId = formData.get('leave_type_id');
-      const startDate = formData.get('start_date');
-      const endDate = formData.get('end_date');
-      const reason = formData.get('reason');
-      const claimSalary = formData.get('claim_salary') === '1';
-      const session1 = formData.get('session1') || 'morning'; // morning or afternoon
-      const session2 = formData.get('session2') || 'afternoon'; // morning or afternoon
-      const year = formData.get('year') || new Date().getFullYear();
-      
+      const leaveTypeId = formData.get("leave_type_id");
+      const startDate = formData.get("start_date");
+      const endDate = formData.get("end_date");
+      const reason = formData.get("reason");
+      const claimSalary = formData.get("claim_salary") === "1";
+      const session1 = formData.get("session1") || "morning"; // morning or afternoon
+      const session2 = formData.get("session2") || "afternoon"; // morning or afternoon
+      const year = formData.get("year") || new Date().getFullYear();
+
       // Check if we have a document
-      const document = formData.get('document');
-      
+      const document = formData.get("document");
+
       // Prepare the payload
       let payload;
       let headers = {};
-      
+
       // Only add document if it exists
       if (document && document.size > 0) {
         // If there's a document, we need to use FormData
         const formDataWithDoc = new FormData();
-        formDataWithDoc.append('employee_id', employeeId);
-        formDataWithDoc.append('leave_type_id', leaveTypeId);
-        formDataWithDoc.append('start_date', startDate);
-        formDataWithDoc.append('end_date', endDate);
-        formDataWithDoc.append('reason', reason);
-        formDataWithDoc.append('claim_salary', claimSalary ? '1' : '0');
-        formDataWithDoc.append('session1', session1);
-        formDataWithDoc.append('session2', session2);
-        formDataWithDoc.append('year', year);
-        formDataWithDoc.append('document', document);
-        
+        formDataWithDoc.append("employee_id", employeeId);
+        formDataWithDoc.append("leave_type_id", leaveTypeId);
+        formDataWithDoc.append("start_date", startDate);
+        formDataWithDoc.append("end_date", endDate);
+        formDataWithDoc.append("reason", reason);
+        formDataWithDoc.append("claim_salary", claimSalary ? "1" : "0");
+        formDataWithDoc.append("session1", session1);
+        formDataWithDoc.append("session2", session2);
+        formDataWithDoc.append("year", year);
+        formDataWithDoc.append("document", document);
+
         payload = formDataWithDoc;
-        headers = { 'Content-Type': 'multipart/form-data' };
+        headers = { "Content-Type": "multipart/form-data" };
       } else {
         // If no document, send as JSON with ALL fields
         payload = {
@@ -238,36 +300,40 @@ export const addLeaveRequest = createAsyncThunk(
           claim_salary: claimSalary,
           session1: session1, // morning or afternoon
           session2: session2, // morning or afternoon
-          year: parseInt(year)
+          year: parseInt(year),
         };
-        headers = { 'Content-Type': 'application/json' };
+        headers = { "Content-Type": "application/json" };
       }
-      
-      console.log("Submitting leave request with payload:", payload);
-      
-      const response = await apiClient.post("/employee/leaves", payload, { headers });
-      console.log("Store leave response:", response.data);
-      
+
+
+      const response = await apiClient.post("/employee/leaves", payload, {
+        headers,
+      });
+
       if (response.data && response.data.status === "success") {
         // Refresh balance after successful submission
         await dispatch(fetchLeaveBalance());
         await dispatch(fetchEmployeeLeaves());
         return response.data.data;
       } else {
-        return rejectWithValue(response.data?.message || "Failed to submit leave request");
+        return rejectWithValue(
+          response.data?.message || "Failed to submit leave request",
+        );
       }
     } catch (error) {
       console.error("Store leave error:", error);
       // Handle validation errors
       if (error.response?.data?.errors) {
-        const errorMessages = Object.values(error.response.data.errors).flat().join(', ');
+        const errorMessages = Object.values(error.response.data.errors)
+          .flat()
+          .join(", ");
         return rejectWithValue(errorMessages);
       }
       return rejectWithValue(
-        error.response?.data?.message || "Failed to submit leave request"
+        error.response?.data?.message || "Failed to submit leave request",
       );
     }
-  }
+  },
 );
 
 // Calculate leave balances
@@ -276,23 +342,99 @@ export const calculateLeaveBalances = createAsyncThunk(
   async (_, { getState }) => {
     const state = getState();
     return state.leaves.leaveBalances;
-  }
+  },
+);
+
+// Update Leave Request
+export const updateLeaveRequest = createAsyncThunk(
+  "leaves/updateLeaveRequest",
+  async ({ id, formData }, { rejectWithValue, dispatch }) => {
+    try {
+      // Check if formData is FormData or plain object
+      let payload;
+      let headers = {};
+
+      if (formData instanceof FormData) {
+        payload = formData;
+        headers = { "Content-Type": "multipart/form-data" };
+      } else {
+        payload = formData;
+        headers = { "Content-Type": "application/json" };
+      }
+
+
+      const response = await apiClient.post(`/employee/leaves/${id}`, payload, {
+        headers,
+      });
+
+      if (response.data && response.data.status === "success") {
+        // Refresh balance and leaves after successful update
+        await dispatch(fetchLeaveBalance());
+        await dispatch(fetchEmployeeLeaves());
+        return response.data.data;
+      } else {
+        return rejectWithValue(
+          response.data?.message || "Failed to update leave request",
+        );
+      }
+    } catch (error) {
+      console.error("Update leave error:", error);
+      if (error.response?.data?.errors) {
+        const errorMessages = Object.values(error.response.data.errors)
+          .flat()
+          .join(", ");
+        return rejectWithValue(errorMessages);
+      }
+      return rejectWithValue(
+        error.response?.data?.message || "Failed to update leave request",
+      );
+    }
+  },
+);
+
+// Delete Leave Request
+export const deleteLeaveRequest = createAsyncThunk(
+  "leaves/deleteLeaveRequest",
+  async (id, { rejectWithValue, dispatch }) => {
+    try {
+
+      const response = await apiClient.delete(`/employee/leaves/${id}`);
+
+      if (response.data && response.data.status === "success") {
+        // Refresh balance and leaves after successful deletion
+        await dispatch(fetchLeaveBalance());
+        await dispatch(fetchEmployeeLeaves());
+        return id;
+      } else {
+        return rejectWithValue(
+          response.data?.message || "Failed to delete leave request",
+        );
+      }
+    } catch (error) {
+      console.error("Delete leave error:", error);
+      return rejectWithValue(
+        error.response?.data?.message || "Failed to delete leave request",
+      );
+    }
+  },
 );
 
 const initialState = {
   leaves: [],
   leaveTypes: [],
+  employeesList: [],
+  editingLeave: null,
   leaveBalances: {
     total: {
       allocated: 0,
       taken: 0,
       pending: 0,
-      remaining: 0
-    }
+      remaining: 0,
+    },
   },
   filter: {
-    status: 'all',
-    search: '',
+    status: "all",
+    search: "",
   },
   pagination: {
     currentPage: 1,
@@ -304,12 +446,12 @@ const initialState = {
 };
 
 const leavesSlice = createSlice({
-  name: 'leaves',
+  name: "leaves",
   initialState,
   reducers: {
     setLeaveFilter: (state, action) => {
       state.filter.status = action.payload.status;
-      state.filter.search = action.payload.search || '';
+      state.filter.search = action.payload.search || "";
       state.pagination.currentPage = 1;
     },
     setLeavePagination: (state, action) => {
@@ -339,7 +481,7 @@ const leavesSlice = createSlice({
         state.loading = false;
         state.error = action.payload;
       })
-      
+
       // Fetch Leave Types
       .addCase(fetchLeaveTypes.pending, (state) => {
         state.loading = true;
@@ -354,7 +496,7 @@ const leavesSlice = createSlice({
         state.loading = false;
         state.error = action.payload;
       })
-      
+
       // Fetch Leave Balance
       .addCase(fetchLeaveBalance.pending, (state) => {
         state.loading = true;
@@ -369,7 +511,7 @@ const leavesSlice = createSlice({
         state.loading = false;
         state.error = action.payload;
       })
-      
+
       // Store Leave Request
       .addCase(addLeaveRequest.pending, (state) => {
         state.submitting = true;
@@ -384,7 +526,21 @@ const leavesSlice = createSlice({
         state.submitting = false;
         state.error = action.payload;
       })
-      
+
+      .addCase(fetchEmployeesForLeave.pending, (state) => {
+        state.loading = true;
+        state.error = null;
+      })
+      .addCase(fetchEmployeesForLeave.fulfilled, (state, action) => {
+        state.loading = false;
+        state.employeesList = action.payload; // Now this will be an array
+        state.error = null;
+      })
+      .addCase(fetchEmployeesForLeave.rejected, (state, action) => {
+        state.loading = false;
+        state.error = action.payload;
+      })
+
       // Calculate Leave Balances
       .addCase(calculateLeaveBalances.pending, (state) => {
         state.loading = true;
@@ -395,9 +551,63 @@ const leavesSlice = createSlice({
       .addCase(calculateLeaveBalances.rejected, (state, action) => {
         state.loading = false;
         state.error = action.payload;
+      })
+      // Update Leave Request
+      .addCase(updateLeaveRequest.pending, (state) => {
+        state.submitting = true;
+        state.error = null;
+      })
+      .addCase(updateLeaveRequest.fulfilled, (state, action) => {
+        state.submitting = false;
+        const index = state.leaves.findIndex(
+          (leave) => leave.id === action.payload.id,
+        );
+        if (index !== -1) {
+          state.leaves[index] = action.payload;
+        }
+        state.error = null;
+      })
+      .addCase(updateLeaveRequest.rejected, (state, action) => {
+        state.submitting = false;
+        state.error = action.payload;
+      })
+
+      // Delete Leave Request
+      .addCase(deleteLeaveRequest.pending, (state) => {
+        state.loading = true;
+        state.error = null;
+      })
+      .addCase(deleteLeaveRequest.fulfilled, (state, action) => {
+        state.loading = false;
+        state.leaves = state.leaves.filter(
+          (leave) => leave.id !== action.payload,
+        );
+        state.error = null;
+      })
+      .addCase(deleteLeaveRequest.rejected, (state, action) => {
+        state.loading = false;
+        state.error = action.payload;
+      })
+      .addCase(fetchLeaveById.pending, (state) => {
+        state.loading = true;
+        state.error = null;
+      })
+      .addCase(fetchLeaveById.fulfilled, (state, action) => {
+        state.loading = false;
+        state.editingLeave = action.payload;
+        state.error = null;
+      })
+      .addCase(fetchLeaveById.rejected, (state, action) => {
+        state.loading = false;
+        state.error = action.payload;
       });
   },
 });
 
-export const { setLeaveFilter, setLeavePagination, clearLeaveError, updateLeaveBalance } = leavesSlice.actions;
+export const {
+  setLeaveFilter,
+  setLeavePagination,
+  clearLeaveError,
+  updateLeaveBalance,
+} = leavesSlice.actions;
 export default leavesSlice.reducer;

@@ -1,26 +1,192 @@
 import { useEffect, useState } from "react";
 import { useDispatch, useSelector } from "react-redux";
+import { useNavigate } from "react-router-dom";
 import {
   punchIn,
   punchOut,
   fetchDashboardData,
 } from "../store/slices/attendanceSlice";
 import { fetchMyProjects } from "../store/slices/employeeProjectSlice";
+import { fetchEmployees } from "../../admin/store/slices/employeeSlice";
+import { fetchProjects } from "../../admin/store/slices/projectSlice";
+import {
+  fetchDashboard,
+  fetchMonthlyHoursByProject,
+  clearMonthlyHours,
+  fetchProjectTimeCost,
+} from "../../admin/store/slices/dashboardSlice";
+import { fetchAssignments } from "../../admin/store/slices/projectAssignmentSlice";
 import PunchOutModal from "../components/modals/PunchOutModal";
 import MapView from "../components/common/MapView";
 import LocationModal from "../components/modals/LocationModal";
 import ErrorToast from "../../components/common/ErrorToast";
 import useErrorHandler from "../../hooks/useErrorHandler";
-import errorHandler from "../../utils/errorHandler";
+
+// Admin Dashboard Components
+import { StatsCard } from "../../admin/components/dashboard/StatsCard";
+import { ProjectAllocationChart } from "../../admin/components/dashboard/ProjectAllocationChart";
+import { ProjectHoursChart } from "../../admin/components/dashboard/ProjectHoursChart";
+import { WeeklyAttendanceChart } from "../../admin/components/dashboard/WeeklyAttendanceChart";
+import { TodayStatusChart } from "../../admin/components/dashboard/TodayStatsChart";
+import { AvgPunchTimeCard } from "../../admin/components/dashboard/AvgPunchTimeCrd";
+import { RecentPunchesList } from "../../admin/components/dashboard/RecentPunchesList";
+import { PunchDistributionChart } from "../../admin/components/dashboard/PunchDistributionChart";
+import { ProjectHoursModal } from "../../admin/components/dashboard/ProjectHoursModal";
+import { showToast } from "../../components/common/Toast";
+import { ProjectTimeCostChart } from "../../admin/components/dashboard/ProjectTimeCostChart";
+
+// ─── COLOR PALETTE ──────────────────────────────────────────────────────
+export const COLORS = {
+  blue: "#2a78d6",
+  aqua: "#1baf7a",
+  yellow: "#eda100",
+  violet: "#4a3aa7",
+  red: "#e34948",
+  green: "#008300",
+  orange: "#f97316",
+  purple: "#8b5cf6",
+  pink: "#ec4899",
+  cyan: "#06b6d4",
+};
+
+export const STATUS_COLORS = {
+  "On time": "#2a78d6",
+  Late: "#eda100",
+  Absent: "#e34948",
+  WFH: "#1baf7a",
+  Leave: "#4a3aa7",
+};
+
+export const CHART_COLORS = [
+  "#2a78d6",
+  "#1baf7a",
+  "#eda100",
+  "#e34948",
+  "#4a3aa7",
+  "#f97316",
+  "#8b5cf6",
+  "#ec4899",
+  "#06b6d4",
+  "#14b8a6",
+];
+
+// ─── HELPERS ──────────────────────────────────────────────────────────────
+const formatTime = (minutes) => {
+  if (!minutes || minutes === 0) return "0h";
+  const hours = Math.floor(minutes / 60);
+  const mins = minutes % 60;
+  if (hours === 0) return `${mins}m`;
+  if (mins === 0) return `${hours}h`;
+  return `${hours}h ${mins}m`;
+};
+
+export const getInitials = (name) => {
+  if (!name) return "?";
+  return name
+    .split(" ")
+    .map((n) => n[0])
+    .join("")
+    .toUpperCase()
+    .slice(0, 2);
+};
+
+export const getStatusBadge = (status) => {
+  const statusMap = {
+    on_time: { label: "On time", className: "badge-success" },
+    "on-time": { label: "On time", className: "badge-success" },
+    ontime: { label: "On time", className: "badge-success" },
+    late: { label: "Late", className: "badge-warn" },
+    absent: { label: "Absent", className: "badge-danger" },
+    wfh: { label: "WFH", className: "badge-blue" },
+    leave: { label: "Leave", className: "badge-violet" },
+  };
+  return statusMap[status] || { label: status, className: "badge-gray" };
+};
+
+export const formatDateDisplay = (dateString) => {
+  if (!dateString) return "-";
+  try {
+    const date = new Date(dateString);
+    return date.toLocaleDateString("en-GB", {
+      day: "2-digit",
+      month: "short",
+      year: "numeric",
+    });
+  } catch {
+    return dateString;
+  }
+};
+
+// Helper function to get avatar URL
+const getAvatarUrl = (avatarPath) => {
+  if (!avatarPath) return null;
+
+  if (avatarPath.startsWith("http://") || avatarPath.startsWith("https://")) {
+    return avatarPath;
+  }
+
+  const baseUrl =
+    import.meta.env.VITE_API_URL?.replace("/api", "") || window.location.origin;
+
+  if (avatarPath.startsWith("avatars/")) {
+    return `${baseUrl}/storage/${avatarPath}`;
+  }
+  if (avatarPath.startsWith("storage/")) {
+    return `${baseUrl}/${avatarPath}`;
+  }
+  if (avatarPath.startsWith("/storage/")) {
+    return `${baseUrl}${avatarPath}`;
+  }
+
+  return `${baseUrl}/storage/${avatarPath}`;
+};
+
+// Helper to get leave status color
+const getLeaveStatusColor = (status) => {
+  switch (status?.toLowerCase()) {
+    case "pending":
+      return "bg-amber-100 text-amber-700 dark:bg-amber-900/30 dark:text-amber-400 border-amber-200 dark:border-amber-800";
+    case "approved":
+      return "bg-green-100 text-green-700 dark:bg-green-900/30 dark:text-green-400 border-green-200 dark:border-green-800";
+    case "rejected":
+      return "bg-red-100 text-red-700 dark:bg-red-900/30 dark:text-red-400 border-red-200 dark:border-red-800";
+    default:
+      return "bg-gray-100 text-gray-700 dark:bg-gray-800 dark:text-gray-400 border-gray-200 dark:border-gray-700";
+  }
+};
+
+// Helper to get leave type icon
+const getLeaveTypeIcon = (type) => {
+  const typeMap = {
+    "sick leave": "fa-notes-medical",
+    "annual leave": "fa-umbrella-beach",
+    "casual leave": "fa-smile",
+    "maternity leave": "fa-baby",
+    "paternity leave": "fa-child",
+    "unpaid leave": "fa-money-bill-wave",
+    "public holiday": "fa-calendar-day",
+    "work from home": "fa-home",
+  };
+  return typeMap[type?.toLowerCase()] || "fa-calendar-alt";
+};
+
+// ─── THEME AWARE GRADIENT ──────────────────────────────────────────────
+const getWelcomeBannerGradient = (isDark) => {
+  if (isDark) {
+    return "bg-gradient-to-br from-gray-800 via-gray-900 to-gray-950 border border-gray-700";
+  }
+  return "bg-gradient-to-br from-green-600 to-green-500";
+};
 
 const Dashboard = () => {
   const dispatch = useDispatch();
+  const navigate = useNavigate();
   const { user } = useSelector((state) => state.auth);
   const { loading: attendanceLoading, dashboardData } = useSelector(
     (state) => state.EmpAttendance,
   );
   const {
-    projects,
+    projects: employeeProjects,
     stats,
     loading: projectsLoading,
   } = useSelector(
@@ -28,8 +194,44 @@ const Dashboard = () => {
       state.employeeProjects || { projects: [], stats: {}, loading: false },
   );
 
+  // Add this with other useSelector calls
+  const { projectTimeCost, loading: projectTimeCostLoading } = useSelector(
+    (state) =>
+      state.dashboard || {
+        projectTimeCost: { data: { projects: [] } },
+        loading: false,
+      },
+  );
+
+  // Admin dashboard data
+  const { employees } = useSelector((state) => state.employees || {});
+  const {
+    stats: adminStats,
+    charts,
+    loading: adminLoading,
+  } = useSelector(
+    (state) => state.dashboard || { stats: {}, charts: {}, loading: false },
+  );
+  const { projects: allProjects, loading: allProjectsLoading } = useSelector(
+    (state) => state.projects || { projects: [], loading: false },
+  );
+  const { assignments } = useSelector(
+    (state) => state.projectAssignments || { assignments: [], loading: false },
+  );
+
   // Use custom error handler
-  const { error, handleError, clearError, withErrorHandling } = useErrorHandler();
+  const { error, handleError, clearError, withErrorHandling } =
+    useErrorHandler();
+
+  // Check if user is HR or HR Manager
+  const isHR =
+    user?.role?.name === "HR Manager" ||
+    user?.role?.name === "HR" ||
+    user?.type === "hr";
+  const isAdmin = user?.type === "admin";
+
+  // Show admin graphs if user is HR or Admin
+  const showAdminGraphs = isHR || isAdmin;
 
   // Use dashboard data as source of truth (not Redux isPunchedIn)
   const todayAttendance = dashboardData?.today_attendance || {};
@@ -53,11 +255,74 @@ const Dashboard = () => {
 
   const [showPendingErrorModal, setShowPendingErrorModal] = useState(false);
   const [pendingPunchOutDate, setPendingPunchOutDate] = useState("");
+  const [showBlockedErrorModal, setShowBlockedErrorModal] = useState(false);
+  const [blockedErrorMessage, setBlockedErrorMessage] = useState("");
+
+  // Admin graphs states
+  const [showProjectHoursModal, setShowProjectHoursModal] = useState(false);
+  const [selectedProjectForModal, setSelectedProjectForModal] = useState(null);
+  const [modalMonth, setModalMonth] = useState(new Date().getMonth() + 1);
+  const [modalYear, setModalYear] = useState(new Date().getFullYear());
+
+  // Add with other useState declarations
+  const [reportMonth, setReportMonth] = useState(new Date().getMonth() + 1);
+  const [reportYear, setReportYear] = useState(new Date().getFullYear());
+
+  // Theme state - check if dark mode is active
+  const [isDarkMode, setIsDarkMode] = useState(false);
+
+  // Check for dark mode
+  useEffect(() => {
+    const checkDarkMode = () => {
+      const isDark = document.documentElement.classList.contains("dark");
+      setIsDarkMode(isDark);
+    };
+
+    checkDarkMode();
+
+    // Observe changes to dark mode class
+    const observer = new MutationObserver(() => {
+      checkDarkMode();
+    });
+
+    observer.observe(document.documentElement, {
+      attributes: true,
+      attributeFilter: ["class"],
+    });
+
+    return () => observer.disconnect();
+  }, []);
+
+  useEffect(() => {
+    if (showAdminGraphs) {
+      dispatch(fetchProjectTimeCost({ month: reportMonth, year: reportYear }));
+    }
+  }, [dispatch, reportMonth, reportYear, showAdminGraphs]);
 
   // Show toast notification
   const showToastMessage = (message, type = "success", title = "") => {
     setToast({ message, type, title });
     setTimeout(() => setToast(null), 5000);
+  };
+
+  // Get employee avatar URL
+  const employeeAvatar = dashboardData?.employee?.avatar
+    ? getAvatarUrl(dashboardData.employee.avatar)
+    : null;
+
+  // Get employee name
+  const getEmployeeName = () => {
+    if (dashboardData?.employee) {
+      return `${dashboardData.employee.first_name} ${dashboardData.employee.last_name}`;
+    }
+    return user?.name || "User";
+  };
+
+  const getEmployeeRole = () => {
+    if (dashboardData?.employee) {
+      return `Employee ID: ${dashboardData.employee.employee_id}`;
+    }
+    return user?.role?.name || user?.role || "Employee";
   };
 
   // Fetch dashboard data and projects on component mount
@@ -68,23 +333,22 @@ const Dashboard = () => {
           await dispatch(fetchDashboardData()).unwrap();
         },
         {
-          onLogin: () => window.location.href = '/login'
-        }
+          onLogin: () => (window.location.href = "/login"),
+        },
       );
     };
     fetchData();
   }, [dispatch]);
 
-  // Separate useEffect to fetch projects when dashboard data loads
+  // Fetch admin dashboard data if user is HR
   useEffect(() => {
-    if (dashboardData?.employee?.id) {
-      console.log(
-        "Fetching projects for employee ID from dashboard:",
-        dashboardData.employee.id,
-      );
-      dispatch(fetchMyProjects(dashboardData.employee.id));
+    if (showAdminGraphs) {
+      dispatch(fetchDashboard());
+      dispatch(fetchProjects());
+      dispatch(fetchAssignments());
+      dispatch(fetchEmployees());
     }
-  }, [dashboardData]);
+  }, [dispatch, showAdminGraphs]);
 
   // Update date and time
   useEffect(() => {
@@ -111,7 +375,11 @@ const Dashboard = () => {
   const handlePunch = async () => {
     if (!isActuallyPunchedIn) {
       if (!canPunch) {
-        showToastMessage("You cannot punch in at this time", "error", "Outside Working Hours");
+        showToastMessage(
+          "You cannot punch in at this time",
+          "error",
+          "Outside Working Hours",
+        );
         return;
       }
       setPunchType("punch-in");
@@ -131,53 +399,85 @@ const Dashboard = () => {
       try {
         await withErrorHandling(
           async () => {
-            const result = await dispatch(punchIn({ location: locationData })).unwrap();
-            showToastMessage("Punched in successfully with location verification!", "success", "Success");
+            const result = await dispatch(
+              punchIn({ location: locationData }),
+            ).unwrap();
+            showToastMessage("Punched in successfully!", "success", "Success");
             await dispatch(fetchDashboardData()).unwrap();
             return result;
-          }
+          },
+          {
+            onError: (err) => {
+              let errorMsg = "";
+              if (typeof err === "string") {
+                errorMsg = err;
+              } else if (err?.payload?.message) {
+                errorMsg = err.payload.message;
+              } else if (err?.message) {
+                errorMsg = err.message;
+              } else if (err?.response?.data?.message) {
+                errorMsg = err.response.data.message;
+              } else {
+                errorMsg = String(err);
+              }
+
+              if (
+                errorMsg.includes("pending punch-out") ||
+                errorMsg.includes("punch out for that day") ||
+                errorMsg.includes("Please punch out first")
+              ) {
+                clearError();
+                const match = errorMsg.match(/for (\d{4}-\d{2}-\d{2})/);
+                const date = match ? match[1] : "that day";
+                setPendingPunchOutDate(date);
+                setShowPendingErrorModal(true);
+                return true;
+              }
+
+              if (
+                errorMsg.includes("Punch-in blocked") ||
+                errorMsg.includes("pending HR approval") ||
+                errorMsg.includes("late check-in request")
+              ) {
+                return false;
+              }
+
+              return false;
+            },
+          },
         );
       } catch (err) {
-        const errorMsg = typeof err === "string" ? err : (err?.message || "");
-        if (errorMsg.includes("pending punch-out") || errorMsg.includes("punch out for that day")) {
-          clearError();
-          const match = errorMsg.match(/for (\d{4}-\d{2}-\d{2})/);
-          const date = match ? match[1] : "that day";
-          setPendingPunchOutDate(date);
-          setShowPendingErrorModal(true);
-        }
+        console.error("Punch in error:", err);
       }
     } else if (punchOutData) {
       const isPastDatePunchOut = punchType === "punch-out-then-punchin";
-      await withErrorHandling(
-        async () => {
-          const result = await dispatch(
-            punchOut({
-              ...punchOutData,
-              location: locationData,
-            })
-          ).unwrap();
-          showToastMessage(
-            isPastDatePunchOut
-              ? `Punched out for ${pendingPunchOutDate} successfully! Now punch in for today.`
-              : "Punched out successfully!",
-            "success",
-            "Success"
-          );
-          setShowPunchOutModal(false);
-          setPunchOutData(null);
-          await dispatch(fetchDashboardData()).unwrap();
+      await withErrorHandling(async () => {
+        const result = await dispatch(
+          punchOut({
+            ...punchOutData,
+            location: locationData,
+          }),
+        ).unwrap();
+        showToastMessage(
+          isPastDatePunchOut
+            ? `Punched out for ${pendingPunchOutDate}! Now punch in for today.`
+            : "Punched out successfully!",
+          "success",
+          "Success",
+        );
+        setShowPunchOutModal(false);
+        setPunchOutData(null);
+        await dispatch(fetchDashboardData()).unwrap();
 
-          if (isPastDatePunchOut) {
-            setPendingPunchOutDate("");
-            setPunchType("punch-in");
-            setTimeout(() => setShowLocationModal(true), 800);
-          } else {
-            setPendingPunchOutDate("");
-          }
-          return result;
+        if (isPastDatePunchOut) {
+          setPendingPunchOutDate("");
+          setPunchType("punch-in");
+          setTimeout(() => setShowLocationModal(true), 800);
+        } else {
+          setPendingPunchOutDate("");
         }
-      );
+        return result;
+      });
     }
 
     setIsSubmitting(false);
@@ -185,16 +485,16 @@ const Dashboard = () => {
 
   const handlePunchOutSubmit = async (data) => {
     setPunchOutData({
-    ...data,
-    punch_out_time: data.punch_out_time || null, // Make sure this is preserved
-  });
+      ...data,
+      punch_out_time: data.punch_out_time || null,
+    });
     setShowPunchOutModal(false);
     setPunchType(pendingPunchOutDate ? "punch-out-then-punchin" : "punch-out");
     setShowLocationModal(true);
   };
 
   const formatPunchTime = (time) => {
-    if (!time) return "—";
+    if (!time) return "00:00";
     try {
       let date;
       if (typeof time === "string" && time.match(/^\d{2}:\d{2}:\d{2}$/)) {
@@ -225,21 +525,6 @@ const Dashboard = () => {
     } catch (error) {
       return time;
     }
-  };
-
-  // Get employee name and role
-  const getEmployeeName = () => {
-    if (dashboardData?.employee) {
-      return `${dashboardData.employee.first_name} ${dashboardData.employee.last_name}`;
-    }
-    return user?.name || "User";
-  };
-
-  const getEmployeeRole = () => {
-    if (dashboardData?.employee) {
-      return `Employee ID: ${dashboardData.employee.employee_id}`;
-    }
-    return user?.role?.name || user?.role || "Employee";
   };
 
   const isButtonDisabled = () => {
@@ -326,6 +611,359 @@ const Dashboard = () => {
     return null;
   };
 
+  // Admin graphs handlers
+  const handleNavigate = (route) => {
+    const basePath = "/employee";
+    navigate(`${basePath}${route}`);
+  };
+
+  const handleBarClick = (data) => {
+    if (data && data.activePayload && data.activePayload.length > 0) {
+      const projectData = data.activePayload[0].payload;
+      const projectName =
+        projectData.fullName || projectData.name || projectData.displayName;
+      const matchedProject = allProjects.find((p) => p.name === projectName);
+      const projectId =
+        matchedProject?.id || projectData.id || projectData.projectId;
+
+      if (projectId) {
+        setSelectedProjectForModal({
+          id: projectId,
+          name: projectName,
+          projectId: projectId,
+        });
+        setModalMonth(new Date().getMonth() + 1);
+        setModalYear(new Date().getFullYear());
+        setShowProjectHoursModal(true);
+      } else {
+        showToast("Project ID not found", "error");
+      }
+    }
+  };
+
+  // Admin dashboard calculations
+  const totalEmployees = employees?.length || 0;
+  const activeProjects = allProjects.filter(
+    (p) => p.status === "Active",
+  ).length;
+  const totalAssignments = assignments.length;
+  const totalTaggedEmployees = assignments.reduce(
+    (sum, a) => sum + (a.projectIds?.length || 0),
+    0,
+  );
+
+  const onTimeCount = charts?.today_status?.["On time"] || 0;
+  const lateCount = charts?.today_status?.Late || 0;
+  const absentCount = charts?.today_status?.Absent || 0;
+  const totalPresent = onTimeCount + lateCount;
+  const attendanceRate =
+    totalEmployees > 0 ? Math.round((totalPresent / totalEmployees) * 100) : 0;
+
+  const todayStatus = charts?.today_status || {};
+  const punchedInToday =
+    Object.values(todayStatus).reduce((a, b) => a + b, 0) ||
+    adminStats?.today?.punched_in ||
+    0;
+  const lateArrivals = todayStatus.Late || adminStats?.today?.late || 0;
+  const absentToday = todayStatus.Absent || adminStats?.today?.absent || 0;
+
+  const projectStats = charts?.project_stats || {};
+  const totalProjects = projectStats.total_projects || allProjects.length;
+  const activeProjectsCount = projectStats.active_projects || activeProjects;
+  const totalAssignmentsCount =
+    projectStats.total_assignments || totalAssignments;
+  const employeesAssigned =
+    projectStats.employees_assigned || totalTaggedEmployees;
+
+  const allocationData = charts?.project_allocation || [];
+  const hoursData = charts?.project_hours || [];
+
+  // Add this after the hoursData declaration
+  // ─── PROCESS PROJECT TIME & COST DATA ──────────────────────────────
+  const rawTimeCostData =
+    projectTimeCost?.data?.projects ||
+    projectTimeCost?.projects ||
+    projectTimeCost?.data ||
+    [];
+
+  const timeCostData = Array.isArray(rawTimeCostData)
+    ? rawTimeCostData.map((project) => ({
+        project_name:
+          project.project_name ||
+          project.name ||
+          project.project ||
+          "Unnamed Project",
+        project_id: project.project_id || project.id || project.projectId,
+        actual_time_logged_hours:
+          project.actual_time_logged_hours ||
+          project.actual_time_logged ||
+          project.time_logged ||
+          project.timeLogged ||
+          0,
+        actual_cost:
+          project.actual_cost || project.actualCost || project.cost || 0,
+        planned_total_hours:
+          project.planned_total_hours ||
+          project.planned_hours ||
+          project.plannedHours ||
+          0,
+        planned_total_cost:
+          project.planned_total_cost ||
+          project.planned_cost ||
+          project.plannedCost ||
+          0,
+        currency: project.currency || "AED",
+        employee_breakdown:
+          project.employee_breakdown || project.employees || [],
+      }))
+    : [];
+
+  // Add this with other handler functions
+  const handleProjectTimeCostClick = (data) => {
+    if (data && data.activePayload && data.activePayload.length > 0) {
+      const projectData = data.activePayload[0].payload;
+      const projectName =
+        projectData.fullName || projectData.name || projectData.project_name;
+      const matchedProject = allProjects.find((p) => p.name === projectName);
+      const projectId =
+        matchedProject?.id || projectData.projectId || projectData.project_id;
+
+      if (projectId) {
+        setSelectedProjectForModal({
+          id: projectId,
+          name: projectName,
+          projectId: projectId,
+        });
+        setModalMonth(new Date().getMonth() + 1);
+        setModalYear(new Date().getFullYear());
+        setShowProjectHoursModal(true);
+      }
+    }
+  };
+
+  // Leave data from dashboard
+  const recentLeaves = dashboardData?.recent_leaves || [];
+  const leaveStats = dashboardData?.leave_stats || {};
+
+  // ─── GET PROJECTS FROM DASHBOARD DATA ──────────────────────────────
+  // Extract projects from dashboardData.project_assignments
+  // ─── GET PROJECTS FROM DASHBOARD DATA ──────────────────────────────
+  // Extract projects from dashboardData.project_assignments
+  const dashboardProjects =
+    dashboardData?.project_assignments
+      ?.map((item) => {
+        const project = item.project || {};
+        const pm = item.project_manager || {};
+        const tl = item.team_lead || {};
+        const assignment = item.assignment || {};
+
+        return {
+          id: project.id,
+          name: project.name,
+          description: project.description || "No description",
+          project_manager_id: project.project_manager_id,
+          team_lead_id: project.team_lead_id,
+          total_hours: project.total_hours,
+          total_cost: project.total_cost,
+          currency: project.currency,
+          status: project.status || "Active",
+          assigned_at: assignment.assigned_at,
+          priority: project.priority || "Medium",
+          // Use the direct project_manager and team_lead data from the API
+          managerName: pm.name || "N/A",
+          managerDepartment: pm.department || "-",
+          managerDesignation: pm.designation || "-",
+          teamLeadName: tl.name || "N/A",
+          teamLeadDepartment: tl.department || "-",
+          teamLeadDesignation: tl.designation || "-",
+          // Also keep employee IDs for reference
+          managerId: pm.id || project.project_manager_id,
+          teamLeadId: tl.id || project.team_lead_id,
+        };
+      })
+      .filter(Boolean) || [];
+
+  // No need to map again for names since we already have them
+  const projectsWithNames = dashboardProjects;
+  // ─── LEAVE & PROJECTS STATS CARDS ──────────────────────────────────────────
+
+  // Leave Stats Card
+  const LeaveStatsCard = () => (
+    <div className="bg-[var(--surface)] border border-[var(--border)] rounded-xl p-4">
+      <div className="flex items-center justify-between mb-3">
+        <h3 className="text-sm font-semibold text-[var(--text)] flex items-center gap-2">
+          <i className="fas fa-calendar-alt text-green-500"></i>
+          Leave Status
+        </h3>
+        {recentLeaves.length > 0 && (
+          <button
+            onClick={() => navigate("/employee/leaves")}
+            className="text-xs text-green-500 hover:text-green-600 font-medium"
+          >
+            View All
+          </button>
+        )}
+      </div>
+
+      <div className="grid grid-cols-3 gap-3">
+        <div className="bg-blue-50 dark:bg-blue-900/20 rounded-xl p-3 text-center border border-blue-200 dark:border-blue-800">
+          <div className="text-2xl font-bold text-blue-600 dark:text-blue-400">
+            {leaveStats.allocated || 0}
+          </div>
+          <div className="text-xs text-blue-600/80 dark:text-blue-400/80 font-medium mt-0.5">
+            Allocated
+          </div>
+        </div>
+
+        <div className="bg-orange-50 dark:bg-orange-900/20 rounded-xl p-3 text-center border border-orange-200 dark:border-orange-800">
+          <div className="text-2xl font-bold text-orange-600 dark:text-orange-400">
+            {leaveStats.total_taken || 0}
+          </div>
+          <div className="text-xs text-orange-600/80 dark:text-orange-400/80 font-medium mt-0.5">
+            Taken
+          </div>
+        </div>
+
+        <div className="bg-green-50 dark:bg-green-900/20 rounded-xl p-3 text-center border border-green-200 dark:border-green-800">
+          <div className="text-2xl font-bold text-green-600 dark:text-green-400">
+            {leaveStats.balance || 0}
+          </div>
+          <div className="text-xs text-green-600/80 dark:text-green-400/80 font-medium mt-0.5">
+            Balance
+          </div>
+        </div>
+      </div>
+
+      {recentLeaves.length > 0 && (
+        <div className="mt-3 pt-3 border-t border-[var(--border)]">
+          <div className="text-xs text-[var(--muted)] mb-2">
+            Recent Requests
+          </div>
+          <div className="space-y-1.5">
+            {recentLeaves.slice(0, 2).map((leave, index) => (
+              <div
+                key={index}
+                className="flex items-center justify-between text-xs p-2 bg-[var(--surface2)] rounded-lg"
+              >
+                <div className="flex items-center gap-2">
+                  <span
+                    className={`px-1.5 py-0.5 rounded-full text-[10px] font-medium ${getLeaveStatusColor(leave.status)}`}
+                  >
+                    {leave.status || "Pending"}
+                  </span>
+                  <span className="text-[var(--text)] truncate max-w-[100px]">
+                    {leave.leave_type?.name || leave.type || "Leave"}
+                  </span>
+                </div>
+                <span className="text-[var(--muted)] text-[10px]">
+                  {formatDateDisplay(leave.start_date || leave.from_date)}
+                </span>
+              </div>
+            ))}
+          </div>
+          {recentLeaves.length > 2 && (
+            <button
+              onClick={() => navigate("/employee/leaves")}
+              className="text-xs text-green-500 hover:text-green-600 font-medium mt-1.5 block"
+            >
+              + {recentLeaves.length - 2} more
+            </button>
+          )}
+        </div>
+      )}
+
+      {recentLeaves.length === 0 && (
+        <div className="mt-3 pt-3 border-t border-[var(--border)]">
+          <button
+            onClick={() => navigate("/employee/request-leave")}
+            className="text-xs text-green-500 hover:text-green-600 font-medium mt-1.5 block text-center w-full"
+          >
+            + Request
+          </button>
+        </div>
+      )}
+    </div>
+  );
+
+  // Projects Stats Card - Using projects from dashboard
+  // Projects Stats Card - Using projects from dashboard
+  const ProjectsStatsCard = () => (
+    <div className="bg-[var(--surface)] border border-[var(--border)] rounded-xl p-4">
+      <div className="flex items-center justify-between mb-3">
+        <h3 className="text-sm font-semibold text-[var(--text)] flex items-center gap-2">
+          <i className="fas fa-project-diagram text-blue-500"></i>
+          My Projects
+        </h3>
+        <span className="text-xs text-[var(--muted)]">
+          {projectsWithNames.length} projects
+        </span>
+      </div>
+
+      <div className="grid grid-cols-2 gap-3">
+        <div className="bg-purple-50 dark:bg-purple-900/20 rounded-xl p-3 text-center border border-purple-200 dark:border-purple-800">
+          <div className="text-2xl font-bold text-purple-600 dark:text-purple-400">
+            {projectsWithNames.length}
+          </div>
+          <div className="text-[10px] text-purple-600/80 dark:text-purple-400/80 font-medium mt-0.5">
+            Total Projects
+          </div>
+        </div>
+
+        <div className="bg-green-50 dark:bg-green-900/20 rounded-xl p-3 text-center border border-green-200 dark:border-green-800">
+          <div className="text-2xl font-bold text-green-600 dark:text-green-400">
+            {projectsWithNames.filter((p) => p.status === "Active").length}
+          </div>
+          <div className="text-[10px] text-green-600/80 dark:text-green-400/80 font-medium mt-0.5">
+            Active Projects
+          </div>
+        </div>
+      </div>
+
+      {/* Scrollable Project List - FIXED height */}
+      {projectsWithNames.length > 0 && (
+        <div className="mt-3 pt-3 border-t border-[var(--border)]">
+          <div className="space-y-1.5 max-h-[180px] overflow-y-auto scrollbar-thin pr-1">
+            {projectsWithNames.map((project) => (
+              <div
+                key={project.id}
+                className="flex items-center justify-between text-xs p-2 bg-[var(--surface2)] rounded-lg cursor-pointer hover:bg-[var(--surface3)] transition-colors"
+                onClick={() => setSelectedProject(project)}
+              >
+                <div className="flex items-center gap-2 min-w-0 flex-1">
+                  <span
+                    className={`w-1.5 h-1.5 rounded-full flex-shrink-0 ${
+                      project.status === "Active"
+                        ? "bg-green-500"
+                        : project.status === "Completed"
+                          ? "bg-blue-500"
+                          : "bg-gray-400"
+                    }`}
+                  ></span>
+                  <span className="text-[var(--text)] truncate max-w-[180px] md:max-w-[200px]">
+                    {project.name}
+                  </span>
+                </div>
+                <span
+                  className={`px-1.5 py-0.5 rounded-full text-[10px] font-medium flex-shrink-0 ml-2 ${getPriorityColor(project.priority)}`}
+                >
+                  {project.priority || "Medium"}
+                </span>
+              </div>
+            ))}
+          </div>
+        </div>
+      )}
+
+      {projectsWithNames.length === 0 && (
+        <div className="mt-3 pt-3 border-t border-[var(--border)]">
+          <div className="text-xs text-[var(--text-secondary)] text-center">
+            No projects assigned yet
+          </div>
+        </div>
+      )}
+    </div>
+  );
+
   // Render location info
   const renderLocationInfo = () => {
     const punchInLocation = normalizeLocation(
@@ -343,56 +981,41 @@ const Dashboard = () => {
     };
 
     return (
-      <div className="location-info bg-[var(--surface)] border border-[var(--border)] rounded-xl p-5 mb-7">
-        <h3 className="text-base font-semibold text-[var(--text)] mb-3 flex items-center gap-2">
-          <i className="fas fa-map-marker-alt text-green-500"></i>
-          Today's Punch Locations
-        </h3>
-
-        {punchInLocation && (
-          <div className="mb-3 pb-3 border-b border-[var(--border)]">
-            <div className="flex justify-between items-start">
-              <div className="flex-1">
-                <p className="text-sm font-semibold text-green-500">
-                  <i className="fas fa-sign-in-alt mr-1"></i> Punch In Location:
-                </p>
-                <p className="text-sm text-[var(--text)] mt-1">
-                  {punchInLocation.address ||
-                    `${punchInLocation.latitude}, ${punchInLocation.longitude}`}
-                </p>
-              </div>
+      <div className="location-info bg-[var(--surface)] border border-[var(--border)] rounded-xl p-3 mb-4">
+        <div className="flex items-center gap-3 flex-wrap">
+          <h3 className="text-sm font-semibold text-[var(--text)] flex items-center gap-2">
+            <i className="fas fa-map-marker-alt text-green-500"></i>
+            Locations
+          </h3>
+          {punchInLocation && (
+            <div className="flex items-center gap-2 text-xs">
+              <span className="text-green-500 font-medium">IN:</span>
+              <span className="text-[var(--muted)] truncate max-w-[200px]">
+                {punchInLocation.address?.substring(0, 30) || "📍"}
+              </span>
               <button
                 onClick={() => handleShowMap(punchInLocation)}
-                className="text-xs bg-green-500/10 text-green-500 px-3 py-1 rounded-lg hover:bg-green-500/20 transition-colors"
+                className="text-blue-500 hover:text-blue-600 text-xs"
               >
-                <i className="fas fa-map mr-1"></i> View Map
+                <i className="fas fa-map"></i>
               </button>
             </div>
-          </div>
-        )}
-
-        {punchOutLocation && punchOutLocation.latitude && (
-          <div>
-            <div className="flex justify-between items-start">
-              <div className="flex-1">
-                <p className="text-sm font-semibold text-red-500">
-                  <i className="fas fa-sign-out-alt mr-1"></i> Punch Out
-                  Location:
-                </p>
-                <p className="text-sm text-[var(--text)] mt-1">
-                  {punchOutLocation.address ||
-                    `${punchOutLocation.latitude}, ${punchOutLocation.longitude}`}
-                </p>
-              </div>
+          )}
+          {punchOutLocation && punchOutLocation.latitude && (
+            <div className="flex items-center gap-2 text-xs">
+              <span className="text-red-500 font-medium">OUT:</span>
+              <span className="text-[var(--muted)] truncate max-w-[200px]">
+                {punchOutLocation.address?.substring(0, 30) || "📍"}
+              </span>
               <button
                 onClick={() => handleShowMap(punchOutLocation)}
-                className="text-xs bg-red-500/10 text-red-500 px-3 py-1 rounded-lg hover:bg-red-500/20 transition-colors"
+                className="text-blue-500 hover:text-blue-600 text-xs"
               >
-                <i className="fas fa-map mr-1"></i> View Map
+                <i className="fas fa-map"></i>
               </button>
             </div>
-          </div>
-        )}
+          )}
+        </div>
       </div>
     );
   };
@@ -447,27 +1070,51 @@ const Dashboard = () => {
   };
 
   return (
-    <div>
+    <div className="space-y-3 px-4 md:px-6 lg:px-8 pb-8">
       {/* Welcome Banner */}
-      <div className="welcome-banner bg-gradient-to-br from-green-600 to-green-500 rounded-xl p-5 md:p-7 mb-7 flex flex-col md:flex-row justify-between items-center gap-5">
-        <div className="welcome-left flex items-center gap-5 flex-wrap">
-          <div className="welcome-avatar w-16 h-16 rounded-xl overflow-hidden border-3 border-white shadow-lg bg-white flex items-center justify-center">
-            <i className="fas fa-user text-green-600 text-3xl"></i>
+      <div
+        className={`welcome-banner rounded-xl p-4 flex flex-col md:flex-row justify-between items-center gap-3 shadow-lg ${getWelcomeBannerGradient(isDarkMode)}`}
+      >
+        <div className="welcome-left flex items-center gap-3">
+          <div className="w-12 h-12 rounded-xl overflow-hidden border-2 border-white shadow-lg bg-white flex items-center justify-center flex-shrink-0">
+            {employeeAvatar ? (
+              <img
+                src={employeeAvatar}
+                alt={getEmployeeName()}
+                className="w-full h-full object-cover"
+                onError={(e) => {
+                  e.target.style.display = "none";
+                  e.target.parentElement.innerHTML = `<i class="fas fa-user text-green-600 text-2xl"></i>`;
+                }}
+              />
+            ) : (
+              <i className="fas fa-user text-green-600 text-2xl"></i>
+            )}
           </div>
           <div className="welcome-text">
-            <h2 className="text-xl md:text-2xl font-bold text-white">
+            <h2
+              className={`text-base md:text-lg font-bold ${isDarkMode ? "text-white" : "text-white"}`}
+            >
               Welcome, {getEmployeeName()}! 👋
             </h2>
-            <p className="text-white/90 text-xs md:text-sm">
+            <p
+              className={`${isDarkMode ? "text-gray-300" : "text-white/90"} text-xs`}
+            >
               {getEmployeeRole()}
             </p>
           </div>
         </div>
-        <div className="datetime-info text-center md:text-right text-white">
-          <div className="time text-2xl md:text-3xl font-bold">
+        <div className="datetime-info text-center md:text-right">
+          <div
+            className={`text-xl md:text-2xl font-bold ${isDarkMode ? "text-white" : "text-white"}`}
+          >
             {currentTime}
           </div>
-          <div className="date text-xs opacity-90">{currentDate}</div>
+          <div
+            className={`text-xs ${isDarkMode ? "text-gray-400" : "text-white/80"}`}
+          >
+            {currentDate}
+          </div>
         </div>
       </div>
 
@@ -475,36 +1122,36 @@ const Dashboard = () => {
       {renderLocationInfo()}
 
       {/* Punch Card */}
-      <div className="punch-card bg-[var(--surface)] border border-[var(--border)] rounded-xl p-4 md:p-6 mb-7 flex flex-col md:flex-row justify-between items-center gap-5">
-        <div className="punch-stats flex gap-8 md:gap-10 flex-wrap justify-center">
+      <div className="punch-card bg-[var(--surface)] border border-[var(--border)] rounded-xl p-3 flex flex-col md:flex-row justify-between items-center gap-3 mb-4">
+        <div className="punch-stats flex gap-6 md:gap-8 flex-wrap justify-center">
           <div className="punch-item text-center">
-            <div className="punch-label text-xs text-[var(--muted)] mb-2">
-              Today's Date
+            <div className="punch-label text-[10px] text-[var(--muted)]">
+              Date
             </div>
             <div className="punch-value text-sm font-semibold text-[var(--text)]">
-              {currentDate}
+              {currentDate.split(",")[0]}
             </div>
           </div>
           <div className="punch-item text-center">
-            <div className="punch-label text-xs text-[var(--muted)] mb-2">
-              Punch In Time
+            <div className="punch-label text-[10px] text-[var(--muted)]">
+              Punch In
             </div>
             <div
-              className={`punch-value text-2xl font-bold ${isActuallyPunchedIn ? "text-green-500" : "text-[var(--text)]"}`}
+              className={`punch-value text-xl font-bold ${isActuallyPunchedIn ? "text-green-500" : "text-[var(--text)]"}`}
             >
               {formatPunchTime(displayPunchTime)}
             </div>
           </div>
           <div className="punch-item text-center">
-            <div className="punch-label text-xs text-[var(--muted)] mb-2">
+            <div className="punch-label text-[10px] text-[var(--muted)]">
               Status
             </div>
             <div
-              className={`punch-value text-lg font-bold ${statusDisplay.color}`}
+              className={`punch-value text-base font-bold ${statusDisplay.color}`}
             >
               {statusDisplay.text}
               {isActuallyPunchedIn && (
-                <span className="ml-2 text-xs animate-pulse">●</span>
+                <span className="ml-1.5 text-xs animate-pulse">●</span>
               )}
             </div>
           </div>
@@ -512,119 +1159,243 @@ const Dashboard = () => {
         <button
           onClick={handlePunch}
           disabled={isButtonDisabled()}
-          className="punch-btn bg-green-500 border-none text-white py-3 px-8 rounded-full font-semibold text-sm cursor-pointer transition-all flex items-center gap-2 hover:bg-green-600 hover:-translate-y-0.5 hover:shadow-md disabled:opacity-50 disabled:cursor-not-allowed"
+          className={`punch-btn border-none text-white py-2 px-6 rounded-full font-semibold text-sm cursor-pointer transition-all flex items-center gap-2 hover:-translate-y-0.5 hover:shadow-md disabled:opacity-50 disabled:cursor-not-allowed flex-shrink-0 ${isActuallyPunchedIn ? "bg-red-500 hover:bg-red-600" : "bg-green-500 hover:bg-green-600"}`}
         >
           <i className="fas fa-fingerprint"></i>
           {getButtonText()}
         </button>
       </div>
 
-      <div className="stats-grid grid grid-cols-2 gap-5 mb-7">
-        <div className="stat-card bg-[var(--surface)] border border-[var(--border)] rounded-xl p-5 text-center hover:-translate-y-0.5 hover:shadow-md transition-all">
-          <div className="stat-icon w-12 h-12 rounded-xl bg-green-500/10 text-green-500 flex items-center justify-center text-2xl mx-auto mb-3">
-            <i className="fas fa-project-diagram"></i>
+      {/* ─── LEAVE & PROJECTS STATS CARDS ────────────────────────────────── */}
+      {/* ─── LEAVE & PROJECTS STATS CARDS ────────────────────────────────── */}
+      {showAdminGraphs ? (
+        // Admin/HR view - 2 columns
+        <div className="grid grid-cols-1 md:grid-cols-2 gap-4 mb-4">
+          <LeaveStatsCard />
+          <ProjectsStatsCard />
+        </div>
+      ) : (
+        // Employee view - single column, full width
+        <div className="mb-4">
+          <LeaveStatsCard />
+        </div>
+      )}
+
+      {/* ─── ADMIN/HR GRAPHS ──────────────────────────────────────────────── */}
+      {showAdminGraphs && (
+        <>
+          {/* ─── ROW 1: Overview ────────────────────── */}
+          <div className="section-label text-[10px] font-medium uppercase tracking-wider text-gray-400 dark:text-gray-500 mt-2 mb-2">
+            Overview
           </div>
-          <div className="stat-number text-3xl font-extrabold text-green-600">
-            {stats.totalProjects || 0}
+          <div className="grid grid-cols-2 sm:grid-cols-4 gap-3 mb-4">
+            <StatsCard
+              title="Total Employees"
+              value={totalEmployees}
+              icon="fas fa-users"
+              color="green"
+              route="/employees"
+              onClick={() => handleNavigate("/employees")}
+            />
+            <StatsCard
+              title="Punched In"
+              value={punchedInToday}
+              icon="fas fa-fingerprint"
+              color="blue"
+              route="/attendance"
+              onClick={() => handleNavigate("/attendance")}
+            />
+            <StatsCard
+              title="Late"
+              value={lateArrivals}
+              icon="fas fa-clock"
+              color="amber"
+              route="/attendance"
+              onClick={() => handleNavigate("/attendance")}
+            />
+            <StatsCard
+              title="Absent"
+              value={absentToday}
+              icon="fas fa-user-slash"
+              color="red"
+              route="/attendance"
+              onClick={() => handleNavigate("/attendance")}
+            />
           </div>
-          <div className="stat-label text-xs text-[var(--muted)]">
-            Total Projects
+
+          {/* ─── ROW 2: Projects Stats ───────────────────────────── */}
+          <div className="grid grid-cols-2 sm:grid-cols-4 gap-2 mb-4">
+            <StatsCard
+              title="Total Projects"
+              value={totalProjects}
+              icon="fas fa-project-diagram"
+              color="purple"
+              route="/projects"
+              onClick={() => handleNavigate("/projects")}
+            />
+            <StatsCard
+              title="Active"
+              value={activeProjectsCount}
+              icon="fas fa-play-circle"
+              color="green"
+              route="/projects"
+              onClick={() => handleNavigate("/projects")}
+            />
+            <StatsCard
+              title="Assignments"
+              value={totalAssignmentsCount}
+              icon="fas fa-link"
+              color="orange"
+              route="/project-assignments"
+              onClick={() => handleNavigate("/project-assignments")}
+            />
+            <StatsCard
+              title="Assigned"
+              value={employeesAssigned}
+              icon="fas fa-user-check"
+              color="blue"
+              route="/project-assignments"
+              onClick={() => handleNavigate("/project-assignments")}
+            />
+          </div>
+
+          {/* ─── ROW 3: Project Charts ────────────────────────────────────────── */}
+          <div className="section-label text-[10px] font-medium uppercase tracking-wider text-gray-400 dark:text-gray-500 mt-4 mb-2">
+            Project Overview
+          </div>
+          <div className="grid grid-cols-1 lg:grid-cols-2 gap-4 mb-4">
+            <div className="bg-[var(--surface)] border border-[var(--border)] rounded-xl p-3 min-h-[220px]">
+              <ProjectAllocationChart data={allocationData} />
+            </div>
+            <div className="bg-[var(--surface)] border border-[var(--border)] rounded-xl p-3 min-h-[220px]">
+              <ProjectHoursChart data={hoursData} onBarClick={handleBarClick} />
+            </div>
+          </div>
+
+          {/* ─── ROW 3.5: Project Time & Cost Chart ─────────────────────────── */}
+          <div className="section-label text-[10px] font-medium uppercase tracking-wider text-gray-400 dark:text-gray-500 mt-4 mb-2">
+            Project Time & Cost Analysis
+          </div>
+          <div className="mb-4">
+            <ProjectTimeCostChart
+              data={timeCostData} // Use processed timeCostData
+              onBarClick={handleProjectTimeCostClick}
+              loading={
+                projectTimeCostLoading || adminLoading || allProjectsLoading
+              }
+              reportPeriod={{ month: reportMonth, year: reportYear }}
+            />
+          </div>
+
+          {/* ─── ROW 4: Attendance Analytics ──────────────────────────────────── */}
+          <div className="section-label text-[10px] font-medium uppercase tracking-wider text-gray-400 dark:text-gray-500 mt-4 mb-2">
+            Attendance Analytics
+          </div>
+          <div className="grid grid-cols-1 md:grid-cols-3 gap-4 mb-4">
+            <div className="bg-[var(--surface)] border border-[var(--border)] rounded-xl p-3 min-h-[200px]">
+              <WeeklyAttendanceChart data={charts?.weekly_attendance} />
+            </div>
+            <div className="bg-[var(--surface)] border border-[var(--border)] rounded-xl p-3 min-h-[200px]">
+              <TodayStatusChart data={charts?.today_status} />
+            </div>
+            <div className="bg-[var(--surface)] border border-[var(--border)] rounded-xl p-3 min-h-[200px]">
+              <AvgPunchTimeCard data={charts?.avg_punch_time} />
+            </div>
+          </div>
+
+          {/* ─── ROW 5: Punch Activity ────────────────────────────────────────── */}
+          <div className="section-label text-[10px] font-medium uppercase tracking-wider text-gray-400 dark:text-gray-500 mt-4 mb-2">
+            Today's Activity
+          </div>
+          <div className="grid grid-cols-1 lg:grid-cols-2 gap-4 mb-4">
+            <div className="bg-[var(--surface)] border border-[var(--border)] rounded-xl p-3 min-h-[200px]">
+              <RecentPunchesList
+                punches={charts?.recent_punches || []}
+                employees={employees}
+                compact
+              />
+            </div>
+            <div className="bg-[var(--surface)] border border-[var(--border)] rounded-xl p-3 min-h-[200px]">
+              <PunchDistributionChart data={charts?.punch_distribution || []} />
+            </div>
+          </div>
+
+          {/* ─── PROJECT HOURS DETAIL MODAL ───────────────────────────────── */}
+          <ProjectHoursModal
+            isOpen={showProjectHoursModal}
+            onClose={() => {
+              setShowProjectHoursModal(false);
+              setSelectedProjectForModal(null);
+              dispatch(clearMonthlyHours());
+            }}
+            project={selectedProjectForModal}
+            month={modalMonth}
+            year={modalYear}
+            employees={employees}
+          />
+        </>
+      )}
+
+      {/* ─── EMPLOYEE PROJECTS SECTION (Only for non-HR/Admin users) ─── */}
+      {!showAdminGraphs && projectsWithNames.length > 0 && (
+        <div className="projects-section bg-[var(--surface)] border border-[var(--border)] rounded-xl p-3 mb-4">
+          <div className="flex items-center justify-between mb-2">
+            <h3 className="text-sm font-semibold text-[var(--text)] flex items-center gap-2">
+              <i className="fas fa-project-diagram text-green-500"></i>
+              My Projects
+              <span className="text-xs text-[var(--muted)] font-normal">
+                ({projectsWithNames.length})
+              </span>
+            </h3>
+          </div>
+
+          {/* Scrollable container */}
+          <div className="max-h-[300px] overflow-y-auto scrollbar-thin pr-1">
+            <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-2">
+              {projectsWithNames.map((project) => (
+                <div
+                  key={project.id}
+                  className="project-card bg-[var(--surface2)] border border-[var(--border)] rounded-lg p-3 hover:shadow-md transition-all cursor-pointer"
+                  onClick={() => setSelectedProject(project)}
+                >
+                  <div className="flex justify-between items-start mb-1.5">
+                    <h4 className="font-semibold text-[var(--text)] text-sm truncate max-w-[120px]">
+                      {project.name}
+                    </h4>
+                    <span
+                      className={`px-1.5 py-0.5 rounded-full text-[10px] font-semibold ${getPriorityColor(project.priority)}`}
+                    >
+                      {project.priority || "Med"}
+                    </span>
+                  </div>
+
+                  <p className="text-xs text-[var(--text-secondary)] mb-2 line-clamp-1">
+                    {project.description || "No description"}
+                  </p>
+
+                  <div className="flex items-center gap-2 text-[10px] text-[var(--muted)]">
+                    <i className="fas fa-user-tie text-green-500"></i>
+                    <span className="truncate">
+                      {project.managerName || "N/A"}
+                    </span>
+                  </div>
+
+                  <div className="mt-1.5 pt-1.5 border-t border-[var(--border)] flex justify-between items-center">
+                    <span
+                      className={`px-1.5 py-0.5 rounded-full text-[10px] font-semibold ${getStatusColor(project.status)}`}
+                    >
+                      {project.status || "Active"}
+                    </span>
+                    <span className="text-[10px] text-[var(--muted)]">
+                      {project.assigned_at?.split("-")[0] || ""}
+                    </span>
+                  </div>
+                </div>
+              ))}
+            </div>
           </div>
         </div>
-        <div className="stat-card bg-[var(--surface)] border border-[var(--border)] rounded-xl p-5 text-center hover:-translate-y-0.5 hover:shadow-md transition-all">
-          <div className="stat-icon w-12 h-12 rounded-xl bg-blue-500/10 text-blue-500 flex items-center justify-center text-2xl mx-auto mb-3">
-            <i className="fas fa-check-circle"></i>
-          </div>
-          <div className="stat-number text-3xl font-extrabold text-blue-500">
-            {stats.activeProjects || 0}
-          </div>
-          <div className="stat-label text-xs text-[var(--muted)]">
-            Active Projects
-          </div>
-        </div>
-      </div>
-      
-      {/* Projects Section - Keep your existing code */}
-      <div className="projects-section bg-[var(--surface)] border border-[var(--border)] rounded-xl p-5 mb-7">
-        <h3 className="text-base font-semibold text-[var(--text)] mb-5 flex items-center gap-2">
-          <i className="fas fa-project-diagram text-green-500"></i>
-          My Assigned Projects
-        </h3>
-
-        {projectsLoading ? (
-          <div className="flex justify-center items-center py-12">
-            <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-green-500"></div>
-          </div>
-        ) : projects.length === 0 ? (
-          <div className="text-center py-12">
-            <i className="fas fa-folder-open text-5xl text-[var(--muted)] mb-3"></i>
-            <p className="text-[var(--text-secondary)]">
-              No projects assigned yet
-            </p>
-          </div>
-        ) : (
-          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-5">
-            {projects.map((project) => (
-              <div
-                key={project.id}
-                className="project-card bg-[var(--surface2)] border border-[var(--border)] rounded-xl p-5 hover:shadow-md transition-all cursor-pointer"
-                onClick={() => setSelectedProject(project)}
-              >
-                <div className="flex justify-between items-start mb-3">
-                  <h4 className="font-semibold text-[var(--text)] text-base">
-                    {project.name}
-                  </h4>
-                  <span
-                    className={`px-2 py-1 rounded-full text-xs font-semibold ${getPriorityColor(project.priority)}`}
-                  >
-                    {project.priority || "Medium"}
-                  </span>
-                </div>
-
-                <p className="text-sm text-[var(--text-secondary)] mb-3 line-clamp-2">
-                  {project.description || "No description provided"}
-                </p>
-
-                <div className="flex items-center gap-2 mb-2">
-                  <i className="fas fa-user-tie text-xs text-green-500"></i>
-                  <span className="text-xs text-[var(--muted)]">Manager:</span>
-                  <span className="text-xs font-medium text-[var(--text)]">
-                    {project.managerName}
-                  </span>
-                </div>
-
-                <div className="flex items-center gap-2 mb-3">
-                  <i className="fas fa-users text-xs text-blue-500"></i>
-                  <span className="text-xs text-[var(--muted)]">
-                    Team Lead:
-                  </span>
-                  <span className="text-xs font-medium text-[var(--text)]">
-                    {project.teamLeadName}
-                  </span>
-                </div>
-
-                <div className="flex items-center gap-2 mb-3 pt-2 border-t border-[var(--border)]">
-                  <i className="fas fa-calendar-alt text-xs text-purple-500"></i>
-                  <span className="text-xs text-[var(--muted)]">
-                    Assigned on:
-                  </span>
-                  <span className="text-xs font-medium text-[var(--text)]">
-                    {project.assignedDate}
-                  </span>
-                </div>
-
-                <div className="mt-2 pt-2 border-t border-[var(--border)]">
-                  <span
-                    className={`px-2 py-1 rounded-full text-xs font-semibold ${getStatusColor(project.status)}`}
-                  >
-                    {project.status || "Active"}
-                  </span>
-                </div>
-              </div>
-            ))}
-          </div>
-        )}
-      </div>
+      )}
 
       {/* Project Details Modal */}
       {selectedProject && (
@@ -700,7 +1471,7 @@ const Dashboard = () => {
                       Assigned On
                     </label>
                     <p className="text-sm font-semibold text-[var(--text)]">
-                      {selectedProject.assignedDate}
+                      {formatDateDisplay(selectedProject.assigned_at)}
                     </p>
                   </div>
                 </div>
@@ -713,67 +1484,81 @@ const Dashboard = () => {
       {/* Recent Activity Section */}
       {dashboardData?.attendance_history &&
         dashboardData.attendance_history.length > 0 && (
-          <div className="recent-activity bg-[var(--surface)] border border-[var(--border)] rounded-xl p-5">
-            <h3 className="text-base font-semibold text-[var(--text)] mb-5 flex items-center gap-2">
-              <i className="fas fa-history"></i> Recent Activity
-            </h3>
-            <div className="overflow-x-auto">
-              <table className="w-full text-sm">
-                <thead>
-                  <tr className="border-b border-[var(--border)]">
-                    <th className="text-left py-3 px-4 text-[var(--muted)] font-semibold">
-                      Date
-                    </th>
-                    <th className="text-left py-3 px-4 text-[var(--muted)] font-semibold">
-                      Punch In
-                    </th>
-                    <th className="text-left py-3 px-4 text-[var(--muted)] font-semibold">
-                      Location
-                    </th>
-                    <th className="text-left py-3 px-4 text-[var(--muted)] font-semibold">
-                      Punch Out
-                    </th>
-                  </tr>
-                </thead>
-                <tbody>
-                  {dashboardData.attendance_history
-                    .slice(0, 5)
-                    .map((attendance, index) => {
-                    
-                      const locationAddress = attendance.punch_in_address;
+          <div className="recent-activity mt-6 bg-[var(--surface)] border border-[var(--border)] rounded-xl p-3">
+            <div className="flex items-center justify-between mb-2">
+              <h3 className="text-sm font-semibold text-[var(--text)] flex items-center gap-2">
+                <i className="fas fa-history"></i> Recent Activity
+              </h3>
+              <span className="text-[10px] text-[var(--muted)]">
+                {dashboardData.attendance_history.length} records
+              </span>
+            </div>
 
-                      return (
-                        <tr
-                          key={index}
-                          className="border-b border-[var(--border)] hover:bg-[var(--surface2)] transition-colors"
-                        >
-                          <td className="py-3 px-4 text-[var(--text)]">
-                            {attendance.log_date}
-                          </td>
-                          <td className="py-3 px-4 text-[var(--text)]">
-                            {attendance.punch_in
-                              ? formatPunchTime(attendance.punch_in)
-                              : "-"}
-                          </td>
-                          <td className="py-3 px-4">
-                            {locationAddress && (
-                              <div className="text-xs text-[var(--muted)]">
-                                <i className="fas fa-map-marker-alt text-green-500 text-xs mr-1"></i>
-                                {locationAddress.substring(0, 40)}
-                                {locationAddress.length > 40 ? "..." : ""}
-                              </div>
-                            )}
-                          </td>
-                          <td className="py-3 px-4 text-[var(--text)]">
-                            {attendance.punch_out
-                              ? formatPunchTime(attendance.punch_out)
-                              : "-"}
-                          </td>
-                        </tr>
-                      );
-                    })}
-                </tbody>
-              </table>
+            <div className="w-full overflow-auto max-h-[200px]">
+              <div className="min-w-[500px]">
+                <table className="w-full text-xs">
+                  <thead className="sticky top-0 bg-[var(--surface)] z-10">
+                    <tr className="border-b border-[var(--border)]">
+                      <th className="text-left py-2 px-2 text-[var(--muted)] font-semibold">
+                        Date
+                      </th>
+                      <th className="text-left py-2 px-2 text-[var(--muted)] font-semibold">
+                        In
+                      </th>
+                      <th className="text-left py-2 px-2 text-[var(--muted)] font-semibold">
+                        Location
+                      </th>
+                      <th className="text-left py-2 px-2 text-[var(--muted)] font-semibold">
+                        Out
+                      </th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {dashboardData.attendance_history.map(
+                      (attendance, index) => {
+                        const locationAddress = attendance.punch_in_address;
+
+                        return (
+                          <tr
+                            key={index}
+                            className="border-b border-[var(--border)] hover:bg-[var(--surface2)] transition-colors"
+                          >
+                            <td className="py-3 px-2 text-[var(--text)] whitespace-nowrap">
+                              {attendance.log_date}
+                            </td>
+                            <td className="py-3 px-2 text-[var(--text)] whitespace-nowrap">
+                              {attendance.punch_in
+                                ? formatPunchTime(attendance.punch_in)
+                                : "-"}
+                            </td>
+                            <td className="py-3 px-2">
+                              {locationAddress ? (
+                                <div className="text-[10px] text-[var(--muted)] flex items-start gap-1">
+                                  <i className="fas fa-map-marker-alt text-green-500 text-[10px] mt-0.5 flex-shrink-0"></i>
+                                  <span className="break-words">
+                                    {locationAddress.length > 40
+                                      ? locationAddress.substring(0, 40) + "..."
+                                      : locationAddress}
+                                  </span>
+                                </div>
+                              ) : (
+                                <span className="text-[10px] text-[var(--muted)]">
+                                  -
+                                </span>
+                              )}
+                            </td>
+                            <td className="py-3 px-2 text-[var(--text)] whitespace-nowrap">
+                              {attendance.punch_out
+                                ? formatPunchTime(attendance.punch_out)
+                                : "-"}
+                            </td>
+                          </tr>
+                        );
+                      },
+                    )}
+                  </tbody>
+                </table>
+              </div>
             </div>
           </div>
         )}
@@ -809,11 +1594,18 @@ const Dashboard = () => {
               <div className="w-16 h-16 bg-red-100 dark:bg-red-900/30 text-red-500 rounded-full flex items-center justify-center text-3xl mb-4">
                 <i className="fas fa-exclamation-triangle"></i>
               </div>
-              <h3 className="text-xl font-bold text-[var(--text)] mb-2">Pending Punch Out</h3>
+              <h3 className="text-xl font-bold text-[var(--text)] mb-2">
+                Pending Punch Out
+              </h3>
               <p className="text-[var(--text-secondary)] mb-6 text-sm">
-                You didn't punch out on <span className="font-bold text-[var(--text)]">{pendingPunchOutDate}</span>. You have to complete the previous day's punch out. After that you can punch in for today.
+                You didn't punch out on{" "}
+                <span className="font-bold text-[var(--text)]">
+                  {pendingPunchOutDate}
+                </span>
+                . You have to complete the previous day's punch out. After that
+                you can punch in for today.
               </p>
-              
+
               <div className="flex w-full gap-3">
                 <button
                   onClick={() => {
@@ -840,6 +1632,34 @@ const Dashboard = () => {
         </div>
       )}
 
+      {/* Blocked Punch-In Error Modal */}
+      {showBlockedErrorModal && (
+        <div className="fixed inset-0 bg-black/70 flex items-center justify-center z-[60] p-4 animate-fade-in">
+          <div className="bg-[var(--surface)] rounded-xl max-w-md w-full p-6 shadow-2xl animate-slide-up">
+            <div className="flex flex-col items-center text-center">
+              <div className="w-16 h-16 bg-orange-100 dark:bg-orange-900/30 text-orange-500 rounded-full flex items-center justify-center text-3xl mb-4">
+                <i className="fas fa-exclamation-circle"></i>
+              </div>
+              <h3 className="text-xl font-bold text-[var(--text)] mb-2">
+                Punch-In Blocked
+              </h3>
+              <p className="text-[var(--text-secondary)] mb-6 text-sm">
+                {blockedErrorMessage}
+              </p>
+
+              <div className="flex w-full">
+                <button
+                  onClick={() => setShowBlockedErrorModal(false)}
+                  className="flex-1 py-2.5 px-4 bg-[var(--surface2)] border border-[var(--border)] rounded-lg text-[var(--text)] font-medium text-sm hover:bg-[var(--surface3)] transition-colors"
+                >
+                  Close
+                </button>
+              </div>
+            </div>
+          </div>
+        </div>
+      )}
+
       {renderMapModal()}
 
       {/* Error Toast */}
@@ -848,12 +1668,21 @@ const Dashboard = () => {
           error={error}
           onClose={clearError}
           onAction={(actionType) => {
-            if (actionType === 'login') {
-              window.location.href = '/login';
-            } else if (actionType === 'retry') {
+            if (actionType === "login") {
+              window.location.href = "/login";
+            } else if (actionType === "retry") {
               window.location.reload();
-            } else if (actionType === 'contact') {
-              window.location.href = 'mailto:support@company.com';
+            } else if (actionType === "contact") {
+              window.location.href = "mailto:support@company.com";
+            } else if (actionType === "punch_out") {
+              setShowPunchOutModal(true);
+              clearError();
+            } else if (actionType === "wait") {
+              clearError();
+              showToastMessage(
+                "We'll notify you when HR approves your request",
+                "info",
+              );
             }
             clearError();
           }}
@@ -863,10 +1692,10 @@ const Dashboard = () => {
       {/* Success Toast */}
       {toast && (
         <ErrorToast
-          error={{ 
-            type: toast.type, 
-            title: toast.title || 'Success', 
-            message: toast.message 
+          error={{
+            type: toast.type,
+            title: toast.title || "Success",
+            message: toast.message,
           }}
           onClose={() => setToast(null)}
         />

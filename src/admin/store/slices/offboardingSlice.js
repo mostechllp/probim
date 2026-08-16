@@ -6,14 +6,12 @@ export const initiateOffboarding = createAsyncThunk(
   "offboarding/initiate",
   async (offboardingData, { rejectWithValue }) => {
     try {
-      console.log("Initiating offboarding with data:", offboardingData);
 
       const response = await apiClient.post(
         "/admin/offboarding/initiate",
         offboardingData,
       );
 
-      console.log("Offboarding initiated response:", response.data);
 
       if (
         response.data &&
@@ -50,7 +48,6 @@ export const fetchAllOffboarding = createAsyncThunk(
 
       const response = await apiClient.get(`/admin/offboarding?${params}`);
 
-      console.log("All offboarding requests response:", response.data);
 
       if (response.data && response.data.status === "success") {
         return response.data.data;
@@ -73,11 +70,8 @@ export const fetchOffboardingById = createAsyncThunk(
   "offboarding/fetchById",
   async (id, { rejectWithValue }) => {
     try {
-      console.log(`Fetching offboarding details for ID: ${id}`);
 
       const response = await apiClient.get(`/admin/offboarding/${id}`);
-
-      console.log("Offboarding details response:", response.data);
 
       if (response.data && response.data.status === "success") {
         return response.data.data;
@@ -100,13 +94,11 @@ export const fetchOffboardingProgress = createAsyncThunk(
   "offboarding/fetchProgress",
   async (id, { rejectWithValue }) => {
     try {
-      console.log(`Fetching offboarding progress for ID: ${id}`);
 
       const response = await apiClient.get(`/admin/offboarding/${id}/progress`);
 
-      console.log("Offboarding progress response:", response.data);
 
-      // ✅ FIX: Check for status === "success" instead of success === true
+      // Check for status === "success" instead of success === true
       if (response.data && response.data.status === "success") {
         return response.data.data;
       } else {
@@ -123,14 +115,16 @@ export const fetchOffboardingProgress = createAsyncThunk(
   },
 );
 
-// Update Offboarding - PUT /admin/offboarding/{id}
+// Update Offboarding - PUT /admin/offboarding/update-initiate
 export const updateOffboarding = createAsyncThunk(
   "offboarding/update",
   async ({ id, data }, { rejectWithValue }) => {
     try {
-      const response = await apiClient.put(`/admin/offboarding/${id}`, data);
+      const response = await apiClient.put(`/admin/offboarding/update-initiate`, {
+        ...data,
+        offboarding_id: id
+      });
 
-      console.log("Offboarding updated response:", response.data);
 
       if (response.data && response.data.status === "success") {
         return response.data.data;
@@ -155,7 +149,6 @@ export const deleteOffboarding = createAsyncThunk(
     try {
       const response = await apiClient.delete(`/admin/offboarding/${id}`);
 
-      console.log("Offboarding deleted response:", response.data);
 
       if (response.data && response.data.status === "success") {
         return { id, message: response.data.message };
@@ -179,14 +172,12 @@ export const updateVisaStatus = createAsyncThunk(
   async ({ id, visaData }, { rejectWithValue }) => {
     try {
       const response = await apiClient.post(
-        `/admin/offboarding/${id}/visa-status/complete`,
+        `/admin/offboarding/${id}/visa-status`,
         visaData,
       );
 
-      console.log("Visa status updated:", response.data);
-
-      if (response.data && response.data.status === "success") {
-        return response.data.data;
+      if (response.data && (response.data.status === "success" || response.data.success === true)) {
+        return response.data.data ? { id, ...response.data.data } : { id };
       } else {
         return rejectWithValue(
           response.data?.message || "Failed to update visa status",
@@ -211,10 +202,9 @@ export const updateChecklist = createAsyncThunk(
         checklistData,
       );
 
-      console.log("Checklist updated:", response.data);
 
-      if (response.data && response.data.status === "success") {
-        return response.data.data;
+      if (response.data && (response.data.status === "success" || response.data.success === true)) {
+        return response.data.data ? { id, ...response.data.data } : { id };
       } else {
         return rejectWithValue(
           response.data?.message || "Failed to update checklist",
@@ -239,10 +229,9 @@ export const updateAssets = createAsyncThunk(
         assetsData,
       );
 
-      console.log("Assets updated:", response.data);
 
-      if (response.data && response.data.status === "success") {
-        return response.data.data;
+      if (response.data && (response.data.status === "success" || response.data.success === true)) {
+        return response.data.data ? { id, ...response.data.data } : { id };
       } else {
         return rejectWithValue(
           response.data?.message || "Failed to update assets",
@@ -267,10 +256,8 @@ export const submitInterview = createAsyncThunk(
         interviewData,
       );
 
-      console.log("Interview submitted:", response.data);
-
-      if (response.data && response.data.status === "success") {
-        return response.data.data;
+      if (response.data && (response.data.status === "success" || response.data.success === true)) {
+        return response.data.data ? { id, ...response.data.data } : { id };
       } else {
         return rejectWithValue(
           response.data?.message || "Failed to submit interview",
@@ -295,7 +282,6 @@ export const updateSettlement = createAsyncThunk(
         settlementData,
       );
 
-      console.log("Settlement updated:", response.data);
 
       if (response.data && response.data.status === "success") {
         return response.data.data;
@@ -323,7 +309,6 @@ export const generateLetters = createAsyncThunk(
         lettersData,
       );
 
-      console.log("Letters generated:", response.data);
 
       if (response.data && response.data.status === "success") {
         return response.data.data;
@@ -348,7 +333,6 @@ export const cancelOffboarding = createAsyncThunk(
     try {
       const response = await apiClient.delete(`/admin/offboarding/${id}`);
 
-      console.log("Offboarding cancelled:", response.data);
 
       if (response.data && response.data.status === "success") {
         return { id, message: response.data.message };
@@ -376,7 +360,6 @@ export const saveOffboardingDraft = createAsyncThunk(
         draftData,
       );
 
-      console.log("Draft saved:", response.data);
 
       if (response.data && response.data.status === "success") {
         return response.data.data;
@@ -392,6 +375,30 @@ export const saveOffboardingDraft = createAsyncThunk(
       );
     }
   },
+);
+
+// Complete Offboarding - POST /admin/offboarding/{id}/complete
+export const completeOffboarding = createAsyncThunk(
+  "offboarding/completeOffboarding",
+  async (id, { rejectWithValue }) => {
+    try {
+      const response = await apiClient.post(`/admin/offboarding/${id}/complete`);
+      
+
+      if (response.data && (response.data.status === "success" || response.data.success === true)) {
+        return { id, ...response.data.data };
+      } else {
+        return rejectWithValue(
+          response.data?.message || "Failed to complete offboarding"
+        );
+      }
+    } catch (error) {
+      console.error("Complete offboarding error:", error.response?.data);
+      return rejectWithValue(
+        error.response?.data?.message || "Failed to complete offboarding"
+      );
+    }
+  }
 );
 
 // ----------------------------------------------------
@@ -565,6 +572,7 @@ const offboardingSlice = createSlice({
       .addCase(updateVisaStatus.fulfilled, (state, action) => {
         if (
           state.currentOffboarding &&
+          action.payload &&
           state.currentOffboarding.id === action.payload.id
         ) {
           state.currentOffboarding.visa_status = action.payload.visa_status;
@@ -576,6 +584,7 @@ const offboardingSlice = createSlice({
       .addCase(updateChecklist.fulfilled, (state, action) => {
         if (
           state.currentOffboarding &&
+          action.payload &&
           state.currentOffboarding.id === action.payload.id
         ) {
           state.currentOffboarding.checklist = action.payload.checklist;
@@ -588,6 +597,7 @@ const offboardingSlice = createSlice({
       .addCase(updateAssets.fulfilled, (state, action) => {
         if (
           state.currentOffboarding &&
+          action.payload &&
           state.currentOffboarding.id === action.payload.id
         ) {
           state.currentOffboarding.assets = action.payload.assets;

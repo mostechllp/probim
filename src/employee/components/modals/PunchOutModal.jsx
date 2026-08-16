@@ -230,13 +230,6 @@ const PunchOutModal = ({
     const maxHours = Math.max(0, Math.min(roundedHours, 24));
     setMaxWorkingHours(maxHours);
 
-    // Debug logging
-    console.log("Punch In Date:", punchInDateObj);
-    console.log("Punch Out Date:", punchOutDateObj);
-    console.log("Difference (ms):", diffMs);
-    console.log("Difference (hours):", diffHours);
-    console.log("Rounded hours:", roundedHours);
-    console.log("Max hours:", maxHours);
   };
 
   // Fetch projects
@@ -471,6 +464,7 @@ const PunchOutModal = ({
     }
   };
 
+  // Update the formatWorkingHours function to handle the display better
   const formatWorkingHours = (hours) => {
     if (!hours || hours <= 0) return "0 hrs";
 
@@ -481,6 +475,42 @@ const PunchOutModal = ({
     if (mins === 0) return `${hrs} hr${hrs > 1 ? "s" : ""}`;
     return `${hrs} hr ${mins} min`;
   };
+
+  // In PunchOutModal.jsx, update the useEffect that handles cleanup
+
+useEffect(() => {
+  if (isOpen) {
+    calculateWorkingHours();
+    fetchProjects();
+  }
+  return () => {
+    // Reset all state when modal is closed/cancelled
+    setConfirmNoProjects(false);
+    setTasksCompleted("");
+    setPlanTomorrow("");
+    setRemarks("");
+    setPunchOutTime("");
+    setTotalHours(0);
+    setMaxWorkingHours(0);
+    setProjectTimes({}); 
+    setProjects([]);
+  };
+}, [isOpen]);
+
+  // Add a new function to format decimal hours to hours and minutes for display
+  const formatHoursAndMinutes = (hours) => {
+    if (!hours || hours <= 0) return "0h 0m";
+
+    const hrs = Math.floor(hours);
+    const mins = Math.round((hours - hrs) * 60);
+
+    if (hrs === 0 && mins === 0) return "0h 0m";
+    if (hrs === 0) return `${mins}m`;
+    if (mins === 0) return `${hrs}h`;
+    return `${hrs}h ${mins}m`;
+  };
+
+  // Update the Working Hours Summary section in the return statement
 
   // Helper to convert 24-hour time to 12-hour format for display
   const convertTo12Hour = (time24) => {
@@ -623,6 +653,7 @@ const PunchOutModal = ({
             </label>
 
             {/* Working Hours Summary */}
+            {/* Working Hours Summary */}
             <div className="mb-4 p-4 bg-blue-500/10 rounded-xl border border-blue-500/20">
               <div className="flex justify-between items-center">
                 <div>
@@ -656,7 +687,7 @@ const PunchOutModal = ({
                   </span>
                   <span className="ml-2 text-lg font-bold text-blue-500">
                     {maxWorkingHours > 0
-                      ? formatWorkingHours(maxWorkingHours)
+                      ? formatHoursAndMinutes(maxWorkingHours)
                       : "—"}
                   </span>
                 </div>
@@ -667,7 +698,7 @@ const PunchOutModal = ({
                   <span
                     className={`ml-2 text-lg font-bold ${totalHours > maxWorkingHours ? "text-red-500" : "text-green-500"}`}
                   >
-                    {isNaN(totalHours) ? "0" : totalHours.toFixed(2)} hours
+                    {formatHoursAndMinutes(totalHours)}
                   </span>
                 </div>
               </div>
@@ -684,8 +715,8 @@ const PunchOutModal = ({
                   </div>
                   <div className="text-xs text-[var(--muted)] mt-1">
                     {totalHours > maxWorkingHours
-                      ? `⚠️ Over by ${(totalHours - maxWorkingHours).toFixed(2)} hours`
-                      : `${(maxWorkingHours - totalHours).toFixed(2)} hours remaining`}
+                      ? `⚠️ Over by ${formatHoursAndMinutes(totalHours - maxWorkingHours)}`
+                      : `${formatHoursAndMinutes(maxWorkingHours - totalHours)} remaining`}
                   </div>
                 </div>
               )}
@@ -694,7 +725,7 @@ const PunchOutModal = ({
             {projects.length > 0 && (
               <p className="text-xs text-[var(--muted)] mb-3">
                 Enter the time you spent working on each project (max{" "}
-                 {formatWorkingHours(maxWorkingHours)} hours total)
+                {formatWorkingHours(maxWorkingHours)} hours total)
               </p>
             )}
           </div>
@@ -740,8 +771,8 @@ const PunchOutModal = ({
                     key={project.id}
                     className="flex items-center justify-between bg-[var(--surface2)] p-4 rounded-xl border border-[var(--border)] hover:border-green-500/30 transition-all"
                   >
-                    <div className="flex-1">
-                      <span className="text-sm font-semibold text-[var(--text)]">
+                    <div className="flex-1 min-w-0">
+                      <span className="text-sm font-semibold text-[var(--text)] truncate block">
                         {project.name}
                       </span>
                       {project.description && (
@@ -750,18 +781,18 @@ const PunchOutModal = ({
                         </p>
                       )}
                     </div>
-                    <div className="flex items-center gap-3">
-                      <div className="w-32">
+                    <div className="flex items-center gap-3 flex-shrink-0">
+                      <div className="w-36">
                         <TimeInputWorking
                           value={projectTimes[project.id] || ""}
                           onChange={(e) =>
                             handleTimeChange(project.id, e.target.value)
                           }
-                          className="text-sm"
                           maxHours={maxWorkingHours}
+                          className="text-sm"
                         />
                       </div>
-                      <span className="text-xs text-[var(--muted)] w-20">
+                      <span className="text-xs text-[var(--muted)] w-20 text-right">
                         {formatTimeDisplay(projectTimes[project.id])}
                       </span>
                     </div>
@@ -842,6 +873,7 @@ const TaskReportsList = () => {
   useEffect(() => {
     dispatch(fetchTaskReports());
   }, [dispatch]);
+  
 
   // Handle errors
   useEffect(() => {

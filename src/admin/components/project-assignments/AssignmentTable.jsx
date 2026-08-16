@@ -43,7 +43,6 @@ const EmployeeProjectsModal = ({
     if (isOpen && userId && !hasFetched) {
       // Check if we already have the data in Redux
       if (employeeWorkingTime && employeeWorkingTime[userId]) {
-        console.log("Using cached working time for userId:", userId);
         setWorkingTimeData(employeeWorkingTime[userId]);
         setHasFetched(true);
         return;
@@ -53,11 +52,9 @@ const EmployeeProjectsModal = ({
       const fetchWorkingTime = async () => {
         setIsLoadingTime(true);
         try {
-          console.log("Fetching working time for userId:", userId);
           const result = await dispatch(
             fetchEmployeeProjectWorkingTime(userId),
           ).unwrap();
-          console.log("Working time result:", result);
           setWorkingTimeData(result.data);
           setHasFetched(true);
         } catch (error) {
@@ -143,8 +140,6 @@ const EmployeeProjectsModal = ({
       ? projectsWithDetails.filter((p) => projectIds.includes(String(p.id)))
       : [];
 
-  console.log("Assigned projects:", assignedProjects);
-  console.log("Working time data:", workingTimeData);
 
   // Helper to get working time for a project
   const getProjectWorkingTime = (projectId) => {
@@ -152,14 +147,11 @@ const EmployeeProjectsModal = ({
       return null;
     }
 
-    console.log("Looking for projectId:", projectId);
-    console.log("Available workingTimeData:", workingTimeData);
 
     const projectTime = workingTimeData.find(
       (item) => String(item.project_id) === String(projectId),
     );
 
-    console.log("Found projectTime:", projectTime);
     return projectTime;
   };
 
@@ -234,7 +226,7 @@ const EmployeeProjectsModal = ({
                   {employeeName}
                 </h3>
                 <p className="text-[10.5px] text-gray-400 dark:text-gray-500 font-semibold mt-1.5 leading-none">
-                  {employeeCode} &bull; {designation} &bull; {department}
+                  {employeeCode} 
                 </p>
               </div>
             </div>
@@ -439,59 +431,70 @@ const AssignmentTable = ({
   const [drawerOpen, setDrawerOpen] = useState(false);
   const [drawerEmployee, setDrawerEmployee] = useState(null);
 
-  // Map assignments to include employee information for quick searches and sorts
-  // Map assignments to include employee information for quick searches and sorts
-const fullAssignments = useMemo(() => {
-  if (!assignments || !Array.isArray(assignments)) {
-    return [];
-  }
+  // Sort options for dropdown
+  const sortOptions = [
+    { value: "employeeName_asc", label: "Name (A-Z)" },
+    { value: "employeeName_desc", label: "Name (Z-A)" },
+    { value: "projectCount_asc", label: "Fewest Projects" },
+    { value: "projectCount_desc", label: "Most Projects" },
+  ];
 
-  return assignments.map((assign) => {
-    // Try to find the employee for additional info (name, avatar, etc.)
-    const emp =
-      employees && Array.isArray(employees)
-        ? employees.find((e) => {
-            const empId = Number(e.id);
-            const userId = Number(e.user_id);
-            const assignId = Number(assign.employeeId);
-            // Also check by employee_id string
-            return empId === assignId || userId === assignId || e.employee_id === assign.employeeCode;
-          })
+  const handleSortChange = (e) => {
+    const [field, direction] = e.target.value.split("_");
+    setSortField(field);
+    setSortDirection(direction);
+  };
+
+  // Get current sort value for dropdown
+  const getCurrentSortValue = () => {
+    return `${sortField}_${sortDirection}`;
+  };
+
+  // In AssignmentTable.jsx - fullAssignments mapping
+  const fullAssignments = useMemo(() => {
+    if (!assignments || !Array.isArray(assignments)) {
+      return [];
+    }
+
+    return assignments.map((assign) => {
+      // Find employee by ID (primary key)
+      const emp = employees && Array.isArray(employees)
+        ? employees.find((e) => Number(e.id) === Number(assign.employeeId))
         : undefined;
-    
-    let employeeName = emp?.name || "";
-    if (!employeeName && (assign.firstName || assign.lastName)) {
-      employeeName = [assign.firstName, assign.lastName]
-        .filter(Boolean)
-        .join(" ");
-    }
-    if (!employeeName && emp) {
-      employeeName = [emp.first_name, emp.last_name]
-        .filter(Boolean)
-        .join(" ");
-    }
-    if (!employeeName && emp) {
-      employeeName = emp.user?.username || `Employee #${emp.id}`;
-    }
-    if (!employeeName) employeeName = `Employee #${assign.employeeId}`;
+      
+      let employeeName = emp?.name || "";
+      if (!employeeName && (assign.firstName || assign.lastName)) {
+        employeeName = [assign.firstName, assign.lastName]
+          .filter(Boolean)
+          .join(" ");
+      }
+      if (!employeeName && emp) {
+        employeeName = [emp.first_name, emp.last_name]
+          .filter(Boolean)
+          .join(" ");
+      }
+      if (!employeeName && emp) {
+        employeeName = emp.user?.username || `Employee #${emp.id}`;
+      }
+      if (!employeeName) employeeName = `Employee #${assign.employeeId}`;
 
-    // IMPORTANT: Use the employeeCode from the assignment data directly
-    // This is the actual employee_id from the API like "EMP-MCS2HX"
-    // Only fallback to emp?.employee_id if assign.employeeCode is not available
-    const employeeCode = assign.employeeCode || emp?.employee_id || `EMP-${assign.employeeId}`;
+      // IMPORTANT: Use emp?.employee_id (from the employee data) as the primary source
+      // Only fallback to assign.employeeCode if emp doesn't have it
+      const employeeCode = emp?.employee_id || assign.employeeCode || `EMP-${assign.employeeId}`;
 
-    return {
-      ...assign,
-      employeeName,
-      employeeCode, // Use the employeeCode from the assignment
-      userId: assign.userId || emp?.user_id || emp?.user?.id || null,
-      designation: emp?.designation || emp?.user?.designation?.name || "-",
-      department: emp?.department || emp?.user?.department?.name || "-",
-      avatar: getPhotoUrl(emp?.avatar) || null,
-      projectCount: assign.projectIds?.length || 0,
-    };
-  });
-}, [assignments, employees]);
+      return {
+        ...assign,
+        employeeName,
+        employeeCode, // Use the employee's employee_id
+        userId: assign.userId || emp?.user_id || emp?.user?.id || null,
+        designation: emp?.designation || emp?.user?.designation?.name || "-",
+        department: emp?.department || emp?.user?.department?.name || "-",
+        avatar: getPhotoUrl(emp?.avatar) || null,
+        projectCount: assign.projectIds?.length || 0,
+      };
+    });
+  }, [assignments, employees]);
+
   // Build projects with manager/team lead data from assignments
   const projectsWithDetails = useMemo(() => {
     if (!assignments || !Array.isArray(assignments)) return [];
@@ -615,6 +618,19 @@ const fullAssignments = useMemo(() => {
     setDrawerOpen(true);
   };
 
+  // Handle row click - opens the modal
+  const handleRowClick = (assign) => {
+    handleOpenDrawer(assign);
+  };
+
+  // Handle action button click - prevents row click from triggering
+  const handleActionClick = (e, callback, assign) => {
+    e.stopPropagation();
+    if (callback) {
+      callback(assign);
+    }
+  };
+
   return (
     <div className="bg-white dark:bg-gray-800 rounded-2xl border border-gray-100 dark:border-gray-700/60 shadow-soft overflow-hidden animate-fadeIn">
       {/* Utilities Control Bar */}
@@ -639,24 +655,44 @@ const fullAssignments = useMemo(() => {
           </span>
         </div>
 
-        {/* Global Filter Input */}
-        <div className="relative w-full md:w-80">
-          <input
-            type="text"
-            placeholder="Search employee, ID or assigned projects..."
-            value={searchTerm}
-            onChange={(e) => setSearchTerm(e.target.value)}
-            className="w-full pl-9 pr-4 py-2 text-xs rounded-xl border border-gray-250 dark:border-gray-600 bg-gray-55 dark:bg-gray-750 text-gray-800 dark:text-gray-200 placeholder-gray-400 focus:outline-none focus:ring-2 focus:ring-green-500/20 focus:border-green-500 focus:bg-white dark:focus:bg-gray-800 transition-all placeholder:text-gray-400"
-          />
-          <i className="fas fa-search absolute left-3 top-3 text-gray-400 text-xs"></i>
-          {searchTerm && (
-            <button
-              onClick={() => setSearchTerm("")}
-              className="absolute right-3 top-2.5 text-gray-400 hover:text-red-500"
+        {/* Sort Dropdown and Search */}
+        <div className="flex items-center gap-3 w-full md:w-auto">
+          {/* Sort Dropdown */}
+          <div className="relative">
+            <select
+              value={getCurrentSortValue()}
+              onChange={handleSortChange}
+              className="pl-9 pr-8 py-2 text-xs rounded-xl border border-gray-200 dark:border-gray-600 bg-gray-50 dark:bg-gray-700/30 text-gray-700 dark:text-gray-300 font-medium focus:outline-none focus:ring-2 focus:ring-green-500/20 focus:border-green-500 focus:bg-white dark:focus:bg-gray-800 transition-all appearance-none cursor-pointer min-w-[140px]"
             >
-              <i className="fas fa-times text-xs"></i>
-            </button>
-          )}
+              {sortOptions.map((option) => (
+                <option key={option.value} value={option.value}>
+                  {option.label}
+                </option>
+              ))}
+            </select>
+            <i className="fas fa-sort absolute left-3 top-2.5 text-gray-400 text-xs"></i>
+            <i className="fas fa-chevron-down absolute right-3 top-2.5 text-gray-400 text-[10px] pointer-events-none"></i>
+          </div>
+
+          {/* Global Filter Input */}
+          <div className="relative w-full md:w-64">
+            <input
+              type="text"
+              placeholder="Search employee, ID or projects..."
+              value={searchTerm}
+              onChange={(e) => setSearchTerm(e.target.value)}
+              className="w-full pl-9 pr-4 py-2 text-xs rounded-xl border border-gray-250 dark:border-gray-600 bg-gray-55 dark:bg-gray-750 text-gray-800 dark:text-gray-200 placeholder-gray-400 focus:outline-none focus:ring-2 focus:ring-green-500/20 focus:border-green-500 focus:bg-white dark:focus:bg-gray-800 transition-all placeholder:text-gray-400"
+            />
+            <i className="fas fa-search absolute left-3 top-3 text-gray-400 text-xs"></i>
+            {searchTerm && (
+              <button
+                onClick={() => setSearchTerm("")}
+                className="absolute right-3 top-2.5 text-gray-400 hover:text-red-500"
+              >
+                <i className="fas fa-times text-xs"></i>
+              </button>
+            )}
+          </div>
         </div>
       </div>
 
@@ -687,8 +723,16 @@ const fullAssignments = useMemo(() => {
                   ></i>
                 )}
               </th>
-              <th className="px-6 py-4 text-xs font-bold text-gray-500 dark:text-gray-400 uppercase tracking-wider select-none whitespace-nowrap">
+              <th
+                onClick={() => handleSort("projectCount")}
+                className="px-6 py-4 text-xs font-bold text-gray-500 dark:text-gray-400 uppercase tracking-wider cursor-pointer hover:bg-gray-100/50 dark:hover:bg-gray-700/30 select-none whitespace-nowrap transition-colors"
+              >
                 Assigned {PROJECT_MODULE_NAME}s
+                {sortField === "projectCount" && (
+                  <i
+                    className={`fas fa-sort-amount-${sortDirection === "asc" ? "up" : "down"} text-green-500 ml-1.5`}
+                  ></i>
+                )}
               </th>
               <th className="px-6 py-4 text-xs font-bold text-gray-500 dark:text-gray-400 uppercase tracking-wider select-none text-right whitespace-nowrap">
                 Actions
@@ -748,16 +792,14 @@ const fullAssignments = useMemo(() => {
               paginatedAssignments.map((assign) => (
                 <tr
                   key={assign.employeeId}
-                  className="hover:bg-gray-50/50 dark:hover:bg-gray-700/10 transition-colors group"
+                  onClick={() => handleRowClick(assign)}
+                  className="hover:bg-gray-50/50 dark:hover:bg-gray-700/10 transition-colors group cursor-pointer"
                 >
                   {/* Employee Info Card */}
                   <td className="px-6 py-4 whitespace-nowrap">
                     <div className="flex items-center gap-3">
                       {/* Avatar */}
-                      <div
-                        onClick={() => handleOpenDrawer(assign)}
-                        className="w-8 h-8 rounded-full overflow-hidden bg-gradient-to-br from-green-500/20 to-teal-500/20 dark:from-green-500/10 dark:to-teal-500/10 flex items-center justify-center flex-shrink-0 border border-gray-100 dark:border-gray-700 cursor-pointer hover:ring-2 hover:ring-green-400 transition-all"
-                      >
+                      <div className="w-8 h-8 rounded-full overflow-hidden bg-gradient-to-br from-green-500/20 to-teal-500/20 dark:from-green-500/10 dark:to-teal-500/10 flex items-center justify-center flex-shrink-0 border border-gray-100 dark:border-gray-700 transition-all">
                         {assign.avatar ? (
                           <img
                             src={assign.avatar}
@@ -779,14 +821,8 @@ const fullAssignments = useMemo(() => {
 
                       {/* Details */}
                       <div className="min-w-0">
-                        <span
-                          onClick={() => handleOpenDrawer(assign)}
-                          className="text-sm font-bold text-gray-800 dark:text-gray-200 block hover:text-green-550 cursor-pointer transition-colors"
-                        >
+                        <span className="text-sm font-bold text-gray-800 dark:text-gray-200 block transition-colors">
                           {assign.employeeName}
-                        </span>
-                        <span className="text-[10px] text-gray-400 dark:text-gray-500 block leading-none mt-1 font-semibold">
-                          {assign.designation} &bull; {assign.department}
                         </span>
                       </div>
                     </div>
@@ -799,12 +835,17 @@ const fullAssignments = useMemo(() => {
                     </span>
                   </td>
 
-                  {/* Assigned Tags List */}
+                  {/* Assigned Tags List with Count */}
                   <td className="px-6 py-4">
-                    <ProjectTags
-                      projectIds={assign.projectIds}
-                      projectsList={projects}
-                    />
+                    <div className="flex items-center gap-2">
+                      <ProjectTags
+                        projectIds={assign.projectIds}
+                        projectsList={projects}
+                      />
+                      <span className="text-xs text-gray-400 font-medium ml-1">
+                        ({assign.projectCount})
+                      </span>
+                    </div>
                   </td>
 
                   {/* Actions Column */}
@@ -812,7 +853,7 @@ const fullAssignments = useMemo(() => {
                     <div className="flex justify-end items-center gap-2">
                       {/* View Assignments (Drawer) */}
                       <button
-                        onClick={() => handleOpenDrawer(assign)}
+                        onClick={(e) => handleActionClick(e, handleOpenDrawer, assign)}
                         title="View Assignments Card"
                         className="w-8 h-8 rounded-lg bg-blue-500/10 hover:bg-blue-500 text-blue-550 hover:text-white flex items-center justify-center transition-all shadow-sm hover:shadow-soft"
                       >
@@ -821,7 +862,7 @@ const fullAssignments = useMemo(() => {
 
                       {/* Edit Button */}
                       <button
-                        onClick={() => onEdit(assign)}
+                        onClick={(e) => handleActionClick(e, onEdit, assign)}
                         title="Edit Assignment"
                         className="w-8 h-8 rounded-lg bg-green-500/10 hover:bg-green-500 text-green-500 hover:text-white flex items-center justify-center transition-all shadow-sm hover:shadow-soft"
                       >
@@ -830,7 +871,7 @@ const fullAssignments = useMemo(() => {
 
                       {/* Delete Button */}
                       <button
-                        onClick={() => onDelete(assign)}
+                        onClick={(e) => handleActionClick(e, onDelete, assign)}
                         title="Delete Assignment"
                         className="w-8 h-8 rounded-lg bg-red-500/10 hover:bg-red-500 text-red-500 hover:text-white flex items-center justify-center transition-all shadow-sm hover:shadow-soft"
                       >

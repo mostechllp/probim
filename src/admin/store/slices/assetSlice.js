@@ -11,7 +11,6 @@ export const fetchAssetTypes = createAsyncThunk(
   async (_, { rejectWithValue }) => {
     try {
       const response = await apiClient.get("/admin/assets/types");
-      console.log("Asset types fetched:", response.data);
 
       // Handle if response is directly the array
       if (Array.isArray(response.data)) {
@@ -47,7 +46,6 @@ export const createAssetType = createAsyncThunk(
   async (typeData, { rejectWithValue }) => {
     try {
       const response = await apiClient.post("/admin/assets/types", typeData);
-      console.log("Asset type created:", response.data);
 
       // Check if response has the created data (has id property)
       if (response.data && response.data.id) {
@@ -84,7 +82,6 @@ export const fetchAssetTypeById = createAsyncThunk(
   async (id, { rejectWithValue }) => {
     try {
       const response = await apiClient.get(`/admin/assets/types/${id}`);
-      console.log("Asset type fetched:", response.data);
 
       if (response.data && response.data.status === "success") {
         return response.data.data;
@@ -110,7 +107,6 @@ export const updateAssetType = createAsyncThunk(
         `/admin/assets/types/${id}`,
         typeData,
       );
-      console.log("Asset type updated:", response.data);
 
       // Check if response has the updated data (has id property)
       if (response.data && response.data.id) {
@@ -147,7 +143,6 @@ export const deleteAssetType = createAsyncThunk(
   async (id, { rejectWithValue }) => {
     try {
       const response = await apiClient.delete(`/admin/assets/types/${id}`);
-      console.log("Asset type deleted:", response.data);
 
       // Check if deletion was successful
       if (
@@ -200,7 +195,6 @@ export const fetchAssets = createAsyncThunk(
       });
 
       const response = await apiClient.get(`/admin/assets?${params}`);
-      console.log("Assets fetched:", response.data);
 
       if (Array.isArray(response.data)) {
         return {
@@ -237,8 +231,7 @@ export const fetchEmployeeAssets = createAsyncThunk(
   "assets/fetchEmployeeAssets",
   async (employeeId, { rejectWithValue }) => {
     try {
-      const response = await apiClient.get(`/employee/assets/${employeeId}`);
-      console.log("Employee assets fetched:", response.data);
+      const response = await apiClient.get(`/admin/assets/employee/${employeeId}`);
 
       if (response.data && response.data.success === true) {
         return response.data.data;
@@ -248,6 +241,12 @@ export const fetchEmployeeAssets = createAsyncThunk(
       );
     } catch (error) {
       console.error("Fetch employee assets error:", error.response?.data);
+      
+      // If backend returns 404 for "No active assets", treat it as an empty list instead of an error
+      if (error.response && error.response.status === 404) {
+        return [];
+      }
+
       return rejectWithValue(
         error.response?.data?.message || "Failed to fetch employee assets",
       );
@@ -261,7 +260,6 @@ export const createAsset = createAsyncThunk(
   async (assetData, { rejectWithValue }) => {
     try {
       const response = await apiClient.post("/admin/assets", assetData);
-      console.log("Asset created:", response.data);
 
       if (response.data && response.data.id) {
         return response.data;
@@ -295,7 +293,6 @@ export const fetchAssetById = createAsyncThunk(
   async (id, { rejectWithValue }) => {
     try {
       const response = await apiClient.get(`/admin/assets/${id}`);
-      console.log("Asset fetched:", response.data);
 
       if (response.data && response.data.status === "success") {
         return response.data.data;
@@ -316,7 +313,6 @@ export const updateAsset = createAsyncThunk(
   async ({ id, assetData }, { rejectWithValue }) => {
     try {
       const response = await apiClient.put(`/admin/assets/${id}`, assetData);
-      console.log("Asset updated:", response.data);
 
       if (response.data && response.data.id) {
         return response.data;
@@ -350,7 +346,6 @@ export const deleteAsset = createAsyncThunk(
   async (id, { rejectWithValue }) => {
     try {
       const response = await apiClient.delete(`/admin/assets/${id}`);
-      console.log("Asset deleted:", response.data);
 
       if (
         response.data &&
@@ -393,7 +388,6 @@ export const assignAsset = createAsyncThunk(
         `/admin/assets/${id}/assign`,
         assignmentData,
       );
-      console.log("Asset assigned:", response.data);
 
       if (response.data && response.data.id) {
         return response.data;
@@ -429,7 +423,6 @@ export const revokeAsset = createAsyncThunk(
       const response = await apiClient.post(`/admin/assets/${id}/revoke`, {
         reason,
       });
-      console.log("Asset assignment revoked:", response.data);
 
       if (
         response.data &&

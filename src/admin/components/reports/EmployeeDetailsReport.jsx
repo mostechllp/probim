@@ -1,45 +1,92 @@
 import { useEffect, useState } from "react";
 import { useDispatch, useSelector } from "react-redux";
-import { Link } from "react-router-dom";
+import { Link, useLocation } from "react-router-dom";
 import SearchBar from "../common/SearchBar";
 import EntriesSelector from "../common/EntriesSelector";
 import { showToast } from "../../../components/common/Toast";
 import Pagination from "../common/Paginations";
-import { fetchEmployeeDetailsReport } from "../../store/slices/reportSlice";
+import { fetchEmployeeDetailsReport, selectEmployeeDetails, selectEmployeeDetailsLoading, selectEmployeeDetailsPagination } from "../../store/slices/reportSlice";
 import { exportToCSV, formatDate } from "../../../utils/reportUtils";
-import { generateEmployeeDetailsPDF } from "../../../utils/reportPDFConfigs";
 import ExportModal from "../../../components/common/ExportModal";
+import apiClient from "../../../utils/apiClient";
+import { getPhotoUrl, getFallbackAvatar } from "../../../utils/imageHelper";
 
 const EmployeeDetailsReport = () => {
   const dispatch = useDispatch();
-  const { employees = [], loading } = useSelector(
-    (state) => state.employees || {},
-  );
+  const location = useLocation();
+
+  // Determine base path based on current route
+  const getBasePath = () => {
+    if (location.pathname.startsWith('/admin')) return '/admin';
+    if (location.pathname.startsWith('/employee')) return '/employee';
+    return '';
+  };
+  const basePath = getBasePath();
+  const rawEmployees = useSelector(selectEmployeeDetails) || [];
+  const loading = useSelector(selectEmployeeDetailsLoading);
+  const pagination = useSelector(selectEmployeeDetailsPagination);
+  const employees = Array.isArray(rawEmployees) ? rawEmployees : [];
 
   // Local state for filtering and pagination
   const [searchTerm, setSearchTerm] = useState("");
   const [currentPage, setCurrentPage] = useState(1);
   const [perPage, setPerPage] = useState(10);
   const [showExportModal, setShowExportModal] = useState(false);
+  const [showViewModal, setShowViewModal] = useState(false);
+  const [selectedEmployee, setSelectedEmployee] = useState(null);
 
   // Filter states
-  const [selectedCompany, setSelectedCompany] = useState("");
   const [selectedDepartment, setSelectedDepartment] = useState("");
   const [selectedStatus, setSelectedStatus] = useState("all");
 
   // Export states
   const [exportFormat, setExportFormat] = useState("csv");
 
+  // Global counts from API
+  const [totalActiveCount, setTotalActiveCount] = useState(0);
+  const [totalInactiveCount, setTotalInactiveCount] = useState(0);
+
   useEffect(() => {
-    dispatch(
-      fetchEmployeeDetailsReport({
-        page: currentPage,
-        per_page: perPage,
-        start_date: "2024-01-01",
-        end_date: "2024-01-31",
-      }),
-    );
-  }, [dispatch]);
+    const fetchCounts = async () => {
+      try {
+        const activeRes = await apiClient.get("/admin/reports/employees", {
+          params: {
+            per_page: 1,
+            department: selectedDepartment || undefined,
+            status: "active",
+            search: searchTerm || undefined,
+          }
+        });
+        const inactiveRes = await apiClient.get("/admin/reports/employees", {
+          params: {
+            per_page: 1,
+            department: selectedDepartment || undefined,
+            status: "inactive",
+            search: searchTerm || undefined,
+          }
+        });
+        
+        const activeData = activeRes.data?.data || activeRes.data;
+        const inactiveData = inactiveRes.data?.data || inactiveRes.data;
+        
+        setTotalActiveCount(activeData?.total || 0);
+        setTotalInactiveCount(inactiveData?.total || 0);
+      } catch (error) {
+        console.error("Failed to fetch global counts", error);
+      }
+    };
+    fetchCounts();
+  }, [selectedDepartment, searchTerm]);
+
+  useEffect(() => {
+    dispatch(fetchEmployeeDetailsReport({
+      page: currentPage,
+      per_page: perPage,
+      department: selectedDepartment || undefined,
+      status: selectedStatus !== "all" ? selectedStatus.toLowerCase() : undefined,
+      search: searchTerm || undefined,
+    }));
+  }, [dispatch, currentPage, perPage, selectedDepartment, selectedStatus, searchTerm]);
 
   // Reset to first page when filters change
   useEffect(() => {
@@ -47,7 +94,6 @@ const EmployeeDetailsReport = () => {
     setCurrentPage(1);
   }, [
     searchTerm,
-    selectedCompany,
     selectedDepartment,
     selectedStatus,
     perPage,
@@ -55,21 +101,25 @@ const EmployeeDetailsReport = () => {
 
   // Transform employee data from raw object to get all fields
   const transformEmployee = (emp) => {
-    const raw = emp.raw;
-    const user = raw?.user;
-    const company = user?.company;
-    const department = user?.department;
-    const designation = user?.designation;
+    const raw = emp.raw || emp;
+    const user = raw?.user || emp?.user || emp;
+    const company = user?.company || emp?.company;
+    const department = user?.department || emp?.department;
+    const designation = user?.designation || emp?.designation;
+
+    const rawStatus = emp.status || raw?.status || user?.status || "active";
+    const capitalizedStatus = typeof rawStatus === 'string' ? rawStatus.charAt(0).toUpperCase() + rawStatus.slice(1).toLowerCase() : "Active";
 
     return {
       id: emp.id,
-      name: emp.name,
-      status: emp.status,
+      name: emp.name || raw?.first_name ? `${raw.first_name} ${raw.last_name || ''}`.trim() : "-",
+      status: capitalizedStatus,
+      avatar: raw?.avatar,
       // Basic fields from the transformed data
-      emp_id: raw?.employee_id || "-",
-      company_name: company?.company_name || user?.company?.company_name || "-",
-      department_name: department?.name || user?.department?.name || "-",
-      designation_name: designation?.name || user?.designation?.name || "-",
+      emp_id: raw?.employee_id || emp?.emp_id || "-",
+      company_name: company?.company_name || company?.name || "-",
+      department_name: department?.name || "-",
+      designation_name: designation?.name || "-",
       // Document fields from raw
       passport_no: raw?.passport_number || "-",
       passport_expiry: raw?.passport_expiry_date,
@@ -81,6 +131,8 @@ const EmployeeDetailsReport = () => {
       eid_expiry: raw?.eid_expiry_date,
       joining_date: raw?.joining_date,
       // Contact fields
+      company_email: raw?.company_email || "-",
+      personal_email: raw?.personal_email || "-",
       email: raw?.company_email || raw?.personal_email || user?.email || "-",
       phone: raw?.company_mobile_number || raw?.personal_number || "-",
       // Additional fields that might be useful
@@ -89,7 +141,7 @@ const EmployeeDetailsReport = () => {
       total_leaves_allocated: raw?.total_leaves_allocated,
       user_type: user?.type,
       // Raw reference for any other needs
-      raw: raw,
+      raw: emp.raw || emp,
     };
   };
 
@@ -97,14 +149,7 @@ const EmployeeDetailsReport = () => {
     ? employees.map(transformEmployee)
     : [];
 
-  // Get unique companies and departments for filters
-  const uniqueCompanies = [
-    ...new Set(
-      transformedEmployees
-        .map((emp) => emp.company_name)
-        .filter((c) => c !== "-"),
-    ),
-  ];
+  // Get unique departments for filters
   const uniqueDepartments = [
     ...new Set(
       transformedEmployees
@@ -116,11 +161,6 @@ const EmployeeDetailsReport = () => {
   // Filter employees
   const getFilteredEmployees = () => {
     let filtered = [...transformedEmployees];
-
-    // Apply company filter
-    if (selectedCompany) {
-      filtered = filtered.filter((emp) => emp.company_name === selectedCompany);
-    }
 
     // Apply department filter
     if (selectedDepartment) {
@@ -154,15 +194,16 @@ const EmployeeDetailsReport = () => {
     return filtered;
   };
 
+  // For backend pagination, the total is from the API
   const filteredEmployees = getFilteredEmployees();
-  const totalFiltered = filteredEmployees.length;
-  const totalPages = Math.ceil(totalFiltered / perPage);
-  const start = (currentPage - 1) * perPage;
-  const pageEmployees = filteredEmployees.slice(start, start + perPage);
+  const totalFiltered = pagination?.total || 0;
+  const totalPages = pagination?.lastPage || Math.ceil(totalFiltered / perPage);
+  const start = 0; // Backend returns only current page, so start is 0
+  const pageEmployees = filteredEmployees;
 
-    const getExportData = () => {
-    // Use the same filteredEmployees data
-    return filteredEmployees.map(emp => ({
+  const getExportData = (employeesToExport = filteredEmployees) => {
+    // Use the provided array (or default to current page)
+    return employeesToExport.map(emp => ({
       emp_id: emp.emp_id,
       name: emp.name,
       company_name: emp.company_name,
@@ -184,7 +225,6 @@ const EmployeeDetailsReport = () => {
   };
 
   const handleResetFilters = () => {
-    setSelectedCompany("");
     setSelectedDepartment("");
     setSelectedStatus("all");
     setSearchTerm("");
@@ -193,7 +233,6 @@ const EmployeeDetailsReport = () => {
   };
 
   const handleExport = async (format) => {
-    const exportData = getExportData();
     const headers = [
       { key: "emp_id", label: "Emp ID" },
       { key: "name", label: "Name" },
@@ -215,13 +254,56 @@ const EmployeeDetailsReport = () => {
     ];
 
     if (format === "csv") {
-      exportToCSV(exportData, headers, `employee_details_${new Date().toISOString().split("T")[0]}.csv`);
+      try {
+        // Fetch all matching records for full export instead of just the current page
+        const response = await apiClient.get('/admin/reports/employees', {
+          params: {
+            page: 1,
+            per_page: 10000,
+            department: selectedDepartment || undefined,
+            status: selectedStatus !== "all" ? selectedStatus.toLowerCase() : undefined,
+            search: searchTerm || undefined,
+          }
+        });
+        
+        let rawData = [];
+        if (Array.isArray(response.data)) {
+          rawData = response.data;
+        } else if (Array.isArray(response.data?.data)) {
+          rawData = response.data.data;
+        } else if (Array.isArray(response.data?.data?.data)) {
+          rawData = response.data.data.data;
+        } else if (Array.isArray(response.data?.employees)) {
+          rawData = response.data.employees;
+        }
+        
+        // Transform the raw data into the same structure used by the table
+        const allEmployees = rawData.map(transformEmployee);
+        
+        const fullExportData = getExportData(allEmployees);
+        exportToCSV(fullExportData, headers, `employee_details_${new Date().toISOString().split("T")[0]}.csv`);
+        showToast("CSV report downloaded successfully!", "success");
+      } catch (error) {
+        console.error("Failed to fetch full data for export", error);
+        showToast("Failed to generate full CSV report", "error");
+      }
     } else if (format === "pdf") {
-      generateEmployeeDetailsPDF(filteredEmployees, {
-        company: selectedCompany,
-        department: selectedDepartment,
-        status: selectedStatus !== "all" ? selectedStatus : null,
-      });
+      try {
+        const response = await apiClient.post('/admin/reports/export',
+          { report_type: 'employee', format: 'pdf' },
+          { responseType: 'blob' }
+        );
+        const url = window.URL.createObjectURL(new Blob([response.data]));
+        const link = document.createElement('a');
+        link.href = url;
+        link.setAttribute('download', `employee_details_${new Date().toISOString().split("T")[0]}.pdf`);
+        document.body.appendChild(link);
+        link.click();
+        document.body.removeChild(link);
+        showToast("PDF report downloaded successfully!", "success");
+      } catch (error) {
+        showToast("Failed to download PDF report", "error");
+      }
     }
   };
 
@@ -237,17 +319,6 @@ const EmployeeDetailsReport = () => {
     return "";
   };
 
-  const activeCount = transformedEmployees.filter(
-    (e) => e.status === "Active",
-  ).length;
-  const inactiveCount = transformedEmployees.filter(
-    (e) => e.status === "Inactive",
-  ).length;
-  // eslint-disable-next-line no-unused-vars
-  const onboardingCount = transformedEmployees.filter(
-    (e) => e.status === "Onboarding",
-  ).length;
-
   return (
     <div className="w-full overflow-x-hidden">
       <main className="content px-4 py-4 md:px-6 md:py-6 w-full overflow-x-hidden">
@@ -255,7 +326,7 @@ const EmployeeDetailsReport = () => {
         <div className="mb-6">
           <div className="flex items-center gap-2 text-xs md:text-sm mb-4 md:mb-6 flex-wrap">
             <Link
-              to="/admin/reports"
+              to={`${basePath}/reports`}
               className="text-green-500 hover:text-green-600 font-medium"
             >
               Reports
@@ -281,7 +352,7 @@ const EmployeeDetailsReport = () => {
                   Total Employees
                 </p>
                 <p className="text-2xl font-bold text-blue-600 dark:text-blue-400">
-                  {transformedEmployees.length}
+                  {totalFiltered}
                 </p>
               </div>
               <div className="w-10 h-10 bg-blue-100 dark:bg-blue-900/30 rounded-lg flex items-center justify-center">
@@ -297,7 +368,7 @@ const EmployeeDetailsReport = () => {
                   Active Employees
                 </p>
                 <p className="text-2xl font-bold text-green-600 dark:text-green-400">
-                  {activeCount}
+                  {totalActiveCount}
                 </p>
               </div>
               <div className="w-10 h-10 bg-green-100 dark:bg-green-900/30 rounded-lg flex items-center justify-center">
@@ -313,7 +384,7 @@ const EmployeeDetailsReport = () => {
                   Inactive Employees
                 </p>
                 <p className="text-2xl font-bold text-red-600 dark:text-red-400">
-                  {inactiveCount}
+                  {totalInactiveCount}
                 </p>
               </div>
               <div className="w-10 h-10 bg-red-100 dark:bg-red-900/30 rounded-lg flex items-center justify-center">
@@ -325,26 +396,7 @@ const EmployeeDetailsReport = () => {
 
         {/* Filters Bar */}
         <div className="bg-white dark:bg-gray-800 border border-gray-200 dark:border-gray-700 rounded-xl p-4 mb-6">
-          <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
-            {/* Company Filter */}
-            <div>
-              <label className="block text-xs font-semibold text-gray-500 dark:text-gray-400 mb-1">
-                <i className="fas fa-building mr-1"></i> Company
-              </label>
-              <select
-                value={selectedCompany}
-                onChange={(e) => setSelectedCompany(e.target.value)}
-                className="w-full px-3 py-2 bg-gray-50 dark:bg-gray-700 border border-gray-200 dark:border-gray-600 rounded-lg text-sm text-gray-700 dark:text-gray-300 focus:outline-none focus:border-green-500"
-              >
-                <option value="">All Companies</option>
-                {uniqueCompanies.map((company) => (
-                  <option key={company} value={company}>
-                    {company}
-                  </option>
-                ))}
-              </select>
-            </div>
-
+          <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">
             {/* Department Filter */}
             <div>
               <label className="block text-xs font-semibold text-gray-500 dark:text-gray-400 mb-1">
@@ -433,49 +485,28 @@ const EmployeeDetailsReport = () => {
                     Name
                   </th>
                   <th className="px-3 py-3 text-left text-xs font-semibold text-gray-500 dark:text-gray-400">
-                    Company
-                  </th>
-                  <th className="px-3 py-3 text-left text-xs font-semibold text-gray-500 dark:text-gray-400">
                     Department
                   </th>
                   <th className="px-3 py-3 text-left text-xs font-semibold text-gray-500 dark:text-gray-400">
                     Designation
                   </th>
                   <th className="px-3 py-3 text-left text-xs font-semibold text-gray-500 dark:text-gray-400">
-                    Passport No
-                  </th>
-                  <th className="px-3 py-3 text-left text-xs font-semibold text-gray-500 dark:text-gray-400">
-                    Passport Expiry
-                  </th>
-                  <th className="px-3 py-3 text-left text-xs font-semibold text-gray-500 dark:text-gray-400">
-                    Visa No
-                  </th>
-                  <th className="px-3 py-3 text-left text-xs font-semibold text-gray-500 dark:text-gray-400">
-                    Visa Expiry
-                  </th>
-                  <th className="px-3 py-3 text-left text-xs font-semibold text-gray-500 dark:text-gray-400">
-                    Labor No
-                  </th>
-                  <th className="px-3 py-3 text-left text-xs font-semibold text-gray-500 dark:text-gray-400">
-                    Labor Expiry
-                  </th>
-                  <th className="px-3 py-3 text-left text-xs font-semibold text-gray-500 dark:text-gray-400">
-                    EID No
-                  </th>
-                  <th className="px-3 py-3 text-left text-xs font-semibold text-gray-500 dark:text-gray-400">
-                    EID Expiry
-                  </th>
-                  <th className="px-3 py-3 text-left text-xs font-semibold text-gray-500 dark:text-gray-400">
                     Joining Date
                   </th>
                   <th className="px-3 py-3 text-left text-xs font-semibold text-gray-500 dark:text-gray-400">
-                    Email
+                    Company Email
+                  </th>
+                  <th className="px-3 py-3 text-left text-xs font-semibold text-gray-500 dark:text-gray-400">
+                    Personal Email
                   </th>
                   <th className="px-3 py-3 text-left text-xs font-semibold text-gray-500 dark:text-gray-400">
                     Phone
                   </th>
                   <th className="px-3 py-3 text-left text-xs font-semibold text-gray-500 dark:text-gray-400">
                     Status
+                  </th>
+                  <th className="px-3 py-3 text-left text-xs font-semibold text-gray-500 dark:text-gray-400 text-center">
+                    Action
                   </th>
                 </tr>
               </thead>
@@ -487,16 +518,24 @@ const EmployeeDetailsReport = () => {
                       className="border-b border-gray-200 dark:border-gray-700 hover:bg-gray-50 dark:hover:bg-gray-700/50 transition-colors"
                     >
                       <td className="px-3 py-3 text-sm text-gray-600 dark:text-gray-400 text-center">
-                        {start + idx + 1}
+                        {(currentPage - 1) * perPage + idx + 1}
                       </td>
                       <td className="px-3 py-3 text-sm font-mono text-gray-700 dark:text-gray-300">
                         {emp.emp_id}
                       </td>
                       <td className="px-3 py-3 text-sm font-semibold text-gray-800 dark:text-gray-200">
-                        {emp.name}
-                      </td>
-                      <td className="px-3 py-3 text-sm text-gray-600 dark:text-gray-400">
-                        {emp.company_name}
+                        <div className="flex items-center gap-3">
+                          <img
+                            src={getPhotoUrl(emp.avatar) || getFallbackAvatar(emp.name)}
+                            alt={emp.name}
+                            className="w-8 h-8 rounded-full object-cover border border-gray-200 dark:border-gray-700"
+                            onError={(e) => {
+                              e.target.onerror = null;
+                              e.target.src = getFallbackAvatar(emp.name);
+                            }}
+                          />
+                          <span>{emp.name}</span>
+                        </div>
                       </td>
                       <td className="px-3 py-3 text-sm text-gray-600 dark:text-gray-400">
                         {emp.department_name}
@@ -504,59 +543,41 @@ const EmployeeDetailsReport = () => {
                       <td className="px-3 py-3 text-sm text-gray-600 dark:text-gray-400">
                         {emp.designation_name}
                       </td>
-                      <td className="px-3 py-3 text-sm font-mono text-gray-600 dark:text-gray-400">
-                        {emp.passport_no}
-                      </td>
-                      <td
-                        className={`px-3 py-3 text-sm ${getExpiryClass(emp.passport_expiry)}`}
-                      >
-                        {formatDate(emp.passport_expiry)}
-                      </td>
-                      <td className="px-3 py-3 text-sm font-mono text-gray-600 dark:text-gray-400">
-                        {emp.visa_no}
-                      </td>
-                      <td
-                        className={`px-3 py-3 text-sm ${getExpiryClass(emp.visa_expiry)}`}
-                      >
-                        {formatDate(emp.visa_expiry)}
-                      </td>
-                      <td className="px-3 py-3 text-sm font-mono text-gray-600 dark:text-gray-400">
-                        {emp.labor_no}
-                      </td>
-                      <td
-                        className={`px-3 py-3 text-sm ${getExpiryClass(emp.labor_expiry)}`}
-                      >
-                        {formatDate(emp.labor_expiry)}
-                      </td>
-                      <td className="px-3 py-3 text-sm font-mono text-gray-600 dark:text-gray-400">
-                        {emp.eid_no}
-                      </td>
-                      <td
-                        className={`px-3 py-3 text-sm ${getExpiryClass(emp.eid_expiry)}`}
-                      >
-                        {formatDate(emp.eid_expiry)}
-                      </td>
                       <td className="px-3 py-3 text-sm text-gray-600 dark:text-gray-400">
                         {formatDate(emp.joining_date)}
                       </td>
                       <td className="px-3 py-3 text-sm text-gray-600 dark:text-gray-400">
-                        {emp.email}
+                        {emp.company_email}
+                      </td>
+                      <td className="px-3 py-3 text-sm text-gray-600 dark:text-gray-400">
+                        {emp.personal_email}
                       </td>
                       <td className="px-3 py-3 text-sm text-gray-600 dark:text-gray-400">
                         {emp.phone}
                       </td>
                       <td className="px-3 py-3">
                         <span
-                          className={`px-2 py-1 rounded-full text-xs font-semibold ${
-                            emp.status === "Active"
-                              ? "bg-green-100 text-green-700 dark:bg-green-900/30 dark:text-green-400"
-                              : emp.status === "Onboarding"
+                          className={`px-2 py-1 rounded-full text-xs font-semibold ${(emp.status || "").toLowerCase() === "active"
+                            ? "bg-green-100 text-green-700 dark:bg-green-900/30 dark:text-green-400"
+                            : (emp.status || "").toLowerCase() === "onboarding"
                               ? "bg-amber-100 text-amber-700 dark:bg-amber-900/30 dark:text-amber-400"
                               : "bg-red-100 text-red-700 dark:bg-red-900/30 dark:text-red-400"
-                          }`}
+                            }`}
                         >
                           {emp.status}
                         </span>
+                      </td>
+                      <td className="px-3 py-3 text-center">
+                        <button
+                          onClick={() => {
+                            setSelectedEmployee(emp);
+                            setShowViewModal(true);
+                          }}
+                          className="w-8 h-8 rounded-full bg-blue-50 dark:bg-blue-900/30 text-blue-600 dark:text-blue-400 flex items-center justify-center hover:bg-blue-100 dark:hover:bg-blue-900/50 transition-colors mx-auto"
+                          title="View Details"
+                        >
+                          <i className="fas fa-eye"></i>
+                        </button>
                       </td>
                     </tr>
                   ))
@@ -586,6 +607,121 @@ const EmployeeDetailsReport = () => {
           />
         )}
       </main>
+
+      {/* View Details Modal */}
+      {showViewModal && selectedEmployee && (
+        <div className="fixed inset-0 bg-black/50 backdrop-blur-sm flex items-center justify-center z-[1000] p-4">
+          <div className="bg-white dark:bg-gray-800 rounded-2xl max-w-2xl w-full p-6 shadow-soft-lg border border-gray-200 dark:border-gray-700">
+            <div className="flex justify-between items-center mb-6 pb-4 border-b border-gray-200 dark:border-gray-700">
+              <div>
+                <h3 className="text-xl font-bold text-gray-800 dark:text-gray-200">
+                  Document Details
+                </h3>
+                <p className="text-sm text-gray-500 mt-1">
+                  {selectedEmployee.name} ({selectedEmployee.emp_id})
+                </p>
+              </div>
+              <button
+                onClick={() => setShowViewModal(false)}
+                className="w-8 h-8 rounded-full bg-gray-100 dark:bg-gray-700 text-gray-500 hover:text-red-500 hover:bg-red-50 dark:hover:bg-red-900/30 flex items-center justify-center transition-colors"
+              >
+                <i className="fas fa-times"></i>
+              </button>
+            </div>
+
+            <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+              {/* Passport */}
+              <div className="p-4 bg-gray-50 dark:bg-gray-700/50 rounded-xl border border-gray-100 dark:border-gray-600">
+                <div className="flex items-center gap-2 mb-3 text-blue-600 dark:text-blue-400">
+                  <i className="fas fa-passport text-lg"></i>
+                  <h4 className="font-semibold">Passport Details</h4>
+                </div>
+                <div className="space-y-2">
+                  <div>
+                    <p className="text-xs text-gray-500 dark:text-gray-400">Document No.</p>
+                    <p className="text-sm font-medium text-gray-800 dark:text-gray-200">{selectedEmployee.passport_no}</p>
+                  </div>
+                  <div>
+                    <p className="text-xs text-gray-500 dark:text-gray-400">Expiry Date</p>
+                    <p className={`text-sm font-medium ${getExpiryClass(selectedEmployee.passport_expiry) || "text-gray-800 dark:text-gray-200"}`}>
+                      {formatDate(selectedEmployee.passport_expiry)}
+                    </p>
+                  </div>
+                </div>
+              </div>
+
+              {/* Visa */}
+              <div className="p-4 bg-gray-50 dark:bg-gray-700/50 rounded-xl border border-gray-100 dark:border-gray-600">
+                <div className="flex items-center gap-2 mb-3 text-green-600 dark:text-green-400">
+                  <i className="fas fa-id-card text-lg"></i>
+                  <h4 className="font-semibold">Visa Details</h4>
+                </div>
+                <div className="space-y-2">
+                  <div>
+                    <p className="text-xs text-gray-500 dark:text-gray-400">Document No.</p>
+                    <p className="text-sm font-medium text-gray-800 dark:text-gray-200">{selectedEmployee.visa_no}</p>
+                  </div>
+                  <div>
+                    <p className="text-xs text-gray-500 dark:text-gray-400">Expiry Date</p>
+                    <p className={`text-sm font-medium ${getExpiryClass(selectedEmployee.visa_expiry) || "text-gray-800 dark:text-gray-200"}`}>
+                      {formatDate(selectedEmployee.visa_expiry)}
+                    </p>
+                  </div>
+                </div>
+              </div>
+
+              {/* Labor Card */}
+              <div className="p-4 bg-gray-50 dark:bg-gray-700/50 rounded-xl border border-gray-100 dark:border-gray-600">
+                <div className="flex items-center gap-2 mb-3 text-amber-600 dark:text-amber-400">
+                  <i className="fas fa-file-contract text-lg"></i>
+                  <h4 className="font-semibold">Labor Card</h4>
+                </div>
+                <div className="space-y-2">
+                  <div>
+                    <p className="text-xs text-gray-500 dark:text-gray-400">Document No.</p>
+                    <p className="text-sm font-medium text-gray-800 dark:text-gray-200">{selectedEmployee.labor_no}</p>
+                  </div>
+                  <div>
+                    <p className="text-xs text-gray-500 dark:text-gray-400">Expiry Date</p>
+                    <p className={`text-sm font-medium ${getExpiryClass(selectedEmployee.labor_expiry) || "text-gray-800 dark:text-gray-200"}`}>
+                      {formatDate(selectedEmployee.labor_expiry)}
+                    </p>
+                  </div>
+                </div>
+              </div>
+
+              {/* Emirates ID */}
+              <div className="p-4 bg-gray-50 dark:bg-gray-700/50 rounded-xl border border-gray-100 dark:border-gray-600">
+                <div className="flex items-center gap-2 mb-3 text-purple-600 dark:text-purple-400">
+                  <i className="fas fa-address-card text-lg"></i>
+                  <h4 className="font-semibold">Emirates ID</h4>
+                </div>
+                <div className="space-y-2">
+                  <div>
+                    <p className="text-xs text-gray-500 dark:text-gray-400">Document No.</p>
+                    <p className="text-sm font-medium text-gray-800 dark:text-gray-200">{selectedEmployee.eid_no}</p>
+                  </div>
+                  <div>
+                    <p className="text-xs text-gray-500 dark:text-gray-400">Expiry Date</p>
+                    <p className={`text-sm font-medium ${getExpiryClass(selectedEmployee.eid_expiry) || "text-gray-800 dark:text-gray-200"}`}>
+                      {formatDate(selectedEmployee.eid_expiry)}
+                    </p>
+                  </div>
+                </div>
+              </div>
+            </div>
+
+            <div className="mt-6 pt-4 border-t border-gray-200 dark:border-gray-700 flex justify-end">
+              <button
+                onClick={() => setShowViewModal(false)}
+                className="px-6 py-2 bg-gray-100 hover:bg-gray-200 dark:bg-gray-700 dark:hover:bg-gray-600 text-gray-800 dark:text-gray-200 rounded-full font-medium transition-colors text-sm"
+              >
+                Close
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
 
       {/* Export Modal */}
       {showExportModal && (
@@ -622,7 +758,7 @@ const EmployeeDetailsReport = () => {
             <div className="bg-gray-50 dark:bg-gray-700/50 rounded-lg p-3 mb-6">
               <p className="text-xs text-gray-500 dark:text-gray-400">
                 <i className="fas fa-info-circle mr-1"></i>
-                Export will include all {filteredEmployees.length} employee
+                Export will include all {totalFiltered} employee
                 records with current filters applied.
               </p>
             </div>
@@ -649,7 +785,7 @@ const EmployeeDetailsReport = () => {
         onClose={() => setShowExportModal(false)}
         onExport={handleExport}
         title="Export Employee Details"
-        totalRecords={filteredEmployees.length}
+        totalRecords={totalFiltered}
         formats={["csv", "pdf"]}
       />
     </div>

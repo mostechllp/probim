@@ -26,6 +26,7 @@ import checklistCategoryReducer from "../admin/store/slices/checklistCategorySli
 import assetReducer from "../admin/store/slices/assetSlice";
 import checklistReducer from "../admin/store/slices/checklistSlice";
 import reportReducer from "../admin/store/slices/reportSlice";
+import publicHolidayReducer from "../admin/store/slices/publicHolidaySlice";
 
 // Employee reducers
 import leavesReducer from "../employee/store/slices/leavesSlice";
@@ -37,6 +38,7 @@ import taskReportsReducer from "../employee/store/slices/taskReportsSlice";
 import EmpAttendanceReducer from "../employee/store/slices/attendanceSlice";
 import EmpAttendanceTypeReducer from "../employee/store/slices/attendanceTypeSlice";
 import employeeProjectReducer from "../employee/store/slices/employeeProjectSlice";
+import myPayrollReducer from "../employee/store/slices/myPayrollSlice";
 
 export const store = configureStore({
   reducer: {
@@ -67,6 +69,7 @@ export const store = configureStore({
     checklist: checklistReducer,
     checklistCategory: checklistCategoryReducer,
     reports: reportReducer,
+    publicHolidays: publicHolidayReducer,
 
     // Employee
     EmpLeaves: leavesReducer,
@@ -78,6 +81,7 @@ export const store = configureStore({
     EmpAttendance: EmpAttendanceReducer,
     EmpAttendanceType: EmpAttendanceTypeReducer,
     employeeProjects: employeeProjectReducer,
+    myPayroll: myPayrollReducer,
   },
   middleware: (getDefaultMiddleware) =>
     getDefaultMiddleware({

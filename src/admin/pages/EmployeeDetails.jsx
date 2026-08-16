@@ -1,5 +1,5 @@
 import { useState, useEffect } from "react";
-import { Link, useNavigate, useParams } from "react-router-dom";
+import { Link, useNavigate, useParams, useLocation } from "react-router-dom";
 import { useDispatch, useSelector } from "react-redux";
 import { showToast } from "../../components/common/Toast";
 import { fetchEmployeeById } from "@admin/store/slices/employeeSlice";
@@ -40,6 +40,16 @@ const EmployeeDetails = () => {
   const navigate = useNavigate();
   const dispatch = useDispatch();
   const { id } = useParams();
+  const location = useLocation();
+  
+  // Determine base path from current route
+  const getBasePath = () => {
+    if (location.pathname.startsWith('/admin')) return '/admin';
+    if (location.pathname.startsWith('/employee')) return '/employee';
+    return '';
+  };
+  const basePath = getBasePath();
+
   const [loading, setLoading] = useState(true);
   const [activeTab, setActiveTab] = useState("basic");
   const [editingComponent, setEditingComponent] = useState(null);
@@ -262,7 +272,7 @@ const EmployeeDetails = () => {
         `/admin/salary-components/${componentId}`,
         {
           employee_id: employeeId,
-          employee_salary_package_id: packageId, // Changed from package_id
+          employee_salary_package_id: packageId,
           component_name: updatedData.component_name,
           value: updatedData.value,
         },
@@ -292,14 +302,12 @@ const EmployeeDetails = () => {
       return;
     }
 
-    // Fix: Use employee_salary_package_id instead of package_id
     if (!newComponent.employee_salary_package_id) {
       showToast("Please select a package", "error");
       return;
     }
 
     try {
-      // Get the employee_id from currentEmployee
       const employeeId = currentEmployee.id || currentEmployee.employee_id;
 
       if (!employeeId) {
@@ -312,12 +320,11 @@ const EmployeeDetails = () => {
 
       const payload = {
         employee_id: employeeId,
-        employee_salary_package_id: newComponent.employee_salary_package_id, // Use the correct field
+        employee_salary_package_id: newComponent.employee_salary_package_id,
         component_name: newComponent.component_name,
         value: parseFloat(newComponent.value).toFixed(2),
       };
 
-      console.log("Adding salary component payload:", payload);
 
       const response = await apiClient.post(
         "/admin/salary-components",
@@ -327,13 +334,12 @@ const EmployeeDetails = () => {
       if (response.data.status === "success") {
         showToast("Salary component added successfully", "success");
         setShowAddComponent(false);
-        // Reset with the correct field name
         setNewComponent({
           component_name: "",
           value: "",
           employee_salary_package_id: null,
         });
-        fetchEmployeeData(); // Refresh data
+        fetchEmployeeData();
       } else {
         showToast(
           response.data.message || "Failed to add salary component",
@@ -351,8 +357,6 @@ const EmployeeDetails = () => {
 
   // ─── Package CRUD ────────────────────────────────────────────────────
   const handleAddPackage = async () => {
-    // This would open a modal to add a new package
-    // For now, we'll show a toast
     showToast("Package management coming soon", "info");
   };
 
@@ -571,6 +575,20 @@ const EmployeeDetails = () => {
     }
   };
 
+  const formatUserType = (type) => {
+  if (!type) return "EMPLOYEE";
+  
+  const typeMap = {
+    'employee': 'Employee',
+    'admin': 'Admin',
+    'hr': 'HR',
+    'manager': 'Manager',
+    'team_lead': 'Team Lead',
+  };
+  
+  return typeMap[type.toLowerCase()] || type;
+};
+
   const isSkilled = () => {
     return (
       currentEmployee?.is_skilled === 1 || currentEmployee?.is_skilled === true
@@ -630,6 +648,11 @@ const EmployeeDetails = () => {
     },
   ];
 
+  // Handle back navigation
+  const handleBack = () => {
+    navigate(`${basePath}/employees`);
+  };
+
   if (loading) {
     return (
       <div className="w-full overflow-x-hidden">
@@ -652,7 +675,7 @@ const EmployeeDetails = () => {
               Employee not found
             </h3>
             <button
-              onClick={() => navigate("/admin/employees")}
+              onClick={() => navigate(`${basePath}/employees`)}
               className="mt-4 px-4 py-2 bg-green-500 text-white rounded-lg hover:bg-green-600"
             >
               Back to Employees
@@ -672,7 +695,7 @@ const EmployeeDetails = () => {
             <div className="flex flex-wrap justify-between items-center gap-4">
               <div className="flex items-center gap-3">
                 <button
-                  onClick={() => navigate("/admin/employees")}
+                  onClick={handleBack}
                   className="p-2 hover:bg-gray-100 rounded-lg transition-colors"
                   title="Back to Employees"
                 >
@@ -688,7 +711,7 @@ const EmployeeDetails = () => {
                 </div>
               </div>
               <Link
-                to={`/admin/employees/edit/${currentEmployee.id}`}
+                to={`${basePath}/employees/edit/${currentEmployee.id}`}
                 className="px-4 py-2 bg-green-500 text-white rounded-lg hover:bg-green-600 transition-colors flex items-center gap-2"
               >
                 <FiEdit /> Edit Employee
@@ -725,7 +748,7 @@ const EmployeeDetails = () => {
                 </h2>
                 <div className="flex flex-wrap gap-2 mt-2 justify-center md:justify-start">
                   <span className="px-2 py-1 bg-green-100 text-green-700 rounded-full text-xs font-semibold">
-                    {currentEmployee.user?.type?.toUpperCase() || "EMPLOYEE"}
+                    {formatUserType(currentEmployee.user?.type) || "EMPLOYEE"}
                   </span>
                   <span
                     className={`px-2 py-1 rounded-full text-xs font-semibold ${
@@ -824,7 +847,7 @@ const EmployeeDetails = () => {
                         User Type
                       </label>
                       <p className="text-gray-800 font-medium mt-1 capitalize">
-                        {currentEmployee.user?.type || "N/A"}
+                        {formatUserType(currentEmployee.user?.type) || "N/A"}
                       </p>
                     </div>
                     <div className="border-b border-gray-100 pb-3">

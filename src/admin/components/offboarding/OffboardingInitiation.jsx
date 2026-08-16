@@ -1,5 +1,5 @@
 import React, { useState, useEffect, useRef } from "react";
-import { useNavigate, useLocation, useSearchParams } from "react-router-dom";
+import { useNavigate, useLocation, useSearchParams, useParams } from "react-router-dom";
 import { useForm, Controller } from "react-hook-form";
 import { zodResolver } from "@hookform/resolvers/zod";
 import * as z from "zod";
@@ -15,6 +15,7 @@ import { useDispatch, useSelector } from "react-redux";
 import DateInput from "../common/DateInput";
 import { showToast } from "../common/Toast";
 import OffboardingHeader from "./OffboardingHeader";
+import OffboardingProgressBox from "./OffboardingProgressBox";
 import { fetchEmployees } from "../../store/slices/employeeSlice";
 import { fetchDepartments } from "../../store/slices/departmentSlice";
 import { fetchDesignations } from "../../store/slices/designationSlice";
@@ -24,55 +25,9 @@ import {
   fetchOffboardingProgress,
   fetchOffboardingById,
   updateOffboarding,
+  clearCurrentOffboarding,
 } from "../../store/slices/offboardingSlice";
-
-// ----------------------------------------------------
-// STATIC REPORTING MANAGERS DATA
-// ----------------------------------------------------
-const STATIC_MANAGERS = [
-  {
-    id: "mgr_001",
-    name: "Sara Al Hashmi",
-    designation: "Operations Director",
-    department: "Operations",
-  },
-  {
-    id: "mgr_002",
-    name: "Elena Rostova",
-    designation: "HR Manager",
-    department: "Human Resources",
-  },
-  {
-    id: "mgr_003",
-    name: "Marcus Aurelius",
-    designation: "IT Director",
-    department: "IT Department",
-  },
-  {
-    id: "mgr_004",
-    name: "John Doe",
-    designation: "Finance Manager",
-    department: "Finance",
-  },
-  {
-    id: "mgr_005",
-    name: "Ahmed Al Qasimi",
-    designation: "Sales Director",
-    department: "Sales",
-  },
-  {
-    id: "mgr_006",
-    name: "Fatima Al Zaabi",
-    designation: "Marketing Manager",
-    department: "Marketing",
-  },
-  {
-    id: "mgr_007",
-    name: "David Chen",
-    designation: "Product Manager",
-    department: "Product",
-  },
-];
+import apiClient from "../../../utils/apiClient";
 
 // ----------------------------------------------------
 // ZOD RESOLVER SCHEMA
@@ -91,7 +46,10 @@ const offboardingSchema = z.object({
   department: z.string().min(1, "Department is required"),
   designation: z.string().min(1, "Designation is required"),
   reportingManager: z.string().min(1, "Reporting manager is required"),
-  reportingManagerId: z.string().optional(),
+  reportingManagerId: z
+    .union([z.string(), z.number()])
+    .optional(),
+  resignationDate: z.string().min(1, "Resignation date is required"),
   noticeStartDate: z.string().min(1, "Notice start date is required"),
   noticePeriodDays: z.coerce.number().min(0, "Notice period must be 0 or more"),
   lastWorkingDay: z.string().min(1, "Last working day is required"),
@@ -107,10 +65,15 @@ const offboardingSchema = z.object({
 const OffboardingInitiation = () => {
   const navigate = useNavigate();
   const dispatch = useDispatch();
+  const { id: paramId } = useParams();
   const location = useLocation();
   const [searchParams] = useSearchParams();
-  const offboardingId = searchParams.get("id");
-  const isEditMode = location.state?.isEdit || offboardingId;
+  
+  // Try to get ID from various sources (params, state, query, or localStorage)
+  const offboardingId = paramId || location.state?.id || searchParams.get('id') || localStorage.getItem("offboarding_id");
+
+  // Determine if we're in edit mode based on URL, state, or localStorage
+  const isEditMode = !!offboardingId || !!location.state?.offboardingData || !!location.state?.isEdit;
 
   const dropdownRef = useRef(null);
   const managerDropdownRef = useRef(null);
@@ -121,6 +84,9 @@ const OffboardingInitiation = () => {
   const [managerSearchQuery, setManagerSearchQuery] = useState("");
   const [showProgress, setShowProgress] = useState(false);
   const [loadingData, setLoadingData] = useState(false);
+  const [reportingManagers, setReportingManagers] = useState([]);
+  const [offboardingEmployees, setOffboardingEmployees] = useState([]);
+  const [offboardingEmployeesLoading, setOffboardingEmployeesLoading] = useState(true);
 
   // Redux state
   const { employees, loading: employeesLoading } = useSelector(
@@ -144,6 +110,7 @@ const OffboardingInitiation = () => {
     formState: { errors },
   } = useForm({
     resolver: zodResolver(offboardingSchema),
+    mode: "onChange",
     defaultValues: {
       employeeId: "",
       backendEmployeeId: "",
@@ -152,6 +119,7 @@ const OffboardingInitiation = () => {
       designation: "",
       reportingManager: "",
       reportingManagerId: "",
+      resignationDate: "",
       noticeStartDate: "",
       noticePeriodDays: 30,
       lastWorkingDay: "",
@@ -168,6 +136,43 @@ const OffboardingInitiation = () => {
     dispatch(fetchEmployees());
     dispatch(fetchDepartments());
     dispatch(fetchDesignations());
+    
+    // Fetch offboarding employees specifically for this dropdown
+    const fetchOffboardingEmployees = async () => {
+      try {
+        setOffboardingEmployeesLoading(true);
+        const response = await apiClient.get('/admin/offboarding/employees');
+        if (response.data?.status === 'success' && response.data?.data) {
+          setOffboardingEmployees(response.data.data);
+        } else if (Array.isArray(response.data?.data)) {
+          setOffboardingEmployees(response.data.data);
+        } else if (Array.isArray(response.data)) {
+          setOffboardingEmployees(response.data);
+        }
+      } catch (error) {
+        console.error("Failed to fetch offboarding employees:", error);
+      } finally {
+        setOffboardingEmployeesLoading(false);
+      }
+    };
+    fetchOffboardingEmployees();
+
+    // Fetch reporting managers
+    const fetchManagers = async () => {
+      try {
+        const response = await apiClient.get('/admin/offboarding/reporting-managers');
+        if (response.data?.status === 'success' && response.data?.data) {
+          setReportingManagers(response.data.data);
+        } else if (Array.isArray(response.data?.data)) {
+          setReportingManagers(response.data.data);
+        } else if (Array.isArray(response.data)) {
+          setReportingManagers(response.data);
+        }
+      } catch (error) {
+        console.error("Failed to fetch reporting managers:", error);
+      }
+    };
+    fetchManagers();
   }, [dispatch]);
 
   // Load existing offboarding data when in edit mode
@@ -179,7 +184,21 @@ const OffboardingInitiation = () => {
       // Check if we have data from navigation state
       if (location.state?.offboardingData) {
         const data = location.state.offboardingData;
-        populateFormWithData(data);
+        
+        let currentEmployees = employees;
+        if (!currentEmployees || currentEmployees.length === 0) {
+          try {
+            const empPayload = await dispatch(fetchEmployees()).unwrap();
+            currentEmployees = empPayload?.data?.data || empPayload?.data || [];
+          } catch (e) {
+            console.error("Failed to fetch employees", e);
+          }
+        }
+        
+        populateFormWithData(data, currentEmployees);
+        if (data.id) {
+          dispatch(fetchOffboardingProgress(data.id));
+        }
         setLoadingData(false);
         return;
       }
@@ -190,9 +209,13 @@ const OffboardingInitiation = () => {
           const result = await dispatch(
             fetchOffboardingById(offboardingId),
           ).unwrap();
-          console.log("Fetched offboarding data:", result);
           if (result) {
-            populateFormWithData(result);
+            let currentEmployees = employees;
+            if (!currentEmployees || currentEmployees.length === 0) {
+              const empPayload = await dispatch(fetchEmployees()).unwrap();
+              currentEmployees = empPayload?.data?.data || empPayload?.data || [];
+            }
+            populateFormWithData(result, currentEmployees);
             // Fetch progress to show current step info
             await dispatch(fetchOffboardingProgress(offboardingId));
           }
@@ -209,16 +232,27 @@ const OffboardingInitiation = () => {
 
     if (isEditMode) {
       loadExistingOffboarding();
+    } else {
+      dispatch(clearCurrentOffboarding());
     }
   }, [offboardingId, location.state, isEditMode, dispatch]);
 
   // Helper function to populate form with existing data
   // Helper function to populate form with existing data
-  const populateFormWithData = (data) => {
-    console.log("Populating form with data:", data);
+  const populateFormWithData = (data, currentEmployees = employees) => {
 
     // Extract employee info from nested object
-    const employeeData = data.employee || {};
+    let employeeData = data.employee || {};
+    let foundFullEmployee = null;
+    
+    // The backend API might not return department, designation, or reporting_manager in the offboarding details response.
+    // Try to find the full employee record from Redux state to get these details!
+    if (currentEmployees && currentEmployees.length > 0) {
+      foundFullEmployee = currentEmployees.find(emp => emp.id === employeeData.id || emp.id === data.employee_id || String(emp.employee_id) === String(data.employee_id) || String(emp.user_id) === String(employeeData.user_id));
+      if (foundFullEmployee) {
+        employeeData = { ...foundFullEmployee, ...employeeData }; // Merge, preferring any specific data returned by the API if present
+      } 
+    }
 
     // Set form values based on actual API response structure
     setValue("employeeId", employeeData.employee_id || data.employee_id || "", {
@@ -239,13 +273,16 @@ const OffboardingInitiation = () => {
 
     // Department from employee or direct
     const departmentName =
-      employeeData.department?.name || data.department || "";
-    setValue("department", departmentName, { shouldValidate: true });
+      employeeData.department?.name || employeeData.department || foundFullEmployee?.department?.name || foundFullEmployee?.department || data.department?.name || data.department || "";
+    const finalDepartment = typeof departmentName === 'object' ? departmentName?.name || "" : departmentName;
+    setValue("department", finalDepartment, { shouldValidate: true });
 
     // Designation from employee or direct
     const designationName =
-      employeeData.designation?.name || data.designation || "";
-    setValue("designation", designationName, { shouldValidate: true });
+      employeeData.designation?.name || employeeData.designation || foundFullEmployee?.designation?.name || foundFullEmployee?.designation || data.designation?.name || data.designation || "";
+    const finalDesignation = typeof designationName === 'object' ? designationName?.name || "" : designationName;
+
+    setValue("designation", finalDesignation, { shouldValidate: true });
 
     // Email from employee or direct
     const emailAddress =
@@ -253,9 +290,24 @@ const OffboardingInitiation = () => {
     setValue("email", emailAddress, { shouldValidate: true });
 
     // Reporting manager (might not be in this response, keep from data or leave empty)
+    let reportingManagerName = data.reporting_manager?.name || data.reporting_manager?.full_name || data.reporting_manager?.first_name ? `${data.reporting_manager.first_name} ${data.reporting_manager.last_name || ''}`.trim() : data.reporting_manager || data.reportingManager?.name || data.reportingManager || employeeData.reporting_manager?.name || employeeData.reporting_manager || employeeData.reportingManager?.name || employeeData.reportingManager || "";
+    if (typeof reportingManagerName === 'object') {
+      reportingManagerName = reportingManagerName?.name || reportingManagerName?.full_name || reportingManagerName?.first_name ? `${reportingManagerName.first_name} ${reportingManagerName.last_name || ''}`.trim() : "";
+    }
+    
+    // If the backend only returned the ID (e.g., reporting_manager_id: 41) but no object, look it up in the employees list!
+    if (!reportingManagerName && (data.reporting_manager_id || employeeData.reporting_manager_id)) {
+      const managerId = data.reporting_manager_id || employeeData.reporting_manager_id;
+      if (currentEmployees && currentEmployees.length > 0) {
+        const foundManager = currentEmployees.find(emp => String(emp.id) === String(managerId) || String(emp.employee_id) === String(managerId));
+        if (foundManager) {
+          reportingManagerName = foundManager.name || foundManager.full_name || `${foundManager.first_name || ''} ${foundManager.last_name || ''}`.trim();
+        }
+      }
+    }
     setValue(
       "reportingManager",
-      data.reporting_manager || data.reportingManager || "",
+      reportingManagerName,
       { shouldValidate: true },
     );
     setValue(
@@ -265,6 +317,11 @@ const OffboardingInitiation = () => {
     );
 
     // Dates
+    setValue(
+      "resignationDate",
+      data.resignation_date || data.resignationDate || "",
+      { shouldValidate: true },
+    );
     setValue(
       "noticeStartDate",
       data.notice_start_date || data.noticeStartDate || "",
@@ -293,12 +350,10 @@ const OffboardingInitiation = () => {
     setValue(
       "visaSponsorship",
       data.visa_sponsorship || data.visaSponsorship || "",
-      { shouldValidate: true },
     );
     setValue(
       "nationality",
       data.nationality || employeeData.nationality || "",
-      { shouldValidate: true },
     );
     setValue(
       "reasonForLeaving",
@@ -308,7 +363,7 @@ const OffboardingInitiation = () => {
 
     // Set search query values for display
     if (employeeName) setSearchQuery(employeeName);
-    if (data.reporting_manager) setManagerSearchQuery(data.reporting_manager);
+    if (reportingManagerName) setManagerSearchQuery(reportingManagerName);
 
     showToast("Offboarding data loaded successfully", "success");
   };
@@ -325,7 +380,7 @@ const OffboardingInitiation = () => {
     if (currentProgress && currentProgress.offboarding_id && showProgress) {
       const timer = setTimeout(() => {
         navigate(
-          `/admin/employees/visa-cancellation?id=${currentProgress.offboarding_id}`,
+          `/admin/employees/asset-return?id=${currentProgress.offboarding_id}`,
         );
         setShowProgress(false);
       }, 2000);
@@ -339,7 +394,7 @@ const OffboardingInitiation = () => {
       fallbackTimer = setTimeout(() => {
         const storedId = localStorage.getItem("offboarding_id");
         if (storedId) {
-          navigate(`/admin/employees/visa-cancellation?id=${storedId}`);
+          navigate(`/admin/employees/asset-return?id=${storedId}`);
           setShowProgress(false);
         }
       }, 3000);
@@ -402,12 +457,10 @@ const OffboardingInitiation = () => {
   }, [watchedNoticeStartDate, watchedNoticePeriodDays, setValue]);
 
   // Filter employees based on search query
-  const filteredEmployees = (employees || []).filter((emp) => {
-    const employeeId = emp.raw?.employee_id ? String(emp.raw.employee_id) : "";
-    const employeeName = emp.name ? String(emp.name).toLowerCase() : "";
-    const employeeEmail = emp.raw?.user?.email
-      ? String(emp.raw.user.email).toLowerCase()
-      : "";
+  const filteredEmployees = offboardingEmployees.filter((emp) => {
+    const employeeId = emp.employee_id ? String(emp.employee_id).toLowerCase() : "";
+    const employeeName = emp.full_name ? String(emp.full_name).toLowerCase() : "";
+    const employeeEmail = emp.email ? String(emp.email).toLowerCase() : "";
     const searchLower = searchQuery.toLowerCase();
 
     return (
@@ -418,11 +471,11 @@ const OffboardingInitiation = () => {
   });
 
   // Filter managers based on search query
-  const filteredManagers = STATIC_MANAGERS.filter((manager) => {
-    const managerName = manager.name.toLowerCase();
-    const managerDesignation = manager.designation.toLowerCase();
-    const managerDepartment = manager.department.toLowerCase();
-    const searchLower = managerSearchQuery.toLowerCase();
+  const filteredManagers = reportingManagers.filter((manager) => {
+    const managerName = (manager.full_name || manager.name || "").toLowerCase();
+    const managerDesignation = (manager.designation || "").toLowerCase();
+    const managerDepartment = (manager.department || "").toLowerCase();
+    const searchLower = (managerSearchQuery || "").toLowerCase();
 
     return (
       managerName.includes(searchLower) ||
@@ -433,50 +486,39 @@ const OffboardingInitiation = () => {
 
   // Handle employee selection and auto-populate all form fields
   const handleSelectEmployee = (emp) => {
-    setSearchQuery(emp.name);
+    setSearchQuery(emp.full_name);
     setShowDropdown(false);
 
-    const rawEmployee = emp.raw || {};
-    const userData = rawEmployee.user || {};
-
-    const departmentObj = departments?.find(
-      (dept) => dept.id === userData.department_id,
-    );
-    const departmentName =
-      departmentObj?.name || userData.department?.name || "";
-
-    const designationObj = designations?.find(
-      (des) => des.id === userData.designation_id,
-    );
-    const designationName =
-      designationObj?.name || userData.designation?.name || "";
-
-    setValue("employeeId", rawEmployee.employee_id || String(emp.id), {
+    setValue("employeeId", emp.employee_id || String(emp.id), {
       shouldValidate: true,
     });
-    setValue("employeeName", emp.name, { shouldValidate: true });
-    setValue("department", departmentName, { shouldValidate: true });
-    setValue("designation", designationName, { shouldValidate: true });
-    setValue("nationality", rawEmployee.nationality || "", {
-      shouldValidate: true,
-    });
-    setValue("email", userData.email || "", { shouldValidate: true });
+    setValue("employeeName", emp.full_name, { shouldValidate: true });
+    setValue("department", emp.department || "", { shouldValidate: true });
+    setValue("designation", emp.designation || "", { shouldValidate: true });
+    setValue("email", emp.email || "", { shouldValidate: true });
     setValue("backendEmployeeId", String(emp.id), { shouldValidate: true });
 
-    const visaStatus =
-      rawEmployee.visa_status || rawEmployee.visa_sponsorship || "";
-    setValue("visaSponsorship", visaStatus, { shouldValidate: true });
+    // Handle missing fields from new API (these might not be provided, so clear or keep empty to avoid validation errors if they are not strictly tied to API)
+    setValue("nationality", emp.nationality || "", { shouldValidate: true });
+    setValue("visaSponsorship", emp.visa_sponsorship || emp.visa_status || "", { shouldValidate: true });
 
-    showToast(`Employee ${emp.name} loaded successfully!`, "success");
+    showToast(`Employee ${emp.full_name} loaded successfully!`, "success");
   };
 
   // Handle manager selection
   const handleSelectManager = (manager) => {
-    setValue("reportingManager", manager.name, { shouldValidate: true });
+    setValue("reportingManager", manager.name || manager.full_name || `${manager.first_name || ''} ${manager.last_name || ''}`.trim(), { shouldValidate: true });
+    // The backend expects the numeric table ID (e.g., 46) NOT the string EMP- identifier!
     setValue("reportingManagerId", manager.id, { shouldValidate: true });
-    setManagerSearchQuery(manager.name);
+    setManagerSearchQuery(manager.name || manager.full_name || `${manager.first_name || ''} ${manager.last_name || ''}`.trim());
     setShowManagerDropdown(false);
-    showToast(`Reporting manager ${manager.name} selected`, "success");
+    showToast(`Reporting manager selected`, "success");
+  };
+
+  // Handle validation errors when form submit is attempted
+  const onError = (errors) => {
+    console.error("Form validation errors:", errors);
+    showToast("Please fill all required fields. Ensure you select Employee and Manager from the dropdowns.", "error");
   };
 
   const onSubmit = async (data) => {
@@ -484,22 +526,17 @@ const OffboardingInitiation = () => {
 
     try {
       const payload = {
-        employee_id: data.backendEmployeeId,
-        employee_name: data.employeeName,
-        department: data.department,
-        designation: data.designation,
-        reporting_manager: data.reportingManager,
-        reporting_manager_id: data.reportingManagerId,
+        employee_id: data.backendEmployeeId ? parseInt(data.backendEmployeeId, 10) : null,
+        reporting_manager_id: data.reportingManagerId ? parseInt(data.reportingManagerId, 10) : null,
         last_working_day: data.lastWorkingDay,
         separation_type: data.separationType.toLowerCase(),
-        notice_period_days: data.noticePeriodDays,
+        resignation_date: data.resignationDate,
+        notice_period_days: data.noticePeriodDays ? parseInt(data.noticePeriodDays, 10) : 0,
         notice_start_date: data.noticeStartDate,
         visa_sponsorship: data.visaSponsorship,
         nationality: data.nationality,
-        email: data.email,
         reason_for_leaving: data.reasonForLeaving,
-        status: "initiated",
-        current_step: "initiation",
+        is_draft: 0,
       };
 
       let result;
@@ -520,7 +557,6 @@ const OffboardingInitiation = () => {
           </div>,
           "success",
         );
-        navigate(`/admin/employees/offboarding-dashboard`);
       } else {
         // Create new offboarding
         result = await dispatch(initiateOffboarding(payload)).unwrap();
@@ -560,14 +596,13 @@ const OffboardingInitiation = () => {
       setSearchQuery("");
       setManagerSearchQuery("");
 
-      if (!isEditMode) {
-        // Only redirect after a short delay for new offboarding
-        setTimeout(() => {
-          if (result && result.id) {
-            navigate(`/admin/employees/visa-cancellation?id=${result.id}`);
-          }
-        }, 2000);
-      }
+      // Redirect to asset return for both create and update
+      setTimeout(() => {
+        const targetId = (result && result.id) || offboardingId;
+        if (targetId) {
+          navigate(`/admin/employees/asset-return?id=${targetId}`);
+        }
+      }, 1000);
     } catch (error) {
       console.error("Offboarding submission error:", error);
       showToast(
@@ -580,13 +615,52 @@ const OffboardingInitiation = () => {
   };
 
   const handleSaveDraft = async () => {
-    const formData = watch();
+    const data = watch();
+    if (!data.backendEmployeeId || !data.reportingManagerId) {
+      showToast("Please select Employee and Manager first.", "warning");
+      return;
+    }
+    
+    setIsSubmitting(true);
+    
     try {
-      localStorage.setItem("offboarding_draft", JSON.stringify(formData));
-      showToast("Offboarding details saved as draft.", "success");
+      const payload = {
+        employee_id: data.backendEmployeeId ? parseInt(data.backendEmployeeId, 10) : null,
+        reporting_manager_id: data.reportingManagerId ? parseInt(data.reportingManagerId, 10) : null,
+        last_working_day: data.lastWorkingDay,
+        separation_type: data.separationType ? data.separationType.toLowerCase() : null,
+        resignation_date: data.resignationDate,
+        notice_period_days: data.noticePeriodDays ? parseInt(data.noticePeriodDays, 10) : 0,
+        notice_start_date: data.noticeStartDate,
+        visa_sponsorship: data.visaSponsorship,
+        nationality: data.nationality,
+        reason_for_leaving: data.reasonForLeaving,
+        is_draft: 1,
+      };
+
+      if (isEditMode && offboardingId) {
+        await dispatch(
+          updateOffboarding({ id: offboardingId, data: payload }),
+        ).unwrap();
+        showToast("Draft updated successfully", "success");
+      } else {
+        const result = await dispatch(initiateOffboarding(payload)).unwrap();
+        if (result && result.id) {
+          localStorage.setItem("offboarding_id", result.id);
+          localStorage.setItem("offboarding_employee_id", data.backendEmployeeId);
+          localStorage.setItem("offboarding_employee_name", data.employeeName);
+          
+          navigate(`/admin/employees/offboarding-initiation?id=${result.id}`, { replace: true });
+        }
+        showToast("Draft saved successfully", "success");
+      }
+      localStorage.removeItem("offboarding_draft");
     } catch (error) {
       console.error("Save draft error:", error);
-      showToast("Failed to save draft. Data saved locally.", "warning");
+      localStorage.setItem("offboarding_draft", JSON.stringify(data));
+      showToast("Failed to save draft to server. Data saved locally.", "warning");
+    } finally {
+      setIsSubmitting(false);
     }
   };
 
@@ -723,10 +797,13 @@ const OffboardingInitiation = () => {
       <div className="max-w-5xl mx-auto space-y-6">
         {/* SaaS Offboarding Header */}
         <OffboardingHeader currentStep={1} />
+        
+        {/* Progress Box */}
+        <OffboardingProgressBox currentStep={1} />
 
         {/* Form Container Card */}
         <div className="bg-white dark:bg-gray-800 border border-gray-100 dark:border-gray-700/80 rounded-2xl shadow-soft p-6 sm:p-8">
-          <form onSubmit={handleSubmit(onSubmit)} className="space-y-6">
+          <form onSubmit={handleSubmit(onSubmit, onError)} className="space-y-6">
             {/* Header Title with Draft Badge */}
             <div className="flex items-center justify-between border-b border-gray-100 dark:border-gray-700 pb-4 mb-6">
               <h1 className="text-xl sm:text-2xl font-black text-gray-900 dark:text-white tracking-tight">
@@ -787,7 +864,7 @@ const OffboardingInitiation = () => {
                 {/* Dropdown suggestions list */}
                 {showDropdown && !isEditMode && (
                   <div className="absolute z-10 mt-1 w-full bg-white dark:bg-gray-800 border border-gray-200 dark:border-gray-700 rounded-lg shadow-lg max-h-60 overflow-y-auto divide-y divide-gray-100 dark:divide-gray-700">
-                    {employeesLoading ? (
+                    {offboardingEmployeesLoading ? (
                       <div className="p-3 text-center text-xs text-gray-400">
                         Loading employees...
                       </div>
@@ -802,7 +879,7 @@ const OffboardingInitiation = () => {
                           <div className="flex items-center justify-between">
                             <div>
                               <p className="text-sm font-semibold text-gray-900 dark:text-white">
-                                {emp.name}
+                                {emp.full_name}
                               </p>
                               <p className="text-xs text-gray-500 dark:text-gray-400">
                                 {emp.designation} • {emp.department}
@@ -935,23 +1012,31 @@ const OffboardingInitiation = () => {
                 {showManagerDropdown && (
                   <div className="absolute z-10 mt-1 w-full bg-white dark:bg-gray-800 border border-gray-200 dark:border-gray-700 rounded-lg shadow-lg max-h-60 overflow-y-auto divide-y divide-gray-100 dark:divide-gray-700">
                     {filteredManagers.length > 0 ? (
-                      filteredManagers.map((manager) => (
-                        <button
-                          key={manager.id}
-                          type="button"
-                          onClick={() => handleSelectManager(manager)}
-                          className="w-full text-left px-4 py-2.5 hover:bg-gray-50 dark:hover:bg-gray-700/50 transition-colors"
-                        >
-                          <div>
-                            <p className="text-sm font-semibold text-gray-900 dark:text-white">
-                              {manager.name}
-                            </p>
-                            <p className="text-xs text-gray-500 dark:text-gray-400">
-                              {manager.designation} • {manager.department}
-                            </p>
-                          </div>
-                        </button>
-                      ))
+                      filteredManagers.map((manager) => {
+                        const managerName = manager.full_name || manager.name || "";
+                        return (
+                          <button
+                            key={manager.id}
+                            type="button"
+                            onClick={() => handleSelectManager({
+                              ...manager,
+                              name: managerName
+                            })}
+                            className="w-full text-left px-4 py-2.5 hover:bg-gray-50 dark:hover:bg-gray-700/50 transition-colors"
+                          >
+                            <div>
+                              <p className="text-sm font-semibold text-gray-900 dark:text-white">
+                                {managerName}
+                              </p>
+                              {(manager.designation || manager.department) && (
+                                <p className="text-xs text-gray-500 dark:text-gray-400">
+                                  {manager.designation || 'No Designation'} {manager.designation && manager.department ? '•' : ''} {manager.department || ''}
+                                </p>
+                              )}
+                            </div>
+                          </button>
+                        );
+                      })
                     ) : (
                       <div className="p-3 text-center text-xs text-gray-400">
                         No managers found matching "{managerSearchQuery}"
@@ -986,6 +1071,7 @@ const OffboardingInitiation = () => {
                   </p>
                 )}
               </div>
+
               {/* NOTICE START DATE */}
               <div className="space-y-1.5">
                 <label className="block text-xs font-bold text-gray-500 dark:text-gray-400 uppercase tracking-wide">
@@ -1068,9 +1154,32 @@ const OffboardingInitiation = () => {
                   <option value="Retirement">Retirement</option>
                   <option value="Contract End">Contract End</option>
                 </select>
-                {errors.separationType && (
+                  {errors.separationType && (
                   <p className="text-xxs font-bold text-red-500 mt-1">
                     {errors.separationType.message}
+                  </p>
+                )}
+              </div>
+              {/* DYNAMIC DATE BASED ON SEPARATION TYPE */}
+              <div className="space-y-1.5">
+                <label className="block text-xs font-bold text-gray-500 dark:text-gray-400 uppercase tracking-wide">
+                  {watch("separationType") ? `${watch("separationType")} Date` : "Date"} <span className="text-red-500">*</span>
+                </label>
+                <Controller
+                  name="resignationDate"
+                  control={control}
+                  render={({ field }) => (
+                    <DateInput
+                      {...field}
+                      placeholder={`Select ${watch("separationType")?.toLowerCase() || "resignation"} date`}
+                      error={!!errors.resignationDate}
+                      className="w-full bg-gray-50 dark:bg-gray-900 border-gray-200 dark:border-gray-700"
+                    />
+                  )}
+                />
+                {errors.resignationDate && (
+                  <p className="text-xxs font-bold text-red-500 mt-1">
+                    {errors.resignationDate.message}
                   </p>
                 )}
               </div>
@@ -1079,19 +1188,25 @@ const OffboardingInitiation = () => {
                 <label className="block text-xs font-bold text-gray-500 dark:text-gray-400 uppercase tracking-wide">
                   Visa sponsorship <span className="text-red-500">*</span>
                 </label>
-                <select
-                  {...register("visaSponsorship")}
-                  className="w-full px-4 py-3 bg-gray-50 dark:bg-gray-900 border border-gray-200 dark:border-gray-700 rounded-lg text-sm text-gray-800 dark:text-gray-200 outline-none transition-all focus:border-green-500 focus:ring-2 focus:ring-green-500/20 font-semibold"
-                >
-                  <option value="">Select Sponsorship</option>
-                  <option value="Company sponsored">Company sponsored</option>
-                  <option value="Self sponsored">Self sponsored</option>
-                  <option value="Golden Visa">Golden Visa</option>
-                  <option value="Family sponsored">Family sponsored</option>
-                  <option value="Not Applicable">
-                    Not Applicable (No visa required)
-                  </option>
-                </select>
+                <Controller
+                  name="visaSponsorship"
+                  control={control}
+                  render={({ field }) => (
+                    <select
+                      {...field}
+                      className="w-full px-4 py-3 bg-gray-50 dark:bg-gray-900 border border-gray-200 dark:border-gray-700 rounded-lg text-sm text-gray-800 dark:text-gray-200 outline-none transition-all focus:border-green-500 focus:ring-2 focus:ring-green-500/20 font-semibold"
+                    >
+                      <option value="">Select Sponsorship</option>
+                      <option value="Company sponsored">Company sponsored</option>
+                      <option value="Self sponsored">Self sponsored</option>
+                      <option value="Golden Visa">Golden Visa</option>
+                      <option value="Family sponsored">Family sponsored</option>
+                      <option value="Not Applicable">
+                        Not Applicable (No visa required)
+                      </option>
+                    </select>
+                  )}
+                />
                 {errors.visaSponsorship && (
                   <p className="text-xxs font-bold text-red-500 mt-1">
                     {errors.visaSponsorship.message}
@@ -1101,13 +1216,19 @@ const OffboardingInitiation = () => {
               {/* Nationality */}
               <div className="space-y-1.5">
                 <label className="block text-xs font-bold text-gray-500 dark:text-gray-400 uppercase tracking-wide">
-                  Nationality
+                  Nationality <span className="text-red-500">*</span>
                 </label>
-                <input
-                  type="text"
-                  placeholder="e.g. Jordanian"
-                  {...register("nationality")}
-                  className="w-full px-4 py-2.5 bg-gray-50 dark:bg-gray-900 border border-gray-200 dark:border-gray-700 rounded-lg text-sm text-gray-800 dark:text-gray-200 font-semibold focus:outline-none"
+                <Controller
+                  name="nationality"
+                  control={control}
+                  render={({ field }) => (
+                    <input
+                      {...field}
+                      type="text"
+                      placeholder="e.g. Indian"
+                      className="w-full px-4 py-2.5 bg-gray-50 dark:bg-gray-900 border border-gray-200 dark:border-gray-700 rounded-lg text-sm text-gray-800 dark:text-gray-200 font-semibold focus:outline-none"
+                    />
+                  )}
                 />
                 {errors.nationality && (
                   <p className="text-xxs font-bold text-red-500 mt-1">

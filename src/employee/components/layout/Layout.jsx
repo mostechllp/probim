@@ -1,10 +1,10 @@
+// Layout.jsx
 import { useState } from "react";
 import { Outlet, Navigate } from "react-router-dom";
 import { useAppSelector } from "../../store/hooks";
 import Sidebar from "../../../components/common/Sidebar";
 import Header from "../common/Header";
-import TaskWidget from "../widgets/TaskWidget";
-import NotesWidget from "../widgets/NotesWidget";
+import UnifiedWidgets from "../widgets/UnifiedWidgets";
 
 const Layout = () => {
   const { isAuthenticated } = useAppSelector((state) => state.auth);
@@ -20,11 +20,7 @@ const Layout = () => {
 
   return (
     <div className="app flex min-h-screen bg-gray-50 dark:bg-gray-900">
-
-      <Sidebar 
-        isOpen={sidebarOpen} 
-        setIsOpen={setSidebarOpen} 
-      />
+      <Sidebar isOpen={sidebarOpen} setIsOpen={setSidebarOpen} />
 
       <div className="main flex-1">
         <Header onMenuClick={toggleSidebar} />
@@ -32,8 +28,9 @@ const Layout = () => {
           <Outlet />
         </div>
       </div>
-      <TaskWidget />
-      <NotesWidget />
+
+      {/* Unified Widgets - Handles both mobile and desktop */}
+      <UnifiedWidgets />
     </div>
   );
 };

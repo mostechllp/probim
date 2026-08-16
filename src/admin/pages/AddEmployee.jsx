@@ -101,6 +101,15 @@ const AddEmployee = () => {
       type: "employee",
       joining_date: "",
       dob: "",
+      probation_start_date: "",
+      probation_end_date: "",
+      confirmation_date: "",
+      contract_start_date: "",
+      contract_end_date: "",
+      notice_period_start_date: "",
+      last_working_day: "",
+      resignation_date: "",
+      relieving_date: "",
       gender: "male",
       nationality: "",
       marital_status: "",
@@ -489,7 +498,7 @@ const AddEmployee = () => {
     { value: "admin", label: "Admin" },
     { value: "hr", label: "HR" },
     { value: "manager", label: "Manager" },
-    { value: "team-lead", label: "Team Lead" },
+    { value: "team_lead", label: "Team Lead" },
   ];
 
   const genderOptions = [
@@ -750,10 +759,6 @@ const AddEmployee = () => {
   const onSubmit = async (data) => {
     setLoading(true);
 
-    console.log("=== FORM SUBMISSION DEBUG ===");
-    console.log("data.role:", data.role);
-    console.log("data.role type:", typeof data.role);
-    console.log("============================");
 
     // Helper function to convert date from dd/mm/yyyy to YYYY-MM-DD
     const convertDateToBackend = (dateString) => {
@@ -826,6 +831,16 @@ const AddEmployee = () => {
 
     formData.append("dob", dob);
     formData.append("joining_date", joiningDate);
+
+    if (data.probation_start_date) formData.append("probation_start_date", convertDateToBackend(data.probation_start_date));
+    if (data.probation_end_date) formData.append("probation_end_date", convertDateToBackend(data.probation_end_date));
+    if (data.confirmation_date) formData.append("confirmation_date", convertDateToBackend(data.confirmation_date));
+    if (data.contract_start_date) formData.append("contract_start_date", convertDateToBackend(data.contract_start_date));
+    if (data.contract_end_date) formData.append("contract_end_date", convertDateToBackend(data.contract_end_date));
+    if (data.notice_period_start_date) formData.append("notice_period_start_date", convertDateToBackend(data.notice_period_start_date));
+    if (data.last_working_day) formData.append("last_working_day", convertDateToBackend(data.last_working_day));
+    if (data.resignation_date) formData.append("resignation_date", convertDateToBackend(data.resignation_date));
+    if (data.relieving_date) formData.append("relieving_date", convertDateToBackend(data.relieving_date));
 
     // Special days - Send as arrays
     if (data.special_days && data.special_days.length > 0) {
@@ -946,19 +961,41 @@ const AddEmployee = () => {
     });
 
     // Additional documents
+    // Additional documents - FIXED with correct field names and file paths
     if (additionalDocuments.length > 0) {
-      const additionalDocsData = additionalDocuments.map((doc) => ({
-        name: doc.name,
-        filename: doc.filename,
-      }));
-      formData.append(
-        "additional_documents",
-        JSON.stringify(additionalDocsData),
-      );
-
+      // Send each additional document as separate fields with indices
       additionalDocuments.forEach((doc, index) => {
+        // Send the file path (temp path from server)
+        if (doc.file_path) {
+          formData.append(
+            `additional_documents[${index}][file_path]`,
+            doc.file_path,
+          );
+        }
+        // Send the file (as backup)
         if (doc.file) {
-          formData.append(`additional_document_${index}`, doc.file);
+          formData.append(`additional_documents[${index}][file]`, doc.file);
+        }
+        // Send the document name
+        if (doc.document_name || doc.name) {
+          formData.append(
+            `additional_documents[${index}][document_name]`,
+            doc.document_name || doc.name,
+          );
+        }
+        // Send the filename
+        if (doc.filename) {
+          formData.append(
+            `additional_documents[${index}][filename]`,
+            doc.filename,
+          );
+        }
+        // Send expiry date if exists
+        if (doc.expiry_date) {
+          formData.append(
+            `additional_documents[${index}][expiry_date]`,
+            doc.expiry_date,
+          );
         }
       });
     }
@@ -1013,7 +1050,6 @@ const AddEmployee = () => {
         const filename = extractFilename(result.path);
 
         // Create preview for display
-        // eslint-disable-next-line no-unused-vars
         let preview = null;
         if (docData.file.type.startsWith("image/")) {
           const reader = new FileReader();
@@ -1021,10 +1057,14 @@ const AddEmployee = () => {
             setAdditionalDocuments((prev) => [
               ...prev,
               {
+                id: Date.now() + Math.random(), // unique id
                 name: docData.name,
+                document_name: docData.name, // for backend compatibility
                 filename: filename,
+                file_path: result.path, // IMPORTANT: Store the temp path
                 file: docData.file,
                 preview: e.target.result,
+                expiry_date: docData.expiry_date || null, // Add expiry date
               },
             ]);
           };
@@ -1033,10 +1073,14 @@ const AddEmployee = () => {
           setAdditionalDocuments((prev) => [
             ...prev,
             {
+              id: Date.now() + Math.random(),
               name: docData.name,
+              document_name: docData.name,
               filename: filename,
+              file_path: result.path, // IMPORTANT: Store the temp path
               file: docData.file,
               preview: "pdf",
+              expiry_date: docData.expiry_date || null,
             },
           ]);
         }
@@ -1052,7 +1096,6 @@ const AddEmployee = () => {
       setUploadingDoc(false);
     }
   };
-
   // Validation rules
   const validationRules = {
     first_name: {
@@ -1934,6 +1977,140 @@ const AddEmployee = () => {
                     />
                   </div>
 
+                  {/* Employment Timeline & Dates Section */}
+                  <div className="md:col-span-2 mt-6 mb-2">
+                    <h3 className="text-lg font-bold text-gray-800 flex items-center">
+                      <i className="fas fa-calendar-alt text-green-500 mr-2"></i>
+                      Employment Timeline & Dates
+                    </h3>
+                  </div>
+
+                  <div>
+                    <label className="block text-xs md:text-sm font-semibold text-gray-700 mb-1 md:mb-2">
+                      <i className="fas fa-calendar-plus text-green-500 mr-1"></i>
+                      Probation Start Date
+                    </label>
+                    <Controller
+                      name="probation_start_date"
+                      control={control}
+                      render={({ field }) => (
+                        <DateInput {...field} placeholder="dd/mm/yyyy" />
+                      )}
+                    />
+                  </div>
+
+                  <div>
+                    <label className="block text-xs md:text-sm font-semibold text-gray-700 mb-1 md:mb-2">
+                      <i className="fas fa-calendar-minus text-green-500 mr-1"></i>
+                      Probation End Date
+                    </label>
+                    <Controller
+                      name="probation_end_date"
+                      control={control}
+                      render={({ field }) => (
+                        <DateInput {...field} placeholder="dd/mm/yyyy" />
+                      )}
+                    />
+                  </div>
+
+                  <div>
+                    <label className="block text-xs md:text-sm font-semibold text-gray-700 mb-1 md:mb-2">
+                      <i className="fas fa-user-check text-green-500 mr-1"></i>
+                      Confirmation Date
+                    </label>
+                    <Controller
+                      name="confirmation_date"
+                      control={control}
+                      render={({ field }) => (
+                        <DateInput {...field} placeholder="dd/mm/yyyy" />
+                      )}
+                    />
+                  </div>
+
+                  <div>
+                    <label className="block text-xs md:text-sm font-semibold text-gray-700 mb-1 md:mb-2">
+                      <i className="fas fa-file-signature text-green-500 mr-1"></i>
+                      Contract Start Date
+                    </label>
+                    <Controller
+                      name="contract_start_date"
+                      control={control}
+                      render={({ field }) => (
+                        <DateInput {...field} placeholder="dd/mm/yyyy" />
+                      )}
+                    />
+                  </div>
+
+                  <div>
+                    <label className="block text-xs md:text-sm font-semibold text-gray-700 mb-1 md:mb-2">
+                      <i className="fas fa-file-contract text-green-500 mr-1"></i>
+                      Contract End Date
+                    </label>
+                    <Controller
+                      name="contract_end_date"
+                      control={control}
+                      render={({ field }) => (
+                        <DateInput {...field} placeholder="dd/mm/yyyy" />
+                      )}
+                    />
+                  </div>
+
+                  <div>
+                    <label className="block text-xs md:text-sm font-semibold text-gray-700 mb-1 md:mb-2">
+                      <i className="fas fa-sign-out-alt text-green-500 mr-1"></i>
+                      Resignation Date
+                    </label>
+                    <Controller
+                      name="resignation_date"
+                      control={control}
+                      render={({ field }) => (
+                        <DateInput {...field} placeholder="dd/mm/yyyy" />
+                      )}
+                    />
+                  </div>
+
+                  <div>
+                    <label className="block text-xs md:text-sm font-semibold text-gray-700 mb-1 md:mb-2">
+                      <i className="fas fa-hourglass-start text-green-500 mr-1"></i>
+                      Notice Period Start Date
+                    </label>
+                    <Controller
+                      name="notice_period_start_date"
+                      control={control}
+                      render={({ field }) => (
+                        <DateInput {...field} placeholder="dd/mm/yyyy" />
+                      )}
+                    />
+                  </div>
+
+                  <div>
+                    <label className="block text-xs md:text-sm font-semibold text-gray-700 mb-1 md:mb-2">
+                      <i className="fas fa-briefcase text-green-500 mr-1"></i>
+                      Last Working Day (LWD)
+                    </label>
+                    <Controller
+                      name="last_working_day"
+                      control={control}
+                      render={({ field }) => (
+                        <DateInput {...field} placeholder="dd/mm/yyyy" />
+                      )}
+                    />
+                  </div>
+
+                  <div>
+                    <label className="block text-xs md:text-sm font-semibold text-gray-700 mb-1 md:mb-2">
+                      <i className="fas fa-door-open text-green-500 mr-1"></i>
+                      Relieving Date
+                    </label>
+                    <Controller
+                      name="relieving_date"
+                      control={control}
+                      render={({ field }) => (
+                        <DateInput {...field} placeholder="dd/mm/yyyy" />
+                      )}
+                    />
+                  </div>
+
                   {/* Passport Size Photo - OUTSIDE isSkilled, visible for all employees */}
                   <div className="md:col-span-2">
                     <div className="border border-gray-200 rounded-lg p-4 bg-gray-50/30 mb-4">
@@ -2120,17 +2297,30 @@ const AddEmployee = () => {
                         <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-3 mt-3">
                           {additionalDocuments.map((doc, index) => (
                             <div
-                              key={index}
+                              key={doc.id || index}
                               className="border border-gray-200 rounded-lg p-3 bg-gray-50"
                             >
                               <div className="flex items-start justify-between">
                                 <div className="flex-1">
                                   <p className="text-sm font-semibold text-gray-700 truncate">
-                                    {doc.name}
+                                    {doc.document_name || doc.name}
                                   </p>
                                   <p className="text-xs text-gray-500 mt-1">
-                                    {doc.file?.name || "Document uploaded"}
+                                    {doc.filename ||
+                                      doc.file?.name ||
+                                      "Document uploaded"}
                                   </p>
+                                  {doc.expiry_date && (
+                                    <p className="text-xs text-red-500 mt-1">
+                                      <i className="fas fa-calendar-times mr-1"></i>
+                                      Expires: {doc.expiry_date}
+                                    </p>
+                                  )}
+                                  {doc.file_path && (
+                                    <p className="text-xs text-gray-400 mt-1 truncate">
+                                      Path: {doc.file_path}
+                                    </p>
+                                  )}
                                 </div>
                                 <button
                                   type="button"

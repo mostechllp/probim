@@ -1,20 +1,22 @@
 import React, { useEffect, useState } from "react";
 import { ArrowLeft, CheckCircle2, Eye, EyeOff } from "lucide-react";
 import { useNavigate, useLocation } from "react-router-dom";
+import { useSelector } from "react-redux";
 
 const STEPS = [
   { id: 1, label: "Initiation", subtitle: "Start Process", path: "/admin/employees/offboarding-initiation" },
-  { id: 2, label: "Visa Cancel", subtitle: "Visa Processing", path: "/admin/employees/visa-cancellation" },
-  { id: 3, label: "Checklist", subtitle: "Verification", path: "/admin/employees/offboarding-checklist" },
-  { id: 4, label: "Interview", subtitle: "Exit Session", path: "/admin/employees/exit-interview" },
-  { id: 5, label: "Assets", subtitle: "Asset Return", path: "/admin/employees/asset-return" },
-  { id: 6, label: "Settlement", subtitle: "Final Payment", path: "/admin/employees/final-settlement" },
-  { id: 7, label: "Letters", subtitle: "Clearance", path: "/admin/employees/letters-and-clearance" },
+  { id: 2, label: "Assets", subtitle: "Asset Return", path: "/admin/employees/asset-return" },
+  { id: 3, label: "Settlement", subtitle: "Final Payment", path: "/admin/employees/final-settlement" },
+  { id: 4, label: "Visa Cancel", subtitle: "Visa Processing", path: "/admin/employees/visa-cancellation" },
+  { id: 5, label: "Interview", subtitle: "Exit Session", path: "/admin/employees/exit-interview" },
+  { id: 6, label: "Letters", subtitle: "Clearance", path: "/admin/employees/letters-and-clearance" },
+  { id: 7, label: "Final Clearance", subtitle: "Verification", path: "/admin/employees/offboarding-checklist" },
 ];
 
 const OffboardingHeader = ({ currentStep }) => {
   const navigate = useNavigate();
   const location = useLocation();
+  const { currentProgress, currentOffboarding } = useSelector((state) => state.offboarding);
   const [isVisaRequired, setIsVisaRequired] = useState(true);
   const [isMobile, setIsMobile] = useState(window.innerWidth < 768);
 
@@ -30,7 +32,7 @@ const OffboardingHeader = ({ currentStep }) => {
   // Get offboarding ID from URL or localStorage
   const getOffboardingId = () => {
     const urlParams = new URLSearchParams(location.search);
-    return urlParams.get('id') || localStorage.getItem("offboarding_id");
+    return location.state?.id || urlParams.get('id') || localStorage.getItem("offboarding_id");
   };
   
   // Check visa sponsorship status from localStorage or session
@@ -53,7 +55,7 @@ const OffboardingHeader = ({ currentStep }) => {
     if (isVisaRequired) {
       return STEPS;
     } else {
-      return STEPS.filter(step => step.id !== 2);
+      return STEPS.filter(step => step.id !== 4);
     }
   };
   
@@ -61,17 +63,31 @@ const OffboardingHeader = ({ currentStep }) => {
   
   const getAdjustedStepId = (originalStepId) => {
     if (!isVisaRequired) {
-      if (originalStepId > 2) {
+      if (originalStepId > 4) {
         return originalStepId - 1;
       }
     }
     return originalStepId;
   };
   
+  const combinedStatus = currentProgress?.status ?? currentOffboarding?.status;
+  
+  let apiCalculatedStep = null;
+  if (combinedStatus) {
+     if (combinedStatus === "completed" || currentProgress?.progress_percentage === 100) apiCalculatedStep = 8;
+     else if (combinedStatus.includes("visa")) apiCalculatedStep = 4;
+     else if (combinedStatus.includes("checklist") || combinedStatus.includes("final") || combinedStatus.includes("clearance")) apiCalculatedStep = 7;
+     else if (combinedStatus.includes("asset")) apiCalculatedStep = 2;
+     else if (combinedStatus.includes("interview")) apiCalculatedStep = 5;
+     else if (combinedStatus.includes("settlement")) apiCalculatedStep = 3;
+     else if (combinedStatus.includes("letter")) apiCalculatedStep = 6;
+  }
+
+  const maxAllowedStep = apiCalculatedStep ? getAdjustedStepId(apiCalculatedStep) : getAdjustedStepId(currentStep);
+
   const canNavigateToStep = (stepId, originalStepId) => {
-    const adjustedCurrentStep = getAdjustedStepId(currentStep);
     const adjustedStepId = getAdjustedStepId(originalStepId);
-    return adjustedStepId <= adjustedCurrentStep + 1;
+    return adjustedStepId <= maxAllowedStep;
   };
   
   const handleStepClick = (step, originalStepId) => {
@@ -128,11 +144,11 @@ const OffboardingHeader = ({ currentStep }) => {
         {/* Stepper */}
         <div className="flex items-center justify-between w-full">
           {filteredSteps.map((step, index) => {
-            const displayStepNumber = !isVisaRequired && step.id > 2 ? step.id - 1 : step.id;
-            const adjustedCurrent = getAdjustedStepId(currentStep);
+            const displayStepNumber = !isVisaRequired && step.id > 4 ? step.id - 1 : step.id;
+            const viewedStep = getAdjustedStepId(currentStep);
             const adjustedStep = getAdjustedStepId(step.id);
-            const isCompleted = adjustedCurrent > adjustedStep;
-            const isActive = adjustedCurrent === adjustedStep;
+            const isCompleted = adjustedStep < maxAllowedStep && adjustedStep !== viewedStep;
+            const isActive = adjustedStep === viewedStep;
             const isClickable = canNavigateToStep(step.id, step.id);
             
             return (
@@ -160,7 +176,7 @@ const OffboardingHeader = ({ currentStep }) => {
                   
                   <div className="mt-3 text-center">
                     <p className={`text-sm font-semibold transition-colors ${
-                      adjustedCurrent >= adjustedStep
+                      maxAllowedStep >= adjustedStep
                         ? "text-gray-900 dark:text-white" 
                         : "text-gray-400"
                     }`}>
@@ -177,7 +193,7 @@ const OffboardingHeader = ({ currentStep }) => {
                     <div 
                       className="h-full bg-green-600 transition-all duration-500 ease-in-out" 
                       style={{ 
-                        width: adjustedCurrent > adjustedStep ? "100%" : "0%" 
+                        width: maxAllowedStep > adjustedStep ? "100%" : "0%" 
                       }}
                     />
                   </div>
@@ -230,7 +246,7 @@ const OffboardingHeader = ({ currentStep }) => {
           <div 
             className="h-full bg-green-600 rounded-full transition-all duration-500 ease-in-out"
             style={{ 
-              width: `${((getAdjustedStepId(currentStep) - 1) / (filteredSteps.length - 1)) * 100}%` 
+              width: `${((Math.max(getAdjustedStepId(currentStep), maxAllowedStep) - 1) / (filteredSteps.length - 1)) * 100}%` 
             }}
           />
         </div>
@@ -238,11 +254,11 @@ const OffboardingHeader = ({ currentStep }) => {
         {/* Step circles - All steps visible */}
         <div className="flex items-center justify-between">
           {filteredSteps.map((step) => {
-            const displayStepNumber = !isVisaRequired && step.id > 2 ? step.id - 1 : step.id;
-            const adjustedCurrent = getAdjustedStepId(currentStep);
+            const displayStepNumber = !isVisaRequired && step.id > 4 ? step.id - 1 : step.id;
+            const viewedStep = getAdjustedStepId(currentStep);
             const adjustedStep = getAdjustedStepId(step.id);
-            const isCompleted = adjustedCurrent > adjustedStep;
-            const isActive = adjustedCurrent === adjustedStep;
+            const isCompleted = adjustedStep < maxAllowedStep && adjustedStep !== viewedStep;
+            const isActive = adjustedStep === viewedStep;
             const isClickable = canNavigateToStep(step.id, step.id);
 
             return (
@@ -269,7 +285,7 @@ const OffboardingHeader = ({ currentStep }) => {
                 </div>
                 
                 <p className={`text-[7px] font-semibold mt-1 text-center leading-tight max-w-[40px] ${
-                  adjustedCurrent >= adjustedStep
+                  maxAllowedStep >= adjustedStep
                     ? "text-gray-900 dark:text-white" 
                     : "text-gray-400"
                 }`}>

@@ -11,12 +11,11 @@ export const submitAttendanceRequest = createAsyncThunk(
         request_date,
         request_time,
         reason,
+        timezone: Intl.DateTimeFormat().resolvedOptions().timeZone,
       };
-      
-      console.log("Submitting attendance request:", payload);
+
       const response = await apiClient.post("/employee/attendance-requests", payload);
-      console.log("Attendance request response:", response.data);
-      
+
       if (response.data?.status === "success") {
         return response.data.data;
       }
@@ -24,13 +23,13 @@ export const submitAttendanceRequest = createAsyncThunk(
     } catch (error) {
       console.error("Submit attendance request error:", error);
       console.error("Error response:", error.response?.data);
-      
+
       // Extract validation errors
       if (error.response?.data?.errors) {
         const errorMessages = Object.values(error.response.data.errors).flat();
         return rejectWithValue(errorMessages.join(", "));
       }
-      
+
       return rejectWithValue(
         error.response?.data?.message || "Failed to submit attendance request"
       );
@@ -44,8 +43,7 @@ export const fetchAttendanceRequests = createAsyncThunk(
   async (_, { rejectWithValue }) => {
     try {
       const response = await apiClient.get("/employee/attendance-requests");
-      console.log("Fetch attendance requests response:", response.data);
-      
+
       if (response.data?.status === "success") {
         return response.data.data || [];
       }
@@ -59,14 +57,84 @@ export const fetchAttendanceRequests = createAsyncThunk(
   }
 );
 
+// Fetch single attendance request details
+export const fetchAttendanceRequestDetails = createAsyncThunk(
+  "attendance/fetchDetails",
+  async (id, { rejectWithValue }) => {
+    try {
+      const response = await apiClient.get(`/employee/attendance-requests/${id}`);
+      return response.data?.data || null;
+    } catch (error) {
+      console.error("Fetch attendance request details error:", error);
+      return rejectWithValue(
+        error.response?.data?.message || "Failed to fetch details"
+      );
+    }
+  }
+);
+
+// Update attendance request
+export const updateAttendanceRequest = createAsyncThunk(
+  "attendance/updateRequest",
+  async ({ id, payload }, { rejectWithValue }) => {
+    try {
+      // Use FormData with POST and _method=PUT. 
+      // This is the absolute most reliable way to send updates to a Laravel backend 
+      // because it bypasses both Hostinger's 405 PUT blocks AND PHP's inability to parse JSON for PUT requests natively in some configs.
+      const formData = new FormData();
+      formData.append('_method', 'PUT');
+      
+      // Append all fields explicitly
+      Object.keys(payload).forEach(key => {
+        if (payload[key] !== undefined && payload[key] !== null) {
+          formData.append(key, payload[key]);
+        }
+      });
+      
+      const response = await apiClient.post(`/employee/attendance-requests/${id}`, formData);
+      if (response.data?.status === "success" || response.data?.success) {
+        return response.data.data;
+      }
+      return rejectWithValue(response.data?.message || "Failed to update attendance request");
+    } catch (error) {
+      console.error("Update attendance request error:", error);
+      return rejectWithValue(
+        error.response?.data?.message || "Failed to update attendance request"
+      );
+    }
+  }
+);
+
+// Delete attendance request
+export const deleteAttendanceRequest = createAsyncThunk(
+  "attendance/deleteRequest",
+  async (id, { rejectWithValue }) => {
+    try {
+      // Use POST with _method spoofing to bypass 405 errors on some hosting providers
+      const response = await apiClient.post(`/employee/attendance-requests/${id}`, {
+        _method: 'DELETE'
+      });
+      if (response.data?.status === "success" || response.data?.success) {
+        return id;
+      }
+      return rejectWithValue(response.data?.message || "Failed to delete attendance request");
+    } catch (error) {
+      console.error("Delete attendance request error:", error);
+      return rejectWithValue(
+        error.response?.data?.message || "Failed to delete attendance request"
+      );
+    }
+  }
+);
+
 // Update attendance request status (for admin)
 export const updateAttendanceRequestStatus = createAsyncThunk(
   "attendance/updateStatus",
   async ({ id, status }, { rejectWithValue }) => {
     try {
       const response = await apiClient.put(`/admin/attendance-requests/${id}/status`, { status });
-      console.log("Update attendance request status response:", response.data);
-      
+
+
       if (response.data?.status === "success") {
         return { id, status };
       }
@@ -134,7 +202,7 @@ const attendanceTypeSlice = createSlice({
         state.submitting = false;
         state.error = action.payload;
       })
-      
+
       // Fetch Attendance Requests
       .addCase(fetchAttendanceRequests.pending, (state) => {
         state.loading = true;
@@ -149,7 +217,7 @@ const attendanceTypeSlice = createSlice({
         state.loading = false;
         state.error = action.payload;
       })
-      
+
       // Update Attendance Request Status
       .addCase(updateAttendanceRequestStatus.fulfilled, (state, action) => {
         const { id, status } = action.payload;
@@ -160,15 +228,31 @@ const attendanceTypeSlice = createSlice({
         if (state.currentRequest?.id === id) {
           state.currentRequest.status = status;
         }
+      })
+
+      // Update Attendance Request
+      .addCase(updateAttendanceRequest.fulfilled, (state, action) => {
+        if (action.payload && action.payload.id) {
+          const index = state.requests.findIndex(r => r.id === action.payload.id);
+          if (index !== -1) {
+            state.requests[index] = action.payload;
+          }
+        }
+      })
+
+      // Delete Attendance Request
+      .addCase(deleteAttendanceRequest.fulfilled, (state, action) => {
+        state.requests = state.requests.filter(r => r.id !== action.payload);
+        state.totalCount = state.requests.length;
       });
   },
 });
 
-export const { 
-  setAttendanceFilter, 
-  setAttendancePagination, 
+export const {
+  setAttendanceFilter,
+  setAttendancePagination,
   clearAttendanceError,
-  clearAttendanceRequests 
+  clearAttendanceRequests
 } = attendanceTypeSlice.actions;
 
 export default attendanceTypeSlice.reducer;

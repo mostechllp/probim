@@ -125,18 +125,15 @@ const OnboardingReview = () => {
 
   // ─── Step 1: Save employee details ──────────────────────────────────────
   const saveEmployeeDetails = async (data) => {
-    console.log("[Onboarding] Step 1: Saving employee details...");
     const response = await apiClient.post(
       "/admin/employees/onboard/details",
       data,
     );
-    console.log("[Onboarding] Employee details saved:", response.data);
     return response.data;
   };
 
   // ─── Step 2: Save salary details with packages ──────────────────────────
   const saveSalaryDetails = async (userId, salaryData) => {
-    console.log("[Onboarding] Step 2: Saving salary details for user:", userId);
 
     const packages = salaryData.packages || {};
     const packagesArray = [];
@@ -144,7 +141,7 @@ const OnboardingReview = () => {
     if (packages.package1 && packages.package1.isSaved) {
       const pkg1 = packages.package1;
       packagesArray.push({
-        name: pkg1.name || "Home Country / WFH",
+        name: pkg1.name || "Package 1 - Home Country / WFH",
         is_active: true,
         currency: pkg1.currency || "AED",
         salary_components: (pkg1.salaryComponents || []).map((comp) => ({
@@ -160,7 +157,7 @@ const OnboardingReview = () => {
     if (packages.package2 && packages.package2.isSaved) {
       const pkg2 = packages.package2;
       packagesArray.push({
-        name: pkg2.name || "Dubai Onsite",
+        name: pkg2.name || "Package 2 - Dubai Onsite",
         is_active: true,
         currency: pkg2.currency || "AED",
         salary_components: (pkg2.salaryComponents || []).map((comp) => ({
@@ -179,17 +176,11 @@ const OnboardingReview = () => {
       packages: packagesArray,
     };
 
-    console.log(
-      "[Onboarding] Salary payload:",
-      JSON.stringify(payload, null, 2),
-    );
-
     try {
       const response = await apiClient.post(
         "/admin/employees/onboard/salary",
         payload,
       );
-      console.log("[Onboarding] Salary details saved:", response.data);
       return response.data;
     } catch (error) {
       console.error("[Onboarding] Error saving salary:", error);
@@ -199,12 +190,10 @@ const OnboardingReview = () => {
 
   // ─── Step 3: Save bank details ──────────────────────────────────────────
   const saveBankDetails = async (userId, bankData) => {
-    console.log("[Onboarding] Step 3: Saving bank details for user:", userId);
 
     const bankAccounts = bankData.bankAccounts || [];
 
     if (bankAccounts.length === 0) {
-      console.log("[Onboarding] No bank accounts to save");
       return { success: true, message: "No bank accounts provided" };
     }
 
@@ -221,14 +210,12 @@ const OnboardingReview = () => {
       })),
     };
 
-    console.log("[Onboarding] Bank payload:", JSON.stringify(payload, null, 2));
 
     try {
       const response = await apiClient.post(
         "/admin/employees/onboard/banks",
         payload,
       );
-      console.log("[Onboarding] Bank details saved response:", response.data);
       return response.data;
     } catch (error) {
       console.error("[Onboarding] Failed to save bank details:", error);
@@ -239,14 +226,9 @@ const OnboardingReview = () => {
 
   // ─── Step 4: Complete onboarding ────────────────────────────────────────
   const completeOnboardingProcess = async (employeeId) => {
-    console.log(
-      "[Onboarding] Step 4: Completing onboarding for employee:",
-      employeeId,
-    );
     const response = await apiClient.post("/admin/employees/onboard/complete", {
       user_id: employeeId,
     });
-    console.log("[Onboarding] Onboarding completed:", response.data);
     return response.data;
   };
 
@@ -351,11 +333,9 @@ const OnboardingReview = () => {
         return;
       }
 
-      // Parse full name
-      const fullName = (employeeDetails.fullName || "").trim();
-      const parts = fullName.split(" ");
-      const first_name = parts[0] || "Unknown";
-      const last_name = parts.slice(1).join(" ") || "";
+      // Retrieve name directly since they are already separated
+      const first_name = employeeDetails.firstName || "Unknown";
+      const last_name = employeeDetails.lastName || "";
 
       // Generate DOB and Employee ID
       let dob = "";
@@ -462,7 +442,6 @@ const OnboardingReview = () => {
         employeeFormData.append("special_days_date[]", specDate);
       }
 
-      console.log("[Onboarding] Submitting employee details...");
       let createdEmployee;
       try {
         const createRes = await saveEmployeeDetails(employeeFormData);
@@ -471,25 +450,17 @@ const OnboardingReview = () => {
         const userId = createdEmployee.user_id;
 
         setEmployeeId(employeeId);
-        console.log(
-          "[Onboarding] Employee created - Employee ID:",
-          employeeId,
-          "User ID:",
-          userId,
-        );
 
         if (!userId) {
           throw new Error("No user_id returned from employee creation");
         }
 
         // ─── Save salary details with packages ──────────────────────────────
-        console.log("[Onboarding] Saving salary details...");
         try {
           await saveSalaryDetails(userId, {
             packages: employeeDetails.packages || {},
             paymentCycle: employeeDetails.paymentCycle || "Monthly",
           });
-          console.log("[Onboarding] Salary details saved successfully");
         } catch (error) {
           console.error("[Onboarding] Failed to save salary details:", error);
           const errorData = error?.response?.data;
@@ -515,12 +486,10 @@ const OnboardingReview = () => {
         }
 
         // ─── Save bank details ──────────────────────────────────────────────
-        console.log("[Onboarding] Saving bank details...");
         try {
           await saveBankDetails(userId, {
             bankAccounts: employeeDetails.bankAccounts || [],
           });
-          console.log("[Onboarding] Bank details saved successfully");
         } catch (error) {
           console.error("[Onboarding] Failed to save bank details:", error);
           const errorData = error?.response?.data;
@@ -546,10 +515,8 @@ const OnboardingReview = () => {
         }
 
         // ─── Complete onboarding ─────────────────────────────────────────────
-        console.log("[Onboarding] Completing onboarding process...");
         try {
           await completeOnboardingProcess(userId);
-          console.log("[Onboarding] Onboarding completed successfully!");
 
           dispatch(fetchEmployees());
           dispatch(completeOnboarding());
@@ -652,18 +619,10 @@ const OnboardingReview = () => {
 
   // ─── Get packages from employeeDetails ──────────────────────────────────
   // Try multiple sources for packages data
-  console.log("[OnboardingReview] employeeDetails:", employeeDetails);
-  console.log(
-    "[OnboardingReview] packages from employeeDetails:",
-    employeeDetails.packages,
-  );
 
   const packages = employeeDetails.packages || {};
   const package1 = packages.package1 || {};
   const package2 = packages.package2 || {};
-
-  console.log("[OnboardingReview] package1:", package1);
-  console.log("[OnboardingReview] package2:", package2);
 
   const getPackagesFromLocalStorage = () => {
     try {
@@ -750,16 +709,11 @@ const finalPackages = (package1.packageId || package2.packageId) ? packages : (l
 const finalPackage1 = finalPackages.package1 || {};
 const finalPackage2 = finalPackages.package2 || {};
 
-console.log('[OnboardingReview] finalPackage1:', finalPackage1);
-console.log('[OnboardingReview] finalPackage2:', finalPackage2);
-
 
   // Check if packages exist and are saved
   const hasPackage1 = (finalPackage1.packageId || finalPackage1.id) && finalPackage1.isSaved;
 const hasPackage2 = (finalPackage2.packageId || finalPackage2.id) && finalPackage2.isSaved;
 
-console.log("[OnboardingReview] hasPackage1:", hasPackage1);
-console.log("[OnboardingReview] hasPackage2:", hasPackage2);
 
   return (
     <>
@@ -858,7 +812,7 @@ console.log("[OnboardingReview] hasPackage2:", hasPackage2);
                 </div>
                 <div>
                   <p className="text-lg font-bold text-gray-900 dark:text-white">
-                    {employeeDetails.fullName}
+                    {employeeDetails.firstName} {employeeDetails.lastName}
                   </p>
                   <p className="text-sm text-gray-500">
                     {employeeDetails.designation} • {employeeDetails.department}

@@ -9,7 +9,6 @@ import onboardingService from "../../services/onboardingService";
 // RESUME PARSING (existing)
 // ─────────────────────────────────────────────────────────────────────────────
 
-// Parse AI resume using file extraction and OpenRouter
 export const parseResume = createAsyncThunk(
   "onboarding/parseResume",
   async (file, { rejectWithValue }) => {
@@ -30,11 +29,6 @@ export const parseResume = createAsyncThunk(
 // SALARY PACKAGES
 // ─────────────────────────────────────────────────────────────────────────────
 
-/**
- * GET api/admin/employees/salary-packages/{userId}
- * Fetch salary packages for an employee using their user_id
- * The userId here is the employee's user ID (the user being onboarded)
- */
 export const fetchEmployeeSalaryPackages = createAsyncThunk(
   "onboarding/fetchEmployeeSalaryPackages",
   async (userId, { rejectWithValue }) => {
@@ -42,11 +36,6 @@ export const fetchEmployeeSalaryPackages = createAsyncThunk(
       if (!userId) {
         return rejectWithValue("User ID is required to fetch salary packages");
       }
-
-      console.log(
-        "[onboarding] Fetching salary packages for userId (employee):",
-        userId,
-      );
       const response = await onboardingService.getSalaryPackages(userId);
 
       let packagesData = [];
@@ -59,8 +48,7 @@ export const fetchEmployeeSalaryPackages = createAsyncThunk(
       } else if (response?.success !== false) {
         packagesData = response?.data || response || [];
       }
-
-      console.log("[onboarding] Extracted packages data:", packagesData);
+    
 
       return {
         data: packagesData,
@@ -81,22 +69,26 @@ export const fetchEmployeeSalaryPackages = createAsyncThunk(
 
 /**
  * POST api/admin/onboarding/save-details
- * Save employee personal & professional details (Step 1).
+ * Save employee personal & professional details (Step 2).
+ * This should UPDATE the draft employee, not create a new one.
  */
+// In onboardingSlice.js - update the saveOnboardingDetails thunk
+
 export const saveOnboardingDetails = createAsyncThunk(
   "onboarding/saveDetails",
-  async (payload, { rejectWithValue }) => {
+  async (payload, { rejectWithValue, getState }) => {
     try {
-      const data = await onboardingService.saveDetails(payload);
+      const state = getState();
+      const employeeId = state.onboarding?.savedEmployeeId || null;
+      
+      // Pass the employeeId to the service
+      const data = await onboardingService.saveDetails(payload, employeeId);
       return data;
     } catch (error) {
-      return rejectWithValue(
-        error.message || "Failed to save employee details",
-      );
+      return rejectWithValue(error);
     }
   },
 );
-
 /**
  * POST api/admin/employees/onboard/salary
  * Save salary structure (Step 3).
@@ -106,9 +98,6 @@ export const saveOnboardingSalary = createAsyncThunk(
   async (payload, { rejectWithValue, getState }) => {
     try {
       const data = await onboardingService.saveSalary(payload);
-      console.log("[onboarding] saveOnboardingSalary response:", data);
-
-      // Return the full response so we can update the state
       return data;
     } catch (error) {
       console.error("[onboarding] saveOnboardingSalary error:", error);
@@ -128,7 +117,6 @@ export const saveOnboardingBanks = createAsyncThunk(
   async (payload, { rejectWithValue }) => {
     try {
       const data = await onboardingService.saveBanks(payload);
-      console.log("[onboarding] saveOnboardingBanks response:", data);
       return data;
     } catch (error) {
       console.error("[onboarding] saveOnboardingBanks error:", error);
@@ -139,13 +127,23 @@ export const saveOnboardingBanks = createAsyncThunk(
 
 /**
  * POST api/admin/employees/onboard/complete
- * Finalise the onboarding process (Step 4 / Final Review).
+ * Finalise the onboarding process (Step 5 / Final Review).
+ * This should UPDATE the draft employee to make them active/complete,
+ * not create a new employee.
  */
+
 export const completeOnboardingAPI = createAsyncThunk(
   "onboarding/completeAPI",
-  async (payload, { rejectWithValue }) => {
+  async (payload, { rejectWithValue, getState }) => {
     try {
-      const data = await onboardingService.completeOnboarding(payload);
+      const state = getState();
+      const employeeId = state.onboarding?.savedEmployeeId || null;
+      
+      // Pass the employeeId in the payload
+      const data = await onboardingService.completeOnboarding({
+        ...payload,
+        employeeId: employeeId,
+      });
       return data;
     } catch (error) {
       return rejectWithValue(error);
@@ -275,7 +273,8 @@ const initialState = {
   availablePackages: [],
   packagesLoading: false,
   employeeDetails: {
-    fullName: "",
+    firstName: "",
+    lastName: "",
     email: "",
     phone: "",
     nationality: "",
@@ -290,7 +289,7 @@ const initialState = {
     packages: {
       package1: {
         id: "package1",
-        name: "Home Country / WFH",
+        name: "Package 1 - Home Country / WFH",
         currency: "AED",
         salaryComponents: [],
         isSaved: false,
@@ -299,7 +298,7 @@ const initialState = {
       },
       package2: {
         id: "package2",
-        name: "Dubai Onsite",
+        name: "Package 2 - Dubai Onsite",
         currency: "AED",
         salaryComponents: [],
         isSaved: false,
@@ -405,6 +404,9 @@ const onboardingSlice = createSlice({
     clearPackages: (state) => {
       state.availablePackages = [];
     },
+    setSavedEmployeeId: (state, action) => {
+      state.savedEmployeeId = action.payload;
+    },
   },
   extraReducers: (builder) => {
     builder
@@ -466,8 +468,22 @@ const onboardingSlice = createSlice({
       })
       .addCase(saveOnboardingDetails.fulfilled, (state, action) => {
         state.isLoading = false;
+        // ✅ Store the employee ID (draft) so we can update it later
         const employeeId = action.payload?.data?.id || action.payload?.id;
-        if (employeeId) state.savedEmployeeId = employeeId;
+        if (employeeId) {
+          state.savedEmployeeId = employeeId;
+          // Also save to localStorage so it persists
+          try {
+            const draftStr = localStorage.getItem("onboarding-draft");
+            if (draftStr) {
+              const draft = JSON.parse(draftStr);
+              draft.savedEmployeeId = employeeId;
+              localStorage.setItem("onboarding-draft", JSON.stringify(draft));
+            }
+          } catch (err) {
+            console.error("Failed to save employee ID to draft:", err);
+          }
+        }
       })
       .addCase(saveOnboardingDetails.rejected, (state, action) => {
         state.isLoading = false;
@@ -479,30 +495,25 @@ const onboardingSlice = createSlice({
         state.isLoading = true;
         state.error = null;
       })
-      // In onboardingSlice.js, update the saveOnboardingSalary.fulfilled reducer:
-
       .addCase(saveOnboardingSalary.fulfilled, (state, action) => {
         state.isLoading = false;
 
-        console.log("[onboarding] Processing salary response:", action.payload);
 
         const responseData = action.payload?.data;
         if (responseData?.packages) {
           const apiPackages = responseData.packages;
 
-          // Create a deep copy of the current packages
           const updatedPackages = {
             package1: { ...state.employeeDetails.packages.package1 },
             package2: { ...state.employeeDetails.packages.package2 },
           };
 
-          // Update package1 with API response
           if (apiPackages.package1) {
             const pkg1 = apiPackages.package1;
             updatedPackages.package1 = {
               ...updatedPackages.package1,
-              packageId: pkg1.id, // <-- THIS IS THE KEY FIX
-              id: pkg1.id, // Also set id for consistency
+              packageId: pkg1.id,
+              id: pkg1.id,
               name: pkg1.name || updatedPackages.package1.name,
               currency: pkg1.currency || updatedPackages.package1.currency,
               isSaved: true,
@@ -513,16 +524,14 @@ const onboardingSlice = createSlice({
                 price: comp.value,
               })),
             };
-            console.log("[onboarding] Updated package1 with ID:", pkg1.id);
           }
 
-          // Update package2 with API response
           if (apiPackages.package2) {
             const pkg2 = apiPackages.package2;
             updatedPackages.package2 = {
               ...updatedPackages.package2,
-              packageId: pkg2.id, // <-- THIS IS THE KEY FIX
-              id: pkg2.id, // Also set id for consistency
+              packageId: pkg2.id,
+              id: pkg2.id,
               name: pkg2.name || updatedPackages.package2.name,
               currency: pkg2.currency || updatedPackages.package2.currency,
               isSaved: true,
@@ -533,18 +542,14 @@ const onboardingSlice = createSlice({
                 price: comp.value,
               })),
             };
-            console.log("[onboarding] Updated package2 with ID:", pkg2.id);
           }
 
-          // Update the state
           state.employeeDetails.packages = updatedPackages;
 
-          // Update payment cycle
           if (responseData.payment_cycle) {
             state.employeeDetails.paymentCycle = responseData.payment_cycle;
           }
 
-          // Also update localStorage draft
           try {
             const draftStr = localStorage.getItem("onboarding-draft");
             if (draftStr) {
@@ -554,9 +559,6 @@ const onboardingSlice = createSlice({
                 draft.employeeDetails.paymentCycle =
                   state.employeeDetails.paymentCycle;
                 localStorage.setItem("onboarding-draft", JSON.stringify(draft));
-                console.log(
-                  "[onboarding] Updated localStorage draft with packages",
-                );
               }
             }
           } catch (err) {
@@ -577,7 +579,6 @@ const onboardingSlice = createSlice({
       .addCase(saveOnboardingBanks.fulfilled, (state, action) => {
         state.isLoading = false;
 
-        console.log("[onboarding] Processing bank response:", action.payload);
 
         const responseData = action.payload?.data;
         if (responseData?.bank_details) {
@@ -593,12 +594,7 @@ const onboardingSlice = createSlice({
           }));
 
           state.employeeDetails.bankAccounts = updatedBankAccounts;
-          console.log(
-            "[onboarding] Updated bank accounts:",
-            updatedBankAccounts,
-          );
 
-          // Also update localStorage draft
           try {
             const draftStr = localStorage.getItem("onboarding-draft");
             if (draftStr) {
@@ -606,9 +602,6 @@ const onboardingSlice = createSlice({
               if (draft.employeeDetails) {
                 draft.employeeDetails.bankAccounts = updatedBankAccounts;
                 localStorage.setItem("onboarding-draft", JSON.stringify(draft));
-                console.log(
-                  "[onboarding] Updated localStorage draft with banks",
-                );
               }
             }
           } catch (err) {
@@ -629,6 +622,8 @@ const onboardingSlice = createSlice({
       .addCase(completeOnboardingAPI.fulfilled, (state) => {
         state.isLoading = false;
         state.onboardingComplete = true;
+        // Clear the saved employee ID after completion
+        state.savedEmployeeId = null;
       })
       .addCase(completeOnboardingAPI.rejected, (state, action) => {
         state.isLoading = false;
@@ -719,6 +714,7 @@ export const {
   restoreDraft,
   clearOnboardingError,
   clearPackages,
+  setSavedEmployeeId,
 } = onboardingSlice.actions;
 
 export default onboardingSlice.reducer;

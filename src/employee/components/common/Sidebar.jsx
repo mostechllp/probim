@@ -10,7 +10,6 @@ import EarlyCheckinModal from "../modals/EarlyCheckinModal";
 const Sidebar = ({ isOpen, onClose }) => {
   const location = useLocation();
   const { user } = useAppSelector((state) => state.auth);
-  console.log("User: ", user)
 
   // Modal states
   const [showEarlyCheckin, setShowEarlyCheckin] = useState(false);
@@ -26,6 +25,7 @@ const Sidebar = ({ isOpen, onClose }) => {
       icon: "fas fa-clipboard-list",
       label: "Task Reports",
     },
+    { path: "/employee/payroll", icon: "fas fa-file-invoice-dollar", label: "My Payroll" },
     { path: "/employee/profile", icon: "fas fa-user-circle", label: "My Profile" },
   ];
 

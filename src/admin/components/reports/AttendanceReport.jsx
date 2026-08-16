@@ -1,10 +1,8 @@
-import { useEffect, useState } from "react";
+import React, { useEffect, useState } from "react";
 import { useDispatch, useSelector } from "react-redux";
-import { Link } from "react-router-dom";
+import { Link, useLocation } from "react-router-dom";
 import SearchBar from "../common/SearchBar";
-import EntriesSelector from "../common/EntriesSelector";
 import { showToast } from "../../../components/common/Toast";
-import Pagination from "../common/Paginations";
 import {
   exportReport,
   fetchAllAttendanceReport,
@@ -13,9 +11,21 @@ import {
 } from "../../store/slices/reportSlice";
 import ExportModal from "../../../components/common/ExportModal";
 import DateInput from "../common/DateInput";
+import { useNavigate } from "react-router-dom";
 
 const AttendanceReport = () => {
   const dispatch = useDispatch();
+  const location = useLocation();
+  const navigate = useNavigate();
+  
+  // Determine base path based on current route
+  const getBasePath = () => {
+    if (location.pathname.startsWith('/admin')) return '/admin';
+    if (location.pathname.startsWith('/employee')) return '/employee';
+    return '';
+  };
+  const basePath = getBasePath();
+
   const {
     attendanceRecords: records = [],
     attendanceLoading: loading = false,
@@ -25,9 +35,9 @@ const AttendanceReport = () => {
     employeesList = [],
   } = useSelector((state) => state.reports || {});
 
-  // Local state for filters (these will be applied when "Apply" is clicked)
-  const [currentPage, setCurrentPage] = useState(1);
-  const [perPage, setPerPage] = useState(10);
+  // Set large perPage to get all records since pagination is removed
+  const perPage = 10000;
+  const currentPage = 1;
 
   // Filter values that are displayed in the UI
   const [searchTerm, setSearchTerm] = useState("");
@@ -39,7 +49,7 @@ const AttendanceReport = () => {
   const [appliedEmployeeFilter, setAppliedEmployeeFilter] = useState("all");
 
   const [showExportModal, setShowExportModal] = useState(false);
-  const [exportType, setExportType] = useState("all");
+  const exportType = "all";
 
   // Date range state
   const [startDate, setStartDate] = useState(() => {
@@ -77,7 +87,6 @@ const AttendanceReport = () => {
         params.employee_id = isNaN(empId) ? appliedEmployeeFilter : empId;
       }
 
-      console.log("Fetch attendance with applied params:", params);
 
       await dispatch(fetchAttendanceReport(params));
     };
@@ -92,16 +101,7 @@ const AttendanceReport = () => {
     appliedEndDate,
   ]);
 
-  // Reset to first page when applied filters change
-  useEffect(() => {
-    setCurrentPage(1);
-  }, [
-    appliedEmployeeFilter,
-    appliedSearchTerm,
-    perPage,
-    appliedStartDate,
-    appliedEndDate,
-  ]);
+  // Pagination is removed, no need to reset page
 
   // Add this useEffect after the other useEffects
   useEffect(() => {
@@ -140,7 +140,6 @@ const AttendanceReport = () => {
         params.employee_id = isNaN(empId) ? appliedEmployeeFilter : empId;
       }
 
-      console.log("Fetch attendance with applied params:", params);
 
       await dispatch(fetchAttendanceReport(params));
     };
@@ -154,6 +153,36 @@ const AttendanceReport = () => {
     appliedStartDate,
     appliedEndDate,
   ]);
+
+  const handleEmployeeClick = (record) => {
+    // Get the employee's string employee_id from the record
+    const employeeStringId = record.employee_id || record.id;
+
+    // Find the employee in the employeesList by matching the employee_id string
+    const matchedEmployee = employeesList.find(
+      (emp) => emp.employee_id === employeeStringId,
+    );
+
+    if (matchedEmployee) {
+      navigate(`${basePath}/reports/attendance/employee/${matchedEmployee.id}`, {
+        state: { date: appliedStartDate }
+      });
+    } else {
+      // Fallback: try to use the record's employee_id
+      console.warn("Employee not found in list, using record data:", record);
+      // Try to find by name or use the record's ID
+      const fallbackEmployee = employeesList.find(
+        (emp) => emp.name === (record.employeeName || record.name),
+      );
+      if (fallbackEmployee) {
+        navigate(`${basePath}/reports/attendance/employee/${fallbackEmployee.id}`, {
+          state: { date: appliedStartDate }
+        });
+      } else {
+        showToast("Employee not found", "error");
+      }
+    }
+  };
 
   const handleDatePresetChange = (preset) => {
     setDatePreset(preset);
@@ -208,7 +237,6 @@ const AttendanceReport = () => {
     setAppliedSearchTerm(searchTerm);
     setAppliedStartDate(startDate);
     setAppliedEndDate(endDate);
-    setCurrentPage(1);
 
     // Force a re-fetch by dispatching with a timestamp
     // This ensures the API call is made with fresh parameters
@@ -231,38 +259,37 @@ const AttendanceReport = () => {
     showToast("Filters applied successfully", "success");
   };
   const handleResetFilters = () => {
-  const firstDayOfMonth = new Date();
-  firstDayOfMonth.setDate(1);
-  const newStartDate = firstDayOfMonth.toISOString().split("T")[0];
-  const newEndDate = new Date().toISOString().split("T")[0];
+    const firstDayOfMonth = new Date();
+    firstDayOfMonth.setDate(1);
+    const newStartDate = firstDayOfMonth.toISOString().split("T")[0];
+    const newEndDate = new Date().toISOString().split("T")[0];
 
-  setStartDate(newStartDate);
-  setEndDate(newEndDate);
-  setEmployeeFilter("all");
-  setSearchTerm("");
-  setDatePreset("custom");
-  setCurrentPage(1);
+    setStartDate(newStartDate);
+    setEndDate(newEndDate);
+    setEmployeeFilter("all");
+    setSearchTerm("");
+    setDatePreset("custom");
 
-  // Reset the applied filters
-  setAppliedEmployeeFilter("all");
-  setAppliedSearchTerm("");
-  setAppliedStartDate(newStartDate);
-  setAppliedEndDate(newEndDate);
+    // Reset the applied filters
+    setAppliedEmployeeFilter("all");
+    setAppliedSearchTerm("");
+    setAppliedStartDate(newStartDate);
+    setAppliedEndDate(newEndDate);
 
-  // Force a re-fetch with reset params
-  const params = {
-    page: 1,
-    per_page: perPage,
-    search: undefined,
-    start_date: newStartDate,
-    end_date: newEndDate,
+    // Force a re-fetch with reset params
+    const params = {
+      page: 1,
+      per_page: perPage,
+      search: undefined,
+      start_date: newStartDate,
+      end_date: newEndDate,
+    };
+
+    // Don't include employee_id when reset
+    dispatch(fetchAttendanceReport(params));
+
+    showToast("Filters reset successfully", "success");
   };
-
-  // Don't include employee_id when reset
-  dispatch(fetchAttendanceReport(params));
-
-  showToast("Filters reset successfully", "success");
-};
 
   const handleExport = async (format) => {
     showToast(`Preparing ${format.toUpperCase()} export...`, "success");
@@ -285,8 +312,6 @@ const AttendanceReport = () => {
       if (exportType === "all") {
         filters.export_all = true;
       }
-
-      console.log("Export filters:", filters);
 
       const result = await dispatch(
         exportReport({
@@ -437,37 +462,41 @@ const AttendanceReport = () => {
   };
 
   // Calculate stats for summary
-  const allRecords = records || [];
-  const totalPresent = allRecords.filter(
-    (r) => r.status !== "Absent" && !r.lateBy,
-  ).length;
-  const totalHalfDay = allRecords.filter((r) => {
-    const status = String(r.status || r.attendance_status || "").toLowerCase();
-    return status === "half day" || status === "halfday";
-  }).length;
-  const totalAbsent = allRecords.filter((r) => r.status === "Absent").length;
-  const totalOvertime = allRecords.filter((r) => {
-    const overtime = r.overtime;
-    if (!overtime || overtime === "-" || overtime === "0" || overtime === 0)
-      return false;
-    if (typeof overtime === "string" && overtime.trim() !== "") return true;
-    if (typeof overtime === "number" && overtime > 0) return true;
-    return false;
-  }).length;
+  const allEmployees = records || [];
+  let totalPresent = 0;
+  let totalHalfDay = 0;
+  let totalAbsent = 0;
+  let totalOvertime = 0;
+  let totalRecordsCount = 0;
 
-  const filteredRecords = allRecords;
+  allEmployees.forEach((emp) => {
+    if (emp.attendance && Array.isArray(emp.attendance)) {
+      emp.attendance.forEach((r) => {
+        totalRecordsCount++;
+        const status = String(r.status || r.attendance_status || "").toLowerCase();
+        if (status === "absent") totalAbsent++;
+        else if (status === "half day" || status === "halfday") totalHalfDay++;
+        else if (status === "full day" || status === "fullday" || status === "present") totalPresent++;
+
+        const overtime = r.overtime;
+        if (overtime && overtime !== "-" && overtime !== "0" && overtime !== 0) {
+          totalOvertime++;
+        }
+      });
+    }
+  });
+
+  const filteredRecords = allEmployees;
   const totalFiltered = totalCount || filteredRecords.length;
-  const totalPages = lastPage || Math.ceil(totalFiltered / perPage);
-  const start = (currentPage - 1) * perPage;
 
   return (
     <div className="w-full overflow-x-hidden">
       <main className="content px-4 py-4 md:px-6 md:py-6 w-full overflow-x-hidden">
-        {/* Page Header with Breadcrumb */}
+        {/* Page Header with Breadcrumb - Dynamic */}
         <div className="mb-6">
           <div className="flex items-center gap-2 text-xs md:text-sm mb-4 md:mb-6 flex-wrap">
             <Link
-              to="/admin/reports"
+              to={`${basePath}/reports`}
               className="text-green-500 hover:text-green-600 font-medium"
             >
               Reports
@@ -485,19 +514,19 @@ const AttendanceReport = () => {
         </div>
 
         {/* Stats Cards */}
-        <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-5 gap-4 mb-6">
+        <div className="grid grid-cols-3 sm:grid-cols-2 md:grid-cols-5 gap-4 mb-6">
           <div className="bg-white dark:bg-gray-800 rounded-xl p-4 border border-gray-200 dark:border-gray-700">
             <div className="flex items-center justify-between">
               <div>
                 <p className="text-xs text-gray-500 dark:text-gray-400">
-                  Total Records
+                  Total Employees
                 </p>
                 <p className="text-2xl font-bold text-blue-600 dark:text-blue-400">
                   {totalFiltered}
                 </p>
               </div>
               <div className="w-10 h-10 bg-blue-100 dark:bg-blue-900/30 rounded-lg flex items-center justify-center">
-                <i className="fas fa-calendar-check text-blue-600 dark:text-blue-400"></i>
+                <i className="fas fa-users text-blue-600 dark:text-blue-400"></i>
               </div>
             </div>
           </div>
@@ -647,24 +676,8 @@ const AttendanceReport = () => {
           </div>
         </div>
         {/* Actions Bar */}
-        <div className="flex flex-col sm:flex-row justify-between items-stretch sm:items-center gap-4 mb-5">
-          <EntriesSelector
-            value={perPage}
-            onChange={(val) => {
-              setPerPage(val);
-              setCurrentPage(1);
-            }}
-          />
+        <div className="flex flex-col sm:flex-row justify-end items-stretch sm:items-center gap-4 mb-5">
           <div className="flex flex-col sm:flex-row gap-3 w-full sm:w-auto">
-            <select
-              value={exportType}
-              onChange={(e) => setExportType(e.target.value)}
-              className="px-3 py-2 bg-gray-100 dark:bg-gray-700 border border-gray-200 dark:border-gray-600 rounded-full text-xs md:text-sm text-gray-700 dark:text-gray-300 focus:outline-none focus:border-green-500"
-            >
-              <option value="all">Export All Data</option>
-              <option value="current">Export Current Page</option>
-            </select>
-
             <button
               onClick={() => setShowExportModal(true)}
               className="bg-green-500 hover:bg-green-600 text-white px-4 py-2 rounded-full text-sm font-semibold flex items-center justify-center gap-2 transition-all shadow-md hover:shadow-lg w-full sm:w-auto"
@@ -690,11 +703,9 @@ const AttendanceReport = () => {
                 <table className="w-full border-collapse">
                   <thead>
                     <tr className="bg-gray-50 dark:bg-gray-700/50 border-b border-gray-200 dark:border-gray-700">
+
                       <th className="px-3 md:px-4 py-2 md:py-3 text-left text-[10px] md:text-xs font-semibold text-gray-500 dark:text-gray-400">
-                        S.No
-                      </th>
-                      <th className="px-3 md:px-4 py-2 md:py-3 text-left text-[10px] md:text-xs font-semibold text-gray-500 dark:text-gray-400">
-                        DATE
+                        EMP ID
                       </th>
                       <th className="px-3 md:px-4 py-2 md:py-3 text-left text-[10px] md:text-xs font-semibold text-gray-500 dark:text-gray-400">
                         EMPLOYEE
@@ -703,152 +714,65 @@ const AttendanceReport = () => {
                         DEPARTMENT
                       </th>
                       <th className="px-3 md:px-4 py-2 md:py-3 text-left text-[10px] md:text-xs font-semibold text-gray-500 dark:text-gray-400">
-                        PUNCH IN
+                        DESIGNATION
                       </th>
-                      <th className="px-3 md:px-4 py-2 md:py-3 text-left text-[10px] md:text-xs font-semibold text-gray-500 dark:text-gray-400">
-                        PUNCH OUT
-                      </th>
-                      <th className="px-3 md:px-4 py-2 md:py-3 text-left text-[10px] md:text-xs font-semibold text-gray-500 dark:text-gray-400">
-                        WORKED HOURS
-                      </th>
-                      <th className="px-3 md:px-4 py-2 md:py-3 text-left text-[10px] md:text-xs font-semibold text-emerald-600 dark:text-emerald-400">
-                        OVERTIME
-                      </th>
-                      <th className="px-3 md:px-4 py-2 md:py-3 text-left text-[10px] md:text-xs font-semibold text-gray-500 dark:text-gray-400">
-                        STATUS
-                      </th>
+
                     </tr>
                   </thead>
                   <tbody>
                     {filteredRecords.length > 0 ? (
-                      filteredRecords.map((record, idx) => {
-                        const hasOvertime = hasOvertimeValue(record.overtime);
-                        const isLate = record.lateBy && record.lateBy > 0;
-
+                      filteredRecords.map((emp, idx) => {
+                        let empPresent = 0;
+                        let empAbsent = 0;
+                        let empHalfDay = 0;
+                        let empOvertime = 0;
+                        (emp.attendance || []).forEach(r => {
+                          const s = String(r.status || "").toLowerCase();
+                          if (s === "absent") empAbsent++;
+                          else if (s === "half day" || s === "halfday") empHalfDay++;
+                          else if (s === "full day" || s === "fullday" || s === "present") empPresent++;
+                          const ot = r.overtime;
+                          if (ot && ot !== "-" && ot !== "0" && ot !== 0) empOvertime++;
+                        });
                         return (
-                          <tr
-                            key={record.id || idx}
-                            className={`border-b border-gray-200 dark:border-gray-700 hover:bg-gray-50 dark:hover:bg-gray-700/50 transition-colors dark:bg-emerald-900/5`}
-                          >
-                            <td className="px-3 md:px-4 py-2 md:py-3 text-xs md:text-sm text-gray-600 dark:text-gray-400 text-center">
-                              {start + idx + 1}
-                            </td>
-                            <td className="px-3 md:px-4 py-2 md:py-3 text-xs md:text-sm text-gray-600 dark:text-gray-400 whitespace-nowrap">
-                              {record.date
-                                ? (() => {
-                                    try {
-                                      if (record.date.includes("/")) {
-                                        const parts = record.date.split("/");
-                                        if (parts.length === 3) {
-                                          const date = new Date(
-                                            `${parts[2]}-${parts[1]}-${parts[0]}`,
-                                          );
-                                          if (!isNaN(date.getTime())) {
-                                            return date.toLocaleDateString(
-                                              "en-GB",
-                                              {
-                                                day: "2-digit",
-                                                month: "short",
-                                                year: "numeric",
-                                              },
-                                            );
-                                          }
-                                        }
-                                      }
-                                      const date = new Date(record.date);
-                                      if (!isNaN(date.getTime())) {
-                                        return date.toLocaleDateString(
-                                          "en-GB",
-                                          {
-                                            day: "2-digit",
-                                            month: "short",
-                                            year: "numeric",
-                                          },
-                                        );
-                                      }
-                                      return record.date;
-                                    } catch (e) {
-                                      return record.date;
-                                    }
-                                  })()
-                                : "-"}
-                            </td>
-                            <td className="px-3 md:px-4 py-2 md:py-3 text-xs md:text-sm font-semibold text-gray-800 dark:text-gray-200">
-                              {record.employeeName || record.name || "-"}
-                              {hasOvertime && (
-                                <span className="ml-1 text-[8px] bg-emerald-500/20 text-emerald-600 dark:text-emerald-400 px-1.5 py-0.5 rounded-full font-bold">
-                                  OT
-                                </span>
-                              )}
-                            </td>
-                            <td className="px-3 md:px-4 py-2 md:py-3 text-xs md:text-sm text-gray-600 dark:text-gray-400">
-                              {record.department || "-"}
-                            </td>
-                            <td className="px-3 md:px-4 py-2 md:py-3 text-xs md:text-sm">
-                              <span
-                                className={`font-semibold ${isLate ? "text-amber-600 dark:text-amber-400" : "text-gray-800 dark:text-gray-200"}`}
-                              >
-                                {formatTime(record.punchIn)}
-                              </span>
-                              {isLate && (
-                                <span className="ml-1 text-[8px] bg-amber-500/20 text-amber-600 dark:text-amber-400 px-1.5 py-0.5 rounded-full">
-                                  Late
-                                </span>
-                              )}
-                            </td>
-                            <td className="px-3 md:px-4 py-2 md:py-3 text-xs md:text-sm">
-                              {record.punchOut ? (
-                                <span className="font-semibold text-gray-800 dark:text-gray-200">
-                                  {formatTime(record.punchOut)}
-                                </span>
-                              ) : (
-                                <span className="inline-block bg-red-100 dark:bg-red-900/30 text-red-600 dark:text-red-400 text-[9px] md:text-xs px-1.5 md:px-2 py-0.5 rounded-full whitespace-nowrap">
-                                  Not Punched Out
-                                </span>
-                              )}
-                            </td>
-                            <td className="px-3 md:px-4 py-2 md:py-3 text-xs md:text-sm text-gray-600 dark:text-gray-400">
-                              {record.working_hours !== undefined &&
-                              record.working_hours !== null &&
-                              record.working_hours !== 0 &&
-                              record.working_hours !== "0" ? (
-                                <span className="font-medium text-gray-700 dark:text-gray-300">
-                                  {formatWorkedHours(record.working_hours)}
-                                </span>
-                              ) : (
-                                "-"
-                              )}
-                            </td>
-                            <td className="px-3 md:px-4 py-2 md:py-3 text-xs md:text-sm">
-                              {hasOvertime ? (
-                                <span className="inline-flex items-center gap-1 bg-emerald-100 dark:bg-emerald-900/30 text-emerald-700 dark:text-emerald-400 font-semibold px-2 py-1 rounded-full border border-emerald-200 dark:border-emerald-800">
-                                  {record.overtime}
-                                </span>
-                              ) : (
-                                <span className="text-gray-400 dark:text-gray-500 text-[10px]">
-                                  -
-                                </span>
-                              )}
-                            </td>
-                            <td className="px-3 md:px-4 py-2 md:py-3">
-                              {getStatusBadge(
-                                record.attendance_status || record.status,
-                                hasOvertime,
-                              )}
-                            </td>
-                          </tr>
+                          <React.Fragment key={emp.id || idx}>
+                            <tr
+                              className="border-b border-gray-200 dark:border-gray-700 hover:bg-gray-50 dark:hover:bg-gray-700/50 transition-colors cursor-pointer"
+                              onClick={() => handleEmployeeClick(emp)}
+                            >
+                              <td className="px-3 md:px-4 py-2 md:py-3 text-xs md:text-sm font-mono text-gray-600 dark:text-gray-400">
+                                {emp.id || "-"}
+                              </td>
+                              <td className="px-3 md:px-4 py-2 md:py-3 text-xs md:text-sm font-semibold text-blue-600 dark:text-blue-400">
+                                {emp.name || "-"}
+                                {empOvertime > 0 && (
+                                  <span className="ml-2 text-[8px] bg-emerald-500/20 text-emerald-600 dark:text-emerald-400 px-1.5 py-0.5 rounded-full font-bold">
+                                    OT
+                                  </span>
+                                )}
+                              </td>
+                              <td className="px-3 md:px-4 py-2 md:py-3 text-xs md:text-sm text-gray-600 dark:text-gray-400">
+                                {emp.department || "-"}
+                              </td>
+                              <td className="px-3 md:px-4 py-2 md:py-3 text-xs md:text-sm text-gray-600 dark:text-gray-400">
+                                {emp.designation || "-"}
+                              </td>
+
+                            </tr>
+                            
+                          </React.Fragment>
                         );
                       })
                     ) : (
                       <tr>
                         <td
-                          colSpan="9"
-                          className="px-4 py-8 text-center text-gray-500 dark:text-gray-400"
+                          colSpan="4"
+                          className="px-4 py-12 text-center text-gray-500 dark:text-gray-400"
                         >
-                          <div className="flex flex-col items-center justify-center gap-2">
-                            <i className="fas fa-calendar-times text-4xl text-gray-300 dark:text-gray-600"></i>
-                            <p>No attendance records found</p>
-                            <p className="text-xs">
+                          <div className="flex flex-col items-center justify-center gap-3">
+                            <i className="fas fa-users-slash text-4xl text-gray-300 dark:text-gray-600"></i>
+                            <p className="font-medium text-gray-600 dark:text-gray-300">No attendance records found</p>
+                            <p className="text-xs text-gray-400">
                               Try changing the date range or filters
                             </p>
                           </div>
@@ -860,16 +784,6 @@ const AttendanceReport = () => {
               </div>
             </div>
 
-            {/* Pagination */}
-            {totalFiltered > 0 && (
-              <Pagination
-                currentPage={currentPage}
-                totalPages={totalPages}
-                onPageChange={setCurrentPage}
-                totalItems={totalFiltered}
-                itemsPerPage={perPage}
-              />
-            )}
           </>
         )}
       </main>
@@ -883,11 +797,7 @@ const AttendanceReport = () => {
         totalRecords={exportType === "all" ? totalCount : records.length}
         formats={["csv", "pdf", "xlsx"]}
         defaultFormat="csv"
-        subtitle={
-          exportType === "all"
-            ? `Exporting all ${totalCount} records across all pages`
-            : `Exporting ${records.length} records from current page`
-        }
+        subtitle={`Exporting all ${totalCount} records`}
         isLoading={exportLoading}
       />
     </div>

@@ -1,9 +1,10 @@
 import React, { useState, useEffect } from "react";
 import { Calendar, Save, CheckCircle2, MessageSquare, Star, ArrowRight, Loader } from "lucide-react";
-import { useNavigate, useSearchParams } from "react-router-dom";
+import { useNavigate, useSearchParams, useLocation } from "react-router-dom";
 import { useDispatch, useSelector } from "react-redux";
 import { showToast } from "../common/Toast";
 import OffboardingHeader from "./OffboardingHeader";
+import OffboardingProgressBox from "./OffboardingProgressBox";
 import { fetchOffboardingById, submitInterview, saveOffboardingDraft, fetchOffboardingProgress } from "../../store/slices/offboardingSlice";
 import { fetchEmployeeById } from "../../store/slices/employeeSlice";
 
@@ -11,26 +12,27 @@ const ExitInterview = () => {
   const navigate = useNavigate();
   const dispatch = useDispatch();
   const [searchParams] = useSearchParams();
-  const offboardingId = searchParams.get("id");
-  
+  const location = useLocation();
+  const offboardingId = location.state?.id || searchParams.get("id");
+
   const [loading, setLoading] = useState(true);
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [isSavingDraft, setIsSavingDraft] = useState(false);
   const [employeeName, setEmployeeName] = useState("");
   const [interviewData, setInterviewData] = useState({
-    interviewer: "Fatima Al Zaabi (HR)",
+    interviewer: "",
     interviewDate: "",
-    interviewMode: "In person",
-    overallSatisfaction: "Satisfied",
-    primaryReason: "Better opportunity",
-    workLifeBalance: "4",
-    managerRelationship: "5",
-    enjoyedMost: "Collaborative team, flexible hours, and a strong learning culture.",
-    areasForImprovement: "Career growth paths and promotion timelines could be clearer.",
-    wouldRecommend: "yes",
+    interviewMode: "",
+    overallSatisfaction: "",
+    primaryReason: "",
+    workLifeBalance: "",
+    managerRelationship: "",
+    enjoyedMost: "",
+    areasForImprovement: "",
+    wouldRecommend: "",
     additionalComments: ""
   });
-  
+
   // Redux state
   const { currentOffboarding, loading: offboardingLoading, currentProgress } = useSelector((state) => state.offboarding);
   const { currentEmployee } = useSelector((state) => state.employees);
@@ -61,24 +63,38 @@ const ExitInterview = () => {
       } else if (currentOffboarding.employee_id) {
         dispatch(fetchEmployeeById(currentOffboarding.employee_id));
       }
-      
+
       // Load interview data from API if available
-      if (currentOffboarding.interview) {
-        setInterviewData({
-          interviewer: currentOffboarding.interview.interviewer || "Fatima Al Zaabi (HR)",
-          interviewDate: currentOffboarding.interview.interview_date || "",
-          interviewMode: currentOffboarding.interview.interview_mode || "In person",
-          overallSatisfaction: currentOffboarding.interview.overall_satisfaction || "Satisfied",
-          primaryReason: currentOffboarding.interview.primary_reason || "Better opportunity",
-          workLifeBalance: currentOffboarding.interview.work_life_balance || "4",
-          managerRelationship: currentOffboarding.interview.manager_relationship || "5",
-          enjoyedMost: currentOffboarding.interview.enjoyed_most || "",
-          areasForImprovement: currentOffboarding.interview.areas_for_improvement || "",
-          wouldRecommend: currentOffboarding.interview.would_recommend || "yes",
-          additionalComments: currentOffboarding.interview.additional_comments || ""
-        });
-      }
+      const interviewDataSrc = currentOffboarding.interview || currentOffboarding.exit_interview || currentOffboarding;
       
+      if (interviewDataSrc && (interviewDataSrc.interviewer || interviewDataSrc.overall_satisfaction || interviewDataSrc.exit_interview_status || currentOffboarding.interview || currentOffboarding.exit_interview)) {
+        const fallbackNotes = interviewDataSrc.additional_comments || 
+                              currentOffboarding.additional_comments ||
+                              interviewDataSrc.additionalComments ||
+                              currentOffboarding.additionalComments ||
+                              interviewDataSrc.notes || 
+                              interviewDataSrc.comments ||
+                              interviewDataSrc.remarks ||
+                              currentOffboarding.remarks ||
+                              interviewDataSrc.exit_interview_notes || 
+                              currentOffboarding.exit_interview_notes || "";
+                              
+        setInterviewData(prev => ({
+          ...prev,
+          interviewer: interviewDataSrc.interviewer || "",
+          interviewDate: interviewDataSrc.interview_date || prev.interviewDate,
+          interviewMode: interviewDataSrc.interview_mode || "",
+          overallSatisfaction: interviewDataSrc.overall_satisfaction || "",
+          primaryReason: interviewDataSrc.primary_reason || "",
+          workLifeBalance: interviewDataSrc.work_life_balance || "",
+          managerRelationship: interviewDataSrc.manager_relationship || "",
+          enjoyedMost: interviewDataSrc.enjoyed_most || "",
+          areasForImprovement: interviewDataSrc.areas_for_improvement || "",
+          wouldRecommend: interviewDataSrc.would_recommend !== undefined ? interviewDataSrc.would_recommend : "",
+          additionalComments: fallbackNotes
+        }));
+      }
+
       // Set interview date if not already set
       if (!interviewData.interviewDate) {
         const defaultDate = new Date();
@@ -88,7 +104,7 @@ const ExitInterview = () => {
           interviewDate: defaultDate.toISOString().split('T')[0]
         }));
       }
-      
+
       setLoading(false);
     }
   }, [currentOffboarding, offboardingLoading, dispatch]);
@@ -110,40 +126,44 @@ const ExitInterview = () => {
   const handleSubmit = async (e) => {
     e.preventDefault();
     setIsSubmitting(true);
-    
+
     try {
       // Prepare interview payload
       const interviewPayload = {
+        offboarding_id: offboardingId || localStorage.getItem("offboarding_id"),
         interviewer: interviewData.interviewer,
         interview_date: interviewData.interviewDate,
         interview_mode: interviewData.interviewMode,
         overall_satisfaction: interviewData.overallSatisfaction,
         primary_reason: interviewData.primaryReason,
-        work_life_balance: parseInt(interviewData.workLifeBalance),
-        manager_relationship: parseInt(interviewData.managerRelationship),
-        enjoyed_most: interviewData.enjoyedMost,
-        areas_for_improvement: interviewData.areasForImprovement,
+        work_life_rating: parseInt(interviewData.workLifeBalance),
+        manager_relationship_rating: parseInt(interviewData.managerRelationship),
+        enjoyed_most: interviewData.enjoyedMost || "None",
+        areas_for_improvement: interviewData.areasForImprovement || "None",
         would_recommend: interviewData.wouldRecommend === "yes",
-        additional_comments: interviewData.additionalComments,
+        additional_comments: interviewData.additionalComments || "None",
+        notes: interviewData.additionalComments || "None",
+        exit_interview_notes: interviewData.additionalComments || "None",
+        remarks: interviewData.additionalComments || "None",
         submitted_at: new Date().toISOString(),
-        status: "completed"
+        status: "completed",
+        exit_interview_status: "completed",
+        interview_status: "completed"
       };
 
       // Submit interview via API
-      const result = await dispatch(submitInterview({ 
-        id: offboardingId || localStorage.getItem("offboarding_id"), 
-        interviewData: interviewPayload 
+      const result = await dispatch(submitInterview({
+        id: offboardingId || localStorage.getItem("offboarding_id"),
+        interviewData: interviewPayload
       })).unwrap();
 
-      console.log("Interview submitted:", result);
-      
       // Refresh progress after submitting interview
       await dispatch(fetchOffboardingProgress(offboardingId || localStorage.getItem("offboarding_id")));
 
       showToast("Exit interview submitted successfully", "success");
-      
+
       setTimeout(() => {
-        navigate(`/admin/employees/final-settlement?id=${offboardingId || localStorage.getItem("offboarding_id")}`);
+        navigate(`/admin/employees/letters-and-clearance?id=${offboardingId || localStorage.getItem("offboarding_id")}`);
       }, 1500);
     } catch (error) {
       console.error("Submit interview error:", error);
@@ -155,7 +175,7 @@ const ExitInterview = () => {
 
   const handleSaveDraft = async () => {
     setIsSavingDraft(true);
-    
+
     try {
       // Prepare draft payload
       const draftPayload = {
@@ -165,12 +185,15 @@ const ExitInterview = () => {
           interview_mode: interviewData.interviewMode,
           overall_satisfaction: interviewData.overallSatisfaction,
           primary_reason: interviewData.primaryReason,
-          work_life_balance: parseInt(interviewData.workLifeBalance),
-          manager_relationship: parseInt(interviewData.managerRelationship),
-          enjoyed_most: interviewData.enjoyedMost,
-          areas_for_improvement: interviewData.areasForImprovement,
+          work_life_rating: parseInt(interviewData.workLifeBalance),
+          manager_relationship_rating: parseInt(interviewData.managerRelationship),
+          enjoyed_most: interviewData.enjoyedMost || "None",
+          areas_for_improvement: interviewData.areasForImprovement || "None",
           would_recommend: interviewData.wouldRecommend === "yes",
-          additional_comments: interviewData.additionalComments,
+          additional_comments: interviewData.additionalComments || "None",
+          notes: interviewData.additionalComments || "None",
+          exit_interview_notes: interviewData.additionalComments || "None",
+          remarks: interviewData.additionalComments || "None",
           draft_saved_at: new Date().toISOString()
         }
       };
@@ -183,7 +206,7 @@ const ExitInterview = () => {
 
       // Also save to localStorage as backup
       localStorage.setItem("exit_interview_draft", JSON.stringify(interviewData));
-      
+
       showToast("Exit interview saved as draft", "success");
     } catch (error) {
       console.error("Save draft error:", error);
@@ -244,9 +267,17 @@ const ExitInterview = () => {
         {/* SaaS Offboarding Header */}
         <OffboardingHeader currentStep={5} />
 
+        {/* Progress Box */}
+        <OffboardingProgressBox 
+          currentStep={5} 
+          apiProgressPercentage={apiProgressPercentage}
+          completedStepsFromApi={completedStepsFromApi}
+          totalStepsFromApi={totalStepsFromApi}
+        />
+
         {/* Main Content Card */}
         <div className="bg-white dark:bg-gray-800 border border-gray-100 dark:border-gray-700/80 rounded-2xl shadow-soft p-6 sm:p-8 space-y-8">
-          
+
           {/* Header */}
           <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 border-b border-gray-100 dark:border-gray-700 pb-6">
             <div className="flex items-center gap-3">
@@ -267,7 +298,7 @@ const ExitInterview = () => {
                 )}
               </div>
             </div>
-            
+
             <div className="flex items-center gap-2">
               <span className="px-3 py-1.5 rounded-lg text-xs font-bold tracking-wider flex items-center gap-2 bg-blue-50 dark:bg-blue-900/30 text-blue-700 dark:text-blue-400 border border-blue-200/60 dark:border-blue-800/60">
                 <Calendar size={14} />
@@ -276,60 +307,15 @@ const ExitInterview = () => {
             </div>
           </div>
 
-          {/* Overall Progress Section */}
-          <div className="space-y-4 p-4 bg-gray-50 dark:bg-gray-900/30 rounded-xl">
-            <div className="flex justify-between items-center">
-              <h3 className="text-sm font-semibold text-gray-700 dark:text-gray-300">
-                Offboarding Progress
-              </h3>
-              <span className="text-sm font-bold text-green-600 dark:text-green-400">
-                {apiProgressPercentage}%
-              </span>
-            </div>
-            <div className="w-full h-2 bg-gray-200 dark:bg-gray-700 rounded-full overflow-hidden">
-              <div 
-                className="h-full bg-green-500 transition-all duration-500"
-                style={{ width: `${apiProgressPercentage}%` }}
-              />
-            </div>
-            <div className="flex justify-between text-xs text-gray-500 dark:text-gray-400">
-              <span>Completed Steps: {completedStepsFromApi}</span>
-              <span>Total Steps: {totalStepsFromApi}</span>
-            </div>
-            
-            {/* Steps Status */}
-            {currentProgress && currentProgress.steps && currentProgress.steps.length > 0 && (
-              <div className="mt-2 pt-2 border-t border-gray-200 dark:border-gray-700">
-                <h4 className="text-xs font-semibold text-gray-500 dark:text-gray-400 uppercase tracking-wide mb-2">
-                  Step Status
-                </h4>
-                <div className="grid grid-cols-2 sm:grid-cols-3 gap-2">
-                  {currentProgress.steps.map((step, index) => (
-                    <div key={index} className="flex items-center gap-1.5">
-                      <div className={`w-1.5 h-1.5 rounded-full ${
-                        step.status === "completed"
-                          ? "bg-green-500"
-                          : step.status === "in_progress"
-                          ? "bg-blue-500 animate-pulse"
-                          : "bg-gray-300 dark:bg-gray-600"
-                      }`} />
-                      <span className="text-xs text-gray-600 dark:text-gray-400">
-                        {step.name}
-                      </span>
-                    </div>
-                  ))}
-                </div>
-              </div>
-            )}
-          </div>
+
 
           {/* Form */}
           <form onSubmit={handleSubmit} className="space-y-8">
-            
+
             <div className="grid grid-cols-1 md:grid-cols-2 gap-x-8 gap-y-6">
-              
+
               {/* Interview Details Section */}
-              <div className="space-y-6 md:col-span-2 grid grid-cols-1 md:grid-cols-3 gap-6 bg-gray-50/50 dark:bg-gray-900/50 p-5 rounded-xl border border-gray-100 dark:border-gray-700/50">
+              <div className="md:col-span-2 grid grid-cols-1 md:grid-cols-3 gap-6 bg-gray-50/50 dark:bg-gray-900/50 p-5 rounded-xl border border-gray-100 dark:border-gray-700/50 items-start">
                 <div className="space-y-1.5">
                   <label className="block text-xs font-bold text-gray-500 dark:text-gray-400 uppercase tracking-wide">
                     Interviewer
@@ -341,7 +327,7 @@ const ExitInterview = () => {
                     className="w-full px-4 py-2.5 bg-white dark:bg-gray-800 border border-gray-200 dark:border-gray-700 rounded-lg text-sm text-gray-800 dark:text-gray-200 font-semibold focus:outline-none focus:ring-2 focus:ring-green-500/20 focus:border-green-500"
                   />
                 </div>
-                
+
                 <div className="space-y-1.5">
                   <label className="block text-xs font-bold text-gray-500 dark:text-gray-400 uppercase tracking-wide">
                     Interview date
@@ -363,6 +349,7 @@ const ExitInterview = () => {
                     onChange={(e) => handleInputChange("interviewMode", e.target.value)}
                     className="w-full px-4 py-2.5 bg-white dark:bg-gray-800 border border-gray-200 dark:border-gray-700 rounded-lg text-sm text-gray-800 dark:text-gray-200 font-semibold focus:outline-none focus:ring-2 focus:ring-green-500/20 focus:border-green-500"
                   >
+                    <option value="" disabled>Select mode</option>
                     <option value="In person">In person</option>
                     <option value="Video call">Video call</option>
                     <option value="Phone">Phone</option>
@@ -371,6 +358,12 @@ const ExitInterview = () => {
               </div>
 
               {/* Core Feedback Section */}
+              <div className="md:col-span-2 mt-4 mb-2">
+                <h3 className="text-lg font-bold text-gray-800 dark:text-gray-200 border-b border-gray-100 dark:border-gray-700 pb-2">
+                  Employee Feedback
+                </h3>
+              </div>
+
               <div className="space-y-1.5">
                 <label className="block text-xs font-bold text-gray-500 dark:text-gray-400 uppercase tracking-wide">
                   Overall satisfaction
@@ -380,6 +373,7 @@ const ExitInterview = () => {
                   onChange={(e) => handleInputChange("overallSatisfaction", e.target.value)}
                   className="w-full px-4 py-3 bg-white dark:bg-gray-900 border border-gray-200 dark:border-gray-700 rounded-lg text-sm text-gray-800 dark:text-gray-200 font-semibold focus:outline-none focus:ring-2 focus:ring-green-500/20 focus:border-green-500"
                 >
+                  <option value="" disabled>Select satisfaction</option>
                   <option value="Satisfied">Satisfied</option>
                   <option value="Neutral">Neutral</option>
                   <option value="Dissatisfied">Dissatisfied</option>
@@ -395,6 +389,7 @@ const ExitInterview = () => {
                   onChange={(e) => handleInputChange("primaryReason", e.target.value)}
                   className="w-full px-4 py-3 bg-white dark:bg-gray-900 border border-gray-200 dark:border-gray-700 rounded-lg text-sm text-gray-800 dark:text-gray-200 font-semibold focus:outline-none focus:ring-2 focus:ring-green-500/20 focus:border-green-500"
                 >
+                  <option value="" disabled>Select reason</option>
                   <option value="Better opportunity">Better opportunity</option>
                   <option value="Relocation">Relocation</option>
                   <option value="Career change">Career change</option>
@@ -415,6 +410,7 @@ const ExitInterview = () => {
                     onChange={(e) => handleInputChange("workLifeBalance", e.target.value)}
                     className="w-full px-4 py-3 bg-white dark:bg-gray-900 border border-gray-200 dark:border-gray-700 rounded-lg text-sm text-gray-800 dark:text-gray-200 font-semibold focus:outline-none focus:ring-2 focus:ring-green-500/20 focus:border-green-500 appearance-none"
                   >
+                    <option value="" disabled>Select rating</option>
                     <option value="5">5 - Excellent</option>
                     <option value="4">4 - Very Good</option>
                     <option value="3">3 - Average</option>
@@ -437,6 +433,7 @@ const ExitInterview = () => {
                     onChange={(e) => handleInputChange("managerRelationship", e.target.value)}
                     className="w-full px-4 py-3 bg-white dark:bg-gray-900 border border-gray-200 dark:border-gray-700 rounded-lg text-sm text-gray-800 dark:text-gray-200 font-semibold focus:outline-none focus:ring-2 focus:ring-green-500/20 focus:border-green-500 appearance-none"
                   >
+                    <option value="" disabled>Select rating</option>
                     <option value="5">5 - Excellent</option>
                     <option value="4">4 - Very Good</option>
                     <option value="3">3 - Average</option>
@@ -452,14 +449,14 @@ const ExitInterview = () => {
               {/* Free Text Answers */}
               <div className="space-y-1.5 md:col-span-2">
                 <label className="block text-xs font-bold text-gray-500 dark:text-gray-400 uppercase tracking-wide">
-                  What did you enjoy most?
+                  What did you like the most?
                 </label>
                 <textarea
                   rows={2}
                   value={interviewData.enjoyedMost}
                   onChange={(e) => handleInputChange("enjoyedMost", e.target.value)}
                   className="w-full px-4 py-3 bg-white dark:bg-gray-900 border border-gray-200 dark:border-gray-700 rounded-lg text-sm text-gray-800 dark:text-gray-200 font-semibold focus:outline-none focus:ring-2 focus:ring-green-500/20 focus:border-green-500"
-                  placeholder="Share what you enjoyed most about working here..."
+                  placeholder="Share what you liked the most about working here..."
                 />
               </div>
 
@@ -542,7 +539,7 @@ const ExitInterview = () => {
                   </>
                 )}
               </button>
-              
+
               <button
                 type="submit"
                 disabled={isSubmitting}

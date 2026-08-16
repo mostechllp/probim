@@ -6,36 +6,42 @@ const ProjectDetailsModal = ({ isOpen, onClose, project, employees = [] }) => {
   if (!isOpen || !project) return null;
 
   // In ProjectDetailsModal.jsx - Updated getEmployeeDetails function
-const getEmployeeDetails = (empId) => {
-  if (!empId) return { name: "Not Assigned", avatar: null, designation: "-" };
-  
-  console.log(`Looking for employee details with ID: ${empId}`);
-  
-  // IMPORTANT: Search by user_id FIRST since that's what projects store
-  let emp = employees.find((e) => String(e.user_id) === String(empId));
-  
-  // If not found by user_id, try by id
-  if (!emp) {
-    emp = employees.find((e) => String(e.id) === String(empId));
-  }
-  
-  // If still not found, try by employee_id
-  if (!emp) {
-    emp = employees.find((e) => String(e.employee_id) === String(empId));
-  }
-  
-  if (emp) {
-    console.log(`✅ Found employee details: ${emp.name}`);
-  } else {
-    console.log(`❌ No employee found with ID: ${empId}`);
-  }
-  
-  return emp ? {
-    name: emp.name,
-    avatar: getPhotoUrl(emp.avatar),
-    designation: emp.designation
-  } : { name: "Not Assigned", avatar: null, designation: "-" };
+  const getEmployeeDetails = (empId) => {
+    if (!empId) return { name: "Not Assigned", avatar: null, designation: "-" };
+
+
+    // IMPORTANT: Search by user_id FIRST since that's what projects store
+    let emp = employees.find((e) => String(e.user_id) === String(empId));
+
+    // If not found by user_id, try by id
+    if (!emp) {
+      emp = employees.find((e) => String(e.id) === String(empId));
+    }
+
+    // If still not found, try by employee_id
+    if (!emp) {
+      emp = employees.find((e) => String(e.employee_id) === String(empId));
+    }
+
+    return emp
+      ? {
+          name: emp.name,
+          avatar: getPhotoUrl(emp.avatar),
+          designation: emp.designation,
+        }
+      : { name: "Not Assigned", avatar: null, designation: "-" };
+  };
+
+ const formatCurrency = (amount, currency = "AED") => {
+  if (!amount) return "-";
+  return `${currency} ${Number(amount).toFixed(2)}`;
 };
+
+  // Format hours
+  const formatHours = (hours) => {
+    if (!hours || hours === 0) return "-";
+    return `${hours.toFixed(1)} hrs`;
+  };
 
   const getInitials = (name) =>
     name && name !== "Not Assigned" ? name.charAt(0).toUpperCase() : "N";
@@ -100,6 +106,38 @@ const getEmployeeDetails = (empId) => {
                   </span>
                 )}
               </p>
+            </div>
+
+            <div className="grid grid-cols-2 gap-4">
+              {/* Total Hours Card */}
+              <div className="bg-white dark:bg-gray-805 rounded-2xl border border-gray-100 dark:border-gray-700/60 p-5 shadow-sm">
+                <div className="flex items-center gap-3 mb-2">
+                  <div className="w-8 h-8 rounded-lg bg-blue-500/10 flex items-center justify-center text-blue-500">
+                    <i className="fas fa-clock"></i>
+                  </div>
+                  <span className="text-[9px] font-extrabold uppercase tracking-widest text-blue-500">
+                    Total Hours
+                  </span>
+                </div>
+                <p className="text-xl font-bold text-gray-800 dark:text-gray-200">
+                  {formatHours(project.totalHours)}
+                </p>
+              </div>
+
+              {/* Total Cost Card */}
+              <div className="bg-white dark:bg-gray-805 rounded-2xl border border-gray-100 dark:border-gray-700/60 p-5 shadow-sm">
+                <div className="flex items-center gap-3 mb-2">
+                  <div className="w-8 h-8 rounded-lg bg-green-500/10 flex items-center justify-center text-green-500">
+                    <i className="fas fa-dollar-sign"></i>
+                  </div>
+                  <span className="text-[9px] font-extrabold uppercase tracking-widest text-green-500">
+                    Total Cost
+                  </span>
+                </div>
+                <p className="text-xl font-bold text-green-600 dark:text-green-400">
+                  {formatCurrency(project.totalCost, project.currency)}
+                </p>
+              </div>
             </div>
 
             {/* Leadership Cards Group */}

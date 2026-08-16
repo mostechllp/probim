@@ -7,7 +7,6 @@ export const fetchChecklists = createAsyncThunk(
   async (offboardingId, { rejectWithValue }) => {
     try {
       const response = await apiClient.get(`/admin/checklists/${offboardingId}`);
-      console.log("All checklists fetched:", response.data);
       
       // Check if response has data array
       if (response.data && Array.isArray(response.data)) {
@@ -31,7 +30,6 @@ export const fetchVisaStatus = createAsyncThunk(
   async (offboardingId, { rejectWithValue }) => {
     try {
       const response = await apiClient.get(`/admin/offboarding/${offboardingId}/visa-status`);
-      console.log("Visa status fetched:", response.data);
       
       if (response.data && response.data.status === "success") {
         return response.data.data;
@@ -53,7 +51,6 @@ export const createChecklist = createAsyncThunk(
         `/admin/checklists/${offboardingId}`,
         checklistData,
       );
-      console.log("Checklist created:", response.data);
 
       if (response.data && (response.data.success === true || response.data.id)) {
         return response.data.data || response.data;
@@ -79,7 +76,6 @@ export const updateChecklist = createAsyncThunk(
         `/admin/checklists/${checklistId}`,
         checklistData,
       );
-      console.log("Checklist updated:", response.data);
 
       if (response.data && (response.data.success === true || response.data.id)) {
         return response.data.data || response.data;
@@ -104,7 +100,6 @@ export const deleteChecklist = createAsyncThunk(
       const response = await apiClient.delete(
         `/admin/checklists/${checklistId}`,
       );
-      console.log("Checklist deleted:", response.data);
 
       if (response.data && (response.data.success === true || response.data.message)) {
         return { id: checklistId };
@@ -127,10 +122,9 @@ export const updateChecklistStatus = createAsyncThunk(
   async ({ checklistId, status }, { rejectWithValue }) => {
     try {
       const response = await apiClient.patch(
-        `/admin/checklists/${checklistId}/status`,
+        `/admin/checklists/item/${checklistId}/status`,
         { status },
       );
-      console.log("Checklist status updated:", response.data);
 
       if (response.data && (response.data.success === true || response.data.id)) {
         return response.data.data || response.data;
