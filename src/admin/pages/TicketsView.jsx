@@ -19,7 +19,10 @@ import {
   FiFlag,
   FiRefreshCw,
   FiX,
+  FiTrash2,
 } from "react-icons/fi";
+import apiClient, { getStorageUrl } from "../../utils/apiClient";
+import { showToast } from "../../components/common/Toast";
 
 // ─── Demo Data ────────────────────────────────────────────────────────────
 const DEMO_TICKETS = [
@@ -247,9 +250,42 @@ const AdminTickets = () => {
   const [showViewModal, setShowViewModal] = useState(false);
   const [viewingTicket, setViewingTicket] = useState(null);
 
-  // ─── Load Demo Data ────────────────────────────────────────────────────
+  // ─── API Integrations ────────────────────────────────────────────────────
+  const fetchTickets = async () => {
+    try {
+      setLoading(true);
+      const res = await apiClient.get('/admin/tickets');
+      
+      let rawData = [];
+      if (Array.isArray(res.data?.data?.data)) {
+        rawData = res.data.data.data;
+      } else if (Array.isArray(res.data?.data)) {
+        rawData = res.data.data;
+      } else if (Array.isArray(res.data)) {
+        rawData = res.data;
+      }
+      
+      const mappedTickets = rawData.map((t) => ({
+        ...t,
+        issue_title: t.title || t.issue_title,
+        issue_description: t.description || t.issue_description,
+        name: t.user?.name || (t.user?.first_name ? `${t.user.first_name} ${t.user.last_name || ''}` : '') || t.name,
+        email: t.user?.email || t.email,
+        module: t.module ? (t.module.slug || t.module.name || t.module.id) : (t.module_id || t.module),
+        date: t.created_at ? t.created_at.split('T')[0] : t.date,
+        screenshot_preview: getStorageUrl(t.screenshot_url || t.screenshot_preview || t.screenshot),
+      }));
+      setTickets(mappedTickets);
+    } catch (error) {
+      console.error("Error fetching tickets:", error);
+      showToast("Failed to fetch tickets", "error");
+    } finally {
+      setLoading(false);
+    }
+  };
+
   useEffect(() => {
-    setTickets(DEMO_TICKETS);
+    fetchTickets();
   }, []);
 
   // ─── Get all available modules ────────────────────────────────────────
@@ -335,14 +371,75 @@ const AdminTickets = () => {
   };
 
   // ─── View Modal Handlers ──────────────────────────────────────────────
-  const openViewModal = (ticket) => {
+  const openViewModal = async (ticket) => {
     setViewingTicket(ticket);
     setShowViewModal(true);
+    try {
+      const res = await apiClient.get(`/admin/tickets/${ticket.id}`);
+      const fullTicket = res.data?.data || res.data;
+      if (fullTicket) {
+        setViewingTicket(prev => {
+          if (!prev || prev.id !== ticket.id) return prev;
+          return {
+            ...prev,
+            ...fullTicket,
+            issue_title: fullTicket.title || fullTicket.issue_title || prev.issue_title,
+            issue_description: fullTicket.description || fullTicket.issue_description || prev.issue_description,
+            screenshot_preview: getStorageUrl(fullTicket.screenshot_url || fullTicket.screenshot_preview) || prev.screenshot_preview,
+            name: fullTicket.user?.name || (fullTicket.user?.first_name ? `${fullTicket.user.first_name} ${fullTicket.user.last_name || ''}` : '') || fullTicket.name || prev.name,
+            email: fullTicket.user?.email || fullTicket.email || prev.email,
+            module: fullTicket.module ? (fullTicket.module.slug || fullTicket.module.name || fullTicket.module.id) : (fullTicket.module_id || fullTicket.module || prev.module),
+          };
+        });
+      }
+    } catch (error) {
+      console.error("Error fetching full ticket details:", error);
+    }
   };
 
   const closeViewModal = () => {
     setShowViewModal(false);
     setViewingTicket(null);
+  };
+
+  // ─── Status & Delete Handlers ──────────────────────────────────────────
+  const [showDeleteConfirm, setShowDeleteConfirm] = useState(false);
+  const [deletingTicketId, setDeletingTicketId] = useState(null);
+
+  const handleStatusChange = async (ticketId, newStatus) => {
+    try {
+      await apiClient.patch(`/admin/tickets/${ticketId}/status`, { status: newStatus });
+      showToast("Ticket status updated successfully", "success");
+      
+      setTickets(tickets.map(t => t.id === ticketId ? { ...t, status: newStatus } : t));
+      if (viewingTicket && viewingTicket.id === ticketId) {
+        setViewingTicket({ ...viewingTicket, status: newStatus });
+      }
+    } catch (error) {
+      console.error("Error updating status:", error);
+      showToast(error?.response?.data?.message || "Failed to update status", "error");
+    }
+  };
+
+  const openDeleteConfirm = (id) => {
+    setDeletingTicketId(id);
+    setShowDeleteConfirm(true);
+  };
+
+  const handleDelete = async () => {
+    if (deletingTicketId) {
+      try {
+        await apiClient.delete(`/admin/tickets/${deletingTicketId}`);
+        setTickets(tickets.filter((t) => t.id !== deletingTicketId));
+        showToast("Ticket deleted successfully", "success");
+      } catch (error) {
+        console.error("Error deleting ticket:", error);
+        showToast("Failed to delete ticket", "error");
+      } finally {
+        setShowDeleteConfirm(false);
+        setDeletingTicketId(null);
+      }
+    }
   };
 
   // ─── Render ────────────────────────────────────────────────────────────
@@ -359,10 +456,11 @@ const AdminTickets = () => {
           </p>
         </div>
         <button
-          onClick={() => setTickets(DEMO_TICKETS)}
-          className="px-4 py-2 bg-blue-500 text-white rounded-lg hover:bg-blue-600 transition-colors flex items-center gap-2 text-sm font-medium shadow-sm hover:shadow-md"
+          onClick={fetchTickets}
+          disabled={loading}
+          className="px-4 py-2 bg-blue-500 text-white rounded-lg hover:bg-blue-600 transition-colors flex items-center gap-2 text-sm font-medium shadow-sm hover:shadow-md disabled:opacity-50"
         >
-          <FiRefreshCw size={16} /> Refresh
+          <FiRefreshCw size={16} className={loading ? "animate-spin" : ""} /> Refresh
         </button>
       </div>
 
@@ -531,13 +629,20 @@ const AdminTickets = () => {
                       {formatDate(ticket.date)}
                     </td>
                     <td className="px-4 py-3">
-                      <div className="flex items-center justify-center">
+                      <div className="flex items-center justify-center gap-2">
                         <button
                           onClick={() => openViewModal(ticket)}
-                          className="p-2 rounded-lg hover:bg-gray-100 dark:hover:bg-gray-700 text-blue-500 transition-colors"
+                          className="p-1.5 rounded-lg hover:bg-gray-100 dark:hover:bg-gray-700 text-blue-500 transition-colors"
                           title="View Details"
                         >
-                          <FiEye size={18} />
+                          <FiEye size={16} />
+                        </button>
+                        <button
+                          onClick={() => openDeleteConfirm(ticket.id)}
+                          className="p-1.5 rounded-lg hover:bg-gray-100 dark:hover:bg-gray-700 text-red-500 transition-colors"
+                          title="Delete Ticket"
+                        >
+                          <FiTrash2 size={16} />
                         </button>
                       </div>
                     </td>
@@ -579,16 +684,31 @@ const AdminTickets = () => {
 
             <div className="space-y-4">
               {/* Status & Priority Row */}
-              <div className="grid grid-cols-2 gap-4 bg-[var(--surface2)] p-3 rounded-lg">
-                <div className="flex items-center gap-2">
-                  <FiFlag className="text-[var(--muted)]" />
-                  <span className="text-xs text-[var(--muted)]">Status:</span>
-                  {getStatusBadge(viewingTicket.status)}
+              <div className="grid grid-cols-2 gap-4 bg-[var(--surface2)] p-3 rounded-lg border border-[var(--border)]">
+                <div className="flex flex-col gap-1">
+                  <div className="flex items-center gap-2 mb-1">
+                    <FiFlag className="text-[var(--muted)]" />
+                    <span className="text-xs text-[var(--muted)]">Status:</span>
+                  </div>
+                  <select
+                    value={viewingTicket.status || "open"}
+                    onChange={(e) => handleStatusChange(viewingTicket.id, e.target.value)}
+                    className="w-full px-2 py-1.5 bg-white dark:bg-gray-800 border border-[var(--border)] rounded-md text-sm font-medium focus:outline-none focus:border-blue-500"
+                  >
+                    <option value="open">Open</option>
+                    <option value="inprogress">In Progress</option>
+                    <option value="in_progress">In Progress (Legacy)</option>
+                    <option value="resolved">Resolved</option>
+                    <option value="closed">Closed</option>
+                    <option value="reopen">Reopen</option>
+                  </select>
                 </div>
-                <div className="flex items-center gap-2">
-                  <FiTag className="text-[var(--muted)]" />
-                  <span className="text-xs text-[var(--muted)]">Priority:</span>
-                  {getPriorityBadge(viewingTicket.priority)}
+                <div className="flex flex-col justify-center">
+                  <div className="flex items-center gap-2 mb-1">
+                    <FiTag className="text-[var(--muted)]" />
+                    <span className="text-xs text-[var(--muted)]">Priority:</span>
+                  </div>
+                  <div>{getPriorityBadge(viewingTicket.priority)}</div>
                 </div>
               </div>
 
@@ -703,6 +823,42 @@ const AdminTickets = () => {
                   Close
                 </button>
               </div>
+            </div>
+          </div>
+        </div>
+      )}
+      {/* ─── DELETE CONFIRMATION ────────────────────────────────────────── */}
+      {showDeleteConfirm && (
+        <div className="fixed inset-0 bg-black/70 flex items-center justify-center z-[70] p-4 animate-fade-in">
+          <div className="bg-[var(--surface)] rounded-xl max-w-md w-full p-6 shadow-2xl animate-slide-up border border-[var(--border)]">
+            <div className="flex items-center gap-3 mb-4">
+              <div className="w-12 h-12 bg-red-100 dark:bg-red-900/30 rounded-full flex items-center justify-center">
+                <FiTrash2 className="text-red-600 dark:text-red-400 text-2xl" />
+              </div>
+              <div>
+                <h3 className="text-lg font-bold text-[var(--text)]">Delete Ticket</h3>
+                <p className="text-sm text-[var(--muted)]">This action cannot be undone</p>
+              </div>
+            </div>
+            <p className="text-sm text-[var(--text-secondary)] mb-6">
+              Are you sure you want to delete this ticket? All data associated with it will be permanently removed.
+            </p>
+            <div className="flex gap-3">
+              <button
+                onClick={() => {
+                  setShowDeleteConfirm(false);
+                  setDeletingTicketId(null);
+                }}
+                className="flex-1 py-2.5 px-4 bg-[var(--surface2)] border border-[var(--border)] rounded-lg text-[var(--text)] font-medium text-sm hover:bg-[var(--surface3)] transition-colors"
+              >
+                Cancel
+              </button>
+              <button
+                onClick={handleDelete}
+                className="flex-1 py-2.5 px-4 bg-red-500 text-white rounded-lg font-medium text-sm hover:bg-red-600 transition-colors flex items-center justify-center gap-2"
+              >
+                <FiTrash2 size={16} /> Delete
+              </button>
             </div>
           </div>
         </div>
