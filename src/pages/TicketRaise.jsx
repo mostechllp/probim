@@ -23,7 +23,7 @@ import {
   FiFilter,
   FiLock,
 } from "react-icons/fi";
-import apiClient from "../utils/apiClient";
+import apiClient, { getStorageUrl } from "../utils/apiClient";
 
 // ─── Demo Data ────────────────────────────────────────────────────────────
 const DEMO_TICKETS = [
@@ -180,35 +180,56 @@ const TicketRaise = () => {
   const [modules, setModules] = useState([]);
 
   // ─── Load Demo Data ────────────────────────────────────────────────────
-  useEffect(() => {
-    setTickets(DEMO_TICKETS);
-    
-    const sidebarModules = user?.sidebar_modules || [];
-    if (sidebarModules.length > 0) {
-      const moduleOptions = sidebarModules
-        .filter((mod) => mod.status === "active")
-        .map((mod) => ({
-          value: mod.slug || mod.name,
-          label: mod.name || mod.slug,
-        }));
-      setModules(moduleOptions);
-    } else {
-      const fallbackModules = [
-        { value: "dashboard", label: "Dashboard" },
-        { value: "attendance", label: "Attendance" },
-        { value: "leaves", label: "Leaves" },
-        { value: "projects", label: "Projects" },
-        { value: "payroll", label: "Payroll" },
-        { value: "employees", label: "Employees" },
-        { value: "reports", label: "Reports" },
-        { value: "settings", label: "Settings" },
-        { value: "wfh", label: "WFH Requests" },
-        { value: "tasks", label: "Tasks" },
-        { value: "documents", label: "Documents" },
-      ];
-      setModules(fallbackModules);
+  // ─── API Integrations ──────────────────────────────────────────────────
+  const fetchTickets = async () => {
+    try {
+      setLoading(true);
+      const res = await apiClient.get('/employee/tickets');
+      
+      let rawData = [];
+      if (Array.isArray(res.data?.data?.data)) {
+        rawData = res.data.data.data;
+      } else if (Array.isArray(res.data?.data)) {
+        rawData = res.data.data;
+      } else if (Array.isArray(res.data)) {
+        rawData = res.data;
+      }
+      
+      const mappedTickets = rawData.map((t) => ({
+        ...t,
+        issue_title: t.title || t.issue_title,
+        issue_description: t.description || t.issue_description,
+        module: t.module ? (t.module.slug || t.module.name || t.module.id) : t.module_id,
+        module_id: t.module_id || t.module?.id || t.module,
+        date: t.created_at ? t.created_at.split('T')[0] : t.date,
+        screenshot_preview: getStorageUrl(t.screenshot_url || t.screenshot),
+      }));
+      setTickets(mappedTickets);
+    } catch (error) {
+      console.error("Error fetching tickets:", error);
+      showToast("Failed to fetch tickets", "error");
+    } finally {
+      setLoading(false);
     }
-  }, [user]);
+  };
+
+  const fetchModules = async () => {
+    try {
+      const res = await apiClient.get('/employee/tickets/modules');
+      const moduleData = res.data?.data || res.data || [];
+      if (Array.isArray(moduleData)) {
+        setModules(moduleData.map((m) => ({ value: m.id, label: m.name })));
+      }
+    } catch (error) {
+      console.error("Error fetching modules:", error);
+      showToast("Failed to fetch modules", "error");
+    }
+  };
+
+  useEffect(() => {
+    fetchTickets();
+    fetchModules();
+  }, []);
 
   // ─── Filtered Tickets ──────────────────────────────────────────────────
   const filteredTickets = tickets.filter((ticket) => {
@@ -257,13 +278,13 @@ const TicketRaise = () => {
     setModalMode("edit");
     setEditingTicket(ticket);
     setFormData({
-      name: ticket.name,
-      email: ticket.email,
-      module: ticket.module,
+      name: ticket.name || employeeName,
+      email: ticket.email || employeeEmail,
+      module: ticket.module_id || ticket.module,
       issue_title: ticket.issue_title,
       issue_description: ticket.issue_description,
-      screenshot: ticket.screenshot || null,
-      screenshot_preview: ticket.screenshot_preview || null,
+      screenshot: null,
+      screenshot_preview: ticket.screenshot_preview || ticket.screenshot || null,
       date: ticket.date,
       status: ticket.status,
       priority: ticket.priority || "medium",
@@ -308,12 +329,19 @@ const TicketRaise = () => {
     setShowDeleteConfirm(true);
   };
 
-  const handleDelete = () => {
+  const handleDelete = async () => {
     if (deletingTicketId) {
-      setTickets(tickets.filter(t => t.id !== deletingTicketId));
-      showToast("Ticket deleted successfully", "success");
-      setShowDeleteConfirm(false);
-      setDeletingTicketId(null);
+      try {
+        await apiClient.delete(`/employee/tickets/${deletingTicketId}`);
+        setTickets(tickets.filter((t) => t.id !== deletingTicketId));
+        showToast("Ticket deleted successfully", "success");
+      } catch (error) {
+        console.error("Error deleting ticket:", error);
+        showToast("Failed to delete ticket", "error");
+      } finally {
+        setShowDeleteConfirm(false);
+        setDeletingTicketId(null);
+      }
     }
   };
 
@@ -334,7 +362,7 @@ const TicketRaise = () => {
     }
 
     // ─── SCREENSHOT IS NOW REQUIRED ──────────────────────────────────────
-    if (!formData.screenshot) {
+    if (!formData.screenshot && !formData.screenshot_preview) {
       newErrors.screenshot = "Please upload a screenshot (required)";
     }
 
@@ -412,42 +440,37 @@ const TicketRaise = () => {
     setSubmitting(true);
 
     try {
-      if (modalMode === "add") {
-        const newTicket = {
-          id: Date.now(),
-          name: formData.name,
-          email: formData.email,
-          module: formData.module,
-          issue_title: formData.issue_title,
-          issue_description: formData.issue_description,
-          screenshot: formData.screenshot,
-          screenshot_preview: formData.screenshot_preview,
-          date: formData.date,
-          status: formData.status,
-          priority: formData.priority || "medium",
-          created_at: new Date().toISOString(),
-        };
-        setTickets([newTicket, ...tickets]);
-        showToast("Ticket raised successfully!", "success");
-      } else if (modalMode === "edit" && editingTicket) {
-        const updatedTicket = {
-          ...editingTicket,
-          module: formData.module,
-          issue_title: formData.issue_title,
-          issue_description: formData.issue_description,
-          screenshot: formData.screenshot,
-          screenshot_preview: formData.screenshot_preview,
-          priority: formData.priority || "medium",
-          // Name, email, date, status remain unchanged
-        };
-        setTickets(tickets.map(t => t.id === editingTicket.id ? updatedTicket : t));
-        showToast("Ticket updated successfully!", "success");
+      const formDataToSend = new FormData();
+      formDataToSend.append("module_id", formData.module);
+      formDataToSend.append("title", formData.issue_title);
+      formDataToSend.append("description", formData.issue_description);
+      
+      if (formData.screenshot && typeof formData.screenshot !== "string") {
+        formDataToSend.append("screenshot", formData.screenshot);
+      }
+      
+      if (formData.priority) {
+        formDataToSend.append("priority", formData.priority);
       }
 
+      if (modalMode === "add") {
+        await apiClient.post('/employee/tickets', formDataToSend, {
+          headers: { "Content-Type": "multipart/form-data" },
+        });
+        showToast("Ticket raised successfully!", "success");
+      } else if (modalMode === "edit" && editingTicket) {
+        formDataToSend.append("_method", "PUT");
+        await apiClient.post(`/employee/tickets/${editingTicket.id}`, formDataToSend, {
+          headers: { "Content-Type": "multipart/form-data" },
+        });
+        showToast("Ticket updated successfully!", "success");
+      }
+      
+      fetchTickets();
       closeModal();
     } catch (error) {
       console.error("Error saving ticket:", error);
-      showToast(error.message || "Failed to save ticket", "error");
+      showToast(error?.response?.data?.message || "Failed to save ticket", "error");
     } finally {
       setSubmitting(false);
     }
@@ -636,13 +659,6 @@ const TicketRaise = () => {
                         <span className="text-sm font-medium text-gray-800 dark:text-gray-200 truncate max-w-[200px]">
                           {ticket.issue_title}
                         </span>
-                        {ticket.screenshot_preview && (
-                          <img
-                            src={ticket.screenshot_preview}
-                            alt="screenshot"
-                            className="w-6 h-6 rounded object-cover border border-gray-200 dark:border-gray-700"
-                          />
-                        )}
                       </div>
                     </td>
                     <td className="px-4 py-3 text-sm text-gray-600 dark:text-gray-400">
@@ -891,10 +907,10 @@ const TicketRaise = () => {
                       />
                       <div className="flex-1">
                         <p className="text-sm font-medium text-gray-800 dark:text-gray-200 truncate">
-                          {formData.screenshot?.name || "Screenshot"}
+                          {formData.screenshot?.name || "Uploaded Screenshot"}
                         </p>
                         <p className="text-xs text-gray-500 dark:text-gray-400">
-                          {(formData.screenshot.size / 1024).toFixed(1)} KB
+                          {formData.screenshot ? `${(formData.screenshot.size / 1024).toFixed(1)} KB` : "Size unavailable"}
                         </p>
                         <button
                           type="button"
@@ -960,7 +976,7 @@ const TicketRaise = () => {
                 </button>
                 <button
                   type="submit"
-                  disabled={submitting || !formData.screenshot}
+                  disabled={submitting || (!formData.screenshot && !formData.screenshot_preview)}
                   className="flex-1 py-2.5 px-4 bg-green-500 text-white rounded-lg font-medium text-sm hover:bg-green-600 transition-colors disabled:opacity-50 disabled:cursor-not-allowed flex items-center justify-center gap-2"
                 >
                   {submitting ? (
