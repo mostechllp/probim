@@ -21,12 +21,14 @@ import {
   Eye,
   Play,
   ListChecks,
+  RefreshCw,
 } from "lucide-react";
 import { showToast } from "../../components/common/Toast";
 import { fetchEmployees } from "../store/slices/employeeSlice";
 import {
   fetchAllOnboarding,
   deleteOnboardingRecord,
+  fetchOnboardingById,
 } from "../store/slices/onboardingSlice";
 
 const OnboardingDashboard = () => {
@@ -84,7 +86,6 @@ const OnboardingDashboard = () => {
   const getEmployeeName = (onboarding) => {
     if (onboarding.employee_name) return onboarding.employee_name;
 
-    // Try to find from employee map using various ID fields
     const employeeId =
       onboarding.employee_id || onboarding.user_id || onboarding.id;
     const employee = employeeMap.get(String(employeeId));
@@ -98,7 +99,6 @@ const OnboardingDashboard = () => {
       );
     }
 
-    // Try using first_name and last_name directly from onboarding data
     if (onboarding.first_name) {
       return `${onboarding.first_name || ""} ${onboarding.last_name || ""}`.trim();
     }
@@ -117,7 +117,6 @@ const OnboardingDashboard = () => {
       return employee.designation;
     }
 
-    // Try from user object in the response
     if (onboarding.user?.designation) {
       return onboarding.user.designation.name || onboarding.user.designation;
     }
@@ -136,7 +135,6 @@ const OnboardingDashboard = () => {
       return employee.department;
     }
 
-    // Try from user object in the response
     if (onboarding.user?.department) {
       return onboarding.user.department.name || onboarding.user.department;
     }
@@ -147,8 +145,10 @@ const OnboardingDashboard = () => {
   const getStatusColor = (status) => {
     switch (status?.toLowerCase()) {
       case "pending":
-      case "onboarding":
+      case "pending_onboarding":
         return "bg-orange-100 text-orange-600 dark:bg-orange-900/30 dark:text-orange-400";
+      case "onboarding":
+        return "bg-blue-100 text-blue-600 dark:bg-blue-900/30 dark:text-blue-400";
       case "in_progress":
       case "in-progress":
         return "bg-yellow-100 text-yellow-600 dark:bg-yellow-900/30 dark:text-yellow-400";
@@ -164,6 +164,7 @@ const OnboardingDashboard = () => {
     if (!status) return "Pending";
     const map = {
       pending: "Pending",
+      pending_onboarding: "Pending Onboarding",
       onboarding: "Onboarding",
       in_progress: "In Progress",
       "in-progress": "In Progress",
@@ -197,7 +198,6 @@ const OnboardingDashboard = () => {
       showToast("Onboarding record deleted successfully", "success");
       setShowDeleteModal(false);
       setSelectedOnboarding(null);
-      // Refresh the list
       await dispatch(fetchAllOnboarding());
     } catch (error) {
       console.error("Delete error:", error);
@@ -207,19 +207,32 @@ const OnboardingDashboard = () => {
     }
   };
 
-  const handleContinue = (onboarding) => {
-    // Store the onboarding ID and navigate to the onboarding wizard
-    localStorage.setItem("onboarding_id", String(onboarding.id));
-    localStorage.setItem(
-      "onboarding_employee_id",
-      String(onboarding.employee_id || onboarding.user_id),
-    );
-    navigate("/admin/employees/onboarding/initiate", {
-      state: {
-        onboardingId: onboarding.id,
-        employeeId: onboarding.employee_id || onboarding.user_id,
-      },
-    });
+  // ─── HANDLE RESUME ──────────────────────────────────────────────────────
+  const handleResume = async (onboarding) => {
+    try {
+      // Store the onboarding ID
+      localStorage.setItem("onboarding_id", String(onboarding.id));
+      localStorage.setItem(
+        "onboarding_employee_id",
+        String(onboarding.employee_id || onboarding.user_id),
+      );
+
+      // Fetch the full onboarding data to pre-fill the form
+      await dispatch(fetchOnboardingById(onboarding.id)).unwrap();
+
+      // Navigate to the initiate page with resume flag
+      navigate("/admin/employees/onboarding/initiate", {
+        state: {
+          onboardingId: onboarding.id,
+          employeeId: onboarding.employee_id || onboarding.user_id,
+          isResume: true,
+          isEdit: true,
+        },
+      });
+    } catch (error) {
+      console.error("Failed to fetch onboarding data:", error);
+      showToast("Failed to load onboarding data. Please try again.", "error");
+    }
   };
 
   const handleView = (onboarding) => {
@@ -236,8 +249,15 @@ const OnboardingDashboard = () => {
     );
   }
 
-  // Get onboarding data from Redux
   const recentOnboarding = onboardingRecords || [];
+
+  // Check if status is pending onboarding
+  const isPendingOnboarding = (status) => {
+    return (
+      status?.toLowerCase() === "pending_onboarding" ||
+      status?.toLowerCase() === "pending"
+    );
+  };
 
   return (
     <div className="w-full overflow-x-hidden">
@@ -249,9 +269,22 @@ const OnboardingDashboard = () => {
         <button
           className="px-4 py-2 rounded-lg bg-green-600 text-white hover:bg-green-700 dark:bg-green-500 dark:hover:bg-green-600 font-semibold text-sm flex items-center gap-2 transition-all shadow-sm"
           onClick={() => {
+            // ─── CLEAR ALL ONBOARDING DATA FOR FRESH START ──────────────────────
+            // Clear localStorage items
             localStorage.removeItem("onboarding_id");
+            localStorage.removeItem("onboarding_employee_id");
             localStorage.removeItem("onboarding-draft");
-            navigate("/admin/employees/onboarding/initiate");
+            localStorage.removeItem("employeeId");
+            localStorage.removeItem("employeeUserId");
+            localStorage.removeItem("onboardingEmployeeUserId");
+
+            // Reset Redux state (will be handled by the initiate page)
+            // Navigate to fresh onboarding
+            navigate("/admin/employees/onboarding/initiate", {
+              state: {
+                isFreshStart: true,
+              },
+            });
           }}
         >
           <UserPlus size={16} />
@@ -301,64 +334,81 @@ const OnboardingDashboard = () => {
               </thead>
               <tbody>
                 {recentOnboarding.length > 0 ? (
-                  recentOnboarding.map((item, idx) => (
-                    <tr
-                      key={item.id}
-                      className="border-b border-gray-200 dark:border-gray-700 hover:bg-gray-50 dark:hover:bg-gray-700/50 transition-colors"
-                    >
-                      <td className="px-3 md:px-4 py-2 md:py-3 text-xs md:text-sm text-gray-600 dark:text-gray-400 text-center">
-                        {idx + 1}
-                      </td>
-                      <td className="px-3 md:px-4 py-2 md:py-3">
-                        <div>
-                          <p className="text-xs md:text-sm font-semibold text-gray-800 dark:text-gray-200">
-                            {getEmployeeName(item)}
-                          </p>
-                        </div>
-                      </td>
-                      <td className="px-3 md:px-4 py-2 md:py-3 text-xs md:text-sm text-gray-600 dark:text-gray-400">
-                        {getDesignation(item)}
-                      </td>
-                      <td className="px-3 md:px-4 py-2 md:py-3 text-xs md:text-sm text-gray-600 dark:text-gray-400">
-                        {getDepartment(item)}
-                      </td>
-                      <td className="px-3 md:px-4 py-2 md:py-3">
-                        <div className="flex items-center gap-1 md:gap-2">
-                          <Calendar size={12} className="text-gray-400" />
-                          <span className="text-xs md:text-sm text-gray-600 dark:text-gray-400 whitespace-nowrap">
-                            {formatDate(item.joining_date)}
-                          </span>
-                        </div>
-                      </td>
-                      <td className="px-3 md:px-4 py-2 md:py-3">
-                        <span
-                          className={`inline-flex px-2 md:px-3 py-0.5 md:py-1 rounded-full text-[10px] md:text-xs font-semibold ${getStatusColor(item.user?.status || item.status)} whitespace-nowrap`}
-                        >
-                          {getStatusLabel(item.user?.status || item.status)}
-                        </span>
-                      </td>
-                      <td className="px-3 md:px-4 py-2 md:py-3 text-right">
-                        <div className="flex items-center justify-end gap-2">
-                          <button
-                            onClick={() => handleView(item)}
-                            title="View"
-                            className="p-2 rounded-xl bg-gray-50 text-gray-500 hover:bg-gray-100 hover:text-gray-700 transition-colors flex items-center justify-center"
-                          >
-                            <Eye size={16} />
-                          </button>
+                  recentOnboarding.map((item, idx) => {
+                    const status = item.user?.status || item.status;
+                    const isPending = isPendingOnboarding(status);
 
-                          
-                          <button
-                            onClick={() => handleDeleteClick(item)}
-                            title="Delete"
-                            className="p-2 rounded-xl bg-red-50 text-red-500 hover:bg-red-100 hover:text-red-600 transition-colors flex items-center justify-center"
+                    return (
+                      <tr
+                        key={item.id}
+                        className="border-b border-gray-200 dark:border-gray-700 hover:bg-gray-50 dark:hover:bg-gray-700/50 transition-colors"
+                      >
+                        <td className="px-3 md:px-4 py-2 md:py-3 text-xs md:text-sm text-gray-600 dark:text-gray-400 text-center">
+                          {idx + 1}
+                        </td>
+                        <td className="px-3 md:px-4 py-2 md:py-3">
+                          <div>
+                            <p className="text-xs md:text-sm font-semibold text-gray-800 dark:text-gray-200">
+                              {getEmployeeName(item)}
+                            </p>
+                          </div>
+                        </td>
+                        <td className="px-3 md:px-4 py-2 md:py-3 text-xs md:text-sm text-gray-600 dark:text-gray-400">
+                          {getDesignation(item)}
+                        </td>
+                        <td className="px-3 md:px-4 py-2 md:py-3 text-xs md:text-sm text-gray-600 dark:text-gray-400">
+                          {getDepartment(item)}
+                        </td>
+                        <td className="px-3 md:px-4 py-2 md:py-3">
+                          <div className="flex items-center gap-1 md:gap-2">
+                            <Calendar size={12} className="text-gray-400" />
+                            <span className="text-xs md:text-sm text-gray-600 dark:text-gray-400 whitespace-nowrap">
+                              {formatDate(item.joining_date)}
+                            </span>
+                          </div>
+                        </td>
+                        <td className="px-3 md:px-4 py-2 md:py-3">
+                          <span
+                            className={`inline-flex px-2 md:px-3 py-0.5 md:py-1 rounded-full text-[10px] md:text-xs font-semibold ${getStatusColor(status)} whitespace-nowrap`}
                           >
-                            <Trash2 size={16} />
-                          </button>
-                        </div>
-                      </td>
-                    </tr>
-                  ))
+                            {getStatusLabel(status)}
+                          </span>
+                        </td>
+                        <td className="px-3 md:px-4 py-2 md:py-3 text-right">
+                          <div className="flex items-center justify-end gap-2">
+                            {/* ─── VIEW BUTTON ────────────────────────────── */}
+                            <button
+                              onClick={() => handleView(item)}
+                              title="View"
+                              className="p-2 rounded-xl bg-gray-50 text-gray-500 hover:bg-gray-100 hover:text-gray-700 transition-colors flex items-center justify-center"
+                            >
+                              <Eye size={16} />
+                            </button>
+
+                            {/* ─── RESUME BUTTON (only for pending) ────────── */}
+                            {isPending && (
+                              <button
+                                onClick={() => handleResume(item)}
+                                title="Resume"
+                                className="p-2 rounded-xl bg-blue-50 text-blue-500 hover:bg-blue-100 hover:text-blue-600 transition-colors flex items-center justify-center"
+                              >
+                                <Play size={16} />
+                              </button>
+                            )}
+
+                            {/* ─── DELETE BUTTON ───────────────────────────── */}
+                            <button
+                              onClick={() => handleDeleteClick(item)}
+                              title="Delete"
+                              className="p-2 rounded-xl bg-red-50 text-red-500 hover:bg-red-100 hover:text-red-600 transition-colors flex items-center justify-center"
+                            >
+                              <Trash2 size={16} />
+                            </button>
+                          </div>
+                        </td>
+                      </tr>
+                    );
+                  })
                 ) : (
                   <tr>
                     <td

@@ -293,7 +293,7 @@ export const deleteOnboardingRecord = createAsyncThunk(
   "onboarding/delete",
   async (id, { rejectWithValue }) => {
     try {
-      const response = await apiClient.delete(`/admin/onboarding/${id}`);
+      const response = await apiClient.delete(`/admin/employees/onboarding/${id}`);
       
       if (response.data && response.data.status === "success") {
         return id;

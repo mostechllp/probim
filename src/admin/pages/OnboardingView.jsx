@@ -221,53 +221,6 @@ const OnboardingView = () => {
         </div>
       </div>
 
-      {/* ─── Quick Stats ───────────────────────────────────────────────────── */}
-      <div className="grid grid-cols-2 md:grid-cols-4 gap-3 md:gap-4 mb-6">
-        <div className="bg-white dark:bg-gray-800 rounded-xl p-3 md:p-4 border border-gray-200 dark:border-gray-700">
-          <div className="flex items-center gap-2">
-            <div className="w-8 h-8 bg-green-100 dark:bg-green-900/30 rounded-lg flex items-center justify-center">
-              <FiCheckCircle className="text-green-600 dark:text-green-400" />
-            </div>
-            <div>
-              <div className="text-xl font-bold text-gray-800 dark:text-gray-200">{user.status || employee.status || "N/A"}</div>
-              <div className="text-[10px] text-gray-500 dark:text-gray-400">Status</div>
-            </div>
-          </div>
-        </div>
-        <div className="bg-white dark:bg-gray-800 rounded-xl p-3 md:p-4 border border-gray-200 dark:border-gray-700">
-          <div className="flex items-center gap-2">
-            <div className="w-8 h-8 bg-blue-100 dark:bg-blue-900/30 rounded-lg flex items-center justify-center">
-              <FiCalendar className="text-blue-600 dark:text-blue-400" />
-            </div>
-            <div>
-              <div className="text-xl font-bold text-gray-800 dark:text-gray-200">{formatDate(employee.joining_date)}</div>
-              <div className="text-[10px] text-gray-500 dark:text-gray-400">Joining Date</div>
-            </div>
-          </div>
-        </div>
-        <div className="bg-white dark:bg-gray-800 rounded-xl p-3 md:p-4 border border-gray-200 dark:border-gray-700">
-          <div className="flex items-center gap-2">
-            <div className="w-8 h-8 bg-purple-100 dark:bg-purple-900/30 rounded-lg flex items-center justify-center">
-              <FiPackage className="text-purple-600 dark:text-purple-400" />
-            </div>
-            <div>
-              <div className="text-xl font-bold text-gray-800 dark:text-gray-200">{salaryPackages.length}</div>
-              <div className="text-[10px] text-gray-500 dark:text-gray-400">Salary Packages</div>
-            </div>
-          </div>
-        </div>
-        <div className="bg-white dark:bg-gray-800 rounded-xl p-3 md:p-4 border border-gray-200 dark:border-gray-700">
-          <div className="flex items-center gap-2">
-            <div className="w-8 h-8 bg-amber-100 dark:bg-amber-900/30 rounded-lg flex items-center justify-center">
-              <FiCreditCard className="text-amber-600 dark:text-amber-400" />
-            </div>
-            <div>
-              <div className="text-xl font-bold text-gray-800 dark:text-gray-200">{bankDetails.length}</div>
-              <div className="text-[10px] text-gray-500 dark:text-gray-400">Bank Accounts</div>
-            </div>
-          </div>
-        </div>
-      </div>
 
       {/* ─── Personal Information ─────────────────────────────────────────── */}
       <div className="grid grid-cols-1 md:grid-cols-2 gap-4 mb-6">
@@ -421,13 +374,7 @@ const OnboardingView = () => {
           <FiArrowLeft /> Back
         </button>
         <div className="flex items-center gap-3">
-          <button
-            onClick={() => handleStatusUpdate("active")}
-            disabled={updating}
-            className="px-6 py-2.5 bg-green-500 text-white rounded-lg font-semibold hover:bg-green-600 transition-colors disabled:opacity-50 flex items-center gap-2"
-          >
-            <FiCheckCircle size={16} /> Mark as Active
-          </button>
+          
           <button
             onClick={handleEdit}
             className="px-6 py-2.5 bg-blue-500 text-white rounded-lg font-semibold hover:bg-blue-600 transition-colors flex items-center gap-2"
