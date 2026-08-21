@@ -111,19 +111,34 @@ const MODULE_LABELS = {
   wfh: "WFH Requests",
   tasks: "Tasks",
   documents: "Documents",
+  "ticket-raise": "Ticket Raise",
+  "wfh-requests": "WFH Requests",
 };
 
+// ─── STATUS CONFIG (Updated to handle both formats) ─────────────────────
 const STATUS_CONFIG = {
   open: { label: "Open", color: "bg-blue-100 text-blue-700 dark:bg-blue-900/30 dark:text-blue-400 border-blue-200 dark:border-blue-800" },
   in_progress: { label: "In Progress", color: "bg-amber-100 text-amber-700 dark:bg-amber-900/30 dark:text-amber-400 border-amber-200 dark:border-amber-800" },
+  inprogress: { label: "In Progress", color: "bg-amber-100 text-amber-700 dark:bg-amber-900/30 dark:text-amber-400 border-amber-200 dark:border-amber-800" },
   resolved: { label: "Resolved", color: "bg-green-100 text-green-700 dark:bg-green-900/30 dark:text-green-400 border-green-200 dark:border-green-800" },
   closed: { label: "Closed", color: "bg-gray-100 text-gray-700 dark:bg-gray-700/30 dark:text-gray-400 border-gray-200 dark:border-gray-700" },
+  reopen: { label: "Reopen", color: "bg-purple-100 text-purple-700 dark:bg-purple-900/30 dark:text-purple-400 border-purple-200 dark:border-purple-800" },
 };
 
 const PRIORITY_CONFIG = {
   high: { label: "High", color: "bg-red-100 text-red-700 dark:bg-red-900/30 dark:text-red-400 border-red-200 dark:border-red-800" },
   medium: { label: "Medium", color: "bg-amber-100 text-amber-700 dark:bg-amber-900/30 dark:text-amber-400 border-amber-200 dark:border-amber-800" },
   low: { label: "Low", color: "bg-green-100 text-green-700 dark:bg-green-900/30 dark:text-green-400 border-green-200 dark:border-green-800" },
+};
+
+// ─── Reverse mapping for API status to display ──────────────────────────
+const REVERSE_STATUS_MAP = {
+  open: "open",
+  inprogress: "inprogress",
+  in_progress: "inprogress",
+  resolved: "resolved",
+  closed: "closed",
+  reopen: "reopen",
 };
 
 const TicketRaise = () => {
@@ -179,7 +194,6 @@ const TicketRaise = () => {
 
   const [modules, setModules] = useState([]);
 
-  // ─── Load Demo Data ────────────────────────────────────────────────────
   // ─── API Integrations ──────────────────────────────────────────────────
   const fetchTickets = async () => {
     try {
@@ -203,6 +217,8 @@ const TicketRaise = () => {
         module_id: t.module_id || t.module?.id || t.module,
         date: t.created_at ? t.created_at.split('T')[0] : t.date,
         screenshot_preview: getStorageUrl(t.screenshot_url || t.screenshot),
+        // Normalize status for display
+        status: REVERSE_STATUS_MAP[t.status] || t.status || "open",
       }));
       setTickets(mappedTickets);
     } catch (error) {
@@ -239,7 +255,11 @@ const TicketRaise = () => {
       ticket.name?.toLowerCase().includes(searchTerm.toLowerCase()) ||
       ticket.module?.toLowerCase().includes(searchTerm.toLowerCase());
     
-    const matchesStatus = statusFilter === "all" || ticket.status === statusFilter;
+    // Normalize status for filtering
+    const ticketStatus = REVERSE_STATUS_MAP[ticket.status] || ticket.status;
+    const filterStatus = statusFilter === "all" ? "all" : statusFilter;
+    const matchesStatus = filterStatus === "all" || ticketStatus === filterStatus;
+    
     const matchesModule = moduleFilter === "all" || ticket.module === moduleFilter;
     
     return matchesSearch && matchesStatus && matchesModule;
@@ -248,9 +268,10 @@ const TicketRaise = () => {
   // ─── Stats ─────────────────────────────────────────────────────────────
   const stats = {
     total: tickets.length,
-    open: tickets.filter(t => t.status === "open").length,
-    in_progress: tickets.filter(t => t.status === "in_progress").length,
-    resolved: tickets.filter(t => t.status === "resolved").length,
+    open: tickets.filter(t => REVERSE_STATUS_MAP[t.status] === "open" || t.status === "open").length,
+    in_progress: tickets.filter(t => REVERSE_STATUS_MAP[t.status] === "inprogress" || t.status === "inprogress" || t.status === "in_progress").length,
+    resolved: tickets.filter(t => REVERSE_STATUS_MAP[t.status] === "resolved" || t.status === "resolved").length,
+    closed: tickets.filter(t => REVERSE_STATUS_MAP[t.status] === "closed" || t.status === "closed").length,
   };
 
   // ─── Modal Handlers ────────────────────────────────────────────────────
@@ -508,7 +529,9 @@ const TicketRaise = () => {
   };
 
   const getStatusBadge = (status) => {
-    const config = STATUS_CONFIG[status] || STATUS_CONFIG.open;
+    // Normalize status for display
+    const normalizedStatus = REVERSE_STATUS_MAP[status] || status || "open";
+    const config = STATUS_CONFIG[normalizedStatus] || STATUS_CONFIG.open;
     return (
       <span className={`px-2 py-0.5 rounded-full text-xs font-medium border ${config.color}`}>
         {config.label}
@@ -615,7 +638,7 @@ const TicketRaise = () => {
         >
           <option value="all">All Status</option>
           <option value="open">Open</option>
-          <option value="in_progress">In Progress</option>
+          <option value="inprogress">In Progress</option>
           <option value="resolved">Resolved</option>
           <option value="closed">Closed</option>
         </select>
