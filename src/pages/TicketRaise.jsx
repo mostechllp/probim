@@ -113,6 +113,7 @@ const MODULE_LABELS = {
   documents: "Documents",
   "ticket-raise": "Ticket Raise",
   "wfh-requests": "WFH Requests",
+  "task-reports": "Task Reports",
 };
 
 // ─── STATUS CONFIG (Updated to handle both formats) ─────────────────────
@@ -161,6 +162,7 @@ const TicketRaise = () => {
   const [submitting, setSubmitting] = useState(false);
   const [isDragging, setIsDragging] = useState(false);
   const [errors, setErrors] = useState({});
+  const [isLoadingTicket, setIsLoadingTicket] = useState(false);
 
   // Delete confirmation
   const [showDeleteConfirm, setShowDeleteConfirm] = useState(false);
@@ -190,11 +192,36 @@ const TicketRaise = () => {
     date: new Date().toISOString().split("T")[0],
     status: "open",
     priority: "medium",
+    notes: "", // Add notes field
   });
 
   const [modules, setModules] = useState([]);
 
   // ─── API Integrations ──────────────────────────────────────────────────
+  
+  // Fetch single ticket details
+  const fetchTicketDetails = async (ticketId) => {
+    try {
+      const response = await apiClient.get(`/employee/tickets/${ticketId}`);
+      const ticket = response.data.data || response.data;
+      return {
+        ...ticket,
+        issue_title: ticket.title || ticket.issue_title,
+        issue_description: ticket.description || ticket.issue_description,
+        module: ticket.module?.slug || ticket.module_id,
+        module_id: ticket.module_id || ticket.module?.id,
+        date: ticket.created_at?.split('T')[0] || ticket.date,
+        screenshot_preview: getStorageUrl(ticket.screenshot_url || ticket.screenshot),
+        status: REVERSE_STATUS_MAP[ticket.status] || ticket.status || "open",
+        notes: ticket.notes || "",
+      };
+    } catch (error) {
+      console.error("Error fetching ticket details:", error);
+      showToast("Failed to fetch ticket details", "error");
+      return null;
+    }
+  };
+
   const fetchTickets = async () => {
     try {
       setLoading(true);
@@ -217,8 +244,8 @@ const TicketRaise = () => {
         module_id: t.module_id || t.module?.id || t.module,
         date: t.created_at ? t.created_at.split('T')[0] : t.date,
         screenshot_preview: getStorageUrl(t.screenshot_url || t.screenshot),
-        // Normalize status for display
         status: REVERSE_STATUS_MAP[t.status] || t.status || "open",
+        notes: t.notes || "",
       }));
       setTickets(mappedTickets);
     } catch (error) {
@@ -255,7 +282,6 @@ const TicketRaise = () => {
       ticket.name?.toLowerCase().includes(searchTerm.toLowerCase()) ||
       ticket.module?.toLowerCase().includes(searchTerm.toLowerCase());
     
-    // Normalize status for filtering
     const ticketStatus = REVERSE_STATUS_MAP[ticket.status] || ticket.status;
     const filterStatus = statusFilter === "all" ? "all" : statusFilter;
     const matchesStatus = filterStatus === "all" || ticketStatus === filterStatus;
@@ -290,28 +316,60 @@ const TicketRaise = () => {
       date: today,
       status: "open",
       priority: "medium",
+      notes: "",
     });
     setErrors({});
     setShowModal(true);
   };
 
-  const openEditModal = (ticket) => {
-    setModalMode("edit");
-    setEditingTicket(ticket);
-    setFormData({
-      name: ticket.name || employeeName,
-      email: ticket.email || employeeEmail,
-      module: ticket.module_id || ticket.module,
-      issue_title: ticket.issue_title,
-      issue_description: ticket.issue_description,
-      screenshot: null,
-      screenshot_preview: ticket.screenshot_preview || ticket.screenshot || null,
-      date: ticket.date,
-      status: ticket.status,
-      priority: ticket.priority || "medium",
-    });
-    setErrors({});
-    setShowModal(true);
+  const openEditModal = async (ticket) => {
+    setIsLoadingTicket(true);
+    try {
+      // Fetch full ticket details from API
+      const fullTicket = await fetchTicketDetails(ticket.id);
+      
+      if (fullTicket) {
+        setEditingTicket(fullTicket);
+        setFormData({
+          name: fullTicket.name || employeeName,
+          email: fullTicket.email || employeeEmail,
+          module: fullTicket.module_id || fullTicket.module,
+          issue_title: fullTicket.issue_title,
+          issue_description: fullTicket.issue_description,
+          screenshot: null,
+          screenshot_preview: fullTicket.screenshot_preview || fullTicket.screenshot || null,
+          date: fullTicket.date,
+          status: fullTicket.status,
+          priority: fullTicket.priority || "medium",
+          notes: fullTicket.notes || "",
+        });
+        setErrors({});
+        setShowModal(true);
+      } else {
+        // Fallback to existing ticket data
+        setEditingTicket(ticket);
+        setFormData({
+          name: ticket.name || employeeName,
+          email: ticket.email || employeeEmail,
+          module: ticket.module_id || ticket.module,
+          issue_title: ticket.issue_title,
+          issue_description: ticket.issue_description,
+          screenshot: null,
+          screenshot_preview: ticket.screenshot_preview || ticket.screenshot || null,
+          date: ticket.date,
+          status: ticket.status,
+          priority: ticket.priority || "medium",
+          notes: ticket.notes || "",
+        });
+        setErrors({});
+        setShowModal(true);
+      }
+    } catch (error) {
+      console.error("Error opening edit modal:", error);
+      showToast("Failed to load ticket details", "error");
+    } finally {
+      setIsLoadingTicket(false);
+    }
   };
 
   const closeModal = () => {
@@ -329,14 +387,23 @@ const TicketRaise = () => {
       date: today,
       status: "open",
       priority: "medium",
+      notes: "",
     });
     setErrors({});
     setSubmitting(false);
+    setIsLoadingTicket(false);
   };
 
-  const openViewModal = (ticket) => {
-    setViewingTicket(ticket);
-    setShowViewModal(true);
+  const openViewModal = async (ticket) => {
+    // Fetch full ticket details
+    const fullTicket = await fetchTicketDetails(ticket.id);
+    if (fullTicket) {
+      setViewingTicket(fullTicket);
+      setShowViewModal(true);
+    } else {
+      setViewingTicket(ticket);
+      setShowViewModal(true);
+    }
   };
 
   const closeViewModal = () => {
@@ -382,7 +449,6 @@ const TicketRaise = () => {
       newErrors.issue_description = "Issue description must be at least 10 characters";
     }
 
-    // ─── SCREENSHOT IS NOW REQUIRED ──────────────────────────────────────
     if (!formData.screenshot && !formData.screenshot_preview) {
       newErrors.screenshot = "Please upload a screenshot (required)";
     }
@@ -443,7 +509,6 @@ const TicketRaise = () => {
       screenshot: null,
       screenshot_preview: null,
     });
-    // Show error if trying to remove in edit mode with existing screenshot
     if (modalMode === "edit" && editingTicket?.screenshot) {
       setErrors({ ...errors, screenshot: "Screenshot is required" });
     }
@@ -529,7 +594,6 @@ const TicketRaise = () => {
   };
 
   const getStatusBadge = (status) => {
-    // Normalize status for display
     const normalizedStatus = REVERSE_STATUS_MAP[status] || status || "open";
     const config = STATUS_CONFIG[normalizedStatus] || STATUS_CONFIG.open;
     return (
@@ -758,258 +822,275 @@ const TicketRaise = () => {
               </button>
             </div>
 
-            {/* Form */}
-            <form onSubmit={handleSubmit} className="space-y-4">
-              {/* ─── NAME & EMAIL (Read-only) ────────────────────────────── */}
-              <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+            {isLoadingTicket ? (
+              <div className="flex justify-center items-center py-12">
+                <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-green-500"></div>
+              </div>
+            ) : (
+              <form onSubmit={handleSubmit} className="space-y-4">
+                {/* ─── NAME & EMAIL (Read-only) ────────────────────────────── */}
+                <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                  <div>
+                    <label className="text-xs font-semibold text-[var(--text)] flex items-center gap-1">
+                      <FiUser className="text-green-500" /> Full Name
+                      <span className="text-red-500 ml-1">*</span>
+                    </label>
+                    <input
+                      type="text"
+                      value={formData.name}
+                      disabled
+                      className="w-full px-3.5 py-2.5 bg-gray-100 dark:bg-gray-700 border border-gray-200 dark:border-gray-600 rounded-lg text-sm text-gray-700 dark:text-gray-300 cursor-not-allowed opacity-75"
+                    />
+                  </div>
+                  <div>
+                    <label className="text-xs font-semibold text-[var(--text)] flex items-center gap-1">
+                      <FiMail className="text-green-500" /> Email
+                      <span className="text-red-500 ml-1">*</span>
+                    </label>
+                    <input
+                      type="email"
+                      value={formData.email}
+                      disabled
+                      className="w-full px-3.5 py-2.5 bg-gray-100 dark:bg-gray-700 border border-gray-200 dark:border-gray-600 rounded-lg text-sm text-gray-700 dark:text-gray-300 cursor-not-allowed opacity-75"
+                    />
+                  </div>
+                </div>
+
+                {/* ─── MODULE & PRIORITY ───────────────────────────────────── */}
+                <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                  <div>
+                    <label className="text-xs font-semibold text-[var(--text)] flex items-center gap-1">
+                      <FiGrid className="text-green-500" /> Module
+                      <span className="text-red-500 ml-1">*</span>
+                    </label>
+                    <select
+                      value={formData.module}
+                      onChange={(e) => {
+                        setFormData({ ...formData, module: e.target.value });
+                        setErrors({ ...errors, module: "" });
+                      }}
+                      className={`w-full px-3.5 py-2.5 bg-[var(--surface2)] border rounded-lg text-sm text-[var(--text)] focus:outline-none focus:ring-2 ${
+                        errors.module
+                          ? "border-red-500 focus:border-red-500 focus:ring-red-500/20"
+                          : "border-[var(--border)] focus:border-green-500 focus:ring-green-500/20"
+                      }`}
+                    >
+                      <option value="">Select Module</option>
+                      {modules.map((mod) => (
+                        <option key={mod.value} value={mod.value}>{mod.label}</option>
+                      ))}
+                    </select>
+                    {errors.module && <p className="mt-1 text-xs text-red-500">{errors.module}</p>}
+                  </div>
+                  <div>
+                    <label className="text-xs font-semibold text-[var(--text)] flex items-center gap-1">
+                      <FiAlertCircle className="text-green-500" /> Priority
+                    </label>
+                    <select
+                      value={formData.priority}
+                      onChange={(e) => setFormData({ ...formData, priority: e.target.value })}
+                      className="w-full px-3.5 py-2.5 bg-[var(--surface2)] border border-[var(--border)] rounded-lg text-sm text-[var(--text)] focus:outline-none focus:border-green-500 focus:ring-2 focus:ring-green-500/20"
+                    >
+                      <option value="low">Low</option>
+                      <option value="medium">Medium</option>
+                      <option value="high">High</option>
+                    </select>
+                  </div>
+                </div>
+
+                {/* ─── ISSUE TITLE ─────────────────────────────────────────── */}
                 <div>
                   <label className="text-xs font-semibold text-[var(--text)] flex items-center gap-1">
-                    <FiUser className="text-green-500" /> Full Name
+                    <FiFileText className="text-green-500" /> Issue Title
                     <span className="text-red-500 ml-1">*</span>
                   </label>
                   <input
                     type="text"
-                    value={formData.name}
-                    disabled
-                    className="w-full px-3.5 py-2.5 bg-gray-100 dark:bg-gray-700 border border-gray-200 dark:border-gray-600 rounded-lg text-sm text-gray-700 dark:text-gray-300 cursor-not-allowed opacity-75"
-                  />
-                </div>
-                <div>
-                  <label className="text-xs font-semibold text-[var(--text)] flex items-center gap-1">
-                    <FiMail className="text-green-500" /> Email
-                    <span className="text-red-500 ml-1">*</span>
-                  </label>
-                  <input
-                    type="email"
-                    value={formData.email}
-                    disabled
-                    className="w-full px-3.5 py-2.5 bg-gray-100 dark:bg-gray-700 border border-gray-200 dark:border-gray-600 rounded-lg text-sm text-gray-700 dark:text-gray-300 cursor-not-allowed opacity-75"
-                  />
-                </div>
-              </div>
-
-              {/* ─── MODULE & PRIORITY ───────────────────────────────────── */}
-              <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                <div>
-                  <label className="text-xs font-semibold text-[var(--text)] flex items-center gap-1">
-                    <FiGrid className="text-green-500" /> Module
-                    <span className="text-red-500 ml-1">*</span>
-                  </label>
-                  <select
-                    value={formData.module}
+                    value={formData.issue_title}
                     onChange={(e) => {
-                      setFormData({ ...formData, module: e.target.value });
-                      setErrors({ ...errors, module: "" });
+                      setFormData({ ...formData, issue_title: e.target.value });
+                      setErrors({ ...errors, issue_title: "" });
                     }}
+                    placeholder="Brief title of the issue"
                     className={`w-full px-3.5 py-2.5 bg-[var(--surface2)] border rounded-lg text-sm text-[var(--text)] focus:outline-none focus:ring-2 ${
-                      errors.module
+                      errors.issue_title
                         ? "border-red-500 focus:border-red-500 focus:ring-red-500/20"
                         : "border-[var(--border)] focus:border-green-500 focus:ring-green-500/20"
                     }`}
-                  >
-                    <option value="">Select Module</option>
-                    {modules.map((mod) => (
-                      <option key={mod.value} value={mod.value}>{mod.label}</option>
-                    ))}
-                  </select>
-                  {errors.module && <p className="mt-1 text-xs text-red-500">{errors.module}</p>}
+                  />
+                  {errors.issue_title && <p className="mt-1 text-xs text-red-500">{errors.issue_title}</p>}
                 </div>
+
+                {/* ─── ISSUE DESCRIPTION ───────────────────────────────────── */}
                 <div>
                   <label className="text-xs font-semibold text-[var(--text)] flex items-center gap-1">
-                    <FiAlertCircle className="text-green-500" /> Priority
-                  </label>
-                  <select
-                    value={formData.priority}
-                    onChange={(e) => setFormData({ ...formData, priority: e.target.value })}
-                    className="w-full px-3.5 py-2.5 bg-[var(--surface2)] border border-[var(--border)] rounded-lg text-sm text-[var(--text)] focus:outline-none focus:border-green-500 focus:ring-2 focus:ring-green-500/20"
-                  >
-                    <option value="low">Low</option>
-                    <option value="medium">Medium</option>
-                    <option value="high">High</option>
-                  </select>
-                </div>
-              </div>
-
-              {/* ─── ISSUE TITLE ─────────────────────────────────────────── */}
-              <div>
-                <label className="text-xs font-semibold text-[var(--text)] flex items-center gap-1">
-                  <FiFileText className="text-green-500" /> Issue Title
-                  <span className="text-red-500 ml-1">*</span>
-                </label>
-                <input
-                  type="text"
-                  value={formData.issue_title}
-                  onChange={(e) => {
-                    setFormData({ ...formData, issue_title: e.target.value });
-                    setErrors({ ...errors, issue_title: "" });
-                  }}
-                  placeholder="Brief title of the issue"
-                  className={`w-full px-3.5 py-2.5 bg-[var(--surface2)] border rounded-lg text-sm text-[var(--text)] focus:outline-none focus:ring-2 ${
-                    errors.issue_title
-                      ? "border-red-500 focus:border-red-500 focus:ring-red-500/20"
-                      : "border-[var(--border)] focus:border-green-500 focus:ring-green-500/20"
-                  }`}
-                />
-                {errors.issue_title && <p className="mt-1 text-xs text-red-500">{errors.issue_title}</p>}
-              </div>
-
-              {/* ─── ISSUE DESCRIPTION ───────────────────────────────────── */}
-              <div>
-                <label className="text-xs font-semibold text-[var(--text)] flex items-center gap-1">
-                  <FiMessageSquare className="text-green-500" /> Description
-                  <span className="text-red-500 ml-1">*</span>
-                </label>
-                <textarea
-                  value={formData.issue_description}
-                  onChange={(e) => {
-                    setFormData({ ...formData, issue_description: e.target.value });
-                    setErrors({ ...errors, issue_description: "" });
-                  }}
-                  rows="3"
-                  placeholder="Describe the issue in detail (minimum 10 characters)..."
-                  className={`w-full px-3.5 py-2.5 bg-[var(--surface2)] border rounded-lg text-sm text-[var(--text)] focus:outline-none focus:ring-2 resize-none ${
-                    errors.issue_description
-                      ? "border-red-500 focus:border-red-500 focus:ring-red-500/20"
-                      : "border-[var(--border)] focus:border-green-500 focus:ring-green-500/20"
-                  }`}
-                />
-                <div className="flex justify-between mt-1">
-                  <small className="text-[10px] text-[var(--muted)]">Minimum 10 characters</small>
-                  <small className={`text-[10px] ${formData.issue_description.length >= 10 ? "text-green-500" : "text-[var(--muted)]"}`}>
-                    {formData.issue_description.length}/10
-                  </small>
-                </div>
-                {errors.issue_description && <p className="mt-1 text-xs text-red-500">{errors.issue_description}</p>}
-              </div>
-
-              {/* ─── SCREENSHOT UPLOAD (REQUIRED) ────────────────────────── */}
-              <div>
-                <label className="text-xs font-semibold text-[var(--text)] flex items-center gap-1">
-                  <FiImage className="text-green-500" /> Screenshot
-                  <span className="text-red-500 ml-1">*</span>
-                </label>
-                {!formData.screenshot_preview ? (
-                  <div
-                    onDrop={handleDrop}
-                    onDragOver={handleDragOver}
-                    onDragLeave={handleDragLeave}
-                    onClick={() => document.getElementById("screenshot-input").click()}
-                    className={`border-2 border-dashed rounded-lg p-6 text-center cursor-pointer transition-all ${
-                      isDragging
-                        ? "border-green-500 bg-green-50 dark:bg-green-900/20"
-                        : errors.screenshot
-                          ? "border-red-500 bg-red-50 dark:bg-red-900/20 hover:border-red-400"
-                          : "border-gray-300 dark:border-gray-600 hover:border-green-400"
-                    }`}
-                  >
-                    <input
-                      id="screenshot-input"
-                      type="file"
-                      accept="image/png,image/jpeg,image/jpg,image/gif"
-                      onChange={(e) => handleFileChange(e.target.files[0])}
-                      className="hidden"
-                    />
-                    <div className="flex flex-col items-center gap-1">
-                      <i className="fas fa-cloud-upload-alt text-3xl text-gray-400"></i>
-                      <p className="text-sm text-gray-600 dark:text-gray-400">Drag & drop or click to upload</p>
-                      <p className="text-xs text-gray-400 dark:text-gray-500">PNG, JPG, JPEG, GIF (Max 5MB)</p>
-                      {errors.screenshot && (
-                        <p className="text-xs text-red-500 flex items-center gap-1 mt-1">
-                          <FiAlertCircle size={12} /> {errors.screenshot}
-                        </p>
-                      )}
-                    </div>
-                  </div>
-                ) : (
-                  <div className="relative border border-gray-200 dark:border-gray-700 rounded-lg p-3 bg-gray-50 dark:bg-gray-900/50">
-                    <div className="flex items-start gap-4">
-                      <img
-                        src={formData.screenshot_preview}
-                        alt="Screenshot preview"
-                        className="w-20 h-20 object-cover rounded-lg border border-gray-200 dark:border-gray-700"
-                      />
-                      <div className="flex-1">
-                        <p className="text-sm font-medium text-gray-800 dark:text-gray-200 truncate">
-                          {formData.screenshot?.name || "Uploaded Screenshot"}
-                        </p>
-                        <p className="text-xs text-gray-500 dark:text-gray-400">
-                          {formData.screenshot ? `${(formData.screenshot.size / 1024).toFixed(1)} KB` : "Size unavailable"}
-                        </p>
-                        <button
-                          type="button"
-                          onClick={removeScreenshot}
-                          className="mt-1 text-xs text-red-500 hover:text-red-600 flex items-center gap-1"
-                        >
-                          <FiX size={14} /> Remove
-                        </button>
-                      </div>
-                    </div>
-                  </div>
-                )}
-                {!errors.screenshot && !formData.screenshot_preview && (
-                  <p className="text-[10px] text-[var(--muted)] mt-1">
-                    <i className="fas fa-info-circle mr-1"></i>
-                    A screenshot is required to help us understand the issue better
-                  </p>
-                )}
-              </div>
-
-              {/* ─── DATE & STATUS (Read-only) ──────────────────────────── */}
-              <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                <div>
-                  <label className="text-xs font-semibold text-[var(--text)] flex items-center gap-1">
-                    <FiCalendar className="text-green-500" /> Date
+                    <FiMessageSquare className="text-green-500" /> Description
                     <span className="text-red-500 ml-1">*</span>
                   </label>
-                  <input
-                    type="date"
-                    value={formData.date}
-                    disabled
-                    className="w-full px-3.5 py-2.5 bg-gray-100 dark:bg-gray-700 border border-gray-200 dark:border-gray-600 rounded-lg text-sm text-gray-700 dark:text-gray-300 cursor-not-allowed opacity-75"
+                  <textarea
+                    value={formData.issue_description}
+                    onChange={(e) => {
+                      setFormData({ ...formData, issue_description: e.target.value });
+                      setErrors({ ...errors, issue_description: "" });
+                    }}
+                    rows="3"
+                    placeholder="Describe the issue in detail (minimum 10 characters)..."
+                    className={`w-full px-3.5 py-2.5 bg-[var(--surface2)] border rounded-lg text-sm text-[var(--text)] focus:outline-none focus:ring-2 resize-none ${
+                      errors.issue_description
+                        ? "border-red-500 focus:border-red-500 focus:ring-red-500/20"
+                        : "border-[var(--border)] focus:border-green-500 focus:ring-green-500/20"
+                    }`}
                   />
+                  <div className="flex justify-between mt-1">
+                    <small className="text-[10px] text-[var(--muted)]">Minimum 10 characters</small>
+                    <small className={`text-[10px] ${formData.issue_description.length >= 10 ? "text-green-500" : "text-[var(--muted)]"}`}>
+                      {formData.issue_description.length}/10
+                    </small>
+                  </div>
+                  {errors.issue_description && <p className="mt-1 text-xs text-red-500">{errors.issue_description}</p>}
                 </div>
+
+                {/* ─── SCREENSHOT UPLOAD (REQUIRED) ────────────────────────── */}
                 <div>
                   <label className="text-xs font-semibold text-[var(--text)] flex items-center gap-1">
-                    <FiCheckCircle className="text-green-500" /> Status
-                    <span className="text-[10px] text-[var(--muted)] ml-1">(Auto-set)</span>
+                    <FiImage className="text-green-500" /> Screenshot
+                    <span className="text-red-500 ml-1">*</span>
                   </label>
-                  <input
-                    type="text"
-                    value={modalMode === "add" ? "Open" : (STATUS_CONFIG[formData.status]?.label || formData.status)}
-                    disabled
-                    className="w-full px-3.5 py-2.5 bg-gray-100 dark:bg-gray-700 border border-gray-200 dark:border-gray-600 rounded-lg text-sm text-gray-700 dark:text-gray-300 cursor-not-allowed opacity-75 font-medium"
-                  />
-                  {modalMode === "edit" && (
+                  {!formData.screenshot_preview ? (
+                    <div
+                      onDrop={handleDrop}
+                      onDragOver={handleDragOver}
+                      onDragLeave={handleDragLeave}
+                      onClick={() => document.getElementById("screenshot-input").click()}
+                      className={`border-2 border-dashed rounded-lg p-6 text-center cursor-pointer transition-all ${
+                        isDragging
+                          ? "border-green-500 bg-green-50 dark:bg-green-900/20"
+                          : errors.screenshot
+                            ? "border-red-500 bg-red-50 dark:bg-red-900/20 hover:border-red-400"
+                            : "border-gray-300 dark:border-gray-600 hover:border-green-400"
+                      }`}
+                    >
+                      <input
+                        id="screenshot-input"
+                        type="file"
+                        accept="image/png,image/jpeg,image/jpg,image/gif"
+                        onChange={(e) => handleFileChange(e.target.files[0])}
+                        className="hidden"
+                      />
+                      <div className="flex flex-col items-center gap-1">
+                        <i className="fas fa-cloud-upload-alt text-3xl text-gray-400"></i>
+                        <p className="text-sm text-gray-600 dark:text-gray-400">Drag & drop or click to upload</p>
+                        <p className="text-xs text-gray-400 dark:text-gray-500">PNG, JPG, JPEG, GIF (Max 5MB)</p>
+                        {errors.screenshot && (
+                          <p className="text-xs text-red-500 flex items-center gap-1 mt-1">
+                            <FiAlertCircle size={12} /> {errors.screenshot}
+                          </p>
+                        )}
+                      </div>
+                    </div>
+                  ) : (
+                    <div className="relative border border-gray-200 dark:border-gray-700 rounded-lg p-3 bg-gray-50 dark:bg-gray-900/50">
+                      <div className="flex items-start gap-4">
+                        <img
+                          src={formData.screenshot_preview}
+                          alt="Screenshot preview"
+                          className="w-20 h-20 object-cover rounded-lg border border-gray-200 dark:border-gray-700"
+                        />
+                        <div className="flex-1">
+                          <p className="text-sm font-medium text-gray-800 dark:text-gray-200 truncate">
+                            {formData.screenshot?.name || "Uploaded Screenshot"}
+                          </p>
+                          <p className="text-xs text-gray-500 dark:text-gray-400">
+                            {formData.screenshot ? `${(formData.screenshot.size / 1024).toFixed(1)} KB` : "Size unavailable"}
+                          </p>
+                          <button
+                            type="button"
+                            onClick={removeScreenshot}
+                            className="mt-1 text-xs text-red-500 hover:text-red-600 flex items-center gap-1"
+                          >
+                            <FiX size={14} /> Remove
+                          </button>
+                        </div>
+                      </div>
+                    </div>
+                  )}
+                  {!errors.screenshot && !formData.screenshot_preview && (
                     <p className="text-[10px] text-[var(--muted)] mt-1">
                       <i className="fas fa-info-circle mr-1"></i>
-                      Status cannot be changed from this form. It is managed by the system.
+                      A screenshot is required to help us understand the issue better
                     </p>
                   )}
                 </div>
-              </div>
 
-              {/* ─── BUTTONS ─────────────────────────────────────────────── */}
-              <div className="flex gap-3 pt-4 border-t border-[var(--border)]">
-                <button
-                  type="button"
-                  onClick={closeModal}
-                  className="flex-1 py-2.5 px-4 bg-[var(--surface2)] border border-[var(--border)] rounded-lg text-[var(--text)] font-medium text-sm hover:bg-[var(--surface3)] transition-colors"
-                >
-                  Cancel
-                </button>
-                <button
-                  type="submit"
-                  disabled={submitting || (!formData.screenshot && !formData.screenshot_preview)}
-                  className="flex-1 py-2.5 px-4 bg-green-500 text-white rounded-lg font-medium text-sm hover:bg-green-600 transition-colors disabled:opacity-50 disabled:cursor-not-allowed flex items-center justify-center gap-2"
-                >
-                  {submitting ? (
-                    <><i className="fas fa-spinner fa-spin"></i> {modalMode === "add" ? "Creating..." : "Updating..."}</>
-                  ) : (
-                    <><FiSend /> {modalMode === "add" ? "Raise Ticket" : "Update Ticket"}</>
-                  )}
-                </button>
-              </div>
-            </form>
+                {/* ─── DATE & STATUS (Read-only) ──────────────────────────── */}
+                <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                  <div>
+                    <label className="text-xs font-semibold text-[var(--text)] flex items-center gap-1">
+                      <FiCalendar className="text-green-500" /> Date
+                      <span className="text-red-500 ml-1">*</span>
+                    </label>
+                    <input
+                      type="date"
+                      value={formData.date}
+                      disabled
+                      className="w-full px-3.5 py-2.5 bg-gray-100 dark:bg-gray-700 border border-gray-200 dark:border-gray-600 rounded-lg text-sm text-gray-700 dark:text-gray-300 cursor-not-allowed opacity-75"
+                    />
+                  </div>
+                  <div>
+                    <label className="text-xs font-semibold text-[var(--text)] flex items-center gap-1">
+                      <FiCheckCircle className="text-green-500" /> Status
+                      <span className="text-[10px] text-[var(--muted)] ml-1">(Auto-set)</span>
+                    </label>
+                    <input
+                      type="text"
+                      value={modalMode === "add" ? "Open" : (STATUS_CONFIG[formData.status]?.label || formData.status)}
+                      disabled
+                      className="w-full px-3.5 py-2.5 bg-gray-100 dark:bg-gray-700 border border-gray-200 dark:border-gray-600 rounded-lg text-sm text-gray-700 dark:text-gray-300 cursor-not-allowed opacity-75 font-medium"
+                    />
+                    {modalMode === "edit" && (
+                      <p className="text-[10px] text-[var(--muted)] mt-1">
+                        <i className="fas fa-info-circle mr-1"></i>
+                        Status cannot be changed from this form. It is managed by the system.
+                      </p>
+                    )}
+                  </div>
+                </div>
+
+                {/* ─── CURRENT NOTES (Read-only) ──────────────────────────── */}
+                {modalMode === "edit" && formData.notes && (
+                  <div>
+                    <label className="text-xs font-semibold text-[var(--text)] flex items-center gap-1">
+                      <FiMessageSquare className="text-purple-500" /> Current Notes
+                    </label>
+                    <div className="p-3 bg-[var(--surface2)] rounded-lg border border-[var(--border)]">
+                      <p className="text-sm text-[var(--text)]">{formData.notes}</p>
+                    </div>
+                  </div>
+                )}
+
+                {/* ─── BUTTONS ─────────────────────────────────────────────── */}
+                <div className="flex gap-3 pt-4 border-t border-[var(--border)]">
+                  <button
+                    type="button"
+                    onClick={closeModal}
+                    className="flex-1 py-2.5 px-4 bg-[var(--surface2)] border border-[var(--border)] rounded-lg text-[var(--text)] font-medium text-sm hover:bg-[var(--surface3)] transition-colors"
+                  >
+                    Cancel
+                  </button>
+                  <button
+                    type="submit"
+                    disabled={submitting || (!formData.screenshot && !formData.screenshot_preview)}
+                    className="flex-1 py-2.5 px-4 bg-green-500 text-white rounded-lg font-medium text-sm hover:bg-green-600 transition-colors disabled:opacity-50 disabled:cursor-not-allowed flex items-center justify-center gap-2"
+                  >
+                    {submitting ? (
+                      <><i className="fas fa-spinner fa-spin"></i> {modalMode === "add" ? "Creating..." : "Updating..."}</>
+                    ) : (
+                      <><FiSend /> {modalMode === "add" ? "Raise Ticket" : "Update Ticket"}</>
+                    )}
+                  </button>
+                </div>
+              </form>
+            )}
           </div>
         </div>
       )}
@@ -1063,6 +1144,20 @@ const TicketRaise = () => {
                 <p className="text-sm text-[var(--text)] mt-1 bg-[var(--surface2)] p-3 rounded-lg">
                   {viewingTicket.issue_description}
                 </p>
+              </div>
+
+              {/* ─── Notes Section ────────────────────────────────────── */}
+              <div>
+                <label className="text-xs font-semibold text-[var(--text)] flex items-center gap-2">
+                  <FiMessageSquare className="text-purple-500" /> Notes
+                </label>
+                <div className="mt-2 p-3 bg-[var(--surface2)] rounded-lg border border-[var(--border)]">
+                  {viewingTicket.notes ? (
+                    <p className="text-sm text-[var(--text)]">{viewingTicket.notes}</p>
+                  ) : (
+                    <p className="text-sm text-[var(--muted)] italic">No notes</p>
+                  )}
+                </div>
               </div>
 
               {viewingTicket.screenshot_preview ? (
