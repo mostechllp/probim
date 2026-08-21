@@ -75,7 +75,8 @@ const MissedPunchModal = ({
   const [punchInTime, setPunchInTime] = useState("");
   const [punchOutTime, setPunchOutTime] = useState("");
   const [reason, setReason] = useState("");
-  const [requestType, setRequestType] = useState("missed_punch_in");
+  // Request type is now fixed to "missed_punch_in" and disabled
+  const [requestType] = useState("missed_punch_in");
   const [projects, setProjects] = useState([]);
   const [projectTimes, setProjectTimes] = useState({});
   const [loadingProjects, setLoadingProjects] = useState(false);
@@ -242,7 +243,6 @@ const MissedPunchModal = ({
     setPunchInTime("");
     setPunchOutTime("");
     setReason("");
-    setRequestType("missed_punch_in");
     setProjectTimes({});
     setProjects([]);
     setConfirmNoProjects(false);
@@ -334,7 +334,7 @@ const MissedPunchModal = ({
     try {
       // Build payload according to API requirements
       const payload = {
-        type: requestType,
+        type: requestType, // "missed_punch_in" - fixed
         request_date: selectedDate,
         reason: reason.trim(),
         timezone: timezone,
@@ -438,21 +438,18 @@ const MissedPunchModal = ({
         </div>
 
         <div className="space-y-4 mt-4">
-          {/* Request Type */}
+          {/* Request Type - Disabled and prefilled */}
           <div>
             <label className="block text-sm font-medium text-[var(--text)] mb-1">
               Request Type <span className="text-red-500">*</span>
             </label>
-            <select
-              value={requestType}
-              onChange={(e) => setRequestType(e.target.value)}
-              className="w-full px-3 py-2 bg-[var(--surface2)] border border-[var(--border)] rounded-lg text-[var(--text)] text-sm focus:outline-none focus:ring-2 focus:ring-orange-500 focus:border-transparent"
-            >
-              <option value="missed_punch_in">Missed Punch In</option>
-              <option value="missed_punch_out">Missed Punch Out</option>
-              <option value="late_check_in">Late Check In</option>
-              <option value="early_check_in">Early Check In</option>
-            </select>
+            <input
+              type="text"
+              value="Missed Punch In"
+              disabled
+              className="w-full px-3 py-2 bg-[var(--surface2)] border border-[var(--border)] rounded-lg text-[var(--text)] text-sm cursor-not-allowed opacity-75"
+            />
+            <input type="hidden" value={requestType} />
           </div>
 
           {/* Date - Disabled */}
