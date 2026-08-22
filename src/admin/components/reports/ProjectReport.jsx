@@ -8,10 +8,8 @@ import SearchBar from "../common/SearchBar";
 import EntriesSelector from "../common/EntriesSelector";
 import { showToast } from "../../../components/common/Toast";
 import Pagination from "../common/Paginations";
-import { fetchProjectReport } from "../../store/slices/reportSlice";
-import { fetchMonthlyHoursByProject, fetchEmployeeDetails, clearMonthlyHours } from "../../store/slices/dashboardSlice";
-import { exportToCSV } from "../../../utils/reportUtils";
-import { generateProjectReportPDF } from "../../../utils/reportPDFConfigs";
+import { fetchProjectReport, exportReport } from "../../store/slices/reportSlice";
+import { clearMonthlyHours } from "../../store/slices/dashboardSlice";
 import { ProjectHoursModal } from "../../components/dashboard/ProjectHoursModal";
 import ExportModal from "../../../components/common/ExportModal";
 import DateInput from "../common/DateInput";
@@ -44,6 +42,7 @@ const ProjectReport = () => {
     projectReportLastPage: lastPage = 1,
   } = useSelector((state) => state.reports || {});
   const { employees = [] } = useSelector((state) => state.employees || {});
+  const { exportLoading } = useSelector((state) => state.reports || {});
 
   // Local state
   const [searchTerm, setSearchTerm] = useState("");
@@ -211,39 +210,28 @@ const ProjectReport = () => {
       projectId: p.id,
     }));
 
-  // Prepare export data
-  const getExportData = () => {
-    return transformedProjects.map(p => ({
-      project_id: p.id || "",
-      project_name: p.name || "",
-      status: p.status || "",
-      total_hours: (p.totalHours || 0).toFixed(1),
-      total_employees: p.totalEmployees || 0,
-      estimated_cost: (p.plannedTotalCost || 0).toFixed(2),
-      actual_cost: (p.actualCost || 0).toFixed(2),
-    }));
-  };
-
+  // ─── HANDLE EXPORT USING BACKEND API ──────────────────────────────────
   const handleExport = async (format) => {
-    const exportData = getExportData();
-    const headers = [
-      { key: "project_id", label: "Project ID" },
-      { key: "project_name", label: "Project Name" },
-      { key: "status", label: "Status" },
-      { key: "total_hours", label: "Total Hours" },
-      { key: "total_employees", label: "Total Employees" },
-      { key: "estimated_cost", label: "Estimated Cost" },
-      { key: "actual_cost", label: "Actual Cost" },
-    ];
+    try {
+      const filters = {
+        start_date: appliedStartDate,
+        end_date: appliedEndDate,
+        status: appliedStatus !== "all" ? appliedStatus : undefined,
+        search: appliedSearchTerm || undefined,
+      };
 
-    if (format === "csv") {
-      exportToCSV(exportData, headers, `project_report_${new Date().toISOString().split("T")[0]}.csv`);
-    } else if (format === "pdf") {
-      generateProjectReportPDF(transformedProjects, {
-        status: appliedStatus !== "all" ? appliedStatus : null,
-      });
+      // Dispatch the export action
+      await dispatch(exportReport({
+        reportType: 'project',
+        format: format,
+        filters: filters,
+      })).unwrap();
+
+      showToast(`Project report exported successfully as ${format.toUpperCase()}`, "success");
+    } catch (error) {
+      console.error("Export error:", error);
+      showToast(error || "Failed to export report", "error");
     }
-    setShowExportModal(false);
   };
 
   const formatHours = (hours) => {
@@ -438,9 +426,19 @@ const ProjectReport = () => {
             />
             <button
               onClick={() => setShowExportModal(true)}
-              className="bg-green-500 hover:bg-green-600 text-white px-4 py-2 rounded-full text-sm font-semibold flex items-center justify-center gap-2 transition-all shadow-md hover:shadow-lg w-full sm:w-auto"
+              disabled={exportLoading}
+              className="bg-green-500 hover:bg-green-600 text-white px-4 py-2 rounded-full text-sm font-semibold flex items-center justify-center gap-2 transition-all shadow-md hover:shadow-lg w-full sm:w-auto disabled:opacity-50 disabled:cursor-not-allowed"
             >
-              <i className="fas fa-download"></i> Export Report
+              {exportLoading ? (
+                <>
+                  <i className="fas fa-spinner fa-spin"></i>
+                  Exporting...
+                </>
+              ) : (
+                <>
+                  <i className="fas fa-download"></i> Export Report
+                </>
+              )}
             </button>
           </div>
         </div>
@@ -548,6 +546,7 @@ const ProjectReport = () => {
         totalRecords={transformedProjects.length}
         formats={["csv", "pdf"]}
         defaultFormat="csv"
+        loading={exportLoading}
       />
 
       {/* Project Hours Modal */}
