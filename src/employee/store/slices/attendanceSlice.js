@@ -26,6 +26,7 @@ export const fetchDashboardData = createAsyncThunk(
 );
 
 // Punch In with location and timezone
+// Punch In with location and timezone
 export const punchIn = createAsyncThunk(
   "attendance/punchIn",
   async (data, { rejectWithValue }) => {
@@ -52,6 +53,32 @@ export const punchIn = createAsyncThunk(
           payload.timezone_offset_minutes =
             data.location.timezone_offset_minutes;
         }
+
+        // ✅ Add punch_in_time with timezone
+        const now = new Date();
+        // Get the timezone from location data
+        const tz = data.location.timezone || Intl.DateTimeFormat().resolvedOptions().timeZone;
+        
+        // Format time in the user's timezone
+        const nowInTz = new Date().toLocaleString("en-US", { timeZone: tz });
+        const tzDate = new Date(nowInTz);
+        const year = tzDate.getFullYear();
+        const month = String(tzDate.getMonth() + 1).padStart(2, '0');
+        const day = String(tzDate.getDate()).padStart(2, '0');
+        const hours = String(tzDate.getHours()).padStart(2, '0');
+        const minutes = String(tzDate.getMinutes()).padStart(2, '0');
+        const seconds = String(tzDate.getSeconds()).padStart(2, '0');
+        
+        // Get timezone offset
+        const tzOffsetMinutes = data.location.timezone_offset_minutes || -new Date().getTimezoneOffset();
+        const offsetHours = Math.floor(Math.abs(tzOffsetMinutes) / 60);
+        const offsetMins = Math.abs(tzOffsetMinutes) % 60;
+        const offsetSign = tzOffsetMinutes >= 0 ? '+' : '-';
+        const offsetStr = `${offsetSign}${String(offsetHours).padStart(2, '0')}:${String(offsetMins).padStart(2, '0')}`;
+        
+        payload.punch_in_time = `${year}-${month}-${day}T${hours}:${minutes}:${seconds}${offsetStr}`;
+        
+        console.log("📤 Adding punch_in_time to payload:", payload.punch_in_time);
       }
 
       const response = await apiClient.post("/employee/punch-in", payload);
