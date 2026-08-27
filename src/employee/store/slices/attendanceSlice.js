@@ -97,7 +97,7 @@ export const submitLateAttendanceRequest = createAsyncThunk(
         location: data.location
       };
 
-      const response = await apiClient.post("/admin/employee/late-check-in-block", payload);
+      const response = await apiClient.post("/employee/late-check-in-block", payload);
       
       if (response.data && response.data.status === "success") {
         return response.data.data;
