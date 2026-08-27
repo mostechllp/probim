@@ -81,17 +81,57 @@ export const punchIn = createAsyncThunk(
   },
 );
 
+export const submitLateAttendanceRequest = createAsyncThunk(
+  "lateAttendance/submitRequest",
+  async (data, { rejectWithValue }) => {
+    try {
+      const payload = {
+        employee_id: data.employee_id,
+        type: data.type || 'late_check_in',
+        request_date: data.request_date,
+        request_time: data.request_time,
+        reason: data.reason,
+        status: data.status || 'pending',
+        timezone: data.timezone,
+        created_by: data.created_by || 'admin',
+        location: data.location
+      };
+
+      const response = await apiClient.post("/admin/employee/late-check-in-block", payload);
+      
+      if (response.data && response.data.status === "success") {
+        return response.data.data;
+      } else {
+        return rejectWithValue(response.data?.message || "Failed to submit request");
+      }
+    } catch (error) {
+      console.error("Late attendance request error:", error);
+      return rejectWithValue(
+        error.response?.data?.message || "Failed to submit request"
+      );
+    }
+  }
+);
+
+// Punch Out with location and timezone
 // Punch Out with location and timezone
 export const punchOut = createAsyncThunk(
   "attendance/punchOut",
   async (data, { rejectWithValue }) => {
     try {
-      const formattedProjectTimes = Object.entries(
-        data.project_times || {},
-      ).map(([projectId, time]) => ({
-        project_id: parseInt(projectId),
-        time_minutes: Math.round(parseFloat(time) * 60),
-      }));
+      // ✅ Add debug logging
+      console.log("📤 Punch Out - Full data received:", data);
+      console.log("📤 Punch Out - Location:", data.location);
+      console.log("📤 Punch Out - Timezone:", data.location?.timezone);
+      console.log("📤 Punch Out - Timezone offset:", data.location?.timezone_offset_minutes);
+      console.log("📤 Punch Out - punch_out_time:", data.punch_out_time);
+
+      const formattedProjectTimes = Object.entries(data.project_times || {}).map(
+  ([projectId, time]) => ({
+    project_id: parseInt(projectId),
+    time_minutes: parseInt(time, 10), 
+  }),
+);
 
       const payload = {
         project_times: formattedProjectTimes,
@@ -101,6 +141,9 @@ export const punchOut = createAsyncThunk(
       // Add punch_out_time to payload
       if (data.punch_out_time) {
         payload.punch_out_time = data.punch_out_time;
+        console.log("✅ Adding punch_out_time:", data.punch_out_time);
+      } else {
+        console.warn("⚠️ No punch_out_time provided!");
       }
 
       if (data.punch_out_date) {
@@ -126,11 +169,20 @@ export const punchOut = createAsyncThunk(
 
         if (location.timezone) {
           payload.timezone = location.timezone;
+          console.log("✅ Adding timezone:", location.timezone);
+        } else {
+          console.warn("⚠️ No timezone provided in location!");
         }
+        
         if (location.timezone_offset_minutes) {
           payload.timezone_offset_minutes = location.timezone_offset_minutes;
+          console.log("✅ Adding timezone_offset_minutes:", location.timezone_offset_minutes);
         }
+      } else {
+        console.warn("⚠️ No location data provided!");
       }
+
+      console.log("📤 Final payload being sent:", payload);
 
       const response = await apiClient.post("/employee/punch-out", payload);
 
@@ -149,9 +201,9 @@ export const punchOut = createAsyncThunk(
         return rejectWithValue(response.data?.message || "Punch out failed");
       }
     } catch (error) {
-      console.error("Punch out error:", error);
+      console.error("❌ Punch out error:", error);
       console.error(
-        "Validation errors:",
+        "❌ Validation errors:",
         JSON.stringify(error.response?.data, null, 2),
       );
       return rejectWithValue(
@@ -195,6 +247,8 @@ const initialState = {
   error: null,
   dashboardData: null,
   punchData: null,
+  success: false,
+  data: null
 };
 
 const attendanceSlice = createSlice({
@@ -209,6 +263,12 @@ const attendanceSlice = createSlice({
       localStorage.removeItem("attendance-punched-in");
       localStorage.removeItem("attendance-punch-in-time");
     },
+    clearLateAttendanceState: (state) => {
+      state.loading = false;
+      state.error = null;
+      state.success = false;
+      state.data = null;
+    }
   },
   extraReducers: (builder) => {
     builder
@@ -276,9 +336,25 @@ const attendanceSlice = createSlice({
       .addCase(fetchPunchData.rejected, (state, action) => {
         state.loading = false;
         state.error = action.payload;
+      })
+       .addCase(submitLateAttendanceRequest.pending, (state) => {
+        state.loading = true;
+        state.error = null;
+        state.success = false;
+      })
+      .addCase(submitLateAttendanceRequest.fulfilled, (state, action) => {
+        state.loading = false;
+        state.success = true;
+        state.data = action.payload;
+        state.error = null;
+      })
+      .addCase(submitLateAttendanceRequest.rejected, (state, action) => {
+        state.loading = false;
+        state.success = false;
+        state.error = action.payload;
       });
   },
 });
 
-export const { clearAttendanceState } = attendanceSlice.actions;
+export const { clearAttendanceState, clearLateAttendanceState } = attendanceSlice.actions;
 export default attendanceSlice.reducer;
