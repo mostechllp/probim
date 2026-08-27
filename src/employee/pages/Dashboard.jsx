@@ -5,6 +5,7 @@ import {
   punchIn,
   punchOut,
   fetchDashboardData,
+  submitLateAttendanceRequest,
 } from "../store/slices/attendanceSlice";
 import { fetchMyProjects } from "../store/slices/employeeProjectSlice";
 import { fetchEmployees } from "../../admin/store/slices/employeeSlice";
@@ -24,6 +25,8 @@ import useErrorHandler from "../../hooks/useErrorHandler";
 import MissedPunchModal from "../components/dashboard/MissedPunchModal";
 import MissedPunchLeaveModal from "../components/dashboard/MissedPunchLeaveModal";
 
+import { storeLocationData, clearStoredLocationData } from "../services/locationStorage";
+
 // Admin Dashboard Components
 import { StatsCard } from "../../admin/components/dashboard/StatsCard";
 import { ProjectAllocationChart } from "../../admin/components/dashboard/ProjectAllocationChart";
@@ -38,6 +41,7 @@ import { showToast } from "../../components/common/Toast";
 import { ProjectTimeCostChart } from "../../admin/components/dashboard/ProjectTimeCostChart";
 import apiClient from "../../utils/apiClient";
 import { submitAttendanceRequest } from "../store/slices/attendanceTypeSlice";
+import { getStoredLocationData } from "../services/locationStorage";
 
 // ─── COLOR PALETTE ──────────────────────────────────────────────────────
 export const COLORS = {
@@ -445,6 +449,8 @@ const Dashboard = () => {
     setShowLocationModal(false);
     setIsSubmitting(true);
 
+    storeLocationData(locationData);
+
     if (punchType === "punch-in") {
       try {
         await withErrorHandling(
@@ -453,6 +459,7 @@ const Dashboard = () => {
               punchIn({ location: locationData }),
             ).unwrap();
             showToastMessage("Punched in successfully!", "success", "Success");
+            clearStoredLocationData();
             await dispatch(fetchDashboardData()).unwrap();
             return result;
           },
@@ -484,13 +491,20 @@ const Dashboard = () => {
                 return true;
               }
 
-              if (
-                errorMsg.includes("Punch-in blocked") ||
+               if (errorMsg.includes("Punch-in blocked") || 
                 errorMsg.includes("pending HR approval") ||
-                errorMsg.includes("late check-in request")
-              ) {
-                return false;
-              }
+                errorMsg.includes("late check-in request") ||
+                errorMsg.includes("late check-in is pending") ||
+                errorMsg.includes("late check-in request is pending")) {
+              // ✅ Don't clear location data - we'll need it for the request
+              // Store the error for later use
+              localStorage.setItem('late-punch-error', errorMsg);
+              
+              // Show the pending modal or handle the wait action
+              setShowBlockedErrorModal(true);
+              setBlockedErrorMessage(errorMsg);
+              return true;
+            }
 
               return false;
             },
@@ -501,10 +515,38 @@ const Dashboard = () => {
       }
     } else if (punchOutData) {
       const isPastDatePunchOut = punchType === "punch-out-then-punchin";
+
+      // In Dashboard.jsx's handleLocationConfirm, once locationData is available:
+      const tz = locationData?.timezone;
+
+      // If user is punching out "now" (not a past date), recompute the correct
+      // local wall-clock time for that timezone rather than trusting the device's.
+      let correctedPunchOutTime = punchOutData.punch_out_time;
+
+      if (!pendingPunchOutDate && tz) {
+        const nowInTz = new Date().toLocaleString("en-US", { timeZone: tz });
+        const nowDate = new Date(nowInTz);
+        const hh = String(nowDate.getHours()).padStart(2, "0");
+        const mm = String(nowDate.getMinutes()).padStart(2, "0");
+        const dateOnly = punchOutData.punch_out_time.split("T")[0];
+        correctedPunchOutTime = `${dateOnly}T${hh}:${mm}:00`;
+      }
+
+      const tzOffsetMinutes =
+        locationData?.timezone_offset_minutes ??
+        -new Date().getTimezoneOffset();
+      const offsetHours = Math.floor(Math.abs(tzOffsetMinutes) / 60);
+      const offsetMins = Math.abs(tzOffsetMinutes) % 60;
+      const offsetSign = tzOffsetMinutes >= 0 ? "+" : "-";
+      const offsetStr = `${offsetSign}${String(offsetHours).padStart(2, "0")}:${String(offsetMins).padStart(2, "0")}`;
+
+      const finalPunchOutTime = `${correctedPunchOutTime}${offsetStr}`;
+
       await withErrorHandling(async () => {
         const result = await dispatch(
           punchOut({
             ...punchOutData,
+            punch_out_time: finalPunchOutTime,
             location: locationData,
           }),
         ).unwrap();
@@ -543,40 +585,44 @@ const Dashboard = () => {
     setShowLocationModal(true);
   };
 
-  const formatPunchTime = (time) => {
-    if (!time) return "00:00";
-    try {
-      let date;
-      if (typeof time === "string" && time.match(/^\d{2}:\d{2}:\d{2}$/)) {
-        const now = new Date();
-        const [hours, minutes, seconds] = time.split(":");
-        date = new Date(
-          now.getFullYear(),
-          now.getMonth(),
-          now.getDate(),
-          parseInt(hours),
-          parseInt(minutes),
-          parseInt(seconds),
-        );
-      } else if (typeof time === "string" && time.includes("T")) {
-        date = new Date(time);
-      } else if (time instanceof Date) {
-        date = time;
-      } else {
-        date = new Date(time);
-      }
-
-      if (isNaN(date.getTime())) return time;
-      return date.toLocaleTimeString("en-US", {
-        hour: "2-digit",
-        minute: "2-digit",
-        hour12: true,
-      });
-    } catch (error) {
-      return time;
+  // In Dashboard.jsx - replace the existing formatPunchTime function
+const formatPunchTime = (time, timezone) => {
+  if (!time) return "00:00";
+  try {
+    let date;
+    if (typeof time === "string" && time.match(/^\d{2}:\d{2}:\d{2}$/)) {
+      const now = new Date();
+      const [hours, minutes, seconds] = time.split(":");
+      date = new Date(
+        now.getFullYear(),
+        now.getMonth(),
+        now.getDate(),
+        parseInt(hours),
+        parseInt(minutes),
+        parseInt(seconds)
+      );
+    } else if (typeof time === "string" && time.includes("T")) {
+      date = new Date(time);
+    } else if (time instanceof Date) {
+      date = time;
+    } else {
+      date = new Date(time);
     }
-  };
 
+    if (isNaN(date.getTime())) return time;
+    
+    // ✅ Use the provided timezone or fallback to browser
+    const tzToUse = timezone || Intl.DateTimeFormat().resolvedOptions().timeZone;
+    return date.toLocaleTimeString("en-US", {
+      hour: "2-digit",
+      minute: "2-digit",
+      hour12: true,
+      timeZone: tzToUse,
+    });
+  } catch (error) {
+    return time;
+  }
+};
   const isButtonDisabled = () => {
     if (attendanceLoading || isSubmitting) return true;
     if (!isActuallyPunchedIn && !canPunch) return true;
@@ -868,17 +914,84 @@ const Dashboard = () => {
     setSelectedMissedDate("");
   };
 
+  const handleLatePunchRequest = async () => {
+  try {
+    // Get stored location data
+    const locationData = getStoredLocationData();
+    
+    if (!locationData) {
+      showToastMessage("Location data not found. Please try punching in again.", "error");
+      return;
+    }
+
+    // Get the error message to extract late duration
+    const errorMsg = localStorage.getItem('late-punch-error') || '';
+    const lateDurationMatch = errorMsg.match(/(\d+)\s*(hrs?|hours?|minutes?|min)/i);
+    const lateDuration = lateDurationMatch ? lateDurationMatch[0] : 'several minutes';
+
+    // Extract scheduled start time
+    const scheduledMatch = errorMsg.match(/scheduled start:\s*(\d{1,2}:\d{2}\s*(?:AM|PM))/i);
+    const scheduledStartTime = scheduledMatch ? scheduledMatch[1] : '09:00 AM';
+
+    // Get current date and time
+    const now = new Date();
+    const today = now.toISOString().split('T')[0];
+    const currentTime = now.toTimeString().slice(0, 8);
+
+    // Prepare payload
+    const payload = {
+      employee_id: user?.employee?.id || user?.id,
+      type: 'late_check_in',
+      request_date: today,
+      request_time: currentTime,
+      reason: `Employee attempted to punch in ${lateDuration} late (scheduled: ${scheduledStartTime}).`,
+      status: 'pending',
+      timezone: locationData.timezone || Intl.DateTimeFormat().resolvedOptions().timeZone,
+      created_by: 'admin',
+      location: {
+        latitude: locationData.latitude,
+        longitude: locationData.longitude,
+        address: locationData.address || locationData.work_location || 'Unknown'
+      }
+    };
+
+    console.log('📤 Submitting late attendance request:', payload);
+
+    // Submit the request
+    const result = await dispatch(submitLateAttendanceRequest(payload)).unwrap();
+    
+    if (result) {
+      showToastMessage(
+        "Your late punch-in request has been submitted to HR for approval.",
+        "success",
+        "Request Submitted"
+      );
+      
+      // Clear stored data after successful submission
+      localStorage.removeItem('late-punch-error');
+      // Don't clear location data yet - might need it if request is rejected
+    }
+    
+  } catch (error) {
+    console.error('Error submitting late attendance request:', error);
+    showToastMessage(
+      error?.message || "Failed to submit request. Please contact HR.",
+      "error"
+    );
+  }
+};
+
   // Submit missed punch request
 
   // Handle Mark as Leave - redirect to /employee/leaves
   const handleMarkAsLeave = (date) => {
-  console.log("Mark as Leave called with date:", date);
-  if (date) {
-    setSelectedMissedLeaveDate(date);
-    setShowMissedPunchLeaveModal(true);
-    console.log("Modal should open with date:", date);
-  }
-};
+    console.log("Mark as Leave called with date:", date);
+    if (date) {
+      setSelectedMissedLeaveDate(date);
+      setShowMissedPunchLeaveModal(true);
+      console.log("Modal should open with date:", date);
+    }
+  };
 
   // ─── LEAVE & PROJECTS STATS CARDS ──────────────────────────────────────────
 
@@ -1226,16 +1339,22 @@ const Dashboard = () => {
               {currentDate.split(",")[0]}
             </div>
           </div>
-          <div className="punch-item text-center">
-            <div className="punch-label text-[10px] text-[var(--muted)]">
-              Punch In
-            </div>
-            <div
-              className={`punch-value text-xl font-bold ${isActuallyPunchedIn ? "text-green-500" : "text-[var(--text)]"}`}
-            >
-              {formatPunchTime(displayPunchTime)}
-            </div>
-          </div>
+          {/* In the Punch Card section - around line where punch-in time is displayed */}
+<div className="punch-item text-center">
+  <div className="punch-label text-[10px] text-[var(--muted)]">
+    Punch In
+  </div>
+  <div
+    className={`punch-value text-xl font-bold ${isActuallyPunchedIn ? "text-green-500" : "text-[var(--text)]"}`}
+  >
+    {formatPunchTime(displayPunchTime, todayAttendance?.timezone)}
+  </div>
+  {todayAttendance?.timezone && (
+    <div className="text-[8px] text-[var(--muted)] mt-0.5">
+      ({todayAttendance.timezone})
+    </div>
+  )}
+</div>
           <div className="punch-item text-center">
             <div className="punch-label text-[10px] text-[var(--muted)]">
               Status
@@ -1491,108 +1610,111 @@ const Dashboard = () => {
       )}
 
       {missedPunchIns.length > 0 && (
-  <div className="missed-punchins mt-4 bg-[var(--surface)] border border-orange-200 dark:border-orange-800 rounded-xl p-3">
-    <div className="flex items-center justify-between mb-3">
-      <h3 className="text-sm font-semibold text-[var(--text)] flex items-center gap-2">
-        <i className="fas fa-exclamation-triangle text-orange-500"></i>
-        Missed Punch-Ins
-        <span className="text-xs bg-orange-100 dark:bg-orange-900/30 text-orange-600 dark:text-orange-400 px-2 py-0.5 rounded-full font-medium">
-          {missedPunchIns.length}
-        </span>
-      </h3>
-      <div className="flex items-center gap-2">
-        <span className="text-[10px] text-[var(--muted)]">
-          {new Date().toLocaleDateString("en-GB", {
-            month: "short",
-            year: "numeric",
-          })}
-        </span>
-      </div>
-    </div>
+        <div className="missed-punchins mt-4 bg-[var(--surface)] border border-orange-200 dark:border-orange-800 rounded-xl p-3">
+          <div className="flex items-center justify-between mb-3">
+            <h3 className="text-sm font-semibold text-[var(--text)] flex items-center gap-2">
+              <i className="fas fa-exclamation-triangle text-orange-500"></i>
+              Missed Punch-Ins
+              <span className="text-xs bg-orange-100 dark:bg-orange-900/30 text-orange-600 dark:text-orange-400 px-2 py-0.5 rounded-full font-medium">
+                {missedPunchIns.length}
+              </span>
+            </h3>
+            <div className="flex items-center gap-2">
+              <span className="text-[10px] text-[var(--muted)]">
+                {new Date().toLocaleDateString("en-GB", {
+                  month: "short",
+                  year: "numeric",
+                })}
+              </span>
+            </div>
+          </div>
 
-    {/* Scrollable table container */}
-    <div className="w-full overflow-auto max-h-[200px]">
-      <div className="min-w-[550px]">
-        <table className="w-full text-xs">
-          <thead className="sticky top-0 bg-[var(--surface)] z-10">
-            <tr className="border-b border-[var(--border)]">
-              <th className="text-left py-2 px-2 text-[var(--muted)] font-semibold">
-                Date
-              </th>
-              <th className="text-left py-2 px-2 text-[var(--muted)] font-semibold">
-                Day
-              </th>
-              <th className="text-left py-2 px-2 text-[var(--muted)] font-semibold">
-                Status
-              </th>
-              <th className="text-right py-2 px-2 text-[var(--muted)] font-semibold">
-                Actions
-              </th>
-            </tr>
-          </thead>
-          <tbody>
-            {missedPunchIns.map((item, index) => (
-              <tr
-                key={index}
-                className="border-b border-[var(--border)] hover:bg-[var(--surface2)] transition-colors"
-              >
-                <td className="py-3 px-2 text-[var(--text)] whitespace-nowrap">
-                  {formatDateDisplay(item.date)}
-                </td>
-                <td className="py-3 px-2 text-[var(--text)] whitespace-nowrap">
-                  {item.day}
-                </td>
-                <td className="py-3 px-2">
-                  <span className="px-2 py-1 rounded-full text-[10px] font-semibold bg-red-100 text-red-700 dark:bg-red-900/30 dark:text-red-400 border border-red-200 dark:border-red-800">
-                    {item.status}
-                  </span>
-                </td>
-                <td className="py-3 px-2 text-right whitespace-nowrap">
-                  <div className="flex items-center justify-end gap-2">
-                    <button
-                      onClick={() => handleSendMissedPunchRequest(item.date)}
-                      className="text-xs px-3 py-1.5 bg-orange-500 hover:bg-orange-600 text-white rounded-lg transition-colors font-medium shadow-sm"
+          {/* Scrollable table container */}
+          <div className="w-full overflow-auto max-h-[200px]">
+            <div className="min-w-[550px]">
+              <table className="w-full text-xs">
+                <thead className="sticky top-0 bg-[var(--surface)] z-10">
+                  <tr className="border-b border-[var(--border)]">
+                    <th className="text-left py-2 px-2 text-[var(--muted)] font-semibold">
+                      Date
+                    </th>
+                    <th className="text-left py-2 px-2 text-[var(--muted)] font-semibold">
+                      Day
+                    </th>
+                    <th className="text-left py-2 px-2 text-[var(--muted)] font-semibold">
+                      Status
+                    </th>
+                    <th className="text-right py-2 px-2 text-[var(--muted)] font-semibold">
+                      Actions
+                    </th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {missedPunchIns.map((item, index) => (
+                    <tr
+                      key={index}
+                      className="border-b border-[var(--border)] hover:bg-[var(--surface2)] transition-colors"
                     >
-                      <i className="fas fa-pen mr-1"></i>
-                      Send Request
-                    </button>
-                    {/* ─── FIX: Pass item.date correctly ─── */}
-                    <button
-                      onClick={() => handleMarkAsLeave(item.date)}
-                      className="text-xs px-3 py-1.5 bg-gray-600 hover:bg-gray-700 text-white rounded-lg transition-colors font-medium shadow-sm"
-                    >
-                      <i className="fas fa-calendar-alt mr-1"></i>
-                      Mark as Leave
-                    </button>
-                  </div>
-                </td>
-              </tr>
-            ))}
-          </tbody>
-        </table>
-      </div>
-    </div>
+                      <td className="py-3 px-2 text-[var(--text)] whitespace-nowrap">
+                        {formatDateDisplay(item.date)}
+                      </td>
+                      <td className="py-3 px-2 text-[var(--text)] whitespace-nowrap">
+                        {item.day}
+                      </td>
+                      <td className="py-3 px-2">
+                        <span className="px-2 py-1 rounded-full text-[10px] font-semibold bg-red-100 text-red-700 dark:bg-red-900/30 dark:text-red-400 border border-red-200 dark:border-red-800">
+                          {item.status}
+                        </span>
+                      </td>
+                      <td className="py-3 px-2 text-right whitespace-nowrap">
+                        <div className="flex items-center justify-end gap-2">
+                          <button
+                            onClick={() =>
+                              handleSendMissedPunchRequest(item.date)
+                            }
+                            className="text-xs px-3 py-1.5 bg-orange-500 hover:bg-orange-600 text-white rounded-lg transition-colors font-medium shadow-sm"
+                          >
+                            <i className="fas fa-pen mr-1"></i>
+                            Send Request
+                          </button>
+                          {/* ─── FIX: Pass item.date correctly ─── */}
+                          <button
+                            onClick={() => handleMarkAsLeave(item.date)}
+                            className="text-xs px-3 py-1.5 bg-gray-600 hover:bg-gray-700 text-white rounded-lg transition-colors font-medium shadow-sm"
+                          >
+                            <i className="fas fa-calendar-alt mr-1"></i>
+                            Mark as Leave
+                          </button>
+                        </div>
+                      </td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
+          </div>
 
-    <div className="mt-3 pt-2 border-t border-[var(--border)] flex items-center justify-between">
-      <p className="text-[10px] text-[var(--muted)]">
-        <i className="fas fa-info-circle mr-1"></i>
-        Send a request to HR to mark your missed punch-in or apply for leave
-      </p>
-      <button
-        onClick={() => {
-          // This is the bottom "Apply for Leave" button - you might want to handle this differently
-          // For now, let's just navigate to the leaves page or open the modal with today's date
-          const today = new Date().toISOString().split('T')[0];
-          handleMarkAsLeave(today);
-        }}
-        className="text-xs font-medium flex items-center gap-1 text-purple-600 hover:text-purple-700 dark:text-purple-400 dark:hover:text-purple-300"
-      >
-        <i className="fas fa-arrow-right"></i>
-        Apply for Leave
-      </button>
-    </div>
-  </div>
-)}
+          <div className="mt-3 pt-2 border-t border-[var(--border)] flex items-center justify-between">
+            <p className="text-[10px] text-[var(--muted)]">
+              <i className="fas fa-info-circle mr-1"></i>
+              Send a request to HR to mark your missed punch-in or apply for
+              leave
+            </p>
+            <button
+              onClick={() => {
+                // This is the bottom "Apply for Leave" button - you might want to handle this differently
+                // For now, let's just navigate to the leaves page or open the modal with today's date
+                const today = new Date().toISOString().split("T")[0];
+                handleMarkAsLeave(today);
+              }}
+              className="text-xs font-medium flex items-center gap-1 text-purple-600 hover:text-purple-700 dark:text-purple-400 dark:hover:text-purple-300"
+            >
+              <i className="fas fa-arrow-right"></i>
+              Apply for Leave
+            </button>
+          </div>
+        </div>
+      )}
 
       {/* Project Details Modal */}
       {selectedProject && (
@@ -1796,6 +1918,7 @@ const Dashboard = () => {
         loading={isSubmitting}
         punchOutDate={pendingPunchOutDate}
         pendingPunchData={pendingPunchData} // Pass the fetched data
+        timezone={dashboardData?.today_attendance?.punch_in_location?.punch_in_timezone || user?.timezone || Intl.DateTimeFormat().resolvedOptions().timeZone}
       />
 
       {/* Pending Punch Out Error Modal */}
@@ -1874,14 +1997,12 @@ const Dashboard = () => {
 
       {renderMapModal()}
 
-      
-
       {/* Error Toast */}
       {error && (
         <ErrorToast
           error={error}
           onClose={clearError}
-          onAction={(actionType) => {
+          onAction={async (actionType) => {
             if (actionType === "login") {
               window.location.href = "/login";
             } else if (actionType === "retry") {
@@ -1909,6 +2030,7 @@ const Dashboard = () => {
               setShowPunchOutModal(true);
               clearError();
             } else if (actionType === "wait") {
+               await handleLatePunchRequest();
               clearError();
               showToastMessage(
                 "We'll notify you when HR approves your request",
