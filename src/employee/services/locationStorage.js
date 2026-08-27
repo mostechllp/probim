@@ -1,12 +1,19 @@
 
-// Store location data from LocationModal
+// services/locationStorage.js - Update storeLocationData
+
 export const storeLocationData = (locationData) => {
   try {
-    localStorage.setItem('punch-location-data', JSON.stringify({
+    // ✅ Ensure work_location is stored
+    const dataToStore = {
       ...locationData,
+      work_location: locationData.work_location || 
+                     locationData.country || 
+                     'Unknown',
       stored_at: new Date().toISOString()
-    }));
-    console.log('📍 Location data stored successfully:', locationData);
+    };
+    
+    localStorage.setItem('punch-location-data', JSON.stringify(dataToStore));
+    console.log('📍 Location data stored successfully:', dataToStore);
   } catch (error) {
     console.error('Error storing location data:', error);
   }

@@ -259,53 +259,53 @@ if (match) {
       }
 
       const locationPayload = {
-        latitude: finalLat,
-        longitude: finalLng,
-        address: manualAddress || `${finalLat}, ${finalLng}`,
-        accuracy: location?.accuracy || null,
-        timestamp: new Date().toISOString(),
-        timezone: manualTimezone || browserTimezone,
-        timezone_offset: manualTimezone
-          ? getTimezoneOffset(manualTimezone)
-          : location?.timezone_offset,
-        timezone_offset_minutes: manualTimezone
-          ? getTimezoneOffsetMinutes(manualTimezone)
-          : location?.timezone_offset_minutes,
-        work_location: manualCountry || "Unknown",
-        country_source: "manual-edit",
-      };
+      latitude: finalLat,
+      longitude: finalLng,
+      address: manualAddress || `${finalLat}, ${finalLng}`, // ✅ Manual edit uses manualAddress
+      accuracy: location?.accuracy || null,
+      timestamp: new Date().toISOString(),
+      timezone: manualTimezone || browserTimezone,
+      timezone_offset: manualTimezone
+        ? getTimezoneOffset(manualTimezone)
+        : location?.timezone_offset,
+      timezone_offset_minutes: manualTimezone
+        ? getTimezoneOffsetMinutes(manualTimezone)
+        : location?.timezone_offset_minutes,
+      work_location: manualCountry || "Unknown",
+      country_source: "manual-edit",
+    };
 
-      storeLocationData(locationPayload);
-
-      onConfirm(locationPayload);
-    } else {
-      // Use detected location
-      if (!location) {
-        setError("Location not detected. Please try again or edit manually.");
-        return;
-      }
-
-      const locationPayload = {
-        latitude: location.latitude,
-        longitude: location.longitude,
-        address:
-          address?.display_name ||
-          address?.address?.road ||
-          address?.address?.neighbourhood ||
-          address?.address?.city ||
-          `${location.latitude}, ${location.longitude}`,
-        accuracy: location.accuracy,
-        timestamp: location.timestamp,
-        timezone: location.timezone,
-        timezone_offset: location.timezone_offset,
-        timezone_offset_minutes: location.timezone_offset_minutes,
-        work_location: country || "Unknown",
-        country_source: countrySource,
-      };
-
-      console.log("📍 Confirming location payload:", locationPayload);
-      onConfirm(locationPayload);
+    storeLocationData(locationPayload);
+    onConfirm(locationPayload);
+  } else {
+    // Use detected location
+    if (!location) {
+      setError("Location not detected. Please try again or edit manually.");
+      return;
     }
+
+    // ✅ Use the readable address from location
+    const displayAddress = location.address || 
+                          address?.readable_address ||
+                          address?.display_name ||
+                          `${location.latitude}, ${location.longitude}`;
+
+    const locationPayload = {
+      latitude: location.latitude,
+      longitude: location.longitude,
+      address: displayAddress, // ✅ This will be the readable address
+      accuracy: location.accuracy,
+      timestamp: location.timestamp,
+      timezone: location.timezone,
+      timezone_offset: location.timezone_offset,
+      timezone_offset_minutes: location.timezone_offset_minutes,
+      work_location: country || "Unknown",
+      country_source: countrySource,
+    };
+
+    console.log("📍 Confirming location payload:", locationPayload);
+    onConfirm(locationPayload);
+  } 
   };
 
   const getAccuracyColor = () => {
@@ -476,14 +476,16 @@ if (match) {
                         📍 Location Detected
                       </p>
                       <p className="text-xs text-[var(--muted)] mb-2">
-                        {address?.display_name ||
-                          address?.address?.road ||
-                          address?.address?.neighbourhood ||
-                          address?.address?.city ||
-                          (location?.latitude && location?.longitude
-                            ? `${location.latitude.toFixed(6)}, ${location.longitude.toFixed(6)}`
-                            : "Location not available")}
-                      </p>
+      {location?.address || 
+        address?.display_name ||
+        address?.readable_address ||
+        address?.address?.road ||
+        address?.address?.neighbourhood ||
+        address?.address?.city ||
+        (location?.latitude && location?.longitude
+          ? `${location.latitude.toFixed(6)}, ${location.longitude.toFixed(6)}`
+          : "Location not available")}
+    </p>
                       <div className="text-xs text-[var(--muted)] space-y-1">
                         {location?.latitude && location?.longitude && (
                           <p>
