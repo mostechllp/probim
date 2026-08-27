@@ -108,6 +108,8 @@ export const punchIn = createAsyncThunk(
   },
 );
 
+// attendanceSlice.js - Update submitLateAttendanceRequest
+
 export const submitLateAttendanceRequest = createAsyncThunk(
   "lateAttendance/submitRequest",
   async (data, { rejectWithValue }) => {
@@ -121,8 +123,11 @@ export const submitLateAttendanceRequest = createAsyncThunk(
         status: data.status || 'pending',
         timezone: data.timezone,
         created_by: data.created_by || 'admin',
-        location: data.location
+        location: data.location,
+        work_location: data.work_location || data.location?.work_location || 'Unknown' // ✅ Add work_location
       };
+
+      console.log("📤 Submitting late attendance request with payload:", payload);
 
       const response = await apiClient.post("/employee/late-check-in-block", payload);
       

@@ -47,6 +47,8 @@ export const getCurrentLocation = () => {
   });
 };
 
+// locationService.js - Updated getAddressFromCoordinates with better error handling
+
 // Reverse geocoding using OpenStreetMap to get address with country
 export const getAddressFromCoordinates = async (latitude, longitude) => {
   if (!latitude || !longitude) {
@@ -54,12 +56,13 @@ export const getAddressFromCoordinates = async (latitude, longitude) => {
   }
 
   try {
+    // ✅ Try with better parameters and proper headers
     const response = await fetch(
-      `https://nominatim.openstreetmap.org/reverse?format=json&lat=${latitude}&lon=${longitude}&zoom=18&addressdetails=1&accept-language=en`,
+      `https://nominatim.openstreetmap.org/reverse?format=json&lat=${latitude}&lon=${longitude}&zoom=18&addressdetails=1&accept-language=en&namedetails=1`,
       {
         headers: {
           'Accept-Language': 'en-US,en;q=0.9',
-          'User-Agent': 'Probim/1.0 (hr@yopmail.com)'
+          'User-Agent': 'Probim/1.0 (support@probim.com)'
         }
       }
     );
@@ -71,21 +74,44 @@ export const getAddressFromCoordinates = async (latitude, longitude) => {
     const data = await response.json();
     
     if (data && data.display_name) {
+      // ✅ Build a more readable address
+      const addressParts = [];
+      const addr = data.address || {};
+      
+      // Add components in order of specificity
+      if (addr.road) addressParts.push(addr.road);
+      if (addr.neighbourhood) addressParts.push(addr.neighbourhood);
+      if (addr.suburb) addressParts.push(addr.suburb);
+      if (addr.city || addr.town || addr.village) {
+        addressParts.push(addr.city || addr.town || addr.village);
+      }
+      if (addr.state) addressParts.push(addr.state);
+      if (addr.country) addressParts.push(addr.country);
+      
+      // If no specific components, use display_name
+      const readableAddress = addressParts.length > 0 
+        ? addressParts.join(', ') 
+        : data.display_name;
+      
+      console.log('✅ Address fetched successfully:', readableAddress);
+      
       return {
-        display_name: data.display_name,
-        road: data.address?.road,
-        city: data.address?.city || data.address?.town || data.address?.village,
-        state: data.address?.state,
-        country: data.address?.country,
-        country_code: data.address?.country_code,
-        postcode: data.address?.postcode,
-        address: data.address || {}
+        display_name: readableAddress,
+        road: addr.road,
+        city: addr.city || addr.town || addr.village,
+        state: addr.state,
+        country: addr.country,
+        country_code: addr.country_code,
+        postcode: addr.postcode,
+        address: addr,
+        readable_address: readableAddress
       };
     }
     
+    console.warn('⚠️ No address data returned from Nominatim');
     return null;
   } catch (error) {
-    console.error('Reverse geocoding error:', error);
+    console.error('❌ Reverse geocoding error:', error);
     return null;
   }
 };
@@ -218,30 +244,29 @@ export const getTimezoneFromIP = async () => {
   }
 };
 
-// MAIN FUNCTION: Get location with timezone from address
+// locationService.js - Update the getLocationWithTimezone function
+
 export const getLocationWithTimezone = async () => {
   try {
-    // Step 1: Get location from browser
     const location = await getCurrentLocation();
     
     if (!location.latitude || !location.longitude) {
       throw new Error('No coordinates available');
     }
     
-    // Step 2: Get address from coordinates (this gives us the country name)
     const addressData = await getAddressFromCoordinates(
       location.latitude,
       location.longitude
     );
     
-    // Step 3: Get country from address
+    console.log('📍 Address data received:', addressData);
+    
     const countryName = addressData?.country || addressData?.address?.country;
     
     let timezone = null;
     let timezoneSource = 'unknown';
     let finalCountry = countryName || 'Unknown';
     
-    // Step 4: Get timezone from country name (using the mapping)
     if (countryName) {
       timezone = getTimezoneFromCountry(countryName);
       if (timezone) {
@@ -250,7 +275,6 @@ export const getLocationWithTimezone = async () => {
       }
     }
     
-    // Step 5: If country lookup failed, try IP-based timezone
     if (!timezone) {
       console.warn('Country lookup failed, trying IP-based timezone...');
       const ipData = await getTimezoneFromIP();
@@ -262,7 +286,6 @@ export const getLocationWithTimezone = async () => {
       }
     }
     
-    // Step 6: Final fallback - use browser timezone
     if (!timezone) {
       console.warn('All lookups failed, using browser timezone as fallback');
       timezone = Intl.DateTimeFormat().resolvedOptions().timeZone;
@@ -273,6 +296,34 @@ export const getLocationWithTimezone = async () => {
     
     const tzOffset = getTimezoneOffsetForTz(timezone);
     const tzOffsetString = getTimezoneOffsetString(timezone);
+    
+    // ✅ Get the readable address - PRIORITIZE readable_address from addressData
+    let displayAddress;
+    
+    // First, try to get the readable address from addressData
+    if (addressData?.readable_address) {
+      displayAddress = addressData.readable_address;
+    } else if (addressData?.display_name) {
+      displayAddress = addressData.display_name;
+    } else if (addressData?.address) {
+      // Build address from address components
+      const addr = addressData.address;
+      const parts = [];
+      if (addr.road) parts.push(addr.road);
+      if (addr.city || addr.town || addr.village) {
+        parts.push(addr.city || addr.town || addr.village);
+      }
+      if (addr.state) parts.push(addr.state);
+      if (addr.country) parts.push(addr.country);
+      displayAddress = parts.length > 0 ? parts.join(', ') : null;
+    }
+    
+    // Final fallback - use coordinates
+    if (!displayAddress) {
+      displayAddress = `${location.latitude.toFixed(6)}, ${location.longitude.toFixed(6)}`;
+    }
+    
+    console.log('📍 Final address to use:', displayAddress);
     
     return {
       latitude: location.latitude,
@@ -286,7 +337,7 @@ export const getLocationWithTimezone = async () => {
       country: finalCountry,
       country_code: addressData?.country_code || addressData?.address?.country_code,
       city: addressData?.city || addressData?.address?.city || addressData?.address?.town,
-      address: addressData?.display_name || `${location.latitude}, ${location.longitude}`,
+      address: displayAddress, // ✅ This is the readable address
       address_details: addressData,
       source: timezoneSource,
     };
@@ -294,7 +345,6 @@ export const getLocationWithTimezone = async () => {
   } catch (error) {
     console.error('Error getting location with timezone:', error);
     
-    // Final fallback: use browser timezone
     const browserTz = Intl.DateTimeFormat().resolvedOptions().timeZone;
     const tzOffset = getTimezoneOffsetForTz(browserTz);
     const countryFromTz = getCountryFromTz(browserTz);
@@ -304,11 +354,11 @@ export const getLocationWithTimezone = async () => {
       timezone_offset: tzOffset,
       timezone_offset_minutes: tzOffset,
       country: countryFromTz || 'Unknown',
+      address: 'Location not available',
       source: 'browser-fallback',
     };
   }
 };
-
 // Legacy exports for backward compatibility
 export const getCurrentTimezone = () => {
   return Intl.DateTimeFormat().resolvedOptions().timeZone;

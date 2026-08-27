@@ -925,6 +925,8 @@ const Dashboard = () => {
   // In Dashboard.jsx - Update the handleLatePunchRequest function
 let isLatePunchRequestSubmitted = false;
 
+// Dashboard.jsx - Update handleLatePunchRequest function
+
 const handleLatePunchRequest = async () => {
   // ✅ Prevent duplicate submissions
   if (isLatePunchRequestSubmitted) {
@@ -967,6 +969,11 @@ const handleLatePunchRequest = async () => {
     const today = now.toISOString().split("T")[0];
     const currentTime = now.toTimeString().slice(0, 8);
 
+    // ✅ Get work_location from locationData
+    const workLocation = locationData.work_location || 
+                         locationData.country || 
+                         'Unknown';
+
     // Prepare payload
     const payload = {
       employee_id: user?.employee?.id || user?.id,
@@ -975,15 +982,14 @@ const handleLatePunchRequest = async () => {
       request_time: currentTime,
       reason: `Employee attempted to punch in ${lateDuration} late (scheduled: ${scheduledStartTime}).`,
       status: "pending",
-      timezone:
-        locationData.timezone ||
-        Intl.DateTimeFormat().resolvedOptions().timeZone,
+      timezone: locationData.timezone || Intl.DateTimeFormat().resolvedOptions().timeZone,
       created_by: "admin",
+      work_location: workLocation, // ✅ Add work_location
       location: {
         latitude: locationData.latitude,
         longitude: locationData.longitude,
-        address:
-          locationData.address || locationData.work_location || "Unknown",
+        address: locationData.address || locationData.work_location || "Unknown",
+        work_location: workLocation // ✅ Also include in location object
       },
     };
 
