@@ -124,8 +124,9 @@ const PunchOutModal = ({
   const punchInDate = todayAttendance.date;
 
   // Get the user's timezone from props or fallback
-  const userTimezone = timezone || 
-    todayAttendance?.timezone || 
+  const userTimezone = 
+    todayAttendance?.punch_in_timezone ||   // ✅ authoritative: the zone the punch-in actually happened in
+    timezone ||                             // fallback: explicit prop, if dashboard doesn't have it
     Intl.DateTimeFormat().resolvedOptions().timeZone;
 
   // Combined fetch function for both projects and punch data
@@ -462,7 +463,15 @@ const calculateWorkingHours = () => {
   // Log for debugging
   console.log("📊 Punch In Raw:", activePunchInTime);
   console.log("📊 Punch In Date:", punchInDateObj.toISOString());
-  console.log("📊 Punch Out Raw:", punchOutTimeStr);
+
+if (!punchOutDateObj || isNaN(punchOutDateObj.getTime())) {
+  console.warn("Invalid punch out time:", punchOutTimeStr);
+  setMaxWorkingMinutes(0);
+  return;
+}
+
+console.log("📊 Punch Out Date:", punchOutDateObj.toISOString());
+
   console.log("📊 Punch Out Date:", punchOutDateObj.toISOString());
   console.log("📊 Difference in seconds:", diffMs / 1000);
   console.log("📊 Difference in minutes (exact):", diffMinutesExact);
