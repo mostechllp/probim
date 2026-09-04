@@ -966,30 +966,81 @@ const handleLatePunchRequest = async () => {
 
     // Get current date and time
     const now = new Date();
-    const today = now.toISOString().split("T")[0];
-    const currentTime = now.toTimeString().slice(0, 8);
+    const today = now.toISOString().split('T')[0];
+    const currentTime = now.toTimeString().slice(0, 8); // HH:MM:SS format
+    
+    // ✅ CRITICAL FIX: Use the timezone from location data
+    // The timezone_offset_minutes should already be in the location data
+    let tzOffsetMinutes = locationData.timezone_offset_minutes;
+    
+    // If not available, try to get it from the timezone string
+    if (!tzOffsetMinutes && locationData.timezone) {
+      // Parse timezone like "Asia/Kolkata" or "+05:30"
+      if (locationData.timezone.startsWith('+') || locationData.timezone.startsWith('-')) {
+        // Parse offset string like "+05:30"
+        const match = locationData.timezone.match(/([+-])(\d{2}):(\d{2})/);
+        if (match) {
+          const sign = match[1] === '+' ? 1 : -1;
+          const hours = parseInt(match[2]);
+          const minutes = parseInt(match[3]);
+          tzOffsetMinutes = sign * (hours * 60 + minutes);
+        }
+      } else {
+        // For named timezone like "Asia/Kolkata", calculate offset
+        const dateInTz = new Date().toLocaleString('en-US', { timeZone: locationData.timezone });
+        const dateInUTC = new Date().toLocaleString('en-US', { timeZone: 'UTC' });
+        const offsetMs = new Date(dateInTz).getTime() - new Date(dateInUTC).getTime();
+        tzOffsetMinutes = Math.round(offsetMs / 60000);
+      }
+    }
+    
+    // If still no offset, use India timezone (UTC+5:30) as fallback
+    if (!tzOffsetMinutes) {
+      // Check if user is in India timezone
+      const userTimezone = locationData.timezone || Intl.DateTimeFormat().resolvedOptions().timeZone;
+      if (userTimezone === 'Asia/Kolkata' || userTimezone === 'IST') {
+        tzOffsetMinutes = 330; // UTC+5:30 in minutes
+      } else {
+        // Default to browser's timezone offset
+        tzOffsetMinutes = -now.getTimezoneOffset();
+      }
+    }
+    
+    // Format the offset
+    const offsetHours = Math.floor(Math.abs(tzOffsetMinutes) / 60);
+    const offsetMins = Math.abs(tzOffsetMinutes) % 60;
+    const offsetSign = tzOffsetMinutes >= 0 ? '+' : '-';
+    const offsetStr = `${offsetSign}${String(offsetHours).padStart(2, '0')}:${String(offsetMins).padStart(2, '0')}`;
+    
+    // Create full datetime string with timezone
+    const requestDateTime = `${today}T${currentTime}+05:30`;
 
-    // ✅ Get work_location from locationData
+    console.log("📍 Timezone offset:", tzOffsetMinutes, "Offset string:", offsetStr);
+    console.log("📅 Request datetime:", requestDateTime);
+
+    // Get work_location from locationData
     const workLocation = locationData.work_location || 
                          locationData.country || 
-                         'Unknown';
+                         'India'; // Default to India
 
     // Prepare payload
     const payload = {
       employee_id: user?.employee?.id || user?.id,
       type: "late_check_in",
       request_date: today,
-      request_time: currentTime,
+      request_time: requestDateTime, // Now in format: "2026-09-04T13:40:46+05:30"
       reason: `Employee attempted to punch in ${lateDuration} late (scheduled: ${scheduledStartTime}).`,
       status: "pending",
-      timezone: locationData.timezone || Intl.DateTimeFormat().resolvedOptions().timeZone,
+      timezone: locationData.timezone || 'Asia/Kolkata',
       created_by: "admin",
-      work_location: workLocation, // ✅ Add work_location
+      work_location: workLocation,
       location: {
         latitude: locationData.latitude,
         longitude: locationData.longitude,
         address: locationData.address || locationData.work_location || "Unknown",
-        work_location: workLocation // ✅ Also include in location object
+        work_location: workLocation,
+        timezone: locationData.timezone || 'Asia/Kolkata',
+        timezone_offset_minutes: tzOffsetMinutes
       },
     };
 
@@ -1013,7 +1064,6 @@ const handleLatePunchRequest = async () => {
 
       // Clear stored error after successful submission
       localStorage.removeItem("late-punch-error");
-      // Don't clear location data yet - might need it if request is rejected
     }
   } catch (error) {
     console.error("Error submitting late attendance request:", error);
