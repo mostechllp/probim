@@ -188,23 +188,21 @@ const getTimezoneFromCoordinates = async (latitude, longitude) => {
   }
 };
 
-// ✅ NEW: Format datetime with timezone offset
-const formatDateTimeWithTimezone = (dateStr, timeStr, timezoneOffsetMinutes) => {
-  if (!dateStr || !timeStr) return null;
+// ✅ FIXED: Format time as HH:MM:SS (no date or timezone)
+const formatTimeOnly = (timeStr) => {
+  if (!timeStr) return null;
   
-  // Get offset in hours and minutes
-  const offsetHours = Math.floor(Math.abs(timezoneOffsetMinutes) / 60);
-  const offsetMins = Math.abs(timezoneOffsetMinutes) % 60;
-  const offsetSign = timezoneOffsetMinutes >= 0 ? '+' : '-';
-  const offsetStr = `${offsetSign}${String(offsetHours).padStart(2, '0')}:${String(offsetMins).padStart(2, '0')}`;
-  
-  // Format time to ensure it has seconds
-  let formattedTime = timeStr;
-  if (formattedTime && formattedTime.split(':').length === 2) {
-    formattedTime = `${formattedTime}:00`;
+  // If time already has seconds, return as is
+  if (timeStr.split(':').length === 3) {
+    return timeStr;
   }
   
-  return `${dateStr}T${formattedTime}${offsetStr}`;
+  // If time has only HH:MM, add :00 seconds
+  if (timeStr.split(':').length === 2) {
+    return `${timeStr}:00`;
+  }
+  
+  return timeStr;
 };
 
 const MissedPunchModal = ({ isOpen, onClose, selectedDate, onSuccess }) => {
@@ -703,7 +701,7 @@ const MissedPunchModal = ({ isOpen, onClose, selectedDate, onSuccess }) => {
     });
   };
 
-  // ✅ FIXED: Handle submit with proper datetime formatting
+  // ✅ FIXED: Handle submit with time only format (HH:MM:SS)
   const handleSubmit = async () => {
     // Validate required fields
     if (!selectedDate) {
@@ -788,22 +786,22 @@ const MissedPunchModal = ({ isOpen, onClose, selectedDate, onSuccess }) => {
         ? location.timezone_offset_minutes 
         : -new Date().getTimezoneOffset();
 
-      // ✅ Format punch in time with timezone
-      const punchInDateTime = formatDateTimeWithTimezone(selectedDate, punchInTime, tzOffset);
-      const punchOutDateTime = formatDateTimeWithTimezone(selectedDate, punchOutTime, tzOffset);
+      // ✅ Format time as HH:MM:SS only (no date, no timezone)
+      const punchInTimeFormatted = formatTimeOnly(punchInTime);
+      const punchOutTimeFormatted = formatTimeOnly(punchOutTime);
 
       console.log("📤 Submitting with timezone:", tz);
       console.log("📤 Timezone offset:", tzOffset);
-      console.log("📤 Punch In DateTime:", punchInDateTime);
-      console.log("📤 Punch Out DateTime:", punchOutDateTime);
+      console.log("📤 Punch In Time:", punchInTimeFormatted);
+      console.log("📤 Punch Out Time:", punchOutTimeFormatted);
 
       const payload = {
         type: requestType,
         request_date: selectedDate,
         reason: reason.trim(),
         timezone: tz,
-        punch_in_time: punchInDateTime, // ✅ Full datetime with timezone
-        punch_out_time: punchOutDateTime, // ✅ Full datetime with timezone
+        punch_in_time: punchInTimeFormatted, // ✅ Only time: HH:MM:SS
+        punch_out_time: punchOutTimeFormatted, // ✅ Only time: HH:MM:SS
         location: {
           latitude: location.latitude,
           longitude: location.longitude,
