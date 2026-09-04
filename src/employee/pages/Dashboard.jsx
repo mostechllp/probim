@@ -1013,7 +1013,7 @@ const handleLatePunchRequest = async () => {
     const offsetStr = `${offsetSign}${String(offsetHours).padStart(2, '0')}:${String(offsetMins).padStart(2, '0')}`;
     
     // Create full datetime string with timezone
-    const requestDateTime = `${today}T${currentTime}${offsetStr}`;
+    const requestDateTime = `${today}T${currentTime}+05:30`;
 
     console.log("📍 Timezone offset:", tzOffsetMinutes, "Offset string:", offsetStr);
     console.log("📅 Request datetime:", requestDateTime);
