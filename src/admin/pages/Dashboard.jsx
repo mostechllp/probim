@@ -158,7 +158,9 @@ const Dashboard = () => {
     setAttendanceModalType(null);
   };
 
-  const totalEmployees = employees?.length || 0;
+   const todayStatus = charts?.today_status || {};
+
+  const totalEmployees = todayStatus.total_employees || 0;
   const activeProjects = projects.filter((p) => p.status === "Active").length;
   const totalAssignments = assignments.length;
   const totalTaggedEmployees = assignments.reduce(
@@ -166,7 +168,7 @@ const Dashboard = () => {
     0,
   );
 
-  const todayStatus = charts?.today_status || {};
+ 
   const onTimeCount = todayStatus["On time"] || 0;
   const lateCount = todayStatus.Late || 0;
   const absentCount = todayStatus.Absent || 0;
