@@ -144,7 +144,15 @@ const MonthYearSelector = ({ month, year, onMonthChange, onYearChange }) => {
       </button>
 
       {isOpen && (
-        <div className="absolute top-full left-0 mt-1 z-50 bg-white dark:bg-gray-800 rounded-xl shadow-2xl border border-gray-200 dark:border-gray-700 p-3 min-w-[220px] max-h-[320px] overflow-y-auto">
+        <div
+          className="
+      absolute top-full mt-1 z-50 bg-white dark:bg-gray-800 rounded-xl shadow-2xl
+      border border-gray-200 dark:border-gray-700 p-3
+      min-w-[220px] max-h-[320px] overflow-y-auto
+      right-0 sm:right-auto sm:left-0
+      max-w-[calc(100vw-2rem)]
+    "
+        >
           <div className="space-y-3">
             {/* Year Selector */}
             <div>
@@ -1099,7 +1107,7 @@ export const ProjectTimeCostChart = ({
 
   // ─── Main Render ──────────────────────────────────────────────────────
   return (
-    <div className="bg-white dark:bg-gray-800 rounded-xl p-3 md:p-4 shadow-soft border border-gray-100 dark:border-gray-700 overflow-hidden">
+    <div className="bg-white dark:bg-gray-800 rounded-xl p-3 md:p-4 shadow-soft border border-gray-100 dark:border-gray-700">
       {/* Header */}
       <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3 mb-3">
         {/* Title + Month/Year */}
