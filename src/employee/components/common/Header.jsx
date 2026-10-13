@@ -6,7 +6,7 @@ import { useNavigate, Link } from 'react-router-dom';
 import { useAppSelector } from '../../store/hooks';
 import { useAppTheme } from '../../../context/ThemeContext';
 import { logoutUser } from '../../../store/slices/authSlice';
-import { 
+import {
   fetchUnreadNotifications,
   markNotificationAsRead,
   markAllNotificationsAsRead,
@@ -15,68 +15,39 @@ import { showToast } from '../../../components/common/Toast';
 import ConfirmModal from '../../../admin/components/common/ConfirmModal';
 
 // ─── HELPER FUNCTIONS ──────────────────────────────────────────────────
-// Format user type for display
 const formatUserType = (type) => {
   if (!type) return 'User';
-  
   const typeMap = {
-    'employee': 'Employee',
-    'admin': 'Admin',
-    'hr': 'HR',
-    'manager': 'Manager',
-    'team_lead': 'Team Lead',
-    'teamlead': 'Team Lead',
-    'team lead': 'Team Lead',
+    'employee': 'Employee', 'admin': 'Admin', 'hr': 'HR', 'manager': 'Manager',
+    'team_lead': 'Team Lead', 'teamlead': 'Team Lead', 'team lead': 'Team Lead',
     'support-admin': 'Support Admin',
   };
-  
   const lowerType = type.toLowerCase().trim();
   return typeMap[lowerType] || type;
 };
 
-// Get dashboard title based on user role
 const getDashboardTitle = (userType, userRole) => {
   if (!userType) return 'Employee Portal';
-  
-  // 🔥 FIX: Check if user is Support Admin first
-  const isSupportAdmin = 
-    userRole === "Support Admin" || 
+  const isSupportAdmin =
+    userRole === "Support Admin" ||
     userRole === "support_admin" ||
     userRole?.toLowerCase().includes("support admin");
-  
-  if (isSupportAdmin) {
-    return 'Support Admin Dashboard';
-  }
-  
+  if (isSupportAdmin) return 'Support Admin Dashboard';
   const lowerType = userType.toLowerCase().trim();
-  
   const titleMap = {
-    'admin': 'Admin Dashboard',
-    'hr': 'HR Dashboard',
-    'manager': 'Manager Dashboard',
-    'team_lead': 'Team Lead Dashboard',
-    'teamlead': 'Team Lead Dashboard',
-    'team lead': 'Team Lead Dashboard',
-    'support-admin': 'Support Admin Dashboard',
+    'admin': 'Admin Dashboard', 'hr': 'HR Dashboard', 'manager': 'Manager Dashboard',
+    'team_lead': 'Team Lead Dashboard', 'teamlead': 'Team Lead Dashboard',
+    'team lead': 'Team Lead Dashboard', 'support-admin': 'Support Admin Dashboard',
   };
-  
   return titleMap[lowerType] || 'Employee Portal';
 };
 
-// Format notification type - remove underscores and capitalize
 const formatNotificationType = (type) => {
   if (!type) return "Notification";
-  
   if (typeof type === 'string') {
-    return type
-      .replace(/_/g, ' ')
-      .replace(/([A-Z])/g, ' $1')
-      .trim()
-      .split(' ')
-      .map(word => word.charAt(0).toUpperCase() + word.slice(1).toLowerCase())
-      .join(' ');
+    return type.replace(/_/g, ' ').replace(/([A-Z])/g, ' $1').trim()
+      .split(' ').map(word => word.charAt(0).toUpperCase() + word.slice(1).toLowerCase()).join(' ');
   }
-  
   return "Notification";
 };
 
@@ -88,7 +59,7 @@ const Header = ({ onMenuClick }) => {
   const { notifications, unreadCount, loading } = useAppSelector(
     (state) => state.notifications || { notifications: [], unreadCount: 0, loading: false }
   );
-  
+
   const [showProfileMenu, setShowProfileMenu] = useState(false);
   const [showNotifications, setShowNotifications] = useState(false);
   const [showLogoutConfirm, setShowLogoutConfirm] = useState(false);
@@ -98,47 +69,34 @@ const Header = ({ onMenuClick }) => {
   const [avatarError, setAvatarError] = useState(false);
   const [markingAll, setMarkingAll] = useState(false);
   const [markingId, setMarkingId] = useState(null);
-  
+
   const notificationRef = useRef(null);
   const profileRef = useRef(null);
 
-  // 🔥 FIX: Check if user is Support Admin early
   const rawUserRole = user?.role?.name || user?.role || user?.type || 'employee';
   const userType = user?.type || 'employee';
-  const isSupportAdmin = 
-    rawUserRole === "Support Admin" || 
+  const isSupportAdmin =
+    rawUserRole === "Support Admin" ||
     rawUserRole === "support_admin" ||
     rawUserRole?.toLowerCase().includes("support admin") ||
     user?._isSupportAdmin === true;
 
-  // Fetch unread notifications only if not Support Admin
   useEffect(() => {
-    if (!isSupportAdmin) {
-      dispatch(fetchUnreadNotifications());
-    }
+    if (!isSupportAdmin) dispatch(fetchUnreadNotifications());
   }, [dispatch, isSupportAdmin]);
 
-  // Refresh unread notifications when dropdown is opened (only if not Support Admin)
   useEffect(() => {
-    if (showNotifications && !isSupportAdmin) {
-      dispatch(fetchUnreadNotifications());
-    }
+    if (showNotifications && !isSupportAdmin) dispatch(fetchUnreadNotifications());
   }, [showNotifications, dispatch, isSupportAdmin]);
 
-  // Update date and time
   useEffect(() => {
     const updateDateTime = () => {
       const now = new Date();
       setCurrentDate(now.toLocaleDateString('en-US', {
-        weekday: 'long',
-        year: 'numeric',
-        month: 'long',
-        day: 'numeric'
+        weekday: 'long', year: 'numeric', month: 'long', day: 'numeric'
       }));
       setCurrentTime(now.toLocaleTimeString('en-US', {
-        hour: '2-digit',
-        minute: '2-digit',
-        second: '2-digit'
+        hour: '2-digit', minute: '2-digit', second: '2-digit'
       }));
     };
     updateDateTime();
@@ -146,13 +104,9 @@ const Header = ({ onMenuClick }) => {
     return () => clearInterval(interval);
   }, []);
 
-  // Click outside handlers
   useEffect(() => {
     const handleClickOutside = (event) => {
-      if (
-        notificationRef.current &&
-        !notificationRef.current.contains(event.target)
-      ) {
+      if (notificationRef.current && !notificationRef.current.contains(event.target)) {
         setShowNotifications(false);
       }
       if (profileRef.current && !profileRef.current.contains(event.target)) {
@@ -163,7 +117,6 @@ const Header = ({ onMenuClick }) => {
     return () => document.removeEventListener("mousedown", handleClickOutside);
   }, []);
 
-  // Get user name and role
   const getUserName = () => {
     if (user?.employee?.name) return user.employee.name;
     if (user?.name) return user.name;
@@ -177,65 +130,49 @@ const Header = ({ onMenuClick }) => {
     return '';
   };
 
-  // 🔥 FIX: Get user role for display
   const userRole = isSupportAdmin ? 'Support Admin' : formatUserType(userType);
   const dashboardTitle = getDashboardTitle(userType, rawUserRole);
-  
   const displayName = getUserName();
   const userEmail = getUserEmail();
 
-  // Get user avatar
   const getUserAvatar = () => {
     if (avatarError) return null;
-    
     const avatar = user?.avatar || user?.employee?.avatar;
     if (!avatar) return null;
-    
     const baseUrl = import.meta.env.VITE_API_URL?.replace('/api', '') || window.location.origin;
-    
-    if (typeof avatar === 'object' && avatar.path) {
-      return `${baseUrl}/storage/${avatar.path}`;
-    }
-    
+    if (typeof avatar === 'object' && avatar.path) return `${baseUrl}/storage/${avatar.path}`;
     if (typeof avatar === 'string') {
       if (avatar.startsWith('http')) return avatar;
       if (avatar.startsWith('/storage/')) return `${baseUrl}${avatar}`;
       if (avatar.startsWith('storage/')) return `${baseUrl}/${avatar}`;
       return `${baseUrl}/storage/${avatar}`;
     }
-    
     return null;
   };
 
   const userAvatar = getUserAvatar();
   const userInitials = displayName?.charAt(0)?.toUpperCase() || "U";
 
-  // Handle marking a single notification as read
   const handleMarkAsRead = async (id) => {
     if (markingId === id || isSupportAdmin) return;
-    
     setMarkingId(id);
     try {
       await dispatch(markNotificationAsRead(id)).unwrap();
       showToast("Notification marked as read", "success");
     } catch (error) {
-      console.error("Failed to mark notification as read:", error);
       showToast("Failed to mark notification as read", "error");
     } finally {
       setMarkingId(null);
     }
   };
 
-  // Handle marking all notifications as read
   const handleMarkAllRead = async () => {
     if (markingAll || isSupportAdmin) return;
-    
     setMarkingAll(true);
     try {
       await dispatch(markAllNotificationsAsRead()).unwrap();
       showToast("All notifications marked as read", "success");
     } catch (error) {
-      console.error("Failed to mark all as read:", error);
       showToast("Failed to mark all as read", "error");
     } finally {
       setMarkingAll(false);
@@ -252,43 +189,30 @@ const Header = ({ onMenuClick }) => {
     try {
       await dispatch(logoutUser()).unwrap();
       setShowLogoutConfirm(false);
-      setTimeout(() => {
-        navigate("/login", { replace: true });
-      }, 100);
+      setTimeout(() => navigate("/login", { replace: true }), 100);
     } catch (err) {
-      console.error("Logout failed", err);
       setLogoutLoading(false);
     }
   };
 
-  // Get the base path for navigation
   const getBasePath = () => {
     if (isSupportAdmin) return '/employee';
     const rawType = user?.type || user?.role || 'employee';
     return rawType === 'admin' || rawType === 'hr' ? '/admin' : '/employee';
   };
 
-  // Check permissions for modules
   const hasAllPermissions = user?.permissions?.all === true;
-
   const hasReadPermission = (slug) => {
     if (hasAllPermissions) return true;
     if (userType === 'admin') return true;
-    
     const modulePermission = user?.permissions?.[slug];
-    if (modulePermission) {
-      return modulePermission.read === true;
-    }
-    
+    if (modulePermission) return modulePermission.read === true;
     const publicModules = ["dashboard", "my-leaves", "my-tasks", "task-reports", "my-wfh-requests", "my-profile"];
     if (publicModules.includes(slug)) return true;
-    
     return false;
   };
-
   const showSettings = hasReadPermission("settings");
 
-  // Format time for display
   const formatNotificationTime = (dateString) => {
     if (!dateString) return "Just now";
     const date = new Date(dateString);
@@ -297,54 +221,30 @@ const Header = ({ onMenuClick }) => {
     const diffMins = Math.floor(diffMs / 60000);
     const diffHours = Math.floor(diffMs / 3600000);
     const diffDays = Math.floor(diffMs / 86400000);
-
     if (diffMins < 1) return "Just now";
     if (diffMins < 60) return `${diffMins}m ago`;
     if (diffHours < 24) return `${diffHours}h ago`;
     if (diffDays < 7) return `${diffDays}d ago`;
-    return date.toLocaleDateString("en-US", {
-      month: "short",
-      day: "numeric",
-    });
+    return date.toLocaleDateString("en-US", { month: "short", day: "numeric" });
   };
 
-  // Get notification type icon with better detection
   const getNotificationIcon = (notification) => {
     const type = notification.type || notification.data?.type || "";
     const lowerType = String(type).toLowerCase();
-    
-    if (lowerType.includes("probation")) {
-      return "fa-clock text-orange-500";
-    }
-    if (lowerType.includes("leave")) {
-      return "fa-calendar-check text-blue-500";
-    }
-    if (lowerType.includes("attendance")) {
-      return "fa-fingerprint text-purple-500";
-    }
-    if (lowerType.includes("contract")) {
-      return "fa-file-contract text-indigo-500";
-    }
-    if (lowerType.includes("task")) {
-      return "fa-tasks text-green-500";
-    }
-    if (lowerType.includes("special_day") || lowerType.includes("birthday") || lowerType.includes("special")) {
-      return "fa-gift text-rose-500";
-    }
-    if (lowerType.includes("document") || lowerType.includes("expiry") || lowerType.includes("employee_document")) {
-      return "fa-file-alt text-orange-500";
-    }
-    if (lowerType.includes("wfh") || lowerType.includes("work from home")) {
-      return "fa-home text-amber-500";
-    }
+    if (lowerType.includes("probation")) return "fa-clock text-orange-500";
+    if (lowerType.includes("leave")) return "fa-calendar-check text-blue-500";
+    if (lowerType.includes("attendance")) return "fa-fingerprint text-purple-500";
+    if (lowerType.includes("contract")) return "fa-file-contract text-indigo-500";
+    if (lowerType.includes("task")) return "fa-tasks text-green-500";
+    if (lowerType.includes("special_day") || lowerType.includes("birthday") || lowerType.includes("special")) return "fa-gift text-rose-500";
+    if (lowerType.includes("document") || lowerType.includes("expiry") || lowerType.includes("employee_document")) return "fa-file-alt text-orange-500";
+    if (lowerType.includes("wfh") || lowerType.includes("work from home")) return "fa-home text-amber-500";
     return "fa-bell text-gray-500";
   };
 
-  // Get notification type color class
   const getNotificationTypeColor = (notification) => {
     const type = notification.type || notification.data?.type || "";
     const lowerType = String(type).toLowerCase();
-    
     if (lowerType.includes("leave")) return "bg-blue-100 text-blue-600 dark:bg-blue-900/30 dark:text-blue-400";
     if (lowerType.includes("attendance")) return "bg-purple-100 text-purple-600 dark:bg-purple-900/30 dark:text-purple-400";
     if (lowerType.includes("task")) return "bg-emerald-100 text-emerald-600 dark:bg-emerald-900/30 dark:text-emerald-400";
@@ -353,90 +253,99 @@ const Header = ({ onMenuClick }) => {
     if (lowerType.includes("contract")) return "bg-teal-100 text-teal-600 dark:bg-teal-900/30 dark:text-teal-400";
     if (lowerType.includes("special_day") || lowerType.includes("birthday") || lowerType.includes("special")) return "bg-rose-100 text-rose-600 dark:bg-rose-900/30 dark:text-rose-400";
     if (lowerType.includes("wfh") || lowerType.includes("work from home")) return "bg-amber-100 text-amber-600 dark:bg-amber-900/30 dark:text-amber-400";
-    
     return "bg-gray-100 text-gray-600 dark:bg-gray-700/30 dark:text-gray-400";
   };
 
   return (
     <>
-      <header className="bg-white dark:bg-gray-800 border-b border-gray-200 dark:border-gray-700 py-3 px-4 md:px-6 sticky top-0 z-40 flex items-center justify-between flex-wrap gap-3 shadow-sm">
-        {/* Left section - Menu button (mobile) and title */}
-        <div className="flex items-center gap-4">
-          <button 
+      {/* 
+        CHANGED: 
+        - No flex-wrap, stays on one line
+        - Very tight gap on mobile (gap-1) 
+        - Reduced vertical padding (py-1.5 on mobile)
+      */}
+      <header className="bg-white dark:bg-gray-800 border-b border-gray-200 dark:border-gray-700 py-1.5 md:py-3 px-2 md:px-6 sticky top-0 z-40 flex items-center justify-between flex-nowrap gap-1 md:gap-3 shadow-sm">
+
+        {/* LEFT: Menu button + Title (title can shrink/truncate) */}
+        <div className="flex items-center gap-1 md:gap-3 min-w-0 flex-1">
+          <button
             onClick={onMenuClick}
-            className="lg:hidden p-2 rounded-lg hover:bg-gray-100 dark:hover:bg-gray-700 transition-colors text-gray-600 dark:text-gray-300"
+            className="lg:hidden p-1 md:p-2 rounded-lg hover:bg-gray-100 dark:hover:bg-gray-700 transition-colors text-gray-600 dark:text-gray-300 flex-shrink-0"
           >
-            <i className="fas fa-bars text-xl"></i>
+            <i className="fas fa-bars text-base md:text-xl"></i>
           </button>
-          
-          <div>
-            <h1 className="text-lg font-bold text-gray-800 dark:text-white">
+
+          {/* Title stays visible — truncates on small screens */}
+          <div className="min-w-0 flex-1 md:flex-none">
+            <h1 className="text-xs md:text-lg font-bold text-gray-800 dark:text-white truncate leading-tight">
               {dashboardTitle}
             </h1>
-            <p className="text-xs text-gray-500 dark:text-gray-400">
+            <p className="text-[10px] md:text-xs text-gray-500 dark:text-gray-400 truncate leading-tight hidden sm:block">
               Welcome back, {displayName}
             </p>
           </div>
         </div>
-        
-        {/* Right section - Date, Time, Theme toggle, Notifications, Profile */}
-        <div className="flex items-center gap-3 flex-wrap">
-          {/* Date and Time */}
-          <div className="hidden md:flex items-center gap-3 bg-gray-50 dark:bg-gray-700/50 border border-gray-200 dark:border-gray-600 px-4 py-1.5 rounded-full">
-            <div className="flex items-center gap-2 text-xs font-medium text-gray-600 dark:text-gray-300">
+
+        {/* RIGHT: Date/Time + Theme + Bell + Avatar */}
+        <div className="flex items-center gap-1 md:gap-3 flex-shrink-0">
+
+          {/* Date/Time — compact single line on mobile */}
+          <div className="hidden sm:flex items-center gap-1.5 md:gap-3 bg-gray-50 dark:bg-gray-700/50 border border-gray-200 dark:border-gray-600 px-1.5 md:px-4 py-1 md:py-1.5 rounded-full">
+            <div className="flex items-center gap-1 md:gap-2 text-[10px] md:text-xs font-medium text-gray-600 dark:text-gray-300 whitespace-nowrap">
               <i className="far fa-calendar-alt text-green-500"></i>
-              <span>{currentDate}</span>
+              <span className="hidden lg:inline">{currentDate}</span>
+              <span className="lg:hidden">
+                {new Date().toLocaleDateString('en-US', { month: 'short', day: 'numeric' })}
+              </span>
             </div>
-            <div className="w-px h-4 bg-gray-300 dark:bg-gray-600"></div>
-            <div className="flex items-center gap-2 text-xs font-medium text-gray-600 dark:text-gray-300">
+            <div className="w-px h-3 md:h-4 bg-gray-300 dark:bg-gray-600"></div>
+            <div className="flex items-center gap-1 md:gap-2 text-[10px] md:text-xs font-medium text-gray-600 dark:text-gray-300 whitespace-nowrap">
               <i className="far fa-clock text-green-500"></i>
               <span>{currentTime}</span>
             </div>
           </div>
-          
-          {/* Theme toggle */}
+
+          {/* Theme toggle — smaller buttons on mobile */}
           <div className="theme-toggle flex bg-gray-100 dark:bg-gray-700 border border-gray-200 dark:border-gray-600 rounded-lg p-0.5 gap-0.5">
             <button
               onClick={() => setThemeMode('light')}
-              className={`theme-btn w-8 h-8 rounded-lg flex items-center justify-center text-sm transition-all ${
-                themeMode === 'light' 
-                  ? 'bg-white dark:bg-gray-600 shadow-md text-green-500' 
+              className={`theme-btn w-6 h-6 md:w-8 md:h-8 rounded-md md:rounded-lg flex items-center justify-center text-[10px] md:text-sm transition-all ${themeMode === 'light'
+                  ? 'bg-white dark:bg-gray-600 shadow-md text-green-500'
                   : 'text-gray-500 dark:text-gray-400 hover:bg-gray-200 dark:hover:bg-gray-600'
-              }`}
+                }`}
               title="Light Mode"
             >
               <i className="fas fa-sun"></i>
             </button>
             <button
               onClick={() => setThemeMode('dark')}
-              className={`theme-btn w-8 h-8 rounded-lg flex items-center justify-center text-sm transition-all ${
-                themeMode === 'dark' 
-                  ? 'bg-white dark:bg-gray-600 shadow-md text-green-500' 
+              className={`theme-btn w-6 h-6 md:w-8 md:h-8 rounded-md md:rounded-lg flex items-center justify-center text-[10px] md:text-sm transition-all ${themeMode === 'dark'
+                  ? 'bg-white dark:bg-gray-600 shadow-md text-green-500'
                   : 'text-gray-500 dark:text-gray-400 hover:bg-gray-200 dark:hover:bg-gray-600'
-              }`}
+                }`}
               title="Dark Mode"
             >
               <i className="fas fa-moon"></i>
             </button>
           </div>
 
-          {/* Notification Bell - Hide for Support Admin */}
+          {/* Notification Bell — smaller on mobile, badge shrunk */}
           {!isSupportAdmin && (
             <div className="relative" ref={notificationRef}>
               <button
                 onClick={() => setShowNotifications(!showNotifications)}
-                className="relative w-9 h-9 md:w-10 md:h-10 bg-gray-100 dark:bg-gray-700 border border-gray-200 dark:border-gray-600 rounded-full flex items-center justify-center hover:bg-gray-200 dark:hover:bg-gray-600 transition-colors"
+                className="relative w-7 h-7 md:w-10 md:h-10 bg-gray-100 dark:bg-gray-700 border border-gray-200 dark:border-gray-600 rounded-full flex items-center justify-center hover:bg-gray-200 dark:hover:bg-gray-600 transition-colors"
               >
-                <i className="fas fa-bell text-gray-600 dark:text-gray-300 text-sm md:text-base"></i>
+                <i className="fas fa-bell text-gray-600 dark:text-gray-300 text-[10px] md:text-base"></i>
                 {unreadCount > 0 && (
-                  <span className="absolute -top-1 -right-1 bg-red-500 text-white text-xs font-bold rounded-full px-1.5 py-0.5 min-w-[18px] text-center animate-pulse">
+                  <span className="absolute -top-0.5 -right-0.5 md:-top-1 md:-right-1 bg-red-500 text-white text-[8px] md:text-xs font-bold rounded-full px-1 py-0.5 min-w-[14px] md:min-w-[18px] text-center animate-pulse">
                     {unreadCount}
                   </span>
                 )}
               </button>
 
               {showNotifications && (
-                <div className="absolute top-12 right-0 w-96 bg-white dark:bg-gray-800 rounded-2xl shadow-soft-lg border border-gray-200 dark:border-gray-700 z-50 overflow-hidden">
+                <div className="absolute top-9 md:top-12 right-0 w-80 sm:w-96 max-w-[calc(100vw-1rem)] bg-white dark:bg-gray-800 rounded-2xl shadow-soft-lg border border-gray-200 dark:border-gray-700 z-50 overflow-hidden">
                   <div className="p-4 border-b border-gray-200 dark:border-gray-700 flex justify-between items-center">
                     <h3 className="font-semibold text-gray-800 dark:text-gray-200 flex items-center gap-2">
                       <i className="fas fa-bell text-green-500"></i>
@@ -453,9 +362,7 @@ const Header = ({ onMenuClick }) => {
                         disabled={markingAll}
                         className="text-xs text-green-500 hover:text-green-600 disabled:opacity-50 disabled:cursor-not-allowed flex items-center gap-1"
                       >
-                        {markingAll ? (
-                          <i className="fas fa-spinner fa-spin"></i>
-                        ) : null}
+                        {markingAll ? <i className="fas fa-spinner fa-spin"></i> : null}
                         Mark all as read
                       </button>
                     )}
@@ -480,13 +387,12 @@ const Header = ({ onMenuClick }) => {
                         const typeColor = getNotificationTypeColor(notification);
                         const iconClass = getNotificationIcon(notification);
                         const message = notification.data?.message || notification.message || '';
-                        
+
                         return (
                           <div
                             key={notification.id}
-                            className={`p-3 border-b border-gray-200 dark:border-gray-700 cursor-pointer transition-colors hover:bg-gray-50 dark:hover:bg-gray-700 ${
-                              !notification.read ? "bg-green-50 dark:bg-green-900/20" : ""
-                            } ${markingId === notification.id ? "opacity-50" : ""}`}
+                            className={`p-3 border-b border-gray-200 dark:border-gray-700 cursor-pointer transition-colors hover:bg-gray-50 dark:hover:bg-gray-700 ${!notification.read ? "bg-green-50 dark:bg-green-900/20" : ""
+                              } ${markingId === notification.id ? "opacity-50" : ""}`}
                             onClick={() => handleMarkAsRead(notification.id)}
                           >
                             <div className="flex items-start gap-3">
@@ -521,91 +427,74 @@ const Header = ({ onMenuClick }) => {
                     )}
                   </div>
 
-                  <div className="p-3 border-t border-gray-200 dark:border-gray-700 text-center bg-gray-50 dark:bg-gray-700/50">
-                    
-                  </div>
+                  <div className="p-3 border-t border-gray-200 dark:border-gray-700 text-center bg-gray-50 dark:bg-gray-700/50"></div>
                 </div>
               )}
             </div>
           )}
-          
-          {/* Profile Avatar - Always visible */}
+
+          {/* Profile Avatar — smaller on mobile */}
           <div className="relative" ref={profileRef}>
-            <div 
+            <div
               onClick={() => setShowProfileMenu(!showProfileMenu)}
-              className="w-10 h-10 rounded-xl overflow-hidden cursor-pointer ring-2 ring-transparent hover:ring-green-500 transition-all duration-200 shadow-md"
+              className="w-7 h-7 md:w-10 md:h-10 rounded-lg md:rounded-xl overflow-hidden cursor-pointer ring-2 ring-transparent hover:ring-green-500 transition-all duration-200 shadow-md"
             >
               {userAvatar ? (
-                <img 
-                  src={userAvatar} 
-                  alt={displayName} 
+                <img
+                  src={userAvatar}
+                  alt={displayName}
                   className="w-full h-full object-cover"
                   onError={() => setAvatarError(true)}
                 />
               ) : (
-                <div className="w-full h-full bg-gradient-to-br from-green-500 to-green-600 flex items-center justify-center text-white font-bold text-sm">
+                <div className="w-full h-full bg-gradient-to-br from-green-500 to-green-600 flex items-center justify-center text-white font-bold text-[10px] md:text-sm">
                   {userInitials}
                 </div>
               )}
             </div>
-            
+
             {showProfileMenu && (
-              <div className="absolute top-[55px] right-0 w-64 bg-white dark:bg-gray-800 rounded-2xl shadow-2xl border border-gray-200 dark:border-gray-700 overflow-hidden z-[9999]">
+              <div className="absolute top-9 md:top-[55px] right-0 w-64 max-w-[calc(100vw-1rem)] bg-white dark:bg-gray-800 rounded-2xl shadow-2xl border border-gray-200 dark:border-gray-700 overflow-hidden z-[9999]">
                 <div className="profile-header flex gap-3 p-4 items-center border-b border-gray-200 dark:border-gray-700">
                   <div className="w-12 h-12 rounded-xl overflow-hidden bg-gradient-to-r from-green-500 to-green-600 flex-shrink-0">
                     {userAvatar ? (
-                      <img 
-                        src={userAvatar} 
-                        alt={displayName} 
-                        className="w-full h-full object-cover"
-                        onError={() => setAvatarError(true)}
-                      />
+                      <img src={userAvatar} alt={displayName} className="w-full h-full object-cover" onError={() => setAvatarError(true)} />
                     ) : (
-                      <div className="w-full h-full flex items-center justify-center text-white font-bold text-lg">
-                        {userInitials}
-                      </div>
+                      <div className="w-full h-full flex items-center justify-center text-white font-bold text-lg">{userInitials}</div>
                     )}
                   </div>
                   <div className="flex-1 min-w-0">
-                    <h4 className="text-sm font-semibold text-gray-800 dark:text-gray-200 truncate">
-                      {displayName}
-                    </h4>
-                    <p className="text-xs text-gray-500 dark:text-gray-400 truncate">
-                      {userEmail}
-                    </p>
-                    <p className="text-xs text-green-600 dark:text-green-400 capitalize">
-                      {userRole}
-                    </p>
+                    <h4 className="text-sm font-semibold text-gray-800 dark:text-gray-200 truncate">{displayName}</h4>
+                    <p className="text-xs text-gray-500 dark:text-gray-400 truncate">{userEmail}</p>
+                    <p className="text-xs text-green-600 dark:text-green-400 capitalize">{userRole}</p>
                   </div>
                 </div>
-                
-                {/* 🔥 FIX: Show My Profile for all users, including Support Admin */}
-                <Link 
+
+                <Link
                   to={`${getBasePath()}/profile`}
                   className="flex items-center gap-3 px-4 py-3.5 hover:bg-gray-50 dark:hover:bg-gray-700 text-gray-700 dark:text-gray-300 no-underline transition-colors"
                   onClick={() => setShowProfileMenu(false)}
                 >
-                  <i className="fas fa-user text-green-500 w-5"></i> 
+                  <i className="fas fa-user text-green-500 w-5"></i>
                   <span>My Profile</span>
                 </Link>
-                
-                {/* Show Settings only if user has permission */}
+
                 {showSettings && !isSupportAdmin && (
-                  <Link 
+                  <Link
                     to={`${getBasePath()}/settings`}
                     className="flex items-center gap-3 px-4 py-3.5 hover:bg-gray-50 dark:hover:bg-gray-700 text-gray-700 dark:text-gray-300 no-underline transition-colors"
                     onClick={() => setShowProfileMenu(false)}
                   >
-                    <i className="fas fa-cog text-gray-500 w-5"></i> 
+                    <i className="fas fa-cog text-gray-500 w-5"></i>
                     <span>Settings</span>
                   </Link>
                 )}
-                
-                <button 
+
+                <button
                   onClick={handleLogoutClick}
                   className="flex items-center gap-3 px-4 py-3.5 hover:bg-gray-50 dark:hover:bg-gray-700 text-gray-700 dark:text-gray-300 w-full text-left transition-colors border-t border-gray-200 dark:border-gray-700"
                 >
-                  <i className="fas fa-arrow-right-from-bracket text-red-500 w-5"></i> 
+                  <i className="fas fa-arrow-right-from-bracket text-red-500 w-5"></i>
                   <span>Sign out</span>
                 </button>
               </div>
@@ -614,7 +503,6 @@ const Header = ({ onMenuClick }) => {
         </div>
       </header>
 
-      {/* Logout Confirmation Modal */}
       <ConfirmModal
         isOpen={showLogoutConfirm}
         onClose={() => setShowLogoutConfirm(false)}
