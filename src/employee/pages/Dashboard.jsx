@@ -385,7 +385,7 @@ const Dashboard = () => {
       dispatch(fetchProjects());
       dispatch(fetchAssignments());
       dispatch(fetchEmployees());
-      dispatch(fetchAttendanceStats()); 
+      dispatch(fetchAttendanceStats());
     }
   }, [dispatch, showAdminGraphs]);
 
@@ -767,15 +767,15 @@ const Dashboard = () => {
 
   // Admin dashboard calculations
   const { stats: attendanceStats } = useSelector(
-  (state) => state.attendance || { stats: {} }
-);
+    (state) => state.attendance || { stats: {} },
+  );
 
-const totalEmployees =
-  attendanceStats?.totalEmployees ??
-  attendanceStats?.total_employees ??
-  attendanceStats?.totalActiveEmployees ??
-  employees?.length ??
-  0;
+  const totalEmployees =
+    attendanceStats?.totalEmployees ??
+    attendanceStats?.total_employees ??
+    attendanceStats?.totalActiveEmployees ??
+    employees?.length ??
+    0;
   const activeProjects = allProjects.filter(
     (p) => p.status === "Active",
   ).length;
@@ -793,9 +793,9 @@ const totalEmployees =
     totalEmployees > 0 ? Math.round((totalPresent / totalEmployees) * 100) : 0;
 
   const todayStatus = charts?.today_status || {};
- const punchedInToday = adminStats?.today?.punched_in || 0;
+  const punchedInToday = adminStats?.today?.punched_in || 0;
   const lateArrivals = adminStats?.today?.late || 0;
-const absentToday = adminStats?.today?.absent || 0;
+  const absentToday = adminStats?.today?.absent || 0;
 
   const projectStats = charts?.project_stats || {};
   const totalProjects = projectStats.total_projects || allProjects.length;
@@ -1620,10 +1620,11 @@ const absentToday = adminStats?.today?.absent || 0;
           </div>
 
           {/* ─── ROW 3.5: Project Time & Cost Chart ─────────────────────────── */}
-          <div className="section-label text-[10px] font-medium uppercase tracking-wider text-gray-400 dark:text-gray-500 mt-4 mb-2">
+          {/* ─── ROW 3.5: Project Time & Cost Chart ─────────────────────────── */}
+          <div className="section-label text-[10px] font-medium uppercase tracking-wider text-gray-400 dark:text-gray-500 mt-4 mb-2 px-1">
             Project Time & Cost Analysis
           </div>
-          <div className="mb-4">
+          <div className="mb-4 overflow-hidden">
             <ProjectTimeCostChart
               data={timeCostData}
               onBarClick={handleProjectTimeCostClick}
