@@ -710,7 +710,9 @@ const Attendances = () => {
       ? presentEmployeesFromStats
       : getEmployeeNamesForStats(todayRecords, "present");
   const lateEmployees =
-    lateEmployeesFromStats.length > 0
+  lateComers?.length > 0
+    ? lateComers.map((emp) => emp.name || emp.employee_name || "Unknown")
+    : lateEmployeesFromStats.length > 0
       ? lateEmployeesFromStats
       : getEmployeeNamesForStats(todayRecords, "late");
   const absentEmployees =
