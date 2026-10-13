@@ -124,7 +124,8 @@ const MonthYearSelector = ({ month, year, onMonthChange, onYearChange }) => {
   const currentYear = new Date().getFullYear();
   const years = Array.from({ length: 10 }, (_, i) => currentYear - i);
 
-  const selectedMonthLabel = months.find(m => m.value === month)?.label || month;
+  const selectedMonthLabel =
+    months.find((m) => m.value === month)?.label || month;
 
   return (
     <div className="relative" ref={dropdownRef}>
@@ -133,8 +134,13 @@ const MonthYearSelector = ({ month, year, onMonthChange, onYearChange }) => {
         className="flex items-center gap-2 px-3 py-1.5 bg-gray-100 dark:bg-gray-700 rounded-lg text-xs font-medium text-gray-700 dark:text-gray-300 hover:bg-gray-200 dark:hover:bg-gray-600 transition-colors"
       >
         <FiCalendar size={14} />
-        <span>{selectedMonthLabel} {year}</span>
-        <FiChevronDown size={14} className={`transition-transform ${isOpen ? 'rotate-180' : ''}`} />
+        <span>
+          {selectedMonthLabel} {year}
+        </span>
+        <FiChevronDown
+          size={14}
+          className={`transition-transform ${isOpen ? "rotate-180" : ""}`}
+        />
       </button>
 
       {isOpen && (
@@ -151,7 +157,9 @@ const MonthYearSelector = ({ month, year, onMonthChange, onYearChange }) => {
                 className="w-full px-2 py-1.5 bg-gray-50 dark:bg-gray-700 border border-gray-200 dark:border-gray-600 rounded-lg text-sm text-gray-700 dark:text-gray-300 focus:outline-none focus:border-green-500"
               >
                 {years.map((y) => (
-                  <option key={y} value={y}>{y}</option>
+                  <option key={y} value={y}>
+                    {y}
+                  </option>
                 ))}
               </select>
             </div>
@@ -225,10 +233,10 @@ export const ProjectTimeCostChart = ({
   const dispatch = useDispatch();
   const [activeView, setActiveView] = useState("overview");
   const [selectedMonth, setSelectedMonth] = useState(
-    initialReportPeriod?.month || new Date().getMonth() + 1
+    initialReportPeriod?.month || new Date().getMonth() + 1,
   );
   const [selectedYear, setSelectedYear] = useState(
-    initialReportPeriod?.year || new Date().getFullYear()
+    initialReportPeriod?.year || new Date().getFullYear(),
   );
   const [localData, setLocalData] = useState(initialData);
   const [localLoading, setLocalLoading] = useState(parentLoading || false);
@@ -239,7 +247,7 @@ export const ProjectTimeCostChart = ({
       setLocalLoading(true);
       try {
         const result = await dispatch(
-          fetchProjectTimeCost({ month: selectedMonth, year: selectedYear })
+          fetchProjectTimeCost({ month: selectedMonth, year: selectedYear }),
         ).unwrap();
         // The result structure: { projects: [...] } or { data: { projects: [...] } }
         const projects = result?.projects || result?.data?.projects || [];
@@ -269,7 +277,7 @@ export const ProjectTimeCostChart = ({
   // ─── Process Data ──────────────────────────────────────────────────────
   const processedData = useMemo(() => {
     const data = localData || [];
-    
+
     if (!data || !Array.isArray(data) || data.length === 0) {
       return null;
     }
@@ -441,12 +449,7 @@ export const ProjectTimeCostChart = ({
     );
   }
 
-  const {
-    overview,
-    topProjects,
-    projectsWithPlan,
-    summary,
-  } = processedData;
+  const { overview, topProjects, projectsWithPlan, summary } = processedData;
 
   // ─── Render Overview ──────────────────────────────────────────────────────
   const renderOverview = () => (
@@ -565,7 +568,7 @@ export const ProjectTimeCostChart = ({
                   : overview.filter((d) => d.hasData).slice(0, 8)
               }
               layout="vertical"
-              margin={{ top: 10, right: 10, left: 110, bottom: 10 }}
+              margin={{ top: 10, right: 20, left: 0, bottom: 10 }}
               onClick={onBarClick}
             >
               <CartesianGrid
@@ -584,7 +587,7 @@ export const ProjectTimeCostChart = ({
               <YAxis
                 type="category"
                 dataKey="displayName"
-                tick={{ fontSize: 9, fill: "#6b7280", fontWeight: 500 }}
+                tick={{ fontSize: 8, fill: "#6b7280", fontWeight: 500 }}
                 width={110}
                 interval={0}
               />
@@ -708,7 +711,7 @@ export const ProjectTimeCostChart = ({
                 <BarChart
                   data={utilizationData}
                   layout="vertical"
-                  margin={{ top: 5, right: 5, left: 70, bottom: 5 }}
+                  margin={{ top: 5, right: 30, left: 0, bottom: 5 }}
                 >
                   <CartesianGrid
                     strokeDasharray="3 3"
@@ -1096,37 +1099,53 @@ export const ProjectTimeCostChart = ({
 
   // ─── Main Render ──────────────────────────────────────────────────────
   return (
-    <div className="bg-white dark:bg-gray-800 rounded-xl p-4 shadow-soft border border-gray-100 dark:border-gray-700">
+    <div className="bg-white dark:bg-gray-800 rounded-xl p-3 md:p-4 shadow-soft border border-gray-100 dark:border-gray-700 overflow-hidden">
       {/* Header */}
-      <div className="flex items-center justify-between mb-3">
-        <div className="flex items-center gap-3">
-          <div className="w-9 h-9 bg-gradient-to-br from-green-500 to-emerald-600 rounded-xl flex items-center justify-center shadow-sm">
-            <FiTrendingUp className="text-white" size={16} />
+      <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3 mb-3">
+        {/* Title + Month/Year */}
+        <div className="flex items-center justify-between sm:justify-start gap-3 min-w-0">
+          <div className="flex items-center gap-2 min-w-0">
+            <div className="w-8 h-8 md:w-9 md:h-9 bg-gradient-to-br from-green-500 to-emerald-600 rounded-xl flex items-center justify-center shadow-sm flex-shrink-0">
+              <FiTrendingUp className="text-white" size={16} />
+            </div>
+            <div className="min-w-0">
+              <h3 className="text-sm font-bold text-gray-800 dark:text-white truncate">
+                Project Time & Cost
+              </h3>
+              <p className="text-[10px] text-gray-500 dark:text-gray-400 truncate">
+                {selectedMonth}/{selectedYear} • {summary.totalProjects}{" "}
+                projects
+              </p>
+            </div>
           </div>
-          <div>
-            <h3 className="text-sm font-bold text-gray-800 dark:text-white">
-              Project Time & Cost
-            </h3>
-            <p className="text-[10px] text-gray-500 dark:text-gray-400">
-              {selectedMonth}/{selectedYear} • {summary.totalProjects} projects
-            </p>
+
+          {/* Month/Year on mobile is on the right of title row */}
+          <div className="sm:hidden flex-shrink-0">
+            <MonthYearSelector
+              month={selectedMonth}
+              year={selectedYear}
+              onMonthChange={handleMonthChange}
+              onYearChange={handleYearChange}
+            />
           </div>
         </div>
 
-        <div className="flex items-center gap-3">
-          {/* Month/Year Selector */}
-          <MonthYearSelector
-            month={selectedMonth}
-            year={selectedYear}
-            onMonthChange={handleMonthChange}
-            onYearChange={handleYearChange}
-          />
+        {/* Right side: month/year (desktop) + tabs */}
+        <div className="flex items-center gap-3 min-w-0">
+          <div className="hidden sm:block flex-shrink-0">
+            <MonthYearSelector
+              month={selectedMonth}
+              year={selectedYear}
+              onMonthChange={handleMonthChange}
+              onYearChange={handleYearChange}
+            />
+          </div>
 
-          {/* View Tabs */}
-          <div className="flex gap-0.5 bg-gray-100 dark:bg-gray-700 rounded-lg p-0.5 flex-wrap">
+          {/* View Tabs — horizontal scroll on mobile, inline on desktop */}
+          <div className="flex gap-0.5 bg-gray-100 dark:bg-gray-700 rounded-lg p-0.5 overflow-x-auto scrollbar-hide w-full sm:w-auto">
             <button
               onClick={() => setActiveView("overview")}
-              className={`px-2.5 py-1 rounded text-[9px] font-medium transition-all ${
+              className={`flex-shrink-0 px-2.5 py-1 rounded text-[9px] font-medium transition-all ${
                 activeView === "overview"
                   ? "bg-white dark:bg-gray-600 text-green-600 dark:text-green-400 shadow-sm"
                   : "text-gray-500 dark:text-gray-400 hover:text-gray-700 dark:hover:text-gray-300"
@@ -1138,7 +1157,7 @@ export const ProjectTimeCostChart = ({
             </button>
             <button
               onClick={() => setActiveView("utilization")}
-              className={`px-2.5 py-1 rounded text-[9px] font-medium transition-all ${
+              className={`flex-shrink-0 px-2.5 py-1 rounded text-[9px] font-medium transition-all ${
                 activeView === "utilization"
                   ? "bg-white dark:bg-gray-600 text-green-600 dark:text-green-400 shadow-sm"
                   : "text-gray-500 dark:text-gray-400 hover:text-gray-700 dark:hover:text-gray-300"
@@ -1150,7 +1169,7 @@ export const ProjectTimeCostChart = ({
             </button>
             <button
               onClick={() => setActiveView("scatter")}
-              className={`px-2.5 py-1 rounded text-[9px] font-medium transition-all ${
+              className={`flex-shrink-0 px-2.5 py-1 rounded text-[9px] font-medium transition-all ${
                 activeView === "scatter"
                   ? "bg-white dark:bg-gray-600 text-green-600 dark:text-green-400 shadow-sm"
                   : "text-gray-500 dark:text-gray-400 hover:text-gray-700 dark:hover:text-gray-300"
@@ -1162,7 +1181,7 @@ export const ProjectTimeCostChart = ({
             </button>
             <button
               onClick={() => setActiveView("planned")}
-              className={`px-2.5 py-1 rounded text-[9px] font-medium transition-all ${
+              className={`flex-shrink-0 px-2.5 py-1 rounded text-[9px] font-medium transition-all ${
                 activeView === "planned"
                   ? "bg-white dark:bg-gray-600 text-green-600 dark:text-green-400 shadow-sm"
                   : "text-gray-500 dark:text-gray-400 hover:text-gray-700 dark:hover:text-gray-300"
@@ -1174,7 +1193,7 @@ export const ProjectTimeCostChart = ({
             </button>
             <button
               onClick={() => setActiveView("budget")}
-              className={`px-2.5 py-1 rounded text-[9px] font-medium transition-all ${
+              className={`flex-shrink-0 px-2.5 py-1 rounded text-[9px] font-medium transition-all ${
                 activeView === "budget"
                   ? "bg-white dark:bg-gray-600 text-green-600 dark:text-green-400 shadow-sm"
                   : "text-gray-500 dark:text-gray-400 hover:text-gray-700 dark:hover:text-gray-300"
