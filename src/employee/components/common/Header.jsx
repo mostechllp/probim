@@ -51,7 +51,7 @@ const formatNotificationType = (type) => {
   return "Notification";
 };
 
-const Header = ({ onMenuClick }) => {
+const Header = ({ onMenuClick, basePath = "/employee" }) => {
   const dispatch = useDispatch();
   const navigate = useNavigate();
   const { user } = useAppSelector((state) => state.auth);
@@ -195,11 +195,7 @@ const Header = ({ onMenuClick }) => {
     }
   };
 
-  const getBasePath = () => {
-    if (isSupportAdmin) return '/employee';
-    const rawType = user?.type || user?.role || 'employee';
-    return rawType === 'admin' || rawType === 'hr' ? '/admin' : '/employee';
-  };
+  const getBasePath = () => basePath;
 
   const hasAllPermissions = user?.permissions?.all === true;
   const hasReadPermission = (slug) => {

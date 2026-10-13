@@ -23,7 +23,7 @@ const Layout = () => {
       <Sidebar isOpen={sidebarOpen} setIsOpen={setSidebarOpen} />
 
       <div className="main flex-1 flex flex-col min-h-screen">
-        <Header onMenuClick={toggleSidebar} />
+        <Header onMenuClick={toggleSidebar} basePath="/employee"/>
         <div className="content-section py-7 px-4 md:px-7 flex-1">
           <Outlet />
         </div>

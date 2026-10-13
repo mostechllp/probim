@@ -24,7 +24,7 @@ const AdminLayout = () => {
       >
         {/* Fixed header container */}
         <div className="fixed top-0 right-0 z-40" style={{ left: !isMobile ? '72px' : '0' }}>
-          <Header onMenuClick={() => setSidebarOpen(!sidebarOpen)} />
+          <Header onMenuClick={() => setSidebarOpen(!sidebarOpen)} basePath="/admin"  />
         </div>
         {/* Spacer to push content below fixed header */}
         <div className="h-[72px] md:h-[76px]"></div>
