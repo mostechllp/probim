@@ -726,61 +726,67 @@ const Attendances = () => {
 
   // Tooltip component with clickable "Show more"
   const TooltipCard = ({ title, employees, color, icon }) => {
-    const [showAll, setShowAll] = useState(false);
-    const displayCount = 5;
-    const hasMore = employees && employees.length > displayCount;
-    const displayEmployees = showAll
-      ? employees
-      : (employees || []).slice(0, displayCount);
+  const [showAll, setShowAll] = useState(false);
+  const displayCount = 5;
 
-    if (!employees || employees.length === 0) {
-      return (
-        <div className="mt-2 pt-2 border-t border-gray-200 dark:border-gray-600">
-          <p className="text-xs text-gray-400 dark:text-gray-500 italic">
-            No {title.toLowerCase()} employees
-          </p>
-        </div>
-      );
-    }
+  // Normalize: accept array of strings OR array of objects with .name
+  const normalizedEmployees = (employees || []).map((emp) =>
+    typeof emp === "string" ? emp : emp?.name || emp?.employee_name || "Unknown"
+  );
 
+  const hasMore = normalizedEmployees.length > displayCount;
+  const displayEmployees = showAll
+    ? normalizedEmployees
+    : normalizedEmployees.slice(0, displayCount);
+
+  if (normalizedEmployees.length === 0) {
     return (
-      <div className="mt-2 pt-2 border-t border-gray-200 dark:border-gray-600 max-h-[300px] overflow-y-auto scrollbar-thin">
-        <p className="text-xs font-semibold text-gray-600 dark:text-gray-400 mb-1 flex items-center gap-1">
-          <i className={`fas ${icon} mr-1`} style={{ color: color }}></i>
-          {title} ({employees.length}):
+      <div className="mt-2 pt-2 border-t border-gray-200 dark:border-gray-600">
+        <p className="text-xs text-gray-400 dark:text-gray-500 italic">
+          No {title.toLowerCase()} employees
         </p>
-        <ul className="space-y-0.5">
-          {displayEmployees.map((name, idx) => (
-            <li
-              key={idx}
-              className="text-xs text-gray-700 dark:text-gray-300 flex items-center gap-1"
-            >
-              <span
-                className="w-1 h-1 rounded-full"
-                style={{ backgroundColor: color }}
-              ></span>
-              {name}
-            </li>
-          ))}
-          {hasMore && (
-            <li className="mt-1">
-              <button
-                onClick={() => setShowAll(!showAll)}
-                className="text-xs text-blue-500 hover:text-blue-700 dark:text-blue-400 dark:hover:text-blue-300 font-medium flex items-center gap-1 transition-colors"
-              >
-                <i
-                  className={`fas ${showAll ? "fa-chevron-up" : "fa-chevron-down"} text-[10px]`}
-                ></i>
-                {showAll
-                  ? "Show less"
-                  : `Show ${employees.length - displayCount} more...`}
-              </button>
-            </li>
-          )}
-        </ul>
       </div>
     );
-  };
+  }
+
+  return (
+    <div className="mt-2 pt-2 border-t border-gray-200 dark:border-gray-600 max-h-[300px] overflow-y-auto scrollbar-thin">
+      <p className="text-xs font-semibold text-gray-600 dark:text-gray-400 mb-1 flex items-center gap-1">
+        <i className={`fas ${icon} mr-1`} style={{ color: color }}></i>
+        {title} ({normalizedEmployees.length}):
+      </p>
+      <ul className="space-y-0.5">
+        {displayEmployees.map((name, idx) => (
+          <li
+            key={idx}
+            className="text-xs text-gray-700 dark:text-gray-300 flex items-center gap-1"
+          >
+            <span
+              className="w-1 h-1 rounded-full"
+              style={{ backgroundColor: color }}
+            ></span>
+            {name}
+          </li>
+        ))}
+        {hasMore && (
+          <li className="mt-1">
+            <button
+              onClick={() => setShowAll(!showAll)}
+              className="text-xs text-blue-500 hover:text-blue-700 dark:text-blue-400 dark:hover:text-blue-300 font-medium flex items-center gap-1 transition-colors"
+            >
+              <i
+                className={`fas ${showAll ? "fa-chevron-up" : "fa-chevron-down"} text-[10px]`}
+              ></i>
+              {showAll
+                ? "Show less"
+                : `Show ${normalizedEmployees.length - displayCount} more...`}
+            </button>
+          </li>
+        )}
+      </ul>
+    </div>
+  );
+};
 
   // ─── INDIVIDUAL STAT CARDS WITH THEIR OWN TOOLTIPS ──────────────────────
 
