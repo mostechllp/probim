@@ -785,175 +785,278 @@ const Attendances = () => {
   // ─── INDIVIDUAL STAT CARDS WITH THEIR OWN TOOLTIPS ──────────────────────
 
   const PunchedInCard = ({ employees }) => {
-    const [showTooltip, setShowTooltip] = useState(false);
-    let timeoutId = useRef(null);
-    const count = employees?.length || 0;
+  const [showTooltip, setShowTooltip] = useState(false);
+  let timeoutId = useRef(null);
+  const count = employees?.length || 0;
 
-    const handleMouseEnter = () => {
-      clearTimeout(timeoutId.current);
-      setShowTooltip(true);
+  const handleMouseEnter = () => {
+    clearTimeout(timeoutId.current);
+    setShowTooltip(true);
+  };
+
+  const handleMouseLeave = () => {
+    timeoutId.current = setTimeout(() => {
+      setShowTooltip(false);
+    }, 300);
+  };
+
+  const handleMobileClose = () => {
+    setShowTooltip(false);
+  };
+
+  useEffect(() => {
+    return () => {
+      if (timeoutId.current) {
+        clearTimeout(timeoutId.current);
+      }
     };
+  }, []);
 
-    const handleMouseLeave = () => {
-      timeoutId.current = setTimeout(() => {
-        setShowTooltip(false);
-      }, 300);
-    };
-
-    useEffect(() => {
-      return () => {
-        if (timeoutId.current) {
-          clearTimeout(timeoutId.current);
-        }
-      };
-    }, []);
-
-    return (
-      <div
-        className="relative"
-        onMouseEnter={handleMouseEnter}
-        onMouseLeave={handleMouseLeave}
-      >
-        <div className="bg-white dark:bg-gray-800 rounded-xl p-2.5 md:p-3 border border-gray-200 dark:border-gray-700 transition-all hover:-translate-y-0.5 hover:shadow-soft cursor-pointer">
-          <div className="w-7 h-7 md:w-8 md:h-8 bg-blue-100 dark:bg-blue-900/30 rounded-lg flex items-center justify-center mb-1">
-            <i className="fas fa-fingerprint text-blue-600 dark:text-blue-400 text-xs md:text-sm"></i>
-          </div>
-          <div className="text-lg md:text-xl font-bold text-blue-600 dark:text-blue-400">
-            {count}
-          </div>
-          <div className="text-[8px] md:text-[10px] text-gray-500 dark:text-gray-400 font-medium leading-tight">
-            Punched In
-          </div>
+  return (
+    <div
+      className="relative"
+      onMouseEnter={handleMouseEnter}
+      onMouseLeave={handleMouseLeave}
+    >
+      <div className="bg-white dark:bg-gray-800 rounded-xl p-2.5 md:p-3 border border-gray-200 dark:border-gray-700 transition-all hover:-translate-y-0.5 hover:shadow-soft cursor-pointer">
+        <div className="w-7 h-7 md:w-8 md:h-8 bg-blue-100 dark:bg-blue-900/30 rounded-lg flex items-center justify-center mb-1">
+          <i className="fas fa-fingerprint text-blue-600 dark:text-blue-400 text-xs md:text-sm"></i>
         </div>
+        <div className="text-lg md:text-xl font-bold text-blue-600 dark:text-blue-400">
+          {count}
+        </div>
+        <div className="text-[8px] md:text-[10px] text-gray-500 dark:text-gray-400 font-medium leading-tight">
+          Punched In
+        </div>
+      </div>
 
-        {showTooltip && count > 0 && (
-          <div className="absolute top-full left-1/2 transform -translate-x-1/2 mt-2 z-50 w-64 bg-white dark:bg-gray-800 rounded-xl shadow-2xl border border-gray-200 dark:border-gray-700 p-3">
-            <div className="absolute -top-1.5 left-1/2 transform -translate-x-1/2 rotate-45 w-3 h-3 bg-white dark:bg-gray-800 border-t border-l border-gray-200 dark:border-gray-700"></div>
+      {/* DESKTOP TOOLTIP (hidden on mobile) */}
+      {showTooltip && count > 0 && (
+        <div className="hidden md:block absolute top-full left-1/2 transform -translate-x-1/2 mt-2 z-50 w-64 bg-white dark:bg-gray-800 rounded-xl shadow-2xl border border-gray-200 dark:border-gray-700 p-3">
+          <div className="absolute -top-1.5 left-1/2 transform -translate-x-1/2 rotate-45 w-3 h-3 bg-white dark:bg-gray-800 border-t border-l border-gray-200 dark:border-gray-700"></div>
+          <TooltipCard
+            title="Present"
+            employees={employees}
+            color="#22c55e"
+            icon="fa-check-circle"
+          />
+        </div>
+      )}
+
+      {/* MOBILE BOTTOM SHEET (hidden on desktop) */}
+      {showTooltip && count > 0 && (
+        <div
+          className="md:hidden fixed inset-0 z-50 flex items-end justify-center bg-black/40 backdrop-blur-sm"
+          onClick={handleMobileClose}
+        >
+          <div
+            className="w-full bg-white dark:bg-gray-800 rounded-t-2xl shadow-2xl p-4 max-h-[60vh] overflow-y-auto"
+            onClick={(e) => e.stopPropagation()}
+          >
+            {/* Drag handle bar */}
+            <div className="w-12 h-1 bg-gray-300 dark:bg-gray-600 rounded-full mx-auto mb-4"></div>
+
             <TooltipCard
               title="Present"
               employees={employees}
               color="#22c55e"
               icon="fa-check-circle"
             />
-          </div>
-        )}
-      </div>
-    );
-  };
 
-  const LateCard = ({ employees }) => {
-    const [showTooltip, setShowTooltip] = useState(false);
-    let timeoutId = useRef(null);
-    const count = employees?.length || 0;
-
-    const handleMouseEnter = () => {
-      clearTimeout(timeoutId.current);
-      setShowTooltip(true);
-    };
-
-    const handleMouseLeave = () => {
-      timeoutId.current = setTimeout(() => {
-        setShowTooltip(false);
-      }, 300);
-    };
-
-    useEffect(() => {
-      return () => {
-        if (timeoutId.current) {
-          clearTimeout(timeoutId.current);
-        }
-      };
-    }, []);
-
-    return (
-      <div
-        className="relative"
-        onMouseEnter={handleMouseEnter}
-        onMouseLeave={handleMouseLeave}
-      >
-        <div className="bg-white dark:bg-gray-800 rounded-xl p-2.5 md:p-3 border border-gray-200 dark:border-gray-700 transition-all hover:-translate-y-0.5 hover:shadow-soft cursor-pointer">
-          <div className="w-7 h-7 md:w-8 md:h-8 bg-amber-100 dark:bg-amber-900/30 rounded-lg flex items-center justify-center mb-1">
-            <i className="fas fa-clock text-amber-600 dark:text-amber-400 text-xs md:text-sm"></i>
-          </div>
-          <div className="text-lg md:text-xl font-bold text-amber-600 dark:text-amber-400">
-            {count}
-          </div>
-          <div className="text-[8px] md:text-[10px] text-gray-500 dark:text-gray-400 font-medium leading-tight">
-            Late
+            <button
+              onClick={handleMobileClose}
+              className="mt-4 w-full py-2 bg-gray-100 dark:bg-gray-700 text-gray-700 dark:text-gray-300 rounded-lg text-sm font-medium"
+            >
+              Close
+            </button>
           </div>
         </div>
+      )}
+    </div>
+  );
+};
 
-        {showTooltip && count > 0 && (
-          <div className="absolute top-full left-1/2 transform -translate-x-1/2 mt-2 z-50 w-64 bg-white dark:bg-gray-800 rounded-xl shadow-2xl border border-gray-200 dark:border-gray-700 p-3">
-            <div className="absolute -top-1.5 left-1/2 transform -translate-x-1/2 rotate-45 w-3 h-3 bg-white dark:bg-gray-800 border-t border-l border-gray-200 dark:border-gray-700"></div>
+  const LateCard = ({ employees }) => {
+  const [showTooltip, setShowTooltip] = useState(false);
+  let timeoutId = useRef(null);
+  const count = employees?.length || 0;
+
+  const handleMouseEnter = () => {
+    clearTimeout(timeoutId.current);
+    setShowTooltip(true);
+  };
+
+  const handleMouseLeave = () => {
+    timeoutId.current = setTimeout(() => {
+      setShowTooltip(false);
+    }, 300);
+  };
+
+  const handleMobileClose = () => {
+    setShowTooltip(false);
+  };
+
+  useEffect(() => {
+    return () => {
+      if (timeoutId.current) {
+        clearTimeout(timeoutId.current);
+      }
+    };
+  }, []);
+
+  return (
+    <div
+      className="relative"
+      onMouseEnter={handleMouseEnter}
+      onMouseLeave={handleMouseLeave}
+    >
+      <div className="bg-white dark:bg-gray-800 rounded-xl p-2.5 md:p-3 border border-gray-200 dark:border-gray-700 transition-all hover:-translate-y-0.5 hover:shadow-soft cursor-pointer">
+        <div className="w-7 h-7 md:w-8 md:h-8 bg-amber-100 dark:bg-amber-900/30 rounded-lg flex items-center justify-center mb-1">
+          <i className="fas fa-clock text-amber-600 dark:text-amber-400 text-xs md:text-sm"></i>
+        </div>
+        <div className="text-lg md:text-xl font-bold text-amber-600 dark:text-amber-400">
+          {count}
+        </div>
+        <div className="text-[8px] md:text-[10px] text-gray-500 dark:text-gray-400 font-medium leading-tight">
+          Late
+        </div>
+      </div>
+
+      {/* DESKTOP TOOLTIP (hidden on mobile) */}
+      {showTooltip && count > 0 && (
+        <div className="hidden md:block absolute top-full left-1/2 transform -translate-x-1/2 mt-2 z-50 w-64 bg-white dark:bg-gray-800 rounded-xl shadow-2xl border border-gray-200 dark:border-gray-700 p-3">
+          <div className="absolute -top-1.5 left-1/2 transform -translate-x-1/2 rotate-45 w-3 h-3 bg-white dark:bg-gray-800 border-t border-l border-gray-200 dark:border-gray-700"></div>
+          <TooltipCard
+            title="Late"
+            employees={employees}
+            color="#eab308"
+            icon="fa-clock"
+          />
+        </div>
+      )}
+
+      {/* MOBILE BOTTOM SHEET (hidden on desktop) */}
+      {showTooltip && count > 0 && (
+        <div
+          className="md:hidden fixed inset-0 z-50 flex items-end justify-center bg-black/40 backdrop-blur-sm"
+          onClick={handleMobileClose}
+        >
+          <div
+            className="w-full bg-white dark:bg-gray-800 rounded-t-2xl shadow-2xl p-4 max-h-[60vh] overflow-y-auto"
+            onClick={(e) => e.stopPropagation()}
+          >
+            {/* Drag handle bar */}
+            <div className="w-12 h-1 bg-gray-300 dark:bg-gray-600 rounded-full mx-auto mb-4"></div>
+
             <TooltipCard
               title="Late"
               employees={employees}
               color="#eab308"
               icon="fa-clock"
             />
-          </div>
-        )}
-      </div>
-    );
-  };
 
-  const AbsentCard = ({ employees }) => {
-    const [showTooltip, setShowTooltip] = useState(false);
-    let timeoutId = useRef(null);
-    const count = employees?.length || 0;
-
-    const handleMouseEnter = () => {
-      clearTimeout(timeoutId.current);
-      setShowTooltip(true);
-    };
-
-    const handleMouseLeave = () => {
-      timeoutId.current = setTimeout(() => {
-        setShowTooltip(false);
-      }, 300);
-    };
-
-    useEffect(() => {
-      return () => {
-        if (timeoutId.current) {
-          clearTimeout(timeoutId.current);
-        }
-      };
-    }, []);
-
-    return (
-      <div
-        className="relative"
-        onMouseEnter={handleMouseEnter}
-        onMouseLeave={handleMouseLeave}
-      >
-        <div className="bg-white dark:bg-gray-800 rounded-xl p-2.5 md:p-3 border border-gray-200 dark:border-gray-700 transition-all hover:-translate-y-0.5 hover:shadow-soft cursor-pointer">
-          <div className="w-7 h-7 md:w-8 md:h-8 bg-red-100 dark:bg-red-900/30 rounded-lg flex items-center justify-center mb-1">
-            <i className="fas fa-user-slash text-red-600 dark:text-red-400 text-xs md:text-sm"></i>
-          </div>
-          <div className="text-lg md:text-xl font-bold text-red-600 dark:text-red-400">
-            {count}
-          </div>
-          <div className="text-[8px] md:text-[10px] text-gray-500 dark:text-gray-400 font-medium leading-tight">
-            Absent
+            <button
+              onClick={handleMobileClose}
+              className="mt-4 w-full py-2 bg-gray-100 dark:bg-gray-700 text-gray-700 dark:text-gray-300 rounded-lg text-sm font-medium"
+            >
+              Close
+            </button>
           </div>
         </div>
+      )}
+    </div>
+  );
+};
 
-        {showTooltip && count > 0 && (
-          <div className="absolute top-full left-1/2 transform -translate-x-1/2 mt-2 z-50 w-64 bg-white dark:bg-gray-800 rounded-xl shadow-2xl border border-gray-200 dark:border-gray-700 p-3">
-            <div className="absolute -top-1.5 left-1/2 transform -translate-x-1/2 rotate-45 w-3 h-3 bg-white dark:bg-gray-800 border-t border-l border-gray-200 dark:border-gray-700"></div>
+  const AbsentCard = ({ employees }) => {
+  const [showTooltip, setShowTooltip] = useState(false);
+  let timeoutId = useRef(null);
+  const count = employees?.length || 0;
+
+  const handleMouseEnter = () => {
+    clearTimeout(timeoutId.current);
+    setShowTooltip(true);
+  };
+
+  const handleMouseLeave = () => {
+    timeoutId.current = setTimeout(() => {
+      setShowTooltip(false);
+    }, 300);
+  };
+
+  // Close tooltip on mobile when clicking outside
+  const handleMobileClose = () => {
+    setShowTooltip(false);
+  };
+
+  useEffect(() => {
+    return () => {
+      if (timeoutId.current) {
+        clearTimeout(timeoutId.current);
+      }
+    };
+  }, []);
+
+  return (
+    <div
+      className="relative"
+      onMouseEnter={handleMouseEnter}
+      onMouseLeave={handleMouseLeave}
+    >
+      <div className="bg-white dark:bg-gray-800 rounded-xl p-2.5 md:p-3 border border-gray-200 dark:border-gray-700 transition-all hover:-translate-y-0.5 hover:shadow-soft cursor-pointer">
+        <div className="w-7 h-7 md:w-8 md:h-8 bg-red-100 dark:bg-red-900/30 rounded-lg flex items-center justify-center mb-1">
+          <i className="fas fa-user-slash text-red-600 dark:text-red-400 text-xs md:text-sm"></i>
+        </div>
+        <div className="text-lg md:text-xl font-bold text-red-600 dark:text-red-400">
+          {count}
+        </div>
+        <div className="text-[8px] md:text-[10px] text-gray-500 dark:text-gray-400 font-medium leading-tight">
+          Absent
+        </div>
+      </div>
+
+      {/* DESKTOP TOOLTIP (hidden on mobile) */}
+      {showTooltip && count > 0 && (
+        <div className="hidden md:block absolute top-full left-1/2 transform -translate-x-1/2 mt-2 z-50 w-64 bg-white dark:bg-gray-800 rounded-xl shadow-2xl border border-gray-200 dark:border-gray-700 p-3">
+          <div className="absolute -top-1.5 left-1/2 transform -translate-x-1/2 rotate-45 w-3 h-3 bg-white dark:bg-gray-800 border-t border-l border-gray-200 dark:border-gray-700"></div>
+          <TooltipCard
+            title="Absent"
+            employees={employees}
+            color="#ef4444"
+            icon="fa-user-slash"
+          />
+        </div>
+      )}
+
+      {/* MOBILE BOTTOM SHEET (hidden on desktop) */}
+      {showTooltip && count > 0 && (
+        <div className="md:hidden fixed inset-0 z-50 flex items-end justify-center bg-black/40 backdrop-blur-sm" onClick={handleMobileClose}>
+          <div 
+            className="w-full bg-white dark:bg-gray-800 rounded-t-2xl shadow-2xl p-4 max-h-[60vh] overflow-y-auto"
+            onClick={(e) => e.stopPropagation()} // Prevent closing when clicking inside
+          >
+            {/* Drag handle bar */}
+            <div className="w-12 h-1 bg-gray-300 dark:bg-gray-600 rounded-full mx-auto mb-4"></div>
+            
             <TooltipCard
               title="Absent"
               employees={employees}
               color="#ef4444"
               icon="fa-user-slash"
             />
+            
+            <button 
+              onClick={handleMobileClose}
+              className="mt-4 w-full py-2 bg-gray-100 dark:bg-gray-700 text-gray-700 dark:text-gray-300 rounded-lg text-sm font-medium"
+            >
+              Close
+            </button>
           </div>
-        )}
-      </div>
-    );
-  };
+        </div>
+      )}
+    </div>
+  );
+};
 
   // Month navigation
   const goToPrevMonth = () => {
