@@ -122,18 +122,12 @@ const ICON_MAP = {
 };
 
 // ────────────────────────────────────────────────────────────────
-// PARENT MENU CONFIG
+// PARENT MENU CONFIG — Admin / HR / Manager tree
+// NOTE: `dashboard` is intentionally NOT inside any group — it renders
+// as a standalone link at the top, before all groups.
 // ────────────────────────────────────────────────────────────────
 
 const PARENT_MENU_CONFIG = {
-  main_group: {
-    label: "Main",
-    icon: "fas fa-home",
-    children: ["dashboard", "pending-requests"],
-    roles: ["*"],
-    order: 1,
-  },
-
   people_group: {
     label: "People",
     icon: "fas fa-users",
@@ -189,6 +183,7 @@ const PARENT_MENU_CONFIG = {
     label: "Administration",
     icon: "fas fa-cogs",
     children: [
+      "pending-requests",
       "documents",
       "payroll",
       "reports",
@@ -216,6 +211,49 @@ const PARENT_MENU_CONFIG = {
   },
 };
 
+// ────────────────────────────────────────────────────────────────
+// EMPLOYEE MENU CONFIG — dashboard is standalone too
+// ────────────────────────────────────────────────────────────────
+
+const EMPLOYEE_PARENT_MENU_CONFIG = {
+  main_group: {
+    label: "Main",
+    icon: "fas fa-home",
+    children: [
+      "my-leaves",
+      "my-tasks",
+      "my-wfh-requests",
+      "my-attendance-requests",
+    ],
+    order: 1,
+  },
+
+  my_space_group: {
+    label: "My Space",
+    icon: "fas fa-user-circle",
+    children: [
+      "my-documents",
+      "my-payroll",
+      "my-profile",
+    ],
+    order: 2,
+  },
+
+  administration_group: {
+    label: "Administration",
+    icon: "fas fa-cogs",
+    children: [
+      "documents",
+      "payroll",
+      "settings",
+      "wfh-requests",
+      "wfh",
+      "ticket-raise",
+    ],
+    order: 3,
+  },
+};
+
 // Modules intentionally hidden because they are aliases / duplicates
 const HIDDEN_MODULES = ["role-management", "agreements", "wfh"];
 
@@ -227,7 +265,6 @@ const BADGE_COLORS = {
   "admin-tickets": "bg-red-500",
   "pending-requests": "bg-red-500",
 };
-
 
 // ────────────────────────────────────────────────────────────────
 // COMPONENT
@@ -370,12 +407,10 @@ const Sidebar = ({ isOpen, setIsOpen }) => {
   const shouldShowParentMenus =
     isHR || isManager || isAdmin || isSupportAdmin;
 
-// Only actual admins (or users with permissions.all) use the admin tree.
-// HR / Manager / Team Lead live in the employee tree.
-const activeRouteMap =
-  userType === "admin" || hasAllPermissions
-    ? ADMIN_ROUTE_MAP
-    : EMPLOYEE_ROUTE_MAP;
+  const activeRouteMap =
+    userType === "admin" || hasAllPermissions
+      ? ADMIN_ROUTE_MAP
+      : EMPLOYEE_ROUTE_MAP;
 
   const permissions = user?.permissions || {};
 
@@ -416,8 +451,6 @@ const activeRouteMap =
     return false;
   };
 
-  // ✅ FIX 2: stop hard-coding admin-tickets/developer-tickets to admin.
-  // Trust the backend permission flag — it's the source of truth.
   const shouldShowModule = (slug) => {
     if (slug === "dashboard") return true;
     if (slug === "support-admin-dashboard") return isSupportAdmin;
@@ -445,7 +478,6 @@ const activeRouteMap =
 
   const allModules = [...apiModules];
 
-  // Support Admin special cases
   if (isSupportAdmin && permissions["developer-tickets"]?.read === true) {
     if (!allModules.includes("developer-tickets")) {
       allModules.push("developer-tickets");
@@ -456,7 +488,7 @@ const activeRouteMap =
   }
 
   // ────────────────────────────────────────────────────────────
-  // Build nav items
+  // Build nav items — dashboard always first as a standalone link
   // ────────────────────────────────────────────────────────────
 
   const buildNavItems = () => {
@@ -464,8 +496,45 @@ const activeRouteMap =
     const parentItems = [];
     const standaloneItems = [];
 
-    if (shouldShowParentMenus) {
-      Object.entries(PARENT_MENU_CONFIG).forEach(([parentKey, config]) => {
+    // ── 1) Dashboard is always a top-level standalone link ──
+    const dashboardSlug = "dashboard";
+    if (allModules.includes(dashboardSlug)) {
+      const module = user?.sidebar_modules?.find(
+        (m) => m.slug === dashboardSlug,
+      );
+      standaloneItems.push({
+        type: "single",
+        slug: dashboardSlug,
+        label: module?.name || "Dashboard",
+        path: activeRouteMap[dashboardSlug],
+        icon: ICON_MAP[dashboardSlug] || "fas fa-chart-line",
+        order: 0, // highest priority
+        badge: badgeCounts[dashboardSlug] || 0,
+      });
+      processedSlugs.add(dashboardSlug);
+    }
+
+    // ── 2) Support-admin dashboard also standalone, right after ──
+    if (isSupportAdmin && allModules.includes("support-admin-dashboard")) {
+      standaloneItems.push({
+        type: "single",
+        slug: "support-admin-dashboard",
+        label: "Support Dashboard",
+        path: activeRouteMap["support-admin-dashboard"],
+        icon: ICON_MAP["support-admin-dashboard"] || "fas fa-tachometer-alt",
+        order: 1,
+        badge: 0,
+      });
+      processedSlugs.add("support-admin-dashboard");
+    }
+
+    // ── 3) Groups (People / Projects / Administration / Main / My Space) ──
+    const parentConfig = shouldShowParentMenus
+      ? PARENT_MENU_CONFIG
+      : EMPLOYEE_PARENT_MENU_CONFIG;
+
+    Object.entries(parentConfig).forEach(([parentKey, config]) => {
+      if (config.roles) {
         const hasRoleAccess =
           config.roles.includes("*") ||
           config.roles.some(
@@ -479,90 +548,64 @@ const activeRouteMap =
           isSupportAdmin;
 
         if (!hasRoleAccess) return;
+      }
 
-        const availableChildren = config.children.filter((child) => {
-          return allModules.includes(child) && hasReadPermission(child);
+      const availableChildren = config.children.filter((child) => {
+        return allModules.includes(child) && hasReadPermission(child);
+      });
+
+      if (availableChildren.length === 0) return;
+
+      const sortedChildren = availableChildren.sort(
+        (a, b) => config.children.indexOf(a) - config.children.indexOf(b),
+      );
+
+      const children = sortedChildren.map((childSlug) => {
+        const module = user?.sidebar_modules?.find(
+          (m) => m.slug === childSlug,
+        );
+        return {
+          slug: childSlug,
+          label: module?.name || childSlug,
+          path: activeRouteMap[childSlug],
+          icon: ICON_MAP[childSlug] || "fas fa-circle",
+          badge: badgeCounts[childSlug] || 0,
+        };
+      });
+
+      const isActive = children.some(
+        (child) => location.pathname === child.path,
+      );
+
+      const alwaysGroup = !shouldShowParentMenus;
+
+      if (alwaysGroup || availableChildren.length >= 2) {
+        parentItems.push({
+          type: "parent",
+          slug: parentKey,
+          label: config.label,
+          icon: config.icon,
+          children,
+          isActive,
+          order: config.order || 500,
         });
+        children.forEach((child) => processedSlugs.add(child.slug));
+      } else {
+        const child = children[0];
+        standaloneItems.push({
+          type: "single",
+          slug: child.slug,
+          label: child.label,
+          path: child.path,
+          icon: child.icon,
+          order: (config.order || 500) - 1,
+          badge: child.badge,
+        });
+        processedSlugs.add(child.slug);
+      }
+    });
 
-        if (availableChildren.length >= 2) {
-          const sortedChildren = availableChildren.sort((a, b) => {
-            return config.children.indexOf(a) - config.children.indexOf(b);
-          });
-
-          const children = sortedChildren.map((childSlug) => {
-            const module = user?.sidebar_modules?.find(
-              (m) => m.slug === childSlug,
-            );
-            return {
-              slug: childSlug,
-              label: module?.name || childSlug,
-              path: activeRouteMap[childSlug],
-              icon: ICON_MAP[childSlug] || "fas fa-circle",
-              badge: badgeCounts[childSlug] || 0,
-            };
-          });
-
-          const isActive = children.some(
-            (child) => location.pathname === child.path,
-          );
-
-          parentItems.push({
-            type: "parent",
-            slug: parentKey,
-            label: config.label,
-            icon: config.icon,
-            children,
-            isActive,
-            order: config.order || 500,
-          });
-
-          children.forEach((child) => processedSlugs.add(child.slug));
-        } else if (availableChildren.length === 1) {
-          const childSlug = availableChildren[0];
-          const module = user?.sidebar_modules?.find(
-            (m) => m.slug === childSlug,
-          );
-
-          standaloneItems.push({
-            type: "single",
-            slug: childSlug,
-            label: module?.name || childSlug,
-            path: activeRouteMap[childSlug],
-            icon: ICON_MAP[childSlug] || "fas fa-circle",
-            order: (config.order || 500) - 1,
-            badge: badgeCounts[childSlug] || 0,
-          });
-
-          processedSlugs.add(childSlug);
-        }
-      });
-    } else {
-      const employeeStandalone = [
-        "my-leaves",
-        "my-tasks",
-        "my-wfh-requests",
-        "my-documents",
-        "my-attendance-requests",
-        "ticket-raise",
-      ];
-      employeeStandalone.forEach((slug) => {
-        if (allModules.includes(slug) && hasReadPermission(slug)) {
-          const module = user?.sidebar_modules?.find((m) => m.slug === slug);
-          standaloneItems.push({
-            type: "single",
-            slug,
-            label: module?.name || slug,
-            path: activeRouteMap[slug],
-            icon: ICON_MAP[slug] || "fas fa-circle",
-            order: 100,
-            badge: badgeCounts[slug] || 0,
-          });
-          processedSlugs.add(slug);
-        }
-      });
-    }
-
-    // Remaining standalone modules
+    // ── 4) Anything left over goes standalone at the bottom ──
     allModules.forEach((slug) => {
       if (processedSlugs.has(slug)) return;
 
