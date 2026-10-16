@@ -11,6 +11,7 @@ import { getCountryFromTimezone } from "../../utils/timezoneCountryMap";
 import MapPicker from "./MapPicker";
 
 import { storeLocationData } from "../../services/locationStorage";
+import { normalizeTimezone } from "../../utils/normalizeTimezone";
 
 const LocationModal = ({ isOpen, onClose, onConfirm, type = "punch-in" }) => {
   const [location, setLocation] = useState(null);
@@ -33,7 +34,7 @@ const LocationModal = ({ isOpen, onClose, onConfirm, type = "punch-in" }) => {
   const { user } = useSelector((state) => state.auth);
 
   // Get current timezone from browser (fallback only)
-  const browserTimezone = Intl.DateTimeFormat().resolvedOptions().timeZone;
+  const browserTimezone = normalizeTimezone(Intl.DateTimeFormat().resolvedOptions().timeZone);
 
   useEffect(() => {
     if (isOpen) {
@@ -264,7 +265,7 @@ if (match) {
       address: manualAddress || `${finalLat}, ${finalLng}`, // ✅ Manual edit uses manualAddress
       accuracy: location?.accuracy || null,
       timestamp: new Date().toISOString(),
-      timezone: manualTimezone || browserTimezone,
+      timezone: normalizeTimezone(manualTimezone || browserTimezone),
       timezone_offset: manualTimezone
         ? getTimezoneOffset(manualTimezone)
         : location?.timezone_offset,
