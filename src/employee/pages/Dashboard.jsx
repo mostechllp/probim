@@ -47,6 +47,7 @@ import { submitAttendanceRequest } from "../store/slices/attendanceTypeSlice";
 import { getStoredLocationData } from "../services/locationStorage";
 import { AttendanceEmployeesModal } from "../../admin/components/dashboard/AttendanceEmployeesModal";
 import { fetchAttendanceStats } from "../../admin/store/slices/attendanceSlice";
+import { normalizeTimezone } from "../utils/normalizeTimezone";
 
 // ─── COLOR PALETTE ──────────────────────────────────────────────────────
 export const COLORS = {
@@ -91,6 +92,54 @@ const formatTime = (minutes) => {
   if (hours === 0) return `${mins}m`;
   if (mins === 0) return `${hours}h`;
   return `${hours}h ${mins}m`;
+};
+
+// Returns the date, time and UTC offset for "now" as seen in a given IANA timezone
+const getZonedNow = (tz, date = new Date()) => {
+  const p = new Intl.DateTimeFormat("en-CA", {
+    timeZone: tz,
+    hourCycle: "h23",
+    year: "numeric",
+    month: "2-digit",
+    day: "2-digit",
+    hour: "2-digit",
+    minute: "2-digit",
+    second: "2-digit",
+  })
+    .formatToParts(date)
+    .reduce((acc, part) => ((acc[part.type] = part.value), acc), {});
+
+  const asUTC = Date.UTC(
+    +p.year,
+    +p.month - 1,
+    +p.day,
+    +p.hour,
+    +p.minute,
+    +p.second,
+  );
+  const nowSec = Math.floor(date.getTime() / 1000) * 1000;
+
+  return {
+    dateStr: `${p.year}-${p.month}-${p.day}`,
+    timeStr: `${p.hour}:${p.minute}:${p.second}`,
+    offsetMinutes: Math.round((asUTC - nowSec) / 60000),
+  };
+};
+
+const isValidTimeZone = (tz) => {
+  try {
+    new Intl.DateTimeFormat("en-US", { timeZone: tz });
+    return true;
+  } catch {
+    return false;
+  }
+};
+
+const formatOffset = (mins) => {
+  const sign = mins >= 0 ? "+" : "-";
+  const h = String(Math.floor(Math.abs(mins) / 60)).padStart(2, "0");
+  const m = String(Math.abs(mins) % 60).padStart(2, "0");
+  return `${sign}${h}:${m}`;
 };
 
 export const getInitials = (name) => {
@@ -990,66 +1039,30 @@ const Dashboard = () => {
         ? scheduledMatch[1]
         : "09:00 AM";
 
-      // Get current date and time
       const now = new Date();
-      const today = now.toISOString().split("T")[0];
-      const currentTime = now.toTimeString().slice(0, 8); // HH:MM:SS format
 
-      // ✅ CRITICAL FIX: Use the timezone from location data
-      // The timezone_offset_minutes should already be in the location data
-      let tzOffsetMinutes = locationData.timezone_offset_minutes;
+      const rawTz = locationData.timezone;
+      const tz =
+        rawTz && isValidTimeZone(rawTz) ? normalizeTimezone(rawTz) : null;
 
-      // If not available, try to get it from the timezone string
-      if (!tzOffsetMinutes && locationData.timezone) {
-        // Parse timezone like "Asia/Kolkata" or "+05:30"
-        if (
-          locationData.timezone.startsWith("+") ||
-          locationData.timezone.startsWith("-")
-        ) {
-          // Parse offset string like "+05:30"
-          const match = locationData.timezone.match(/([+-])(\d{2}):(\d{2})/);
-          if (match) {
-            const sign = match[1] === "+" ? 1 : -1;
-            const hours = parseInt(match[2]);
-            const minutes = parseInt(match[3]);
-            tzOffsetMinutes = sign * (hours * 60 + minutes);
-          }
-        } else {
-          // For named timezone like "Asia/Kolkata", calculate offset
-          const dateInTz = new Date().toLocaleString("en-US", {
-            timeZone: locationData.timezone,
-          });
-          const dateInUTC = new Date().toLocaleString("en-US", {
-            timeZone: "UTC",
-          });
-          const offsetMs =
-            new Date(dateInTz).getTime() - new Date(dateInUTC).getTime();
-          tzOffsetMinutes = Math.round(offsetMs / 60000);
-        }
+      let today, currentTime, tzOffsetMinutes;
+
+      if (tz) {
+        const z = getZonedNow(tz, now);
+        today = z.dateStr;
+        currentTime = z.timeStr;
+        tzOffsetMinutes = z.offsetMinutes;
+      } else {
+        // No IANA zone: use the offset we were given, else the device's
+        tzOffsetMinutes =
+          locationData.timezone_offset_minutes ?? -now.getTimezoneOffset();
+        const shifted = new Date(now.getTime() + tzOffsetMinutes * 60000);
+        today = shifted.toISOString().slice(0, 10);
+        currentTime = shifted.toISOString().slice(11, 19);
       }
 
-      // If still no offset, use India timezone (UTC+5:30) as fallback
-      if (!tzOffsetMinutes) {
-        // Check if user is in India timezone
-        const userTimezone =
-          locationData.timezone ||
-          Intl.DateTimeFormat().resolvedOptions().timeZone;
-        if (userTimezone === "Asia/Kolkata" || userTimezone === "IST") {
-          tzOffsetMinutes = 330; // UTC+5:30 in minutes
-        } else {
-          // Default to browser's timezone offset
-          tzOffsetMinutes = -now.getTimezoneOffset();
-        }
-      }
-
-      // Format the offset
-      const offsetHours = Math.floor(Math.abs(tzOffsetMinutes) / 60);
-      const offsetMins = Math.abs(tzOffsetMinutes) % 60;
-      const offsetSign = tzOffsetMinutes >= 0 ? "+" : "-";
-      const offsetStr = `${offsetSign}${String(offsetHours).padStart(2, "0")}:${String(offsetMins).padStart(2, "0")}`;
-
-      // Create full datetime string with timezone
-      const requestDateTime = `${today}T${currentTime}+05:30`;
+      const offsetStr = formatOffset(tzOffsetMinutes);
+      const requestDateTime = `${today}T${currentTime}${offsetStr}`; // e.g. 2026-10-15T09:48:00+04:00
 
       console.log(
         "📍 Timezone offset:",

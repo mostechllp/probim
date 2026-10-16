@@ -1,6 +1,7 @@
 // attendanceSlice.js
 import { createAsyncThunk, createSlice } from "@reduxjs/toolkit";
 import apiClient from "../../../utils/apiClient";
+import { normalizeTimezone } from "../../utils/normalizeTimezone";
 
 // Fetch Dashboard Data
 export const fetchDashboardData = createAsyncThunk(
@@ -45,7 +46,7 @@ export const punchIn = createAsyncThunk(
 
         // Timezone
         if (data.location.timezone) {
-          payload.timezone = data.location.timezone;
+          payload.timezone = normalizeTimezone(data.location.timezone); 
         }
 
         // Timezone offset in minutes
@@ -57,28 +58,35 @@ export const punchIn = createAsyncThunk(
         // ✅ Add punch_in_time with timezone
         const now = new Date();
         // Get the timezone from location data
-        const tz = data.location.timezone || Intl.DateTimeFormat().resolvedOptions().timeZone;
-        
+        const tz =
+          data.location.timezone ||
+          Intl.DateTimeFormat().resolvedOptions().timeZone;
+
         // Format time in the user's timezone
         const nowInTz = new Date().toLocaleString("en-US", { timeZone: tz });
         const tzDate = new Date(nowInTz);
         const year = tzDate.getFullYear();
-        const month = String(tzDate.getMonth() + 1).padStart(2, '0');
-        const day = String(tzDate.getDate()).padStart(2, '0');
-        const hours = String(tzDate.getHours()).padStart(2, '0');
-        const minutes = String(tzDate.getMinutes()).padStart(2, '0');
-        const seconds = String(tzDate.getSeconds()).padStart(2, '0');
-        
+        const month = String(tzDate.getMonth() + 1).padStart(2, "0");
+        const day = String(tzDate.getDate()).padStart(2, "0");
+        const hours = String(tzDate.getHours()).padStart(2, "0");
+        const minutes = String(tzDate.getMinutes()).padStart(2, "0");
+        const seconds = String(tzDate.getSeconds()).padStart(2, "0");
+
         // Get timezone offset
-        const tzOffsetMinutes = data.location.timezone_offset_minutes || -new Date().getTimezoneOffset();
+        const tzOffsetMinutes =
+          data.location.timezone_offset_minutes ||
+          -new Date().getTimezoneOffset();
         const offsetHours = Math.floor(Math.abs(tzOffsetMinutes) / 60);
         const offsetMins = Math.abs(tzOffsetMinutes) % 60;
-        const offsetSign = tzOffsetMinutes >= 0 ? '+' : '-';
-        const offsetStr = `${offsetSign}${String(offsetHours).padStart(2, '0')}:${String(offsetMins).padStart(2, '0')}`;
-        
+        const offsetSign = tzOffsetMinutes >= 0 ? "+" : "-";
+        const offsetStr = `${offsetSign}${String(offsetHours).padStart(2, "0")}:${String(offsetMins).padStart(2, "0")}`;
+
         payload.punch_in_time = `${year}-${month}-${day}T${hours}:${minutes}:${seconds}${offsetStr}`;
-        
-        console.log("📤 Adding punch_in_time to payload:", payload.punch_in_time);
+
+        console.log(
+          "📤 Adding punch_in_time to payload:",
+          payload.punch_in_time,
+        );
       }
 
       const response = await apiClient.post("/employee/punch-in", payload);
@@ -116,58 +124,68 @@ export const submitLateAttendanceRequest = createAsyncThunk(
     try {
       // Format the request_time as full ISO datetime with timezone
       let requestDateTime = data.request_time;
-      
+
       // If request_time is just a time string (HH:MM:SS), combine with request_date
-      if (data.request_time && !data.request_time.includes('T')) {
-        const tz = data.timezone || 'Asia/Kolkata';
-        const dateStr = data.request_date || new Date().toISOString().split('T')[0];
-        
+      if (data.request_time && !data.request_time.includes("T")) {
+        const tz = data.timezone || "Asia/Kolkata";
+        const dateStr =
+          data.request_date || new Date().toISOString().split("T")[0];
+
         // Get the timezone offset - use the one from location data
         let tzOffsetMinutes = data.location?.timezone_offset_minutes;
-        
+
         // If not available, use India timezone (UTC+5:30) as default
-        if (!tzOffsetMinutes) {
-          tzOffsetMinutes = 330; // UTC+5:30 in minutes
+        if (tzOffsetMinutes == null) {
+          tzOffsetMinutes = -new Date().getTimezoneOffset();
         }
-        
+
         const offsetHours = Math.floor(Math.abs(tzOffsetMinutes) / 60);
         const offsetMins = Math.abs(tzOffsetMinutes) % 60;
-        const offsetSign = tzOffsetMinutes >= 0 ? '+' : '-';
-        const offsetStr = `${offsetSign}${String(offsetHours).padStart(2, '0')}:${String(offsetMins).padStart(2, '0')}`;
-        
+        const offsetSign = tzOffsetMinutes >= 0 ? "+" : "-";
+        const offsetStr = `${offsetSign}${String(offsetHours).padStart(2, "0")}:${String(offsetMins).padStart(2, "0")}`;
+
         // Combine date and time with timezone offset
         requestDateTime = `${dateStr}T${data.request_time}${offsetStr}`;
       }
 
       const payload = {
         employee_id: data.employee_id,
-        type: data.type || 'late_check_in',
+        type: data.type || "late_check_in",
         request_date: data.request_date,
         request_time: requestDateTime, // Now in format: "2026-09-04T13:40:46+05:30"
         reason: data.reason,
-        status: data.status || 'pending',
-        timezone: data.timezone || 'Asia/Kolkata',
-        created_by: data.created_by || 'admin',
+        status: data.status || "pending",
+        timezone: normalizeTimezone(data.timezone) || "Asia/Kolkata",
+        created_by: data.created_by || "admin",
         location: data.location,
-        work_location: data.work_location || data.location?.work_location || 'India'
+        work_location:
+          data.work_location || data.location?.work_location || "India",
       };
 
-      console.log("📤 Submitting late attendance request with payload:", payload);
+      console.log(
+        "📤 Submitting late attendance request with payload:",
+        payload,
+      );
 
-      const response = await apiClient.post("/employee/late-check-in-block", payload);
-      
+      const response = await apiClient.post(
+        "/employee/late-check-in-block",
+        payload,
+      );
+
       if (response.data && response.data.status === "success") {
         return response.data.data;
       } else {
-        return rejectWithValue(response.data?.message || "Failed to submit request");
+        return rejectWithValue(
+          response.data?.message || "Failed to submit request",
+        );
       }
     } catch (error) {
       console.error("Late attendance request error:", error);
       return rejectWithValue(
-        error.response?.data?.message || "Failed to submit request"
+        error.response?.data?.message || "Failed to submit request",
       );
     }
-  }
+  },
 );
 
 // Punch Out with location and timezone
@@ -179,15 +197,18 @@ export const punchOut = createAsyncThunk(
       console.log("📤 Punch Out - Full data received:", data);
       console.log("📤 Punch Out - Location:", data.location);
       console.log("📤 Punch Out - Timezone:", data.location?.timezone);
-      console.log("📤 Punch Out - Timezone offset:", data.location?.timezone_offset_minutes);
+      console.log(
+        "📤 Punch Out - Timezone offset:",
+        data.location?.timezone_offset_minutes,
+      );
       console.log("📤 Punch Out - punch_out_time:", data.punch_out_time);
 
-      const formattedProjectTimes = Object.entries(data.project_times || {}).map(
-  ([projectId, time]) => ({
-    project_id: parseInt(projectId),
-    time_minutes: parseInt(time, 10), 
-  }),
-);
+      const formattedProjectTimes = Object.entries(
+        data.project_times || {},
+      ).map(([projectId, time]) => ({
+        project_id: parseInt(projectId),
+        time_minutes: parseInt(time, 10),
+      }));
 
       const payload = {
         project_times: formattedProjectTimes,
@@ -224,15 +245,18 @@ export const punchOut = createAsyncThunk(
         }
 
         if (location.timezone) {
-          payload.timezone = location.timezone;
+          payload.timezone = normalizeTimezone(location.timezone);  
           console.log("✅ Adding timezone:", location.timezone);
         } else {
           console.warn("⚠️ No timezone provided in location!");
         }
-        
+
         if (location.timezone_offset_minutes) {
           payload.timezone_offset_minutes = location.timezone_offset_minutes;
-          console.log("✅ Adding timezone_offset_minutes:", location.timezone_offset_minutes);
+          console.log(
+            "✅ Adding timezone_offset_minutes:",
+            location.timezone_offset_minutes,
+          );
         }
       } else {
         console.warn("⚠️ No location data provided!");
@@ -304,7 +328,7 @@ const initialState = {
   dashboardData: null,
   punchData: null,
   success: false,
-  data: null
+  data: null,
 };
 
 const attendanceSlice = createSlice({
@@ -324,7 +348,7 @@ const attendanceSlice = createSlice({
       state.error = null;
       state.success = false;
       state.data = null;
-    }
+    },
   },
   extraReducers: (builder) => {
     builder
@@ -393,7 +417,7 @@ const attendanceSlice = createSlice({
         state.loading = false;
         state.error = action.payload;
       })
-       .addCase(submitLateAttendanceRequest.pending, (state) => {
+      .addCase(submitLateAttendanceRequest.pending, (state) => {
         state.loading = true;
         state.error = null;
         state.success = false;
@@ -412,5 +436,6 @@ const attendanceSlice = createSlice({
   },
 });
 
-export const { clearAttendanceState, clearLateAttendanceState } = attendanceSlice.actions;
+export const { clearAttendanceState, clearLateAttendanceState } =
+  attendanceSlice.actions;
 export default attendanceSlice.reducer;
