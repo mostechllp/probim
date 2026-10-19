@@ -269,12 +269,6 @@ const RequestLeave = () => {
     );
     if (selectedLeaveType) {
       const balance = leaveBalances[selectedLeaveType.name] || { remaining: 0 };
-      if (totalDays > balance.remaining && balance.remaining >= 0) {
-        setLocalError(
-          `Requested days (${totalDays}) exceed available ${selectedLeaveType.name} balance (${balance.remaining} days)`,
-        );
-        return;
-      }
     }
 
     // Create FormData for the request
@@ -601,13 +595,6 @@ const getSelectedLeaveBalance = () => {
                 </label>
               </div>
             </div>
-
-            {exceedsBalance && (
-              <div className="warning-message mb-6 p-3 bg-amber-500/10 border border-amber-500 rounded-lg text-amber-600 text-sm">
-                ⚠️ Warning: Requested days ({totalDays}) exceed available
-                balance ({remaining} days)
-              </div>
-            )}
 
             <div className="form-actions flex flex-col sm:flex-row justify-end gap-4 mt-8 pt-6 border-t border-gray-200 dark:border-gray-700">
               <Link

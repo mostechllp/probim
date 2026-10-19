@@ -220,12 +220,6 @@ const MissedPunchLeaveModal = ({ isOpen, onClose, selectedDate, onSuccess }) => 
     );
     if (selectedType) {
       const balance = leaveBalances[selectedType.name] || { remaining: 0 };
-      if (totalDays > balance.remaining && balance.remaining >= 0) {
-        setLocalError(
-          `Requested days (${totalDays}) exceed available ${selectedType.name} balance (${balance.remaining} days)`,
-        );
-        return;
-      }
     }
 
     setIsSubmitting(true);
@@ -497,13 +491,6 @@ const MissedPunchLeaveModal = ({ isOpen, onClose, selectedDate, onSuccess }) => 
               </label>
             </div>
           </div>
-
-          {/* Balance Warning */}
-          {exceedsBalance && (
-            <div className="warning-message p-3 bg-amber-500/10 border border-amber-500 rounded-lg text-amber-600 text-sm">
-              ⚠️ Warning: Requested days ({totalDays}) exceed available balance ({remaining} days)
-            </div>
-          )}
 
           {/* Balance Info */}
           {formData.leave_type_id && (
