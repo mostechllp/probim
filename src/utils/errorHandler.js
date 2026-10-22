@@ -1,7 +1,27 @@
 // Centralized error handler service
+const IS_DEV =
+  typeof process !== "undefined"
+    ? process.env?.NODE_ENV !== "production"
+    : true;
+
+const devLog = (...args) => {
+  if (IS_DEV) console.log(...args);
+};
+
+// ✅ Action types as constants (avoids typos)
+const ActionType = Object.freeze({
+  RETRY: "retry",
+  LOGIN: "login",
+  CONTACT: "contact",
+  PUNCH_OUT: "punch_out",
+  SCHEDULE: "schedule",
+  WAIT: "wait",
+  FIX: "fix",
+});
+
 class ErrorHandler {
   constructor() {
-    this.errorTypes = {
+    this.errorTypes = Object.freeze({
       // Database constraint errors
       FOREIGN_KEY_VIOLATION: "FOREIGN_KEY_VIOLATION",
       UNIQUE_VIOLATION: "UNIQUE_VIOLATION",
@@ -18,7 +38,6 @@ class ErrorHandler {
 
       // Validation errors
       VALIDATION_ERROR: "VALIDATION_ERROR",
-      INVALID_INPUT: "INVALID_INPUT",
 
       // Business logic errors
       ALREADY_PUNCHED_IN: "ALREADY_PUNCHED_IN",
@@ -34,307 +53,292 @@ class ErrorHandler {
 
       // Generic
       UNKNOWN_ERROR: "UNKNOWN_ERROR",
-    };
+    });
 
-    this.errorMessages = {
+    this.errorMessages = Object.freeze({
       [this.errorTypes.FOREIGN_KEY_VIOLATION]: {
         title: "Account Configuration Issue",
         message:
           "Your account is missing required information. Please contact HR to complete your profile.",
         action: "Contact HR",
-        actionType: "contact",
+        actionType: ActionType.CONTACT,
       },
       [this.errorTypes.UNIQUE_VIOLATION]: {
         title: "Duplicate Entry",
         message: "This record already exists in the system.",
         action: "Try Again",
-        actionType: "retry",
+        actionType: ActionType.RETRY,
+      },
+      [this.errorTypes.NOT_NULL_VIOLATION]: {
+        title: "Missing Required Data",
+        message:
+          "A required field is missing. Please contact HR or try again.",
+        action: "Try Again",
+        actionType: ActionType.RETRY,
       },
       [this.errorTypes.NETWORK_ERROR]: {
         title: "Connection Error",
         message:
           "Unable to connect to the server. Please check your internet connection.",
         action: "Retry",
-        actionType: "retry",
+        actionType: ActionType.RETRY,
       },
       [this.errorTypes.TIMEOUT_ERROR]: {
         title: "Request Timeout",
         message: "The server is taking too long to respond. Please try again.",
         action: "Retry",
-        actionType: "retry",
+        actionType: ActionType.RETRY,
       },
       [this.errorTypes.UNAUTHORIZED]: {
         title: "Authentication Required",
         message: "Please log in again to continue.",
         action: "Login",
-        actionType: "login",
+        actionType: ActionType.LOGIN,
       },
       [this.errorTypes.FORBIDDEN]: {
         title: "Access Denied",
         message: "You don't have permission to perform this action.",
         action: "Contact Admin",
-        actionType: "contact",
+        actionType: ActionType.CONTACT,
       },
       [this.errorTypes.SESSION_EXPIRED]: {
         title: "Session Expired",
         message: "Your session has expired. Please log in again.",
         action: "Login",
-        actionType: "login",
+        actionType: ActionType.LOGIN,
       },
       [this.errorTypes.VALIDATION_ERROR]: {
         title: "Validation Error",
         message: "Please check the form for errors and try again.",
         action: "Fix Errors",
-        actionType: "fix",
+        actionType: ActionType.FIX,
       },
       [this.errorTypes.ALREADY_PUNCHED_IN]: {
         title: "Already Punched In",
         message: "You have already punched in for today.",
         action: "Punch Out",
-        actionType: "punch_out",
+        actionType: ActionType.PUNCH_OUT,
       },
       [this.errorTypes.ALREADY_PUNCHED_OUT]: {
         title: "Already Punched Out",
         message: "You have already punched out for today.",
         action: "Contact HR",
-        actionType: "contact",
+        actionType: ActionType.CONTACT,
       },
       [this.errorTypes.OUTSIDE_WORKING_HOURS]: {
         title: "Outside Working Hours",
         message: "Punch in/out is only allowed during working hours.",
         action: "Check Schedule",
-        actionType: "schedule",
+        actionType: ActionType.SCHEDULE,
       },
       [this.errorTypes.LOCATION_NOT_ALLOWED]: {
         title: "Location Not Allowed",
         message: "Your current location is not within the allowed area.",
         action: "Try Again",
-        actionType: "retry",
+        actionType: ActionType.RETRY,
       },
       [this.errorTypes.PENDING_PUNCH_OUT]: {
         title: "Pending Punch Out",
         message:
           "You have a pending punch out from a previous day. Please complete it first.",
         action: "Punch Out Now",
-        actionType: "punch_out",
+        actionType: ActionType.PUNCH_OUT,
       },
       [this.errorTypes.LATE_PUNCH_PENDING_APPROVAL]: {
         title: "Late Punch In - Pending Approval",
         message:
           "Your late punch-in request is pending HR approval. Please wait.",
         action: "Okay, I'll Wait",
-        actionType: "wait",
+        actionType: ActionType.WAIT,
       },
       [this.errorTypes.SERVER_ERROR]: {
         title: "Server Error",
         message: "Something went wrong on our end. Please try again later.",
         action: "Try Again",
-        actionType: "retry",
+        actionType: ActionType.RETRY,
       },
       [this.errorTypes.SERVICE_UNAVAILABLE]: {
         title: "Service Unavailable",
         message:
           "The service is temporarily unavailable. Please try again later.",
         action: "Retry",
-        actionType: "retry",
+        actionType: ActionType.RETRY,
       },
       [this.errorTypes.UNKNOWN_ERROR]: {
         title: "Something Went Wrong",
         message: "An unexpected error occurred. Please try again.",
         action: "Try Again",
-        actionType: "retry",
+        actionType: ActionType.RETRY,
       },
-    };
+    });
   }
 
-  // Extract error message from various formats
+  // Safely dig a nested property by "a.b.c" path
+  _dig(obj, path) {
+    try {
+      return path.split(".").reduce((acc, key) => acc?.[key], obj);
+    } catch {
+      return undefined;
+    }
+  }
+
+  // Extract a user-facing error message from various formats
   extractErrorMessage(error) {
-    console.log("Extracting message from:", error);
+    if (error == null) return null;
 
-    // If error is a string
+    // Plain string
     if (typeof error === "string") {
-      return error;
+      return error.trim() || null;
     }
 
-    // If error has payload (Redux thunk rejection)
-    if (error?.payload) {
-      const payload = error.payload;
-      if (typeof payload === "string") return payload;
-      if (payload?.message) return payload.message;
-      if (payload?.data?.message) return payload.data.message;
-      if (payload?.error)
-        return typeof payload.error === "string"
-          ? payload.error
-          : payload.error?.message;
-      if (payload?.msg) return payload.msg;
-      if (payload?.detail) return payload.detail;
+    // Number / boolean / etc. -> stringify for debugging but don't return raw junk
+    if (typeof error !== "object") {
+      return null;
     }
 
-    // If error has response data (Axios error)
-    if (error?.response?.data) {
-      const data = error.response.data;
-      if (typeof data === "string") return data;
-      if (data?.message) return data.message;
-      if (data?.error)
-        return typeof data.error === "string"
-          ? data.error
-          : data.error?.message;
-      if (data?.msg) return data.msg;
-      if (data?.detail) return data.detail;
-      if (data?.data?.message) return data.data.message;
-    }
+    // Candidate paths, checked in order
+    const paths = [
+      "payload.message",
+      "payload.data.message",
+      "payload.error.message",
+      "payload.error",
+      "payload.data.error.message",
+      "payload.msg",
+      "payload.detail",
+      "response.data.message",
+      "response.data.error.message",
+      "response.data.error",
+      "response.data.msg",
+      "response.data.detail",
+      "response.data.data.message",
+      "data.message",
+      "data.error.message",
+      "data.error",
+      "error.message",
+      "error.response.data.message",
+      "message",
+      "msg",
+      "detail",
+    ];
 
-    // If error has data property
-    if (error?.data) {
-      if (typeof error.data === "string") return error.data;
-      if (error.data?.message) return error.data.message;
-      if (error.data?.error) return error.data.error;
-    }
-
-    // If error has message property
-    if (error?.message) {
-      return error.message;
-    }
-
-    // If error has error property
-    if (error?.error) {
-      if (typeof error.error === "string") return error.error;
-      if (error.error?.message) return error.error.message;
-      if (error.error?.response?.data?.message)
-        return error.error.response.data.message;
-    }
-
-    // Check for nested error structures
-    if (error?.error?.response?.data?.message) {
-      return error.error.response.data.message;
-    }
-
-    // If error is an object, try to stringify it
-    if (typeof error === "object" && error !== null) {
-      try {
-        const jsonStr = JSON.stringify(error);
-        if (jsonStr && jsonStr !== "{}") {
-          const parsed = JSON.parse(jsonStr);
-          if (parsed?.message) return parsed.message;
-          if (parsed?.error)
-            return typeof parsed.error === "string"
-              ? parsed.error
-              : parsed.error?.message;
-        }
-        return jsonStr;
-      } catch (e) {
-        return String(error);
+    for (const path of paths) {
+      const value = this._dig(error, path);
+      if (typeof value === "string" && value.trim()) {
+        return value.trim();
       }
     }
 
+    // Last resort: maybe a plain object with only .message at root — covered above.
+    // Do NOT stringify the whole object — it can leak internals to the UI,
+    // or fail on circular refs.
     return null;
   }
 
   // Parse error and determine type
+  // ✅ Order matters: business codes → SQL → status → message fallbacks
   parseError(error) {
-    // Extract the error message
     const errorMessage = this.extractErrorMessage(error) || "";
-    console.log("Extracted message:", errorMessage);
+    const lower = errorMessage.toLowerCase();
 
     const statusCode =
-      error?.response?.status ||
-      error?.status ||
-      error?.payload?.status ||
+      error?.response?.status ??
+      error?.status ??
+      error?.payload?.status ??
+      error?.error?.response?.status ??
       null;
-    const errorData =
-      error?.response?.data || error?.data || error?.payload || {};
 
-    // Check for specific SQL errors
-    if (
-      errorMessage.includes("foreign key constraint fails") ||
-      errorMessage.includes("1452")
-    ) {
-      return this.errorTypes.FOREIGN_KEY_VIOLATION;
-    }
+    // ---- 1) Explicit business codes / messages (highest priority) ----
 
     if (
-      errorMessage.includes("Duplicate entry") ||
-      errorMessage.includes("1062")
-    ) {
-      return this.errorTypes.UNIQUE_VIOLATION;
-    }
-
-    if (
-      errorMessage.includes("cannot be null") ||
-      errorMessage.includes("1048")
-    ) {
-      return this.errorTypes.NOT_NULL_VIOLATION;
-    }
-
-    // Check for pending punch-out error
-    if (
-      errorMessage.includes("pending punch-out") ||
-      errorMessage.includes("punch out for that day") ||
-      errorMessage.includes("Please punch out first") ||
-      errorMessage.includes("You have pending punch out")
-    ) {
-      return this.errorTypes.PENDING_PUNCH_OUT;
-    }
-
-    // Check for late punch-in with HR approval
-    if (
-      errorMessage.includes("Punch-in blocked") ||
-      errorMessage.includes("pending HR approval") ||
-      errorMessage.includes("late check-in request") ||
-      errorMessage.includes("late check-in is pending") ||
-      errorMessage.includes("late check-in request is pending")
+      lower.includes("punch-in blocked") ||
+      lower.includes("punch in blocked") ||
+      lower.includes("pending hr approval") ||
+      lower.includes("late check-in request") ||
+      lower.includes("late check-in is pending") ||
+      lower.includes("late check-in request is pending")
     ) {
       return this.errorTypes.LATE_PUNCH_PENDING_APPROVAL;
     }
 
-    // Check status codes
-    if (statusCode === 401) {
-      return this.errorTypes.UNAUTHORIZED;
-    }
-
-    if (statusCode === 403) {
-      return this.errorTypes.FORBIDDEN;
-    }
-
-    if (statusCode === 422) {
-      return this.errorTypes.VALIDATION_ERROR;
-    }
-
-    if (statusCode === 500) {
-      return this.errorTypes.SERVER_ERROR;
-    }
-
-    if (statusCode === 503) {
-      return this.errorTypes.SERVICE_UNAVAILABLE;
-    }
-
-    // Check network errors
     if (
-      errorMessage.includes("Network Error") ||
-      errorMessage.includes("Failed to fetch")
+      lower.includes("pending punch-out") ||
+      lower.includes("pending punch out") ||
+      lower.includes("punch out for that day") ||
+      lower.includes("please punch out first") ||
+      lower.includes("you have pending punch out")
     ) {
-      return this.errorTypes.NETWORK_ERROR;
+      return this.errorTypes.PENDING_PUNCH_OUT;
     }
 
-    if (errorMessage.includes("timeout") || errorMessage.includes("Timeout")) {
-      return this.errorTypes.TIMEOUT_ERROR;
-    }
-
-    // Check business logic errors
-    if (errorMessage.toLowerCase().includes("already punched in")) {
+    if (lower.includes("already punched in")) {
       return this.errorTypes.ALREADY_PUNCHED_IN;
     }
 
-    if (errorMessage.toLowerCase().includes("already punched out")) {
+    if (lower.includes("already punched out")) {
       return this.errorTypes.ALREADY_PUNCHED_OUT;
     }
 
-    if (errorMessage.toLowerCase().includes("outside working hours")) {
+    if (lower.includes("outside working hours")) {
       return this.errorTypes.OUTSIDE_WORKING_HOURS;
     }
 
-    if (errorMessage.toLowerCase().includes("location")) {
+    // More specific than bare "location"
+    if (
+      lower.includes("location is not within") ||
+      lower.includes("outside allowed location") ||
+      lower.includes("location not allowed")
+    ) {
       return this.errorTypes.LOCATION_NOT_ALLOWED;
+    }
+
+    // ---- 2) SQL / DB errors ----
+
+    if (
+      lower.includes("foreign key constraint fails") ||
+      lower.includes("1452")
+    ) {
+      return this.errorTypes.FOREIGN_KEY_VIOLATION;
+    }
+
+    if (lower.includes("duplicate entry") || lower.includes("1062")) {
+      return this.errorTypes.UNIQUE_VIOLATION;
+    }
+
+    if (lower.includes("cannot be null") || lower.includes("1048")) {
+      return this.errorTypes.NOT_NULL_VIOLATION;
+    }
+
+    // ---- 3) HTTP status ----
+
+    if (statusCode === 401) {
+      // Distinguish expired-session if we can
+      if (
+        lower.includes("expired") ||
+        error?.response?.data?.code === "TOKEN_EXPIRED" ||
+        error?.payload?.code === "TOKEN_EXPIRED"
+      ) {
+        return this.errorTypes.SESSION_EXPIRED;
+      }
+      return this.errorTypes.UNAUTHORIZED;
+    }
+
+    if (statusCode === 403) return this.errorTypes.FORBIDDEN;
+    if (statusCode === 422) return this.errorTypes.VALIDATION_ERROR;
+
+    if (statusCode === 503) return this.errorTypes.SERVICE_UNAVAILABLE;
+
+    if (typeof statusCode === "number" && statusCode >= 500 && statusCode < 600) {
+      return this.errorTypes.SERVER_ERROR;
+    }
+
+    // ---- 4) Network / transport ----
+
+    if (lower.includes("network error") || lower.includes("failed to fetch")) {
+      return this.errorTypes.NETWORK_ERROR;
+    }
+
+    if (lower.includes("timeout") || lower.includes("timed out")) {
+      return this.errorTypes.TIMEOUT_ERROR;
     }
 
     return this.errorTypes.UNKNOWN_ERROR;
@@ -343,109 +347,150 @@ class ErrorHandler {
   // Get user-friendly error object
   getFriendlyError(error) {
     const errorType = this.parseError(error);
-    console.log("Error type determined:", errorType);
+    devLog("Error type determined:", errorType);
 
-    let defaultError = this.errorMessages[errorType];
+    const base = this.errorMessages[errorType];
 
-    // If we have a specific error type and it has a dynamic message, use the actual message
+    // Dynamic message overrides
+    const actualMessage = this.extractErrorMessage(error);
+
     if (errorType === this.errorTypes.LATE_PUNCH_PENDING_APPROVAL) {
-      const actualMessage = this.extractErrorMessage(error);
       return {
-        title: "Late Punch In - Pending Approval",
-        message:
-          actualMessage ||
-          "Your late punch-in request is pending HR approval. Please wait.",
-        action: "Okay, I'll Wait",
-        actionType: "wait", // ✅ This triggers the wait action
+        ...base,
+        message: actualMessage || base.message,
       };
     }
 
-    if (errorType === this.errorTypes.PENDING_PUNCH_OUT) {
-      const actualMessage = this.extractErrorMessage(error);
-      if (actualMessage) {
-        defaultError = {
-          ...defaultError,
-          message: actualMessage,
-        };
+    if (errorType === this.errorTypes.PENDING_PUNCH_OUT && actualMessage) {
+      return { ...base, message: actualMessage };
+    }
+
+    // Validation errors — extract per-field messages safely
+    if (errorType === this.errorTypes.VALIDATION_ERROR) {
+      const validationErrors =
+        error?.response?.data?.errors ??
+        error?.data?.errors ??
+        error?.payload?.errors;
+
+      if (validationErrors && typeof validationErrors === "object") {
+        const fieldErrors = Object.values(validationErrors)
+          .flat()
+          .map((v) => {
+            if (typeof v === "string") return v;
+            if (v && typeof v === "object") return v.message ?? null;
+            return null;
+          })
+          .filter(Boolean);
+
+        if (fieldErrors.length > 0) {
+          return {
+            title: "Validation Failed",
+            message: fieldErrors.join(", "),
+            action: "Fix Errors",
+            actionType: ActionType.FIX,
+            details: validationErrors,
+          };
+        }
       }
     }
 
-    // Extract validation errors if present
-    const validationErrors =
-      error?.response?.data?.errors ||
-      error?.data?.errors ||
-      error?.payload?.errors;
-    if (validationErrors && errorType === this.errorTypes.VALIDATION_ERROR) {
-      const fieldErrors = Object.values(validationErrors).flat();
+    // Unknown error but with a useful message
+    if (
+      errorType === this.errorTypes.UNKNOWN_ERROR &&
+      actualMessage &&
+      actualMessage !== "{}"
+    ) {
       return {
-        title: "Validation Failed",
-        message: fieldErrors.join(", "),
-        action: "Fix Errors",
-        actionType: "fix",
-        details: validationErrors,
+        title: "Error",
+        message: actualMessage,
+        action: "Try Again",
+        actionType: ActionType.RETRY,
       };
     }
 
-    // If we have a custom message and it's not a known type, use the custom message
-    if (errorType === this.errorTypes.UNKNOWN_ERROR) {
-      const customMessage = this.extractErrorMessage(error);
-      if (customMessage && customMessage.length > 0 && customMessage !== "{}") {
-        return {
-          title: "Error",
-          message: customMessage,
-          action: "Try Again",
-          actionType: "retry",
-        };
-      }
-    }
+    return base || this.errorMessages[this.errorTypes.UNKNOWN_ERROR];
+  }
 
-    return defaultError || this.errorMessages[this.errorTypes.UNKNOWN_ERROR];
+  // Default fallbacks when caller doesn't supply a callback
+  _defaultAction(actionType) {
+    switch (actionType) {
+      case ActionType.RETRY:
+        // Force a fresh document load
+        try {
+          window.location.reload();
+        } catch {
+          window.location.href = window.location.href;
+        }
+        break;
+      case ActionType.LOGIN:
+        try {
+          window.location.href = "/login";
+        } catch {
+          /* no-op */
+        }
+        break;
+      case ActionType.CONTACT:
+        // Do nothing — caller should wire this to a modal / mailto
+        break;
+      case ActionType.PUNCH_OUT:
+      case ActionType.SCHEDULE:
+      case ActionType.WAIT:
+      case ActionType.FIX:
+      default:
+        // Let the caller decide — no default side effect
+        break;
+    }
   }
 
   // Handle error with callback actions
   handleError(error, callbacks = {}) {
     const friendlyError = this.getFriendlyError(error);
-    console.log("Friendly error:", friendlyError);
 
-    // Log error for debugging
-    console.error("Error occurred:", {
-      original: error,
-      friendly: friendlyError,
-    });
-
-    // Execute callback based on action type
-    if (friendlyError.actionType === "login" && callbacks.onLogin) {
-      callbacks.onLogin();
+    // Log for debugging (dev only)
+    if (IS_DEV) {
+      console.error("[ErrorHandler]", {
+        original: error,
+        friendly: friendlyError,
+      });
     }
 
-    if (friendlyError.actionType === "retry" && callbacks.onRetry) {
-      callbacks.onRetry();
+    const callbackMap = {
+      [ActionType.LOGIN]: callbacks.onLogin,
+      [ActionType.RETRY]: callbacks.onRetry,
+      [ActionType.CONTACT]: callbacks.onContact,
+      [ActionType.PUNCH_OUT]: callbacks.onPunchOut,
+      [ActionType.SCHEDULE]: callbacks.onViewSchedule,
+      [ActionType.WAIT]: callbacks.onWait,
+      [ActionType.FIX]: callbacks.onFix,
+    };
+
+    const fn = callbackMap[friendlyError?.actionType];
+    if (typeof fn === "function") {
+      fn();
+      // Indicate a callback handled it
+      return { ...friendlyError, handled: true };
     }
 
-    if (friendlyError.actionType === "contact" && callbacks.onContact) {
-      callbacks.onContact();
+    // No callback supplied — indicate the caller can wire one,
+    // and fall back to a sensible default for RETRY/LOGIN.
+    if (IS_DEV) {
+      console.warn(
+        `[ErrorHandler] No callback provided for action "${friendlyError?.actionType}". Falling back to default.`
+      );
     }
 
-    if (friendlyError.actionType === "punch_out" && callbacks.onPunchOut) {
-      callbacks.onPunchOut();
+    if (friendlyError?.actionType === ActionType.RETRY) {
+      // Don't auto-reload silently — flag for UI to handle if possible,
+      // but still provide the fallback to avoid a dead button.
+      this._defaultAction(ActionType.RETRY);
+    } else if (friendlyError?.actionType === ActionType.LOGIN) {
+      this._defaultAction(ActionType.LOGIN);
     }
 
-    if (friendlyError.actionType === "schedule" && callbacks.onViewSchedule) {
-      callbacks.onViewSchedule();
-    }
-
-    if (friendlyError.actionType === "wait" && callbacks.onWait) {
-      callbacks.onWait();
-    }
-
-    if (friendlyError.actionType === "fix" && callbacks.onFix) {
-      callbacks.onFix();
-    }
-
-    return friendlyError;
+    return { ...friendlyError, handled: false };
   }
 
-  // Get error message string (simple version)
+  // Simple message string
   getErrorMessage(error) {
     const friendly = this.getFriendlyError(error);
     return friendly.message;
