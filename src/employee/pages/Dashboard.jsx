@@ -986,11 +986,25 @@ const Dashboard = () => {
 
   const missedPunchIns = getMissedPunchIns();
 
-  // Handle Send Missed Punch Request
-  const handleSendMissedPunchRequest = (date) => {
-    setSelectedMissedDate(date);
-    setShowMissedPunchModal(true);
-  };
+  const normalizeDate = (d) => {
+  if (!d) return "";
+  const parsed = new Date(d);
+  if (!isNaN(parsed.getTime())) return parsed.toISOString().split("T")[0];
+  // try DD/MM/YYYY
+  const parts = String(d).split("/");
+  if (parts.length === 3) {
+    const iso = new Date(`${parts[2]}-${parts[1]}-${parts[0]}`);
+    if (!isNaN(iso.getTime())) return iso.toISOString().split("T")[0];
+  }
+  return "";
+};
+
+const handleSendMissedPunchRequest = (date) => {
+  const normalized = normalizeDate(date);
+  if (!normalized) { showToastMessage("Invalid date", "error"); return; }
+  setSelectedMissedDate(normalized);
+  setShowMissedPunchModal(true);
+};
 
   const handleMissedPunchModalClose = () => {
     setShowMissedPunchModal(false);
