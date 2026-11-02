@@ -27,6 +27,8 @@ import assetReducer from "../admin/store/slices/assetSlice";
 import checklistReducer from "../admin/store/slices/checklistSlice";
 import reportReducer from "../admin/store/slices/reportSlice";
 import publicHolidayReducer from "../admin/store/slices/publicHolidaySlice";
+import projectCostReducer from "../admin/store/slices/projectCostSlice";
+import timesheetReducer from "../admin/store/slices/timesheetSlice";
 
 // Employee reducers
 import leavesReducer from "../employee/store/slices/leavesSlice";
@@ -70,6 +72,8 @@ export const store = configureStore({
     checklistCategory: checklistCategoryReducer,
     reports: reportReducer,
     publicHolidays: publicHolidayReducer,
+    projectCost: projectCostReducer,
+    timesheets: timesheetReducer,
 
     // Employee
     EmpLeaves: leavesReducer,
