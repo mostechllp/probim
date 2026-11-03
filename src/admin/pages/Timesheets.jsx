@@ -1,33 +1,18 @@
 // src/admin/pages/projects/Timesheets.jsx
-import React, { useEffect, useState, useCallback, useMemo } from "react";
+import React, { useEffect, useState, useCallback } from "react";
 import { useDispatch, useSelector } from "react-redux";
 import { showToast } from "../../components/common/Toast";
 
 import {
   fetchTimesheets,
-  updateTimesheetStatus,
+  approveTimesheet,
+  rejectTimesheet,
   exportTimesheets,
   clearTimesheetError,
 } from "../store/slices/timesheetSlice";
 
 import PeriodSelector from "../components/projectCost/PeriodSelector";
 import ExportModal from "../../components/common/ExportModal";
-
-// ────────────────────────────────────────────────────────────
-// 🛑 STATIC DATA TOGGLE (Set to false when API is ready)
-// ────────────────────────────────────────────────────────────
-const USE_MOCK_DATA = true;
-
-const MOCK_RECORDS = [
-  { id: 1, employeeName: "Ahmed Khan", projectName: "Burj Vista Tower", date: "2026-10-24", hours: 8.5, status: "Pending", manager: "Sarah Smith" },
-  { id: 2, employeeName: "Ravi Patel", projectName: "Marina Mall Extension", date: "2026-10-24", hours: 9.0, status: "Pending", manager: "Sarah Smith" },
-  { id: 3, employeeName: "Maria Garcia", projectName: "Burj Vista Tower", date: "2026-10-23", hours: 7.5, status: "Approved", manager: "Sarah Smith" },
-  { id: 4, employeeName: "John Doe", projectName: "Al Reem Villas", date: "2026-10-23", hours: 8.0, status: "Approved", manager: "Ahmed Khan" },
-  { id: 5, employeeName: "Ahmed Khan", projectName: "Burj Vista Tower", date: "2026-10-23", hours: 8.0, status: "Approved", manager: "Sarah Smith" },
-  { id: 6, employeeName: "Lisa Wong", projectName: "Yas Island Hotel", date: "2026-10-22", hours: 10.0, status: "Rejected", manager: "John Doe" },
-];
-
-const MOCK_STATS = { totalHours: 51.0, pendingApprovals: 2, approvedHours: 31.5 };
 
 // ────────────────────────────────────────────────────────────
 // Date helpers
@@ -60,7 +45,6 @@ const getPresetRange = (preset) => {
 
 const Timesheets = () => {
   const dispatch = useDispatch();
-  const { user } = useSelector((state) => state.auth);
 
   const { records, stats, loading, actionLoading, exportLoading, error } = useSelector(
     (state) => state.timesheets
@@ -70,9 +54,6 @@ const Timesheets = () => {
   const [customStart, setCustomStart] = useState(toISODate(new Date()));
   const [customEnd, setCustomEnd] = useState(toISODate(new Date()));
   const [isExportOpen, setIsExportOpen] = useState(false);
-  
-  // Local state for Mock Data
-  const [mockData, setMockData] = useState({ records: [], stats: {}, loading: true });
 
   const resolveRange = useCallback(() => {
     return period === "custom"
@@ -82,65 +63,47 @@ const Timesheets = () => {
 
   // Fetch data
   useEffect(() => {
-    if (USE_MOCK_DATA) {
-      setMockData((prev) => ({ ...prev, loading: true }));
-      setTimeout(() => {
-        setMockData({ records: MOCK_RECORDS, stats: MOCK_STATS, loading: false });
-      }, 500);
-      return;
-    }
-
     const { start, end } = resolveRange();
-    dispatch(fetchTimesheets({ start_date: start, end_date: end, preset: period }));
+    dispatch(fetchTimesheets({ start_date: start, end_date: end, filter: period }));
   }, [dispatch, resolveRange, period]);
 
   // Surface errors
   useEffect(() => {
-    if (error && !USE_MOCK_DATA) {
+    if (error) {
       showToast(error, "error");
       dispatch(clearTimesheetError());
     }
   }, [error, dispatch]);
 
   const handleUpdateStatus = async (id, status) => {
-    if (USE_MOCK_DATA) {
-      setMockData((prev) => ({
-        ...prev,
-        records: prev.records.map((r) => (r.id === id ? { ...r, status } : r)),
-      }));
-      showToast(`Timesheet ${status.toLowerCase()} (Mock)`, "success");
-      return;
-    }
-
     try {
-      await dispatch(updateTimesheetStatus({ id, status })).unwrap();
-      showToast(`Timesheet ${status.toLowerCase()} successfully`, "success");
+      if (status === "Approved") {
+        await dispatch(approveTimesheet(id)).unwrap();
+        showToast("Timesheet approved successfully", "success");
+      } else {
+        // If you want to ask for a rejection reason, you could use a prompt or modal here.
+        // For now, we pass an empty/default reason or omit it based on backend requirements.
+        await dispatch(rejectTimesheet({ id, reason: "Rejected by Admin" })).unwrap();
+        showToast("Timesheet rejected successfully", "success");
+      }
     } catch (e) {
       showToast(e || "Failed to update status", "error");
     }
   };
 
   const handleExport = async (format) => {
-    if (USE_MOCK_DATA) {
-      showToast(`Mock Export triggered as ${format.toUpperCase()}`, "info");
-      setTimeout(() => setIsExportOpen(false), 500);
-      return;
-    }
-
     const { start, end } = resolveRange();
     try {
-      await dispatch(exportTimesheets({ format, filters: { start_date: start, end_date: end } })).unwrap();
+      await dispatch(exportTimesheets({ 
+        format, 
+        filters: { start_date: start, end_date: end, filter: period } 
+      })).unwrap();
       showToast(`Timesheets exported as ${format.toUpperCase()}`, "success");
       setIsExportOpen(false);
     } catch (e) {
       showToast(e || "Export failed", "error");
     }
   };
-
-  // Determine data source
-  const displayRecords = USE_MOCK_DATA ? mockData.records : records;
-  const displayStats = USE_MOCK_DATA ? mockData.stats : stats;
-  const isLoading = USE_MOCK_DATA ? mockData.loading : loading;
 
   return (
     <div className="p-4 md:p-6 space-y-6 max-w-[1600px] mx-auto animate-fadeIn">
@@ -149,11 +112,6 @@ const Timesheets = () => {
         <div>
           <h2 className="text-lg md:text-2xl font-bold gradient-heading bg-clip-text text-transparent tracking-tight flex items-center gap-3">
             Timesheets & Hours
-            {USE_MOCK_DATA && (
-              <span className="text-[10px] bg-amber-100 text-amber-700 px-2 py-1 rounded-full uppercase tracking-wider font-bold border border-amber-200">
-                Mock Data Active
-              </span>
-            )}
           </h2>
           <p className="text-xs text-gray-500 dark:text-gray-400 mt-1 font-medium">
             Manage and approve employee hours logged against projects.
@@ -177,7 +135,9 @@ const Timesheets = () => {
           </div>
           <div>
             <p className="text-xs text-gray-500 font-semibold uppercase">Total Logged Hours</p>
-            <p className="text-2xl font-bold text-gray-800 dark:text-gray-200">{displayStats.totalHours}h</p>
+            <p className="text-2xl font-bold text-gray-800 dark:text-gray-200">
+              {stats?.totalHours || stats?.total_hours || 0}h
+            </p>
           </div>
         </div>
         <div className="bg-white dark:bg-gray-800 rounded-xl p-4 border border-gray-200 dark:border-gray-700 flex items-center gap-4">
@@ -186,7 +146,9 @@ const Timesheets = () => {
           </div>
           <div>
             <p className="text-xs text-gray-500 font-semibold uppercase">Pending Approvals</p>
-            <p className="text-2xl font-bold text-gray-800 dark:text-gray-200">{displayStats.pendingApprovals}</p>
+            <p className="text-2xl font-bold text-gray-800 dark:text-gray-200">
+              {stats?.pendingApprovals || stats?.pending_approvals || 0}
+            </p>
           </div>
         </div>
         <div className="bg-white dark:bg-gray-800 rounded-xl p-4 border border-gray-200 dark:border-gray-700 flex items-center gap-4">
@@ -195,7 +157,9 @@ const Timesheets = () => {
           </div>
           <div>
             <p className="text-xs text-gray-500 font-semibold uppercase">Approved Hours</p>
-            <p className="text-2xl font-bold text-gray-800 dark:text-gray-200">{displayStats.approvedHours}h</p>
+            <p className="text-2xl font-bold text-gray-800 dark:text-gray-200">
+              {stats?.approvedHours || stats?.approved_hours || 0}h
+            </p>
           </div>
         </div>
       </div>
@@ -226,63 +190,73 @@ const Timesheets = () => {
                 </tr>
               </thead>
               <tbody>
-                {isLoading ? (
+                {loading ? (
                   <tr>
                     <td colSpan="6" className="px-4 py-10 text-center text-gray-500">
                       <i className="fas fa-spinner fa-spin mr-2 text-green-500"></i> Loading timesheets...
                     </td>
                   </tr>
-                ) : displayRecords.length === 0 ? (
+                ) : records.length === 0 ? (
                   <tr>
                     <td colSpan="6" className="px-4 py-10 text-center text-gray-500">
                       No timesheet records found for this period.
                     </td>
                   </tr>
                 ) : (
-                  displayRecords.map((r) => (
-                    <tr key={r.id} className="border-b border-gray-200 dark:border-gray-700 hover:bg-gray-50 dark:hover:bg-gray-700/50 transition-colors">
-                      <td className="px-4 py-3">
-                        <p className="text-sm font-semibold text-gray-800 dark:text-gray-200">{r.employeeName}</p>
-                        <p className="text-[11px] text-gray-500">Mgr: {r.manager}</p>
-                      </td>
-                      <td className="px-4 py-3 text-sm text-gray-700 dark:text-gray-300">{r.projectName}</td>
-                      <td className="px-4 py-3 text-sm text-gray-700 dark:text-gray-300">{r.date}</td>
-                      <td className="px-4 py-3 text-sm text-right font-mono font-semibold text-gray-800 dark:text-gray-200">{r.hours}h</td>
-                      <td className="px-4 py-3 text-center">
-                        <span className={`px-2.5 py-1 rounded-full text-xs font-semibold ${
-                          r.status === "Approved" ? "bg-green-100 text-green-700 dark:bg-green-900/30 dark:text-green-400" :
-                          r.status === "Rejected" ? "bg-red-100 text-red-700 dark:bg-red-900/30 dark:text-red-400" :
-                          "bg-amber-100 text-amber-700 dark:bg-amber-900/30 dark:text-amber-400"
-                        }`}>
-                          {r.status}
-                        </span>
-                      </td>
-                      <td className="px-4 py-3 text-right">
-                        {r.status === "Pending" ? (
-                          <div className="flex items-center justify-end gap-2">
-                            <button
-                              onClick={() => handleUpdateStatus(r.id, "Approved")}
-                              disabled={actionLoading}
-                              className="w-8 h-8 rounded-full bg-green-50 text-green-600 hover:bg-green-100 dark:bg-green-900/30 dark:text-green-400 flex items-center justify-center transition-colors"
-                              title="Approve"
-                            >
-                              <i className="fas fa-check"></i>
-                            </button>
-                            <button
-                              onClick={() => handleUpdateStatus(r.id, "Rejected")}
-                              disabled={actionLoading}
-                              className="w-8 h-8 rounded-full bg-red-50 text-red-600 hover:bg-red-100 dark:bg-red-900/30 dark:text-red-400 flex items-center justify-center transition-colors"
-                              title="Reject"
-                            >
-                              <i className="fas fa-times"></i>
-                            </button>
-                          </div>
-                        ) : (
-                          <span className="text-xs text-gray-400 italic">No actions needed</span>
-                        )}
-                      </td>
-                    </tr>
-                  ))
+                  records.map((r) => {
+                    // Fallbacks handle both camelCase and snake_case API responses
+                    const empName = r.employeeName || r.employee_name || r.employee?.name || "Unknown";
+                    const projName = r.projectName || r.project_name || r.project?.name || "Unknown";
+                    const mgrName = r.manager || r.manager_name || r.approver?.name || "-";
+                    const dateStr = r.date || r.log_date || "-";
+                    const hoursStr = r.hours || r.total_hours || 0;
+                    const statusStr = r.status || "Pending";
+
+                    return (
+                      <tr key={r.id} className="border-b border-gray-200 dark:border-gray-700 hover:bg-gray-50 dark:hover:bg-gray-700/50 transition-colors">
+                        <td className="px-4 py-3">
+                          <p className="text-sm font-semibold text-gray-800 dark:text-gray-200">{empName}</p>
+                          <p className="text-[11px] text-gray-500">Mgr: {mgrName}</p>
+                        </td>
+                        <td className="px-4 py-3 text-sm text-gray-700 dark:text-gray-300">{projName}</td>
+                        <td className="px-4 py-3 text-sm text-gray-700 dark:text-gray-300">{dateStr}</td>
+                        <td className="px-4 py-3 text-sm text-right font-mono font-semibold text-gray-800 dark:text-gray-200">{hoursStr}h</td>
+                        <td className="px-4 py-3 text-center">
+                          <span className={`px-2.5 py-1 rounded-full text-xs font-semibold ${
+                            statusStr === "Approved" || statusStr === "approved" ? "bg-green-100 text-green-700 dark:bg-green-900/30 dark:text-green-400" :
+                            statusStr === "Rejected" || statusStr === "rejected" ? "bg-red-100 text-red-700 dark:bg-red-900/30 dark:text-red-400" :
+                            "bg-amber-100 text-amber-700 dark:bg-amber-900/30 dark:text-amber-400"
+                          }`}>
+                            {statusStr}
+                          </span>
+                        </td>
+                        <td className="px-4 py-3 text-right">
+                          {statusStr === "Pending" || statusStr === "pending" ? (
+                            <div className="flex items-center justify-end gap-2">
+                              <button
+                                onClick={() => handleUpdateStatus(r.id, "Approved")}
+                                disabled={actionLoading}
+                                className="w-8 h-8 rounded-full bg-green-50 text-green-600 hover:bg-green-100 dark:bg-green-900/30 dark:text-green-400 flex items-center justify-center transition-colors disabled:opacity-50"
+                                title="Approve"
+                              >
+                                <i className="fas fa-check"></i>
+                              </button>
+                              <button
+                                onClick={() => handleUpdateStatus(r.id, "Rejected")}
+                                disabled={actionLoading}
+                                className="w-8 h-8 rounded-full bg-red-50 text-red-600 hover:bg-red-100 dark:bg-red-900/30 dark:text-red-400 flex items-center justify-center transition-colors disabled:opacity-50"
+                                title="Reject"
+                              >
+                                <i className="fas fa-times"></i>
+                              </button>
+                            </div>
+                          ) : (
+                            <span className="text-xs text-gray-400 italic">No actions needed</span>
+                          )}
+                        </td>
+                      </tr>
+                    );
+                  })
                 )}
               </tbody>
             </table>
@@ -297,7 +271,7 @@ const Timesheets = () => {
         onExport={handleExport}
         title="Export Timesheets"
         subtitle="Download timesheet records for the selected period"
-        totalRecords={displayRecords.length}
+        totalRecords={records.length}
         formats={["excel", "pdf", "csv"]}
         defaultFormat="excel"
         loading={exportLoading}
