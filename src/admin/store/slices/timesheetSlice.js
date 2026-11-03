@@ -8,10 +8,15 @@ import apiClient from "../../../utils/apiClient";
 
 export const fetchTimesheets = createAsyncThunk(
   "timesheets/fetchTimesheets",
-  async (params, { rejectWithValue }) => {
+  async (params = {}, { rejectWithValue }) => {
     try {
       const res = await apiClient.get("/admin/timesheets", { params });
-      return res.data?.data || res.data || {};
+      // Assuming standard API response format: { data: { records: [], stats: {} } } or { data: [] }
+      const payload = res.data?.data || res.data || {};
+      return {
+        records: payload.records || payload.data || payload || [],
+        stats: payload.stats || {},
+      };
     } catch (error) {
       return rejectWithValue(
         error.response?.data?.message || error.message || "Failed to fetch timesheets"
@@ -20,15 +25,29 @@ export const fetchTimesheets = createAsyncThunk(
   }
 );
 
-export const updateTimesheetStatus = createAsyncThunk(
-  "timesheets/updateStatus",
-  async ({ id, status }, { rejectWithValue }) => {
+export const approveTimesheet = createAsyncThunk(
+  "timesheets/approve",
+  async (id, { rejectWithValue }) => {
     try {
-      const res = await apiClient.patch(`/admin/timesheets/${id}/status`, { status });
-      return res.data?.data || res.data;
+      const res = await apiClient.post(`/admin/timesheets/${id}/approve`);
+      return res.data?.data || res.data || { id, status: "Approved" };
     } catch (error) {
       return rejectWithValue(
-        error.response?.data?.message || error.message || "Failed to update status"
+        error.response?.data?.message || error.message || "Failed to approve timesheet"
+      );
+    }
+  }
+);
+
+export const rejectTimesheet = createAsyncThunk(
+  "timesheets/reject",
+  async ({ id, reason }, { rejectWithValue }) => {
+    try {
+      const res = await apiClient.post(`/admin/timesheets/${id}/reject`, { reason });
+      return res.data?.data || res.data || { id, status: "Rejected" };
+    } catch (error) {
+      return rejectWithValue(
+        error.response?.data?.message || error.message || "Failed to reject timesheet"
       );
     }
   }
@@ -38,11 +57,11 @@ export const exportTimesheets = createAsyncThunk(
   "timesheets/export",
   async ({ format, filters }, { rejectWithValue }) => {
     try {
-      const res = await apiClient.post(
-        "/admin/timesheets/export",
-        { format, filters },
-        { responseType: "blob" }
-      );
+      // Using GET for export as per the API docs
+      const res = await apiClient.get("/admin/timesheets/export", {
+        params: { format: format === "excel" ? "xlsx" : format, ...filters },
+        responseType: "blob",
+      });
 
       const blob = new Blob([res.data]);
       const url = window.URL.createObjectURL(blob);
@@ -53,6 +72,7 @@ export const exportTimesheets = createAsyncThunk(
       link.click();
       link.remove();
       window.URL.revokeObjectURL(url);
+      
       return true;
     } catch (error) {
       return rejectWithValue(
@@ -85,34 +105,50 @@ const timesheetSlice = createSlice({
   },
   extraReducers: (builder) => {
     builder
+      // Fetch
       .addCase(fetchTimesheets.pending, (state) => {
         state.loading = true;
         state.error = null;
       })
       .addCase(fetchTimesheets.fulfilled, (state, action) => {
         state.loading = false;
-        state.records = action.payload.records || action.payload.data || [];
-        state.stats = action.payload.stats || initialState.stats;
+        state.records = action.payload.records;
+        state.stats = action.payload.stats;
       })
       .addCase(fetchTimesheets.rejected, (state, action) => {
         state.loading = false;
         state.error = action.payload;
       })
-      .addCase(updateTimesheetStatus.pending, (state) => {
+
+      // Approve
+      .addCase(approveTimesheet.pending, (state) => {
         state.actionLoading = true;
       })
-      .addCase(updateTimesheetStatus.fulfilled, (state, action) => {
+      .addCase(approveTimesheet.fulfilled, (state, action) => {
         state.actionLoading = false;
-        // Optimistically update the record in state
         const idx = state.records.findIndex((r) => r.id === action.payload.id);
-        if (idx !== -1) {
-          state.records[idx] = { ...state.records[idx], status: action.payload.status };
-        }
+        if (idx !== -1) state.records[idx] = { ...state.records[idx], status: "Approved" };
       })
-      .addCase(updateTimesheetStatus.rejected, (state, action) => {
+      .addCase(approveTimesheet.rejected, (state, action) => {
         state.actionLoading = false;
         state.error = action.payload;
       })
+
+      // Reject
+      .addCase(rejectTimesheet.pending, (state) => {
+        state.actionLoading = true;
+      })
+      .addCase(rejectTimesheet.fulfilled, (state, action) => {
+        state.actionLoading = false;
+        const idx = state.records.findIndex((r) => r.id === action.payload.id);
+        if (idx !== -1) state.records[idx] = { ...state.records[idx], status: "Rejected" };
+      })
+      .addCase(rejectTimesheet.rejected, (state, action) => {
+        state.actionLoading = false;
+        state.error = action.payload;
+      })
+
+      // Export
       .addCase(exportTimesheets.pending, (state) => {
         state.exportLoading = true;
       })

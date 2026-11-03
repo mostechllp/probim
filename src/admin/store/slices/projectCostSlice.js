@@ -6,22 +6,20 @@ import apiClient from "../../../utils/apiClient";
 // Async Thunks
 // ────────────────────────────────────────────────────────────
 
-/**
- * Financial summary per project for a period.
- * Params: { start_date, end_date, preset }
- */
 export const fetchProjectCostSummary = createAsyncThunk(
   "projectCost/fetchSummary",
   async (params = {}, { rejectWithValue }) => {
     try {
-      const res = await apiClient.get("/admin/projects/financial-summary", {
-        params,
+      const res = await apiClient.get("/admin/projects/cost", {
+        params: {
+          filter: params.filter,
+          start_date: params.start_date,
+          end_date: params.end_date,
+          search: params.search,
+        },
       });
-      const data = res.data?.data || res.data || {};
-      return {
-        records: data.records || data.projects || [],
-        totals: data.totals || {},
-      };
+      // API returns { status, message, data: { summary, projects, currency, period_label } }
+      return res.data?.data || res.data || {};
     } catch (error) {
       return rejectWithValue(
         error.response?.data?.message ||
@@ -32,18 +30,13 @@ export const fetchProjectCostSummary = createAsyncThunk(
   }
 );
 
-/**
- * Per-employee hours/cost breakdown for a project.
- * Response: { employees: [...], daily_hours: [...] }
- */
 export const fetchProjectCostBreakdown = createAsyncThunk(
   "projectCost/fetchBreakdown",
-  async ({ projectId, start_date, end_date }, { rejectWithValue }) => {
+  async ({ projectId, filter, start_date, end_date }, { rejectWithValue }) => {
     try {
-      const res = await apiClient.get(
-        `/admin/projects/${projectId}/employee-breakdown`,
-        { params: { start_date, end_date } }
-      );
+      const res = await apiClient.get(`/admin/projects/cost/${projectId}`, {
+        params: { filter, start_date, end_date },
+      });
       const data = res.data?.data || res.data || {};
       return {
         projectId,
@@ -60,28 +53,25 @@ export const fetchProjectCostBreakdown = createAsyncThunk(
   }
 );
 
-/**
- * Export project cost report as Excel or PDF.
- * Payload: { format: 'excel' | 'pdf', filters }
- */
 export const exportProjectCost = createAsyncThunk(
   "projectCost/export",
   async ({ format, filters }, { rejectWithValue }) => {
     try {
-      const res = await apiClient.post(
-        "/admin/projects/export",
-        { format, filters },
-        { responseType: "blob" }
-      );
+      // API expects GET /api/admin/projects/cost/export?format=xlsx
+      const res = await apiClient.get("/admin/projects/cost/export", {
+        params: {
+          format: format === "excel" ? "xlsx" : format,
+          ...filters,
+        },
+        responseType: "blob",
+      });
 
       const blob = new Blob([res.data]);
       const url = window.URL.createObjectURL(blob);
       const link = document.createElement("a");
       link.href = url;
       const ext = format === "excel" ? "xlsx" : "pdf";
-      link.download = `project-cost-report-${new Date()
-        .toISOString()
-        .slice(0, 10)}.${ext}`;
+      link.download = `project-cost-report-${new Date().toISOString().slice(0, 10)}.${ext}`;
       document.body.appendChild(link);
       link.click();
       link.remove();
@@ -104,8 +94,7 @@ export const exportProjectCost = createAsyncThunk(
 
 const initialState = {
   summary: {
-    records: [],
-    totals: {},
+    data: null, // Will hold the full { summary, projects, currency, period_label } object
     loading: false,
     error: null,
   },
@@ -150,8 +139,7 @@ const projectCostSlice = createSlice({
       })
       .addCase(fetchProjectCostSummary.fulfilled, (state, action) => {
         state.summary.loading = false;
-        state.summary.records = action.payload.records;
-        state.summary.totals = action.payload.totals;
+        state.summary.data = action.payload;
       })
       .addCase(fetchProjectCostSummary.rejected, (state, action) => {
         state.summary.loading = false;
@@ -191,6 +179,5 @@ const projectCostSlice = createSlice({
   },
 });
 
-export const { clearProjectCostError, clearBreakdown } =
-  projectCostSlice.actions;
+export const { clearProjectCostError, clearBreakdown } = projectCostSlice.actions;
 export default projectCostSlice.reducer;

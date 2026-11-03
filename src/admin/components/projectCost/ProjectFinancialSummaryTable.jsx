@@ -1,26 +1,9 @@
 // src/admin/components/projectCost/ProjectFinancialSummaryTable.jsx
 import React from "react";
 
-const fmtHours = (h) => {
-  if (!h || h <= 0) return "0h";
-  const hrs = Math.floor(h);
-  const mins = Math.round((h - hrs) * 60);
-  if (hrs === 0) return `${mins}m`;
-  if (mins === 0) return `${hrs}h`;
-  return `${hrs}h ${mins}m`;
-};
-
-const fmtAED = (n) => {
-  if (n === null || n === undefined || isNaN(n)) return "-";
-  return Number(n).toLocaleString("en-AE", {
-    minimumFractionDigits: 2,
-    maximumFractionDigits: 2,
-  });
-};
-
 const ProjectFinancialSummaryTable = ({
   records = [],
-  totals = {},
+  summary = {},
   loading,
   onSelectProject,
   selectedProjectId,
@@ -72,20 +55,12 @@ const ProjectFinancialSummaryTable = ({
                 </tr>
               ) : (
                 records.map((r) => {
-                  const hasBudget =
-                    r.budget !== null &&
-                    r.budget !== undefined &&
-                    !isNaN(r.budget) &&
-                    Number(r.budget) > 0;
-                  
-                  const variance = hasBudget ? r.budget - r.cost : null;
                   const isSelected = r.id === selectedProjectId;
-                  const isOver = hasBudget && variance < 0;
-
+                  
                   return (
                     <tr
                       key={r.id}
-                      onClick={() => onSelectProject(r)} // Make whole row clickable
+                      onClick={() => onSelectProject(r)}
                       className={`border-b border-gray-200 dark:border-gray-700 transition-colors cursor-pointer ${
                         isSelected
                           ? "bg-green-50/50 dark:bg-green-900/10"
@@ -98,18 +73,18 @@ const ProjectFinancialSummaryTable = ({
                       <td className="px-4 py-3 text-sm text-right text-gray-600 dark:text-gray-400">
                         <span className="inline-flex items-center gap-1.5 bg-indigo-50 dark:bg-indigo-900/30 px-2.5 py-1 rounded-full text-xs font-semibold text-indigo-700 dark:text-indigo-400">
                           <i className="fas fa-users text-[10px]"></i>
-                          {r.employees || 0}
+                          {r.employees_count || 0}
                         </span>
                       </td>
                       <td className="px-4 py-3 text-sm text-right font-mono text-gray-700 dark:text-gray-300">
-                        {fmtHours(r.hours)}
+                        {r.total_hours_formatted || "0h"}
                       </td>
                       <td className="px-4 py-3 text-sm text-right font-mono text-gray-700 dark:text-gray-300">
-                        {fmtAED(r.cost)}
+                        {r.total_cost_formatted || "0.00"}
                       </td>
                       <td className="px-4 py-3 text-sm text-right font-mono text-gray-700 dark:text-gray-300">
-                        {hasBudget ? (
-                          fmtAED(r.budget)
+                        {r.budget !== null && r.budget !== undefined ? (
+                          r.budget_formatted
                         ) : (
                           <span className="text-[11px] text-gray-400 italic bg-gray-100 dark:bg-gray-800 px-2 py-1 rounded">
                             No budget set
@@ -118,17 +93,16 @@ const ProjectFinancialSummaryTable = ({
                       </td>
                       <td
                         className={`px-4 py-3 text-sm text-right font-mono font-semibold ${
-                          variance === null
+                          r.variance === null
                             ? "text-gray-400"
-                            : isOver
+                            : r.is_over_budget
                             ? "text-red-600 dark:text-red-400"
                             : "text-green-600 dark:text-green-400"
                         }`}
                       >
-                        {variance === null ? "-" : fmtAED(variance)}
+                        {r.variance_formatted || "-"}
                       </td>
                       <td className="px-4 py-3 text-center">
-                        {/* Button kept for visual consistency, but row handles the click */}
                         <button
                           className={`text-xs font-bold flex items-center gap-1.5 mx-auto transition-colors px-3 py-1.5 rounded-lg ${
                             isSelected 
@@ -146,26 +120,26 @@ const ProjectFinancialSummaryTable = ({
               )}
             </tbody>
 
-            {!loading && records.length > 0 && (
+            {!loading && records.length > 0 && summary && (
               <tfoot>
                 <tr className="bg-gray-100 dark:bg-gray-700/60 font-bold border-t-2 border-gray-300 dark:border-gray-600">
                   <td className="px-4 py-4 text-sm text-gray-800 dark:text-gray-100 uppercase tracking-wider">
                     TOTAL SUMMARY
                   </td>
                   <td className="px-4 py-4 text-sm text-right text-gray-800 dark:text-gray-100">
-                    {totals.employees || 0}
+                    {summary.total_employees || 0}
                   </td>
                   <td className="px-4 py-4 text-sm text-right font-mono text-gray-800 dark:text-gray-100">
-                    {fmtHours(totals.hours)}
+                    {summary.total_hours_formatted || "0h"}
                   </td>
                   <td className="px-4 py-4 text-sm text-right font-mono text-gray-800 dark:text-gray-100">
-                    {fmtAED(totals.cost)}
+                    {summary.total_cost_formatted || "0.00"}
                   </td>
                   <td className="px-4 py-4 text-sm text-right font-mono text-gray-800 dark:text-gray-100">
-                    {fmtAED(totals.budget)}
+                    {summary.total_budget_formatted || "0.00"}
                   </td>
-                  <td className="px-4 py-4 text-sm text-right font-mono text-gray-800 dark:text-gray-100">
-                    {fmtAED(totals.variance)}
+                  <td className={`px-4 py-4 text-sm text-right font-mono ${summary.is_over_budget ? 'text-red-600 dark:text-red-400' : 'text-green-600 dark:text-green-400'}`}>
+                    {summary.total_variance_formatted || "-"}
                   </td>
                   <td></td>
                 </tr>
