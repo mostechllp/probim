@@ -326,9 +326,12 @@ const Timesheets = () => {
                   </tr>
                 ) : (
                   safeRecords.map((r) => {
-                    // Normalize status for UI checks
                     const status = (r.status || "Pending").toLowerCase();
                     const isPending = status === "pending";
+                    
+                    // Extract avatar
+                    const avatarUrl = r.employee?.avatar || r.employee_avatar || null;
+                    const empName = r.employee?.name || r.employee_name || "Unknown";
 
                     return (
                       <tr 
@@ -349,19 +352,35 @@ const Timesheets = () => {
                            )}
                         </td>
                         <td className="px-4 py-3">
-                          <p className="text-sm font-semibold text-gray-800 dark:text-gray-200">{r.employee_name || r.employee?.name || "Unknown"}</p>
-                          <p className="text-[11px] text-gray-500">Mgr: {r.manager_name || r.approver?.name || "-"}</p>
+                          <div className="flex items-center gap-3">
+                            {/* Avatar Image */}
+                            <div className="w-8 h-8 rounded-full bg-gray-200 overflow-hidden flex-shrink-0">
+                              {avatarUrl ? (
+                                <img src={avatarUrl} alt={empName} className="w-full h-full object-cover" />
+                              ) : (
+                                <div className="w-full h-full flex items-center justify-center bg-indigo-100 text-indigo-600 font-bold text-xs">
+                                  {empName.charAt(0).toUpperCase()}
+                                </div>
+                              )}
+                            </div>
+                            <div>
+                              <p className="text-sm font-semibold text-gray-800 dark:text-gray-200">{empName}</p>
+                              {r.employee?.manager_name && (
+                                <p className="text-[11px] text-gray-500">Mgr: {r.employee.manager_name}</p>
+                              )}
+                            </div>
+                          </div>
                         </td>
-                        <td className="px-4 py-3 text-sm text-gray-700 dark:text-gray-300">{r.project_name || r.project?.name || "Unknown"}</td>
+                        <td className="px-4 py-3 text-sm text-gray-700 dark:text-gray-300">{r.project?.name || r.project_name || "Unknown"}</td>
                         <td className="px-4 py-3 text-sm text-gray-700 dark:text-gray-300">{r.date || r.log_date || "-"}</td>
-                        <td className="px-4 py-3 text-sm text-right font-mono font-semibold text-gray-800 dark:text-gray-200">{r.hours || r.total_hours || 0}h</td>
+                        <td className="px-4 py-3 text-sm text-right font-mono font-semibold text-gray-800 dark:text-gray-200">{r.hours_formatted || `${r.hours || r.total_hours || 0}h`}</td>
                         <td className="px-4 py-3 text-center">
                           <span className={`px-2.5 py-1 rounded-full text-xs font-semibold uppercase tracking-wider ${
                             status === "approved" ? "bg-green-100 text-green-700 dark:bg-green-900/30 dark:text-green-400" :
                             status === "rejected" ? "bg-red-100 text-red-700 dark:bg-red-900/30 dark:text-red-400" :
                             "bg-amber-100 text-amber-700 dark:bg-amber-900/30 dark:text-amber-400"
                           }`}>
-                            {r.status || "Pending"}
+                            {r.status_label || r.status || "Pending"}
                           </span>
                         </td>
                         <td className="px-4 py-3 text-right">
