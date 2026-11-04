@@ -2,10 +2,6 @@
 import { createSlice, createAsyncThunk } from "@reduxjs/toolkit";
 import apiClient from "../../../utils/apiClient";
 
-// ────────────────────────────────────────────────────────────
-// Async Thunks
-// ────────────────────────────────────────────────────────────
-
 export const fetchProjectCostSummary = createAsyncThunk(
   "projectCost/fetchSummary",
   async (params = {}, { rejectWithValue }) => {
@@ -18,13 +14,10 @@ export const fetchProjectCostSummary = createAsyncThunk(
           search: params.search,
         },
       });
-      // API returns { status, message, data: { summary, projects, currency, period_label } }
       return res.data?.data || res.data || {};
     } catch (error) {
       return rejectWithValue(
-        error.response?.data?.message ||
-          error.message ||
-          "Failed to fetch project cost summary"
+        error.response?.data?.message || error.message || "Failed to fetch project cost summary"
       );
     }
   }
@@ -37,17 +30,18 @@ export const fetchProjectCostBreakdown = createAsyncThunk(
       const res = await apiClient.get(`/admin/projects/cost/${projectId}`, {
         params: { filter, start_date, end_date },
       });
-      const data = res.data?.data || res.data || {};
+      
+      const projectData = res.data?.data?.project || res.data?.project || res.data?.data || res.data || {};
+      
       return {
         projectId,
-        employees: data.employees || [],
-        dailyHours: data.daily_hours || data.dailyHours || [],
+        employees: projectData.employees || [],
+        // Make sure we grab daily_hours from the project object
+        dailyHours: projectData.daily_hours || projectData.dailyHours || [],
       };
     } catch (error) {
       return rejectWithValue(
-        error.response?.data?.message ||
-          error.message ||
-          "Failed to fetch employee breakdown"
+        error.response?.data?.message || error.message || "Failed to fetch employee breakdown"
       );
     }
   }
@@ -57,7 +51,6 @@ export const exportProjectCost = createAsyncThunk(
   "projectCost/export",
   async ({ format, filters }, { rejectWithValue }) => {
     try {
-      // API expects GET /api/admin/projects/cost/export?format=xlsx
       const res = await apiClient.get("/admin/projects/cost/export", {
         params: {
           format: format === "excel" ? "xlsx" : format,
@@ -80,26 +73,21 @@ export const exportProjectCost = createAsyncThunk(
       return true;
     } catch (error) {
       return rejectWithValue(
-        error.response?.data?.message ||
-          error.message ||
-          "Failed to export project cost report"
+        error.response?.data?.message || error.message || "Failed to export project cost report"
       );
     }
   }
 );
 
-// ────────────────────────────────────────────────────────────
-// Initial State
-// ────────────────────────────────────────────────────────────
-
 const initialState = {
   summary: {
-    data: null, // Will hold the full { summary, projects, currency, period_label } object
+    data: null,
     loading: false,
     error: null,
   },
   breakdown: {
     projectId: null,
+    projectName: null,
     employees: [],
     dailyHours: [],
     loading: false,
@@ -108,10 +96,6 @@ const initialState = {
   exportLoading: false,
   error: null,
 };
-
-// ────────────────────────────────────────────────────────────
-// Slice
-// ────────────────────────────────────────────────────────────
 
 const projectCostSlice = createSlice({
   name: "projectCost",
@@ -123,16 +107,20 @@ const projectCostSlice = createSlice({
     clearBreakdown: (state) => {
       state.breakdown = {
         projectId: null,
+        projectName: null,
         employees: [],
         dailyHours: [],
         loading: false,
         error: null,
       };
     },
+    setActiveProjectMeta: (state, action) => {
+      state.breakdown.projectId = action.payload.id;
+      state.breakdown.projectName = action.payload.name;
+    }
   },
   extraReducers: (builder) => {
     builder
-      // Summary
       .addCase(fetchProjectCostSummary.pending, (state) => {
         state.summary.loading = true;
         state.summary.error = null;
@@ -143,11 +131,9 @@ const projectCostSlice = createSlice({
       })
       .addCase(fetchProjectCostSummary.rejected, (state, action) => {
         state.summary.loading = false;
-        state.summary.error =
-          action.payload || "Failed to fetch project cost summary";
+        state.summary.error = action.payload || "Failed to fetch project cost summary";
       })
 
-      // Breakdown
       .addCase(fetchProjectCostBreakdown.pending, (state) => {
         state.breakdown.loading = true;
         state.breakdown.error = null;
@@ -160,11 +146,9 @@ const projectCostSlice = createSlice({
       })
       .addCase(fetchProjectCostBreakdown.rejected, (state, action) => {
         state.breakdown.loading = false;
-        state.breakdown.error =
-          action.payload || "Failed to fetch employee breakdown";
+        state.breakdown.error = action.payload || "Failed to fetch employee breakdown";
       })
 
-      // Export
       .addCase(exportProjectCost.pending, (state) => {
         state.exportLoading = true;
         state.error = null;
@@ -179,5 +163,5 @@ const projectCostSlice = createSlice({
   },
 });
 
-export const { clearProjectCostError, clearBreakdown } = projectCostSlice.actions;
+export const { clearProjectCostError, clearBreakdown, setActiveProjectMeta } = projectCostSlice.actions;
 export default projectCostSlice.reducer;

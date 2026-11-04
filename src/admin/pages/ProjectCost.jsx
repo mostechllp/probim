@@ -5,9 +5,12 @@ import { showToast } from "../../components/common/Toast";
 
 import {
   fetchProjectCostSummary,
+  fetchProjectCostBreakdown,
   exportProjectCost,
   clearProjectCostError,
-} from "../store/slices/projectCostSlice";
+  clearBreakdown,
+  setActiveProjectMeta,
+} from "../store/slices/projectCostSlice"; // Adjust path if needed
 
 import PeriodSelector from "../components/projectCost/PeriodSelector";
 import ProjectFinancialSummaryTable from "../components/projectCost/ProjectFinancialSummaryTable";
@@ -15,9 +18,6 @@ import EmployeeBreakdownPanel from "../components/projectCost/EmployeeBreakdownP
 import ExportModal from "../../components/common/ExportModal";
 import RestrictedAccess from "../components/projectCost/RestrictedAccess";
 
-// ────────────────────────────────────────────────────────────
-// Date helpers
-// ────────────────────────────────────────────────────────────
 const toISODate = (d) => d.toISOString().split("T")[0];
 
 const getPresetRange = (preset) => {
@@ -40,9 +40,6 @@ const getPresetRange = (preset) => {
   }
 };
 
-// ────────────────────────────────────────────────────────────
-// Access control
-// ────────────────────────────────────────────────────────────
 const isRestrictedUser = (user) => {
   if (!user) return false;
   const type = (user?.type || "").toLowerCase();
@@ -60,14 +57,11 @@ const isRestrictedUser = (user) => {
   );
 };
 
-// ────────────────────────────────────────────────────────────
-// Component
-// ────────────────────────────────────────────────────────────
 const ProjectCost = () => {
   const dispatch = useDispatch();
   const { user } = useSelector((state) => state.auth);
 
-  const { summary, exportLoading, error } = useSelector(
+  const { summary, breakdown, exportLoading, error } = useSelector(
     (state) => state.projectCost
   );
 
@@ -76,8 +70,8 @@ const ProjectCost = () => {
   const [customEnd, setCustomEnd] = useState(toISODate(new Date()));
   const [isExportOpen, setIsExportOpen] = useState(false);
   
-  // Holds the project object clicked from the table (which includes employees and daily_hours)
-  const [selectedProject, setSelectedProject] = useState(null);
+  const [selectedProjectId, setSelectedProjectId] = useState(null);
+  const [isPanelOpen, setIsPanelOpen] = useState(false);
 
   const accessGranted = useMemo(() => isRestrictedUser(user), [user]);
 
@@ -109,10 +103,37 @@ const ProjectCost = () => {
     }
   }, [error, dispatch]);
 
-  // Open side panel directly using the data from the selected project row
-  const handleOpenBreakdown = useCallback((project) => {
-    setSelectedProject(project);
-  }, []);
+  // ── HANDLER FOR CLICKING A PROJECT ROW ──
+  const handleOpenBreakdown = useCallback(
+    (project) => {
+      // 1. Set UI state
+      setSelectedProjectId(project.id);
+      setIsPanelOpen(true);
+      
+      // 2. Set the header name immediately
+      dispatch(setActiveProjectMeta({ id: project.id, name: project.name }));
+
+      // 3. Resolve date range
+      const { start, end } = resolveRange();
+      
+      // 4. Trigger the API call to /api/admin/projects/cost/{id}
+      dispatch(
+        fetchProjectCostBreakdown({
+          projectId: project.id,
+          filter: period,
+          start_date: start || undefined,
+          end_date: end || undefined,
+        })
+      );
+    },
+    [dispatch, resolveRange, period]
+  );
+
+  const handleClosePanel = () => {
+    setIsPanelOpen(false);
+    setSelectedProjectId(null);
+    dispatch(clearBreakdown());
+  };
 
   // Export handler
   const handleExport = async (format) => {
@@ -139,7 +160,6 @@ const ProjectCost = () => {
     return <RestrictedAccess />;
   }
 
-  // Safely extract data from the API response structure
   const apiData = summary.data || {};
   const projects = apiData.projects || [];
   const totals = apiData.summary || {};
@@ -177,26 +197,26 @@ const ProjectCost = () => {
         setCustomEnd={setCustomEnd}
       />
 
-      {/* Summary table */}
+      {/* Summary table - Make sure this passes the click up */}
       <ProjectFinancialSummaryTable
         records={projects}
         summary={totals}
         loading={summary.loading}
-        onSelectProject={handleOpenBreakdown}
-        selectedProjectId={selectedProject?.id}
+        onSelectProject={handleOpenBreakdown} 
+        selectedProjectId={selectedProjectId}
       />
 
       {/* Side panel */}
-      {selectedProject && (
+      {isPanelOpen && (
         <EmployeeBreakdownPanel
-          project={selectedProject}
+          project={{ name: breakdown.projectName }} 
           data={{
-            employees: selectedProject.employees || [],
-            dailyHours: selectedProject.daily_hours || [],
-            loading: false, // No longer loading from API
+            employees: breakdown.employees,
+            dailyHours: breakdown.dailyHours,
+            loading: breakdown.loading, 
           }}
           period={periodLabel}
-          onClose={() => setSelectedProject(null)}
+          onClose={handleClosePanel}
         />
       )}
 
