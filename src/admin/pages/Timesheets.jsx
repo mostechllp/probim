@@ -5,69 +5,73 @@ import { showToast } from "../../components/common/Toast";
 
 import {
   fetchTimesheets,
+  fetchTimesheetById,
+  createTimesheet,
+  updateTimesheet,
+  deleteTimesheet,
   approveTimesheet,
   rejectTimesheet,
+  bulkApproveTimesheets,
+  bulkRejectTimesheets,
   exportTimesheets,
   clearTimesheetError,
+  clearSelectedTimesheet,
 } from "../store/slices/timesheetSlice";
 
 import PeriodSelector from "../components/projectCost/PeriodSelector";
 import ExportModal from "../../components/common/ExportModal";
+import TimesheetModal from "../components/projectCost/TimesheetModal";
+import TimesheetDetailsPanel from "../components/projectCost/TimesheetDetailsPanel";
+import ConfirmModal from "../components/common/ConfirmModal";
 
-// ────────────────────────────────────────────────────────────
-// Date helpers
-// ────────────────────────────────────────────────────────────
 const toISODate = (d) => d.toISOString().split("T")[0];
 
 const getPresetRange = (preset) => {
   const now = new Date();
   const y = now.getFullYear();
   const m = now.getMonth();
-
   switch (preset) {
-    case "this_month":
-      return { start: toISODate(new Date(y, m, 1)), end: toISODate(new Date(y, m + 1, 0)) };
-    case "last_month":
-      return { start: toISODate(new Date(y, m - 1, 1)), end: toISODate(new Date(y, m, 0)) };
+    case "this_month": return { start: toISODate(new Date(y, m, 1)), end: toISODate(new Date(y, m + 1, 0)) };
+    case "last_month": return { start: toISODate(new Date(y, m - 1, 1)), end: toISODate(new Date(y, m, 0)) };
     case "this_quarter": {
       const qStart = Math.floor(m / 3) * 3;
       return { start: toISODate(new Date(y, qStart, 1)), end: toISODate(new Date(y, qStart + 3, 0)) };
     }
-    case "project_to_date":
-    default:
-      return { start: null, end: null };
+    default: return { start: null, end: null };
   }
 };
 
-// ────────────────────────────────────────────────────────────
-// Component
-// ────────────────────────────────────────────────────────────
-
 const Timesheets = () => {
   const dispatch = useDispatch();
-
-  const { records, stats, loading, actionLoading, exportLoading, error } = useSelector(
-    (state) => state.timesheets
-  );
+  const { records, stats, selectedTimesheet, loading, actionLoading, exportLoading, error } = useSelector((state) => state.timesheets);
+  const safeRecords = Array.isArray(records) ? records : [];
 
   const [period, setPeriod] = useState("this_month");
   const [customStart, setCustomStart] = useState(toISODate(new Date()));
   const [customEnd, setCustomEnd] = useState(toISODate(new Date()));
   const [isExportOpen, setIsExportOpen] = useState(false);
+  
+  // Modals & Panels state
+  const [isFormOpen, setIsFormOpen] = useState(false);
+  const [editingRecord, setEditingRecord] = useState(null);
+  const [isPanelOpen, setIsPanelOpen] = useState(false);
+  
+  // Bulk Selection & Delete Confirm State
+  const [selectedIds, setSelectedIds] = useState([]);
+  const [isDeleteOpen, setIsDeleteOpen] = useState(false);
+  const [recordToDelete, setRecordToDelete] = useState(null);
 
   const resolveRange = useCallback(() => {
-    return period === "custom"
-      ? { start: customStart, end: customEnd }
-      : getPresetRange(period);
+    return period === "custom" ? { start: customStart, end: customEnd } : getPresetRange(period);
   }, [period, customStart, customEnd]);
 
-  // Fetch data
-  useEffect(() => {
+  const refreshData = useCallback(() => {
     const { start, end } = resolveRange();
     dispatch(fetchTimesheets({ start_date: start, end_date: end, filter: period }));
   }, [dispatch, resolveRange, period]);
 
-  // Surface errors
+  useEffect(() => { refreshData(); }, [refreshData]);
+
   useEffect(() => {
     if (error) {
       showToast(error, "error");
@@ -75,29 +79,117 @@ const Timesheets = () => {
     }
   }, [error, dispatch]);
 
+  // Handlers
+  const handleOpenPanel = (record) => {
+    setIsPanelOpen(true);
+    dispatch(fetchTimesheetById(record.id));
+  };
+
+  const handleClosePanel = () => {
+    setIsPanelOpen(false);
+    dispatch(clearSelectedTimesheet());
+  };
+
+  const handleOpenCreate = () => {
+    setEditingRecord(null);
+    setIsFormOpen(true);
+  };
+
+  const handleOpenEdit = (record) => {
+    setEditingRecord(record);
+    setIsFormOpen(true);
+    setIsPanelOpen(false);
+  };
+
+  const handleSaveForm = async (formData) => {
+    try {
+      if (formData.id) {
+        await dispatch(updateTimesheet({ id: formData.id, data: formData })).unwrap();
+        showToast("Timesheet updated successfully", "success");
+      } else {
+        await dispatch(createTimesheet(formData)).unwrap();
+        showToast("Timesheet created successfully", "success");
+      }
+      setIsFormOpen(false);
+      refreshData();
+    } catch (e) {
+      showToast(e || "Failed to save timesheet", "error");
+    }
+  };
+
+  const handleDeleteTrigger = (record) => {
+    setRecordToDelete(record);
+    setIsDeleteOpen(true);
+  };
+
+  const handleConfirmDelete = async () => {
+    if (!recordToDelete) return;
+    try {
+      await dispatch(deleteTimesheet(recordToDelete.id)).unwrap();
+      showToast("Timesheet deleted successfully", "success");
+      setIsDeleteOpen(false);
+      setRecordToDelete(null);
+      handleClosePanel();
+      refreshData();
+    } catch (e) {
+      showToast(e || "Failed to delete timesheet", "error");
+    }
+  };
+
   const handleUpdateStatus = async (id, status) => {
     try {
       if (status === "Approved") {
         await dispatch(approveTimesheet(id)).unwrap();
-        showToast("Timesheet approved successfully", "success");
+        showToast("Timesheet approved", "success");
       } else {
-        // If you want to ask for a rejection reason, you could use a prompt or modal here.
-        // For now, we pass an empty/default reason or omit it based on backend requirements.
         await dispatch(rejectTimesheet({ id, reason: "Rejected by Admin" })).unwrap();
-        showToast("Timesheet rejected successfully", "success");
+        showToast("Timesheet rejected", "success");
       }
+      refreshData();
+      if (isPanelOpen) dispatch(fetchTimesheetById(id));
     } catch (e) {
       showToast(e || "Failed to update status", "error");
+    }
+  };
+
+  // Bulk Handlers - Fixed to use lowercase 'pending'
+  const pendingRecords = safeRecords.filter(r => (r.status || "").toLowerCase() === "pending");
+  
+  const handleSelectAll = (e) => {
+    if (e.target.checked) {
+      setSelectedIds(pendingRecords.map(r => r.id));
+    } else {
+      setSelectedIds([]);
+    }
+  };
+
+  const handleSelectRow = (id) => {
+    setSelectedIds(prev => 
+      prev.includes(id) ? prev.filter(item => item !== id) : [...prev, id]
+    );
+  };
+
+  const handleBulkAction = async (action) => {
+    if (selectedIds.length === 0) return;
+    try {
+      if (action === "Approved") {
+        await dispatch(bulkApproveTimesheets(selectedIds)).unwrap();
+        showToast(`${selectedIds.length} timesheets approved`, "success");
+      } else {
+        await dispatch(bulkRejectTimesheets({ ids: selectedIds, reason: "Bulk rejected" })).unwrap();
+        showToast(`${selectedIds.length} timesheets rejected`, "success");
+      }
+      setSelectedIds([]);
+      refreshData();
+    } catch (e) {
+      showToast(e || "Bulk action failed", "error");
     }
   };
 
   const handleExport = async (format) => {
     const { start, end } = resolveRange();
     try {
-      await dispatch(exportTimesheets({ 
-        format, 
-        filters: { start_date: start, end_date: end, filter: period } 
-      })).unwrap();
+      await dispatch(exportTimesheets({ format, filters: { start_date: start, end_date: end, filter: period } })).unwrap();
       showToast(`Timesheets exported as ${format.toUpperCase()}`, "success");
       setIsExportOpen(false);
     } catch (e) {
@@ -105,8 +197,11 @@ const Timesheets = () => {
     }
   };
 
+  const isAllSelected = pendingRecords.length > 0 && pendingRecords.every(r => selectedIds.includes(r.id));
+
   return (
     <div className="p-4 md:p-6 space-y-6 max-w-[1600px] mx-auto animate-fadeIn">
+      
       {/* Header */}
       <div className="flex flex-col md:flex-row md:items-center justify-between gap-4">
         <div>
@@ -117,14 +212,21 @@ const Timesheets = () => {
             Manage and approve employee hours logged against projects.
           </p>
         </div>
-        <button
-          onClick={() => setIsExportOpen(true)}
-          disabled={exportLoading}
-          className="px-5 py-2.5 rounded-full bg-green-500 hover:bg-green-600 text-white text-xs md:text-sm font-bold flex items-center gap-2 shadow-soft hover:shadow-soft-lg disabled:opacity-50 self-start md:self-auto"
-        >
-          <i className="fas fa-file-export"></i>
-          Export Data
-        </button>
+        <div className="flex items-center gap-2 self-start md:self-auto">
+          <button
+            onClick={handleOpenCreate}
+            className="px-5 py-2.5 rounded-full bg-green-500 hover:bg-green-600 text-white text-xs md:text-sm font-bold flex items-center gap-2 shadow-soft hover:shadow-soft-lg transition-all"
+          >
+            <i className="fas fa-plus-circle"></i> Add Entry
+          </button>
+          <button
+            onClick={() => setIsExportOpen(true)}
+            disabled={exportLoading}
+            className="px-4 py-2.5 rounded-full bg-white dark:bg-gray-800 border border-gray-200 dark:border-gray-700 text-gray-700 dark:text-gray-200 text-xs md:text-sm font-semibold flex items-center gap-2 hover:bg-gray-50 dark:hover:bg-gray-700 transition-all disabled:opacity-50"
+          >
+            <i className="fas fa-file-export"></i> Export
+          </button>
+        </div>
       </div>
 
       {/* Stats Cards */}
@@ -136,7 +238,7 @@ const Timesheets = () => {
           <div>
             <p className="text-xs text-gray-500 font-semibold uppercase">Total Logged Hours</p>
             <p className="text-2xl font-bold text-gray-800 dark:text-gray-200">
-              {stats?.totalHours || stats?.total_hours || 0}h
+              {stats?.total_logged_hours_formatted || `${stats?.total_logged_hours || 0}h`}
             </p>
           </div>
         </div>
@@ -147,7 +249,7 @@ const Timesheets = () => {
           <div>
             <p className="text-xs text-gray-500 font-semibold uppercase">Pending Approvals</p>
             <p className="text-2xl font-bold text-gray-800 dark:text-gray-200">
-              {stats?.pendingApprovals || stats?.pending_approvals || 0}
+              {stats?.pending_approvals_count || 0}
             </p>
           </div>
         </div>
@@ -158,29 +260,49 @@ const Timesheets = () => {
           <div>
             <p className="text-xs text-gray-500 font-semibold uppercase">Approved Hours</p>
             <p className="text-2xl font-bold text-gray-800 dark:text-gray-200">
-              {stats?.approvedHours || stats?.approved_hours || 0}h
+              {stats?.approved_hours_formatted || `${stats?.approved_hours || 0}h`}
             </p>
           </div>
         </div>
       </div>
 
-      {/* Period selector */}
-      <PeriodSelector
-        period={period}
-        setPeriod={setPeriod}
-        customStart={customStart}
-        setCustomStart={setCustomStart}
-        customEnd={customEnd}
-        setCustomEnd={setCustomEnd}
-      />
+      <PeriodSelector period={period} setPeriod={setPeriod} customStart={customStart} setCustomStart={setCustomStart} customEnd={customEnd} setCustomEnd={setCustomEnd} />
 
-      {/* Data Table */}
+      {/* Bulk Actions Bar */}
+      {selectedIds.length > 0 && (
+        <div className="bg-green-50 dark:bg-green-900/20 border border-green-200 dark:border-green-800 rounded-xl p-3 flex items-center justify-between animate-fadeIn">
+          <div className="text-sm font-semibold text-green-800 dark:text-green-300">
+            {selectedIds.length} timesheet(s) selected
+          </div>
+          <div className="flex gap-2">
+            <button onClick={() => handleBulkAction("Approved")} className="px-4 py-1.5 text-xs font-bold text-white bg-green-500 rounded-lg hover:bg-green-600">
+              Approve Selected
+            </button>
+            <button onClick={() => handleBulkAction("Rejected")} className="px-4 py-1.5 text-xs font-bold text-white bg-red-500 rounded-lg hover:bg-red-600">
+              Reject Selected
+            </button>
+            <button onClick={() => setSelectedIds([])} className="px-4 py-1.5 text-xs font-bold text-gray-600 bg-gray-200 dark:bg-gray-700 dark:text-gray-300 rounded-lg hover:bg-gray-300 dark:hover:bg-gray-600">
+              Clear
+            </button>
+          </div>
+        </div>
+      )}
+
+      {/* Table */}
       <div className="bg-white dark:bg-gray-800 rounded-xl border border-gray-200 dark:border-gray-700 overflow-hidden shadow-soft">
         <div className="overflow-x-auto">
           <div className="min-w-[900px]">
             <table className="w-full border-collapse">
               <thead>
                 <tr className="bg-gray-50 dark:bg-gray-700/50 border-b border-gray-200 dark:border-gray-700">
+                  <th className="px-4 py-3 text-left w-10">
+                    <input 
+                      type="checkbox" 
+                      checked={isAllSelected}
+                      onChange={handleSelectAll}
+                      className="w-4 h-4 text-green-500 rounded border-gray-300 focus:ring-green-500 cursor-pointer"
+                    />
+                  </th>
                   <th className="px-4 py-3 text-left text-xs font-semibold text-gray-500 dark:text-gray-400 uppercase">Employee</th>
                   <th className="px-4 py-3 text-left text-xs font-semibold text-gray-500 dark:text-gray-400 uppercase">Project</th>
                   <th className="px-4 py-3 text-left text-xs font-semibold text-gray-500 dark:text-gray-400 uppercase">Date</th>
@@ -192,61 +314,63 @@ const Timesheets = () => {
               <tbody>
                 {loading ? (
                   <tr>
-                    <td colSpan="6" className="px-4 py-10 text-center text-gray-500">
+                    <td colSpan="7" className="px-4 py-10 text-center text-gray-500">
                       <i className="fas fa-spinner fa-spin mr-2 text-green-500"></i> Loading timesheets...
                     </td>
                   </tr>
-                ) : records.length === 0 ? (
+                ) : safeRecords.length === 0 ? (
                   <tr>
-                    <td colSpan="6" className="px-4 py-10 text-center text-gray-500">
+                    <td colSpan="7" className="px-4 py-10 text-center text-gray-500">
                       No timesheet records found for this period.
                     </td>
                   </tr>
                 ) : (
-                  records.map((r) => {
-                    // Fallbacks handle both camelCase and snake_case API responses
-                    const empName = r.employeeName || r.employee_name || r.employee?.name || "Unknown";
-                    const projName = r.projectName || r.project_name || r.project?.name || "Unknown";
-                    const mgrName = r.manager || r.manager_name || r.approver?.name || "-";
-                    const dateStr = r.date || r.log_date || "-";
-                    const hoursStr = r.hours || r.total_hours || 0;
-                    const statusStr = r.status || "Pending";
+                  safeRecords.map((r) => {
+                    // Normalize status for UI checks
+                    const status = (r.status || "Pending").toLowerCase();
+                    const isPending = status === "pending";
 
                     return (
-                      <tr key={r.id} className="border-b border-gray-200 dark:border-gray-700 hover:bg-gray-50 dark:hover:bg-gray-700/50 transition-colors">
-                        <td className="px-4 py-3">
-                          <p className="text-sm font-semibold text-gray-800 dark:text-gray-200">{empName}</p>
-                          <p className="text-[11px] text-gray-500">Mgr: {mgrName}</p>
+                      <tr 
+                        key={r.id} 
+                        onClick={() => handleOpenPanel(r)}
+                        className={`border-b border-gray-200 dark:border-gray-700 hover:bg-gray-50 dark:hover:bg-gray-700/50 transition-colors cursor-pointer ${
+                          selectedIds.includes(r.id) ? "bg-green-50/50 dark:bg-green-900/10" : ""
+                        }`}
+                      >
+                        <td className="px-4 py-3 text-center" onClick={(e) => e.stopPropagation()}>
+                           {isPending && (
+                             <input 
+                               type="checkbox" 
+                               checked={selectedIds.includes(r.id)}
+                               onChange={() => handleSelectRow(r.id)}
+                               className="w-4 h-4 text-green-500 rounded border-gray-300 focus:ring-green-500 cursor-pointer"
+                             />
+                           )}
                         </td>
-                        <td className="px-4 py-3 text-sm text-gray-700 dark:text-gray-300">{projName}</td>
-                        <td className="px-4 py-3 text-sm text-gray-700 dark:text-gray-300">{dateStr}</td>
-                        <td className="px-4 py-3 text-sm text-right font-mono font-semibold text-gray-800 dark:text-gray-200">{hoursStr}h</td>
+                        <td className="px-4 py-3">
+                          <p className="text-sm font-semibold text-gray-800 dark:text-gray-200">{r.employee_name || r.employee?.name || "Unknown"}</p>
+                          <p className="text-[11px] text-gray-500">Mgr: {r.manager_name || r.approver?.name || "-"}</p>
+                        </td>
+                        <td className="px-4 py-3 text-sm text-gray-700 dark:text-gray-300">{r.project_name || r.project?.name || "Unknown"}</td>
+                        <td className="px-4 py-3 text-sm text-gray-700 dark:text-gray-300">{r.date || r.log_date || "-"}</td>
+                        <td className="px-4 py-3 text-sm text-right font-mono font-semibold text-gray-800 dark:text-gray-200">{r.hours || r.total_hours || 0}h</td>
                         <td className="px-4 py-3 text-center">
-                          <span className={`px-2.5 py-1 rounded-full text-xs font-semibold ${
-                            statusStr === "Approved" || statusStr === "approved" ? "bg-green-100 text-green-700 dark:bg-green-900/30 dark:text-green-400" :
-                            statusStr === "Rejected" || statusStr === "rejected" ? "bg-red-100 text-red-700 dark:bg-red-900/30 dark:text-red-400" :
+                          <span className={`px-2.5 py-1 rounded-full text-xs font-semibold uppercase tracking-wider ${
+                            status === "approved" ? "bg-green-100 text-green-700 dark:bg-green-900/30 dark:text-green-400" :
+                            status === "rejected" ? "bg-red-100 text-red-700 dark:bg-red-900/30 dark:text-red-400" :
                             "bg-amber-100 text-amber-700 dark:bg-amber-900/30 dark:text-amber-400"
                           }`}>
-                            {statusStr}
+                            {r.status || "Pending"}
                           </span>
                         </td>
                         <td className="px-4 py-3 text-right">
-                          {statusStr === "Pending" || statusStr === "pending" ? (
-                            <div className="flex items-center justify-end gap-2">
-                              <button
-                                onClick={() => handleUpdateStatus(r.id, "Approved")}
-                                disabled={actionLoading}
-                                className="w-8 h-8 rounded-full bg-green-50 text-green-600 hover:bg-green-100 dark:bg-green-900/30 dark:text-green-400 flex items-center justify-center transition-colors disabled:opacity-50"
-                                title="Approve"
-                              >
+                          {isPending ? (
+                            <div className="flex items-center justify-end gap-2" onClick={(e) => e.stopPropagation()}>
+                              <button onClick={() => handleUpdateStatus(r.id, "Approved")} className="w-8 h-8 rounded-full bg-green-50 text-green-600 hover:bg-green-100 dark:bg-green-900/30 dark:text-green-400 transition-colors" title="Approve">
                                 <i className="fas fa-check"></i>
                               </button>
-                              <button
-                                onClick={() => handleUpdateStatus(r.id, "Rejected")}
-                                disabled={actionLoading}
-                                className="w-8 h-8 rounded-full bg-red-50 text-red-600 hover:bg-red-100 dark:bg-red-900/30 dark:text-red-400 flex items-center justify-center transition-colors disabled:opacity-50"
-                                title="Reject"
-                              >
+                              <button onClick={() => handleUpdateStatus(r.id, "Rejected")} className="w-8 h-8 rounded-full bg-red-50 text-red-600 hover:bg-red-100 dark:bg-red-900/30 dark:text-red-400 transition-colors" title="Reject">
                                 <i className="fas fa-times"></i>
                               </button>
                             </div>
@@ -264,17 +388,36 @@ const Timesheets = () => {
         </div>
       </div>
 
-      {/* Export Modal */}
-      <ExportModal
-        isOpen={isExportOpen}
-        onClose={() => setIsExportOpen(false)}
-        onExport={handleExport}
-        title="Export Timesheets"
-        subtitle="Download timesheet records for the selected period"
-        totalRecords={records.length}
-        formats={["excel", "pdf", "csv"]}
-        defaultFormat="excel"
-        loading={exportLoading}
+      {/* Modals & Panels */}
+      <ExportModal isOpen={isExportOpen} onClose={() => setIsExportOpen(false)} onExport={handleExport} title="Export Timesheets" totalRecords={safeRecords.length} formats={["excel", "pdf", "csv"]} defaultFormat="excel" loading={exportLoading} />
+      
+      <TimesheetModal 
+        isOpen={isFormOpen} 
+        onClose={() => setIsFormOpen(false)} 
+        onSave={handleSaveForm} 
+        initialData={editingRecord} 
+        loading={actionLoading} 
+      />
+      
+      <TimesheetDetailsPanel
+        isOpen={isPanelOpen}
+        data={selectedTimesheet}
+        loading={actionLoading && !selectedTimesheet}
+        onClose={handleClosePanel}
+        onEdit={handleOpenEdit}
+        onDelete={handleDeleteTrigger}
+        onUpdateStatus={handleUpdateStatus}
+      />
+
+      <ConfirmModal
+        isOpen={isDeleteOpen}
+        onClose={() => setIsDeleteOpen(false)}
+        onConfirm={handleConfirmDelete}
+        title="Delete Timesheet"
+        message="Are you sure you want to permanently delete this timesheet entry? This action cannot be undone."
+        confirmText="Delete"
+        type="delete"
+        loading={actionLoading}
       />
     </div>
   );
