@@ -365,8 +365,8 @@ const Timesheets = () => {
                             </div>
                             <div>
                               <p className="text-sm font-semibold text-gray-800 dark:text-gray-200">{empName}</p>
-                              {r.employee?.manager_name && (
-                                <p className="text-[11px] text-gray-500">Mgr: {r.employee.manager_name}</p>
+                              {r.approver?.name && (
+                                <p className="text-[11px] text-gray-500">Approved by: {r.approver?.name}</p>
                               )}
                             </div>
                           </div>
