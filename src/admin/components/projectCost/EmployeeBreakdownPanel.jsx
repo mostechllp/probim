@@ -24,9 +24,6 @@ const EmployeeBreakdownPanel = ({ project, data, period, onClose }) => {
   const dailyHours = data?.dailyHours || [];
   const isLoading = data?.loading;
 
-  // Find max daily hours for progress bar scaling
-  const maxDailyHours = Math.max(...dailyHours.map((d) => d.hours || 0), 1);
-
   // Prevent background scrolling when panel is open
   React.useEffect(() => {
     const originalStyle = window.getComputedStyle(document.body).overflow;
@@ -35,6 +32,58 @@ const EmployeeBreakdownPanel = ({ project, data, period, onClose }) => {
       document.body.style.overflow = originalStyle;
     };
   }, []);
+
+  // Create a map for quick lookup of daily hours by date
+  const dailyDataMap = React.useMemo(() => {
+    const map = {};
+    dailyHours.forEach((d) => {
+      map[d.date] = d;
+    });
+    return map;
+  }, [dailyHours]);
+
+  // Find max daily hours to determine highest color intensity
+  const maxDailyHours = Math.max(...dailyHours.map((d) => d.hours || 0), 1);
+
+  // Get days in the current month based on the first day of dailyHours
+  const getCalendarDays = () => {
+    if (dailyHours.length === 0) return { days: [], firstDayOfWeek: 0 };
+    
+    const firstDateStr = dailyHours[0].date; // e.g., "2026-11-01"
+    const [year, month] = firstDateStr.split("-");
+    
+    const date = new Date(year, parseInt(month) - 1, 1);
+    const daysInMonth = new Date(year, month, 0).getDate();
+    const firstDayOfWeek = date.getDay(); // 0 = Sunday, 1 = Monday...
+
+    const days = [];
+    for (let i = 1; i <= daysInMonth; i++) {
+      const dayStr = i.toString().padStart(2, "0");
+      const currentDateStr = `${year}-${month}-${dayStr}`;
+      days.push({
+        dayNum: i,
+        dateStr: currentDateStr,
+        data: dailyDataMap[currentDateStr] || { hours: 0, cost: 0, formatted_hours: "0h" },
+      });
+    }
+
+    return { days, firstDayOfWeek };
+  };
+
+  const { days, firstDayOfWeek } = getCalendarDays();
+
+  // Determine background color based on hours worked
+  const getDayBgColor = (hours) => {
+    if (hours === 0) return "bg-gray-50 dark:bg-gray-700/30 text-gray-400 dark:text-gray-500";
+    
+    const intensity = hours / maxDailyHours;
+    if (intensity > 0.8) return "bg-green-500 text-white shadow-sm hover:bg-green-600";
+    if (intensity > 0.5) return "bg-green-400 text-white shadow-sm hover:bg-green-500";
+    if (intensity > 0.2) return "bg-green-300 text-green-900 shadow-sm hover:bg-green-400";
+    return "bg-green-100 text-green-800 shadow-sm hover:bg-green-200";
+  };
+
+  const weekDays = ["Sun", "Mon", "Tue", "Wed", "Thu", "Fri", "Sat"];
 
   return createPortal(
     <>
@@ -50,7 +99,7 @@ const EmployeeBreakdownPanel = ({ project, data, period, onClose }) => {
         {/* Header */}
         <div className="flex items-center justify-between px-6 py-4 border-b border-gray-200 dark:border-gray-700 bg-gray-50 dark:bg-gray-800/50 shrink-0">
           <div>
-            <h3 className="text-lg font-bold text-gray-800 dark:text-gray-200 truncate pr-4">
+            <h3 className="text-lg font-bold text-gray-800 dark:text-gray-200 truncate pr-4 flex items-center gap-3">
               {project?.name || "Project Details"}
             </h3>
             <p className="text-xs text-gray-500 mt-0.5 capitalize">
@@ -126,11 +175,11 @@ const EmployeeBreakdownPanel = ({ project, data, period, onClose }) => {
                 </div>
               </div>
 
-              {/* Daily Hours Timeline Chart */}
+              {/* Daily Hours Calendar View */}
               <div>
                 <h4 className="text-xs font-bold text-gray-400 uppercase tracking-wider mb-3 flex items-center justify-between">
-                  <span><i className="fas fa-chart-bar mr-2"></i> Daily Hours Timeline</span>
-                  <span className="text-[10px] text-gray-400 normal-case font-normal">Hover for cost details</span>
+                  <span><i className="fas fa-calendar-alt mr-2"></i> Daily Activity</span>
+                  <span className="text-[10px] text-gray-400 normal-case font-normal">Hover for details</span>
                 </h4>
                 
                 {dailyHours.length === 0 ? (
@@ -138,39 +187,66 @@ const EmployeeBreakdownPanel = ({ project, data, period, onClose }) => {
                     No daily logs available.
                   </p>
                 ) : (
-                  <div className="bg-gray-50 dark:bg-gray-700/30 p-4 pb-8 rounded-xl border border-gray-100 dark:border-gray-700 overflow-x-auto">
-                    <div className="flex items-end gap-1.5 h-32 min-w-full">
-                      {dailyHours.map((day, idx) => {
-                        const heightPct = (day.hours / maxDailyHours) * 100;
-                        const isZero = day.hours === 0;
-                        
+                  <div className="bg-white dark:bg-gray-800 border border-gray-200 dark:border-gray-700 p-4 rounded-xl shadow-sm">
+                    
+                    {/* Calendar Header */}
+                    <div className="grid grid-cols-7 gap-2 mb-2">
+                      {weekDays.map((day) => (
+                        <div key={day} className="text-center text-[10px] font-bold text-gray-400 uppercase">
+                          {day}
+                        </div>
+                      ))}
+                    </div>
+
+                    {/* Calendar Grid */}
+                    <div className="grid grid-cols-7 gap-2">
+                      {/* Empty cells for days before the 1st */}
+                      {Array.from({ length: firstDayOfWeek }).map((_, i) => (
+                        <div key={`empty-${i}`} className="aspect-square"></div>
+                      ))}
+                      
+                      {/* Actual days */}
+                      {days.map((day) => {
+                        const hasHours = day.data.hours > 0;
+                        const bgClass = getDayBgColor(day.data.hours);
+
                         return (
-                          <div key={idx} className="flex-1 min-w-[14px] flex flex-col items-center group relative">
-                            {/* Tooltip */}
-                            <div className="opacity-0 group-hover:opacity-100 absolute -top-10 bg-gray-900 text-white text-[10px] py-1.5 px-2.5 rounded-lg whitespace-nowrap pointer-events-none transition-opacity z-10 shadow-xl flex flex-col items-center gap-0.5">
-                              <span className="font-bold">{day.label || day.date}</span>
-                              <span>{day.formatted_hours || fmtHours(day.hours)}</span>
-                              {day.cost > 0 && <span className="text-green-400">AED {fmtAED(day.cost)}</span>}
-                            </div>
-                            
-                            {/* Bar */}
-                            <div
-                              className={`w-full rounded-t-sm transition-all ${
-                                isZero 
-                                  ? "bg-gray-200 dark:bg-gray-600" 
-                                  : "bg-indigo-500 hover:bg-indigo-400"
-                              }`}
-                              style={{ height: `${Math.max(heightPct, 4)}%` }}
-                            ></div>
-                            
-                            {/* X Axis Label (Only show every few days to save space) */}
-                            <span className="text-[9px] text-gray-400 mt-2 rotate-45 origin-left">
-                              {day.day || day.date.split("-")[2]}
+                          <div 
+                            key={day.dateStr}
+                            className={`relative aspect-square flex flex-col items-center justify-center rounded-lg text-sm font-semibold transition-all group cursor-default ${bgClass}`}
+                          >
+                            <span className={hasHours ? "opacity-80 text-[10px]" : "opacity-50 text-[10px]"}>
+                              {day.dayNum}
                             </span>
+                            {hasHours && (
+                              <span className="text-xs font-bold">{fmtHours(day.data.hours)}</span>
+                            )}
+
+                            {/* Hover Tooltip for Calendar Day */}
+                            {hasHours && (
+                              <div className="opacity-0 group-hover:opacity-100 absolute -top-12 bg-gray-900 text-white text-[10px] py-1.5 px-3 rounded-lg whitespace-nowrap pointer-events-none transition-opacity z-10 shadow-xl flex flex-col items-center gap-0.5">
+                                <span className="font-bold border-b border-gray-700 pb-0.5 mb-0.5 w-full text-center">
+                                  {day.dateStr}
+                                </span>
+                                <span>{day.data.formatted_hours || fmtHours(day.data.hours)} Logged</span>
+                                <span className="text-green-400">AED {fmtAED(day.data.cost)}</span>
+                              </div>
+                            )}
                           </div>
                         );
                       })}
                     </div>
+                    
+                    {/* Legend */}
+                    <div className="flex items-center justify-end gap-2 mt-4 text-[10px] text-gray-500 font-medium">
+                      <span>Less</span>
+                      <div className="w-3 h-3 rounded-sm bg-gray-50 dark:bg-gray-700/30 border border-gray-200 dark:border-gray-600"></div>
+                      <div className="w-3 h-3 rounded-sm bg-green-100"></div>
+                      <div className="w-3 h-3 rounded-sm bg-green-300"></div>
+                      <div className="w-3 h-3 rounded-sm bg-green-500"></div>
+                      <span>More</span>
+                    </div>
+
                   </div>
                 )}
               </div>
