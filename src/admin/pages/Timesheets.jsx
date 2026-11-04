@@ -1,5 +1,5 @@
 // src/admin/pages/projects/Timesheets.jsx
-import React, { useEffect, useState, useCallback } from "react";
+import React, { useEffect, useState, useCallback, useMemo } from "react";
 import { useDispatch, useSelector } from "react-redux";
 import { showToast } from "../../components/common/Toast";
 
@@ -23,6 +23,8 @@ import ExportModal from "../../components/common/ExportModal";
 import TimesheetModal from "../components/projectCost/TimesheetModal";
 import TimesheetDetailsPanel from "../components/projectCost/TimesheetDetailsPanel";
 import ConfirmModal from "../components/common/ConfirmModal";
+import SearchableSelect from "../../components/common/SearchableSelect"; 
+import Pagination from "../components/common/Paginations"; 
 
 const toISODate = (d) => d.toISOString().split("T")[0];
 
@@ -43,13 +45,14 @@ const getPresetRange = (preset) => {
 
 const Timesheets = () => {
   const dispatch = useDispatch();
-  const { records, stats, selectedTimesheet, loading, actionLoading, exportLoading, error } = useSelector((state) => state.timesheets);
+  const { records, stats, pagination, selectedTimesheet, loading, actionLoading, exportLoading, error } = useSelector((state) => state.timesheets);
   const safeRecords = Array.isArray(records) ? records : [];
 
   const [period, setPeriod] = useState("this_month");
   const [customStart, setCustomStart] = useState(toISODate(new Date()));
   const [customEnd, setCustomEnd] = useState(toISODate(new Date()));
   const [isExportOpen, setIsExportOpen] = useState(false);
+  const [currentPage, setCurrentPage] = useState(1);
   
   // Modals & Panels state
   const [isFormOpen, setIsFormOpen] = useState(false);
@@ -61,16 +64,47 @@ const Timesheets = () => {
   const [isDeleteOpen, setIsDeleteOpen] = useState(false);
   const [recordToDelete, setRecordToDelete] = useState(null);
 
+  // Employee Filter state
+  const [selectedEmployee, setSelectedEmployee] = useState("");
+
+  // Extract unique employees from the fetched records for the filter dropdown
+  const employeeOptions = useMemo(() => {
+    const map = new Map();
+    safeRecords.forEach(r => {
+      if (r.employee) {
+        const val = r.employee.user_id;
+        if (val && !map.has(val)) {
+          map.set(val, r.employee.name);
+        }
+      }
+    });
+    return Array.from(map.entries()).map(([value, label]) => ({
+      value: String(value),
+      label,
+    }));
+  }, [safeRecords]);
+
   const resolveRange = useCallback(() => {
     return period === "custom" ? { start: customStart, end: customEnd } : getPresetRange(period);
   }, [period, customStart, customEnd]);
 
   const refreshData = useCallback(() => {
     const { start, end } = resolveRange();
-    dispatch(fetchTimesheets({ start_date: start, end_date: end, filter: period }));
-  }, [dispatch, resolveRange, period]);
+    dispatch(fetchTimesheets({ 
+      start_date: start, 
+      end_date: end, 
+      filter: period,
+      user_id: selectedEmployee || undefined,
+      page: currentPage, // Pass page to API
+    }));
+  }, [dispatch, resolveRange, period, selectedEmployee, currentPage]);
 
   useEffect(() => { refreshData(); }, [refreshData]);
+
+  // Reset to page 1 when filters change
+  useEffect(() => {
+    setCurrentPage(1);
+  }, [period, customStart, customEnd, selectedEmployee]);
 
   useEffect(() => {
     if (error) {
@@ -189,7 +223,15 @@ const Timesheets = () => {
   const handleExport = async (format) => {
     const { start, end } = resolveRange();
     try {
-      await dispatch(exportTimesheets({ format, filters: { start_date: start, end_date: end, filter: period } })).unwrap();
+      await dispatch(exportTimesheets({ 
+        format, 
+        filters: { 
+          start_date: start, 
+          end_date: end, 
+          filter: period,
+          user_id: selectedEmployee || undefined,
+        } 
+      })).unwrap();
       showToast(`Timesheets exported as ${format.toUpperCase()}`, "success");
       setIsExportOpen(false);
     } catch (e) {
@@ -266,7 +308,34 @@ const Timesheets = () => {
         </div>
       </div>
 
-      <PeriodSelector period={period} setPeriod={setPeriod} customStart={customStart} setCustomStart={setCustomStart} customEnd={customEnd} setCustomEnd={setCustomEnd} />
+            {/* Filters Row */}
+      <div className="flex flex-col lg:flex-row gap-4 items-stretch">
+        <div className="flex-1">
+          <PeriodSelector 
+            period={period} 
+            setPeriod={setPeriod} 
+            customStart={customStart} 
+            setCustomStart={setCustomStart} 
+            customEnd={customEnd} 
+            setCustomEnd={setCustomEnd} 
+          />
+        </div>
+        
+        {/* Employee Filter Dropdown - matched to PeriodSelector height */}
+        <div className="w-full lg:w-72 bg-white dark:bg-gray-800 border border-gray-200 dark:border-gray-700 rounded-xl px-4 py-3 shadow-sm flex flex-col justify-center">
+          <SearchableSelect
+            label="Filter by Employee"
+            placeholder="All Employees"
+            options={employeeOptions}
+            value={selectedEmployee}
+            onChange={(val) => {
+              setSelectedEmployee(val);
+              setSelectedIds([]); 
+            }}
+            clearable={true}
+          />
+        </div>
+      </div>
 
       {/* Bulk Actions Bar */}
       {selectedIds.length > 0 && (
@@ -329,7 +398,6 @@ const Timesheets = () => {
                     const status = (r.status || "Pending").toLowerCase();
                     const isPending = status === "pending";
                     
-                    // Extract avatar
                     const avatarUrl = r.employee?.avatar || r.employee_avatar || null;
                     const empName = r.employee?.name || r.employee_name || "Unknown";
 
@@ -353,7 +421,6 @@ const Timesheets = () => {
                         </td>
                         <td className="px-4 py-3">
                           <div className="flex items-center gap-3">
-                            {/* Avatar Image */}
                             <div className="w-8 h-8 rounded-full bg-gray-200 overflow-hidden flex-shrink-0">
                               {avatarUrl ? (
                                 <img src={avatarUrl} alt={empName} className="w-full h-full object-cover" />
@@ -406,6 +473,17 @@ const Timesheets = () => {
           </div>
         </div>
       </div>
+
+      {/* Pagination */}
+      {pagination && pagination.total > 0 && (
+        <Pagination
+          currentPage={currentPage}
+          totalPages={pagination.last_page || 1}
+          onPageChange={setCurrentPage}
+          totalItems={pagination.total}
+          itemsPerPage={pagination.per_page || 50}
+        />
+      )}
 
       {/* Modals & Panels */}
       <ExportModal isOpen={isExportOpen} onClose={() => setIsExportOpen(false)} onExport={handleExport} title="Export Timesheets" totalRecords={safeRecords.length} formats={["excel", "pdf", "csv"]} defaultFormat="excel" loading={exportLoading} />

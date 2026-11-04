@@ -15,6 +15,7 @@ export const fetchTimesheets = createAsyncThunk(
       return {
         records: payload.timesheets || payload.records || [],
         stats: payload.kpis || payload.stats || {},
+        pagination: payload.pagination || {},
       };
     } catch (error) {
       return rejectWithValue(error.response?.data?.message || error.message || "Failed to fetch timesheets");
@@ -95,7 +96,7 @@ export const rejectTimesheet = createAsyncThunk(
 );
 
 // ────────────────────────────────────────────────────────────
-// NEW: Bulk Actions
+// Bulk Actions
 // ────────────────────────────────────────────────────────────
 
 export const bulkApproveTimesheets = createAsyncThunk(
@@ -155,6 +156,7 @@ export const exportTimesheets = createAsyncThunk(
 const initialState = {
   records: [],
   stats: { total_logged_hours: 0, pending_approvals_count: 0, approved_hours: 0 },
+  pagination: { total: 0, per_page: 50, current_page: 1, last_page: 1 }, // Added pagination
   selectedTimesheet: null,
   loading: false,
   actionLoading: false,
@@ -184,6 +186,7 @@ const timesheetSlice = createSlice({
         state.loading = false;
         state.records = Array.isArray(action.payload.records) ? action.payload.records : [];
         state.stats = action.payload.stats || initialState.stats;
+        state.pagination = action.payload.pagination || initialState.pagination;
       })
       .addCase(fetchTimesheets.rejected, (state, action) => {
         state.loading = false;
