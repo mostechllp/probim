@@ -930,6 +930,7 @@ function AppContent() {
           path="request-leave-for-employee"
           element={<RequestLeaveForEmployee />}
         />
+        <Route path="timesheets" element={<Timesheets />} />
       </Route>
 
       {/* ======================================================

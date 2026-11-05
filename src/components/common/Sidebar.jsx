@@ -74,6 +74,8 @@ const EMPLOYEE_ROUTE_MAP = {
   "role-management": "/employee/role-management",
   wfh: "/employee/wfh",
   "my-payroll": "/employee/my-payroll",
+  timesheets: "/employee/timesheets", 
+  "project-cost": "/employee/project-cost",
   "ticket-raise": "/employee/ticket-raise",
   "developer-tickets": "/employee/developer-tickets",
   "admin-tickets": "/employee/admin-tickets",
