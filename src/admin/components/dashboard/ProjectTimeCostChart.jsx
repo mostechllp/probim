@@ -290,12 +290,17 @@ export const ProjectTimeCostChart = ({
       return null;
     }
 
-    const allProjects = data.map((d) => ({
+        const allProjects = data.map((d) => ({
       ...d,
-      actual_time_logged_hours: d.actual_time_logged_hours || 0,
-      actual_cost: d.actual_cost || 0,
-      planned_total_hours: d.planned_total_hours || 0,
-      planned_total_cost: d.planned_total_cost || 0,
+      // Map API fields to the fields expected by the UI
+      actual_time_logged_hours: d.total_hours || 0,
+      actual_cost: d.total_cost || 0,
+      planned_total_hours: d.budget ? (d.budget / 100) : 0, // If you use budget to estimate hours, or 0 if not applicable
+      planned_total_cost: d.budget || 0,
+      
+      // Also map the name correctly for the Y-Axis
+      project_name: d.name || "Unnamed", 
+      project_id: d.id,
     }));
 
     const projectsWithUtilization = allProjects.map((d) => {
