@@ -122,7 +122,7 @@ const TimesheetDetailsPanel = ({
               )}
 
               {/* Employee Hero Card */}
-              <div className="bg-gradient-to-br from-gray-50 to-gray-100/60 dark:from-gray-700/40 dark:to-gray-800 p-4.5 rounded-2xl border border-gray-200/80 dark:border-gray-700 flex items-center justify-between gap-4 shadow-xs">
+              <div className="bg-gradient-to-br from-gray-50 to-gray-100/60 dark:from-gray-700/40 dark:to-gray-800 px-5 py-5 rounded-2xl border border-gray-200/80 dark:border-gray-700 flex items-center justify-between gap-4 shadow-xs">
                 <div className="flex items-center gap-3.5 min-w-0">
                   <div className="w-12 h-12 rounded-2xl bg-white dark:bg-gray-800 border border-gray-200 dark:border-gray-700 overflow-hidden shadow-xs flex items-center justify-center shrink-0">
                     {avatarUrl ? (
@@ -244,20 +244,26 @@ const TimesheetDetailsPanel = ({
                 </div>
               </div>
 
-              {/* Description / Task Card */}
-              <div className="bg-white dark:bg-gray-800 border border-gray-200 dark:border-gray-700 rounded-2xl p-4.5 shadow-xs">
-                <div className="flex items-center gap-2 mb-2.5">
+              {/* Description / Task Section */}
+              <div className="space-y-2">
+                <div className="flex items-center gap-2 px-1">
                   <i className="fas fa-align-left text-xs text-green-500"></i>
                   <h4 className="text-xs font-bold text-gray-500 dark:text-gray-400 uppercase tracking-wider">
                     Description / Task Notes
                   </h4>
                 </div>
-                <div className="bg-gray-50 dark:bg-gray-700/30 border border-gray-100 dark:border-gray-700/60 rounded-xl p-3.5">
-                  <p className="text-sm text-gray-700 dark:text-gray-300 leading-relaxed whitespace-pre-wrap">
-                    {data.description || data.task_description || (
-                      <span className="italic text-gray-400">No task description provided for this log.</span>
-                    )}
-                  </p>
+
+                <div className="bg-gray-50/80 dark:bg-gray-700/30 border border-gray-200 dark:border-gray-700 rounded-2xl p-4 text-sm text-gray-700 dark:text-gray-300 min-h-[90px] leading-relaxed shadow-2xs">
+                  {data.description || data.task_description ? (
+                    <p className="whitespace-pre-wrap">
+                      {data.description || data.task_description}
+                    </p>
+                  ) : (
+                    <p className="italic text-gray-400 dark:text-gray-500 flex items-center gap-2">
+                      <i className="fas fa-info-circle text-xs text-gray-400"></i>
+                      <span>No task description provided for this log.</span>
+                    </p>
+                  )}
                 </div>
               </div>
 
