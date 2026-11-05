@@ -95,17 +95,19 @@ const TimesheetDetailsPanel = ({
                           key={rec.id || idx}
                           type="button"
                           onClick={() => onSelectRecord && onSelectRecord(rec)}
-                          className={`px-3 py-1.5 rounded-full text-xs font-semibold whitespace-nowrap transition-all flex items-center gap-1.5 ${isCurrent
+                          className={`px-3 py-1.5 rounded-full text-xs font-semibold whitespace-nowrap transition-all flex items-center gap-1.5 ${
+                            isCurrent
                               ? "bg-green-500 text-white shadow-sm"
                               : "bg-white dark:bg-gray-800 text-gray-700 dark:text-gray-300 hover:bg-gray-100 dark:hover:bg-gray-700 border border-gray-200 dark:border-gray-700"
-                            }`}
+                          }`}
                         >
                           <span>{rec.project?.name || rec.project_name || `Log #${idx + 1}`}</span>
                           <span
-                            className={`text-[10px] px-1.5 py-0.2 rounded-full font-bold ${isCurrent
+                            className={`text-[10px] px-1.5 py-0.2 rounded-full font-bold ${
+                              isCurrent
                                 ? "bg-white/20 text-white"
                                 : "bg-gray-100 dark:bg-gray-700 text-gray-600 dark:text-gray-300"
-                              }`}
+                            }`}
                           >
                             {rec.hours_formatted || `${rec.hours || rec.total_hours || 0}h`}
                           </span>
@@ -149,20 +151,22 @@ const TimesheetDetailsPanel = ({
                 {/* Status Pill in hero banner */}
                 <div className="shrink-0">
                   <span
-                    className={`inline-flex items-center gap-1.5 px-3 py-1 rounded-full text-xs font-bold uppercase tracking-wider ${status === "approved"
+                    className={`inline-flex items-center gap-1.5 px-3 py-1 rounded-full text-xs font-bold uppercase tracking-wider ${
+                      status === "approved"
                         ? "bg-green-100 text-green-700 dark:bg-green-900/40 dark:text-green-300 border border-green-200 dark:border-green-800/80"
                         : status === "rejected"
-                          ? "bg-red-100 text-red-700 dark:bg-red-900/40 dark:text-red-300 border border-red-200 dark:border-red-800/80"
-                          : "bg-amber-100 text-amber-700 dark:bg-amber-900/40 dark:text-amber-300 border border-amber-200 dark:border-amber-800/80"
-                      }`}
+                        ? "bg-red-100 text-red-700 dark:bg-red-900/40 dark:text-red-300 border border-red-200 dark:border-red-800/80"
+                        : "bg-amber-100 text-amber-700 dark:bg-amber-900/40 dark:text-amber-300 border border-amber-200 dark:border-amber-800/80"
+                    }`}
                   >
                     <i
-                      className={`fas ${status === "approved"
+                      className={`fas ${
+                        status === "approved"
                           ? "fa-check-circle"
                           : status === "rejected"
-                            ? "fa-times-circle"
-                            : "fa-clock"
-                        } text-[10px]`}
+                          ? "fa-times-circle"
+                          : "fa-clock"
+                      } text-[10px]`}
                     ></i>
                     {data.status || "Pending"}
                   </span>
@@ -226,12 +230,13 @@ const TimesheetDetailsPanel = ({
                       Approval Status
                     </p>
                     <p
-                      className={`text-sm font-bold capitalize mt-0.5 ${status === "approved"
+                      className={`text-sm font-bold capitalize mt-0.5 ${
+                        status === "approved"
                           ? "text-green-600 dark:text-green-400"
                           : status === "rejected"
-                            ? "text-red-600 dark:text-red-400"
-                            : "text-amber-600 dark:text-amber-400"
-                        }`}
+                          ? "text-red-600 dark:text-red-400"
+                          : "text-amber-600 dark:text-amber-400"
+                      }`}
                     >
                       {data.status || "Pending"}
                     </p>
