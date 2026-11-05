@@ -221,6 +221,12 @@ const ChecklistCategories = lazy(
 
 const Notifications = lazy(() => import("./admin/pages/Notifications"));
 
+
+const ProjectCost = lazy(() => import("./admin/pages/ProjectCost"));
+
+const Timesheets = lazy(() => import("./admin/pages/Timesheets"));
+
+
 // ============================================================
 // EMPLOYEE PAGES
 // ============================================================
@@ -613,6 +619,10 @@ function AppContent() {
           path="support-admin-dashboard"
           element={<SupportAdminDashboard />}
         />
+
+        <Route path="project-cost" element={<ProjectCost />} />
+
+        <Route path="timesheets" element={<Timesheets />} />
       </Route>
 
       {/* ======================================================

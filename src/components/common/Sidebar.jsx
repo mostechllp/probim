@@ -162,7 +162,7 @@ const PARENT_MENU_CONFIG = {
       "projects",
       "project-assignments",
       "timesheets",
-      "project-cost",
+      "project-cost",        
     ],
     roles: [
       "HR Manager",

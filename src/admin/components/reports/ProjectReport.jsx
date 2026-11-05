@@ -1,5 +1,4 @@
 // src/admin/pages/reports/ProjectReport.js
-
 import { useEffect, useState } from "react";
 import { useDispatch, useSelector } from "react-redux";
 import { Link, useLocation } from "react-router-dom";
@@ -75,6 +74,19 @@ const ProjectReport = () => {
   const [modalMonth, setModalMonth] = useState(new Date().getMonth() + 1);
   const [modalYear, setModalYear] = useState(new Date().getFullYear());
 
+  // Debounce search term to auto-apply
+  useEffect(() => {
+    const delayDebounceFn = setTimeout(() => {
+      // Only apply if the search term is actually different
+      if (appliedSearchTerm !== searchTerm) {
+        setAppliedSearchTerm(searchTerm);
+        setCurrentPage(1);
+      }
+    }, 500);
+
+    return () => clearTimeout(delayDebounceFn);
+  }, [searchTerm, appliedSearchTerm]);
+
   // Fetch project report data
   useEffect(() => {
     const fetchData = async () => {
@@ -84,7 +96,7 @@ const ProjectReport = () => {
         search: appliedSearchTerm || undefined,
         start_date: appliedStartDate,
         end_date: appliedEndDate,
-        status: appliedStatus,
+        status: appliedStatus !== "all" ? appliedStatus : undefined,
       };
 
       await dispatch(fetchProjectReport(params));
@@ -95,7 +107,7 @@ const ProjectReport = () => {
   // Reset to first page when filters change
   useEffect(() => {
     setCurrentPage(1);
-  }, [appliedSearchTerm, appliedStatus, selectedCompany, perPage, appliedStartDate, appliedEndDate]);
+  }, [appliedStatus, selectedCompany, perPage, appliedStartDate, appliedEndDate]);
 
   // Transform project data with hours from API
   const transformProject = (project) => {
