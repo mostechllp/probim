@@ -6,8 +6,8 @@ const PRESETS = [
   { value: "this_month", label: "This Month", icon: "fas fa-calendar-day" },
   { value: "last_month", label: "Last Month", icon: "fas fa-calendar-minus" },
   { value: "this_quarter", label: "This Quarter", icon: "fas fa-calendar-alt" },
-  { value: "project_to_date", label: "Project to Date", icon: "fas fa-infinity" },
-  { value: "custom", label: "Custom Range", icon: "fas fa-calendar" },
+  { value: "project_to_date", label: "Project to Date", icon: "fas fa-calendar-check" },
+  { value: "custom", label: "Custom Range", icon: "fas fa-calendar-plus" },
 ];
 
 const PeriodSelector = ({
@@ -17,9 +17,10 @@ const PeriodSelector = ({
   setCustomStart,
   customEnd,
   setCustomEnd,
+  className = "bg-white dark:bg-gray-800 border border-gray-200 dark:border-gray-700 rounded-xl p-4 mb-6 shadow-sm",
 }) => {
   return (
-    <div className="bg-white dark:bg-gray-800 border border-gray-200 dark:border-gray-700 rounded-xl p-4 mb-6 shadow-sm">
+    <div className={className}>
       <div className="flex flex-wrap items-center gap-2">
         {PRESETS.map((p) => (
           <button
