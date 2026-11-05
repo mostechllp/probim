@@ -96,7 +96,7 @@ const ROUTE_TO_MODULE_MAP = {
   "/employee/wfh": "my-wfh-requests",
   "/employee/profile": "my-profile",
   "/employee/settings": "settings",
-  "/employee/roles": "roles",
+  "/employee/roles-permissions": "roles",
   "/employee/modules": "modules",
   "/employee/project-working-hours": "project-working-hours",
   "/employee/organizations": "organizations",
