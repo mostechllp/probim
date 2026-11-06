@@ -64,8 +64,14 @@ const Timesheets = () => {
   const [isDeleteOpen, setIsDeleteOpen] = useState(false);
   const [recordToDelete, setRecordToDelete] = useState(null);
 
+  // Selected Employee Group for Sidebar Drawer
+  const [selectedGroup, setSelectedGroup] = useState(null);
+
   // Employee Filter state
   const [selectedEmployee, setSelectedEmployee] = useState("");
+
+  // View mode state: 'grid' or 'list'
+  const [viewMode, setViewMode] = useState("grid");
 
   // Extract unique employees from the fetched records for the filter dropdown
   const employeeOptions = useMemo(() => {
@@ -82,6 +88,71 @@ const Timesheets = () => {
       value: String(value),
       label,
     }));
+  }, [safeRecords]);
+
+  // Group timesheet records by employee for the Employee List view
+  const employeeGroups = useMemo(() => {
+    const map = new Map();
+    safeRecords.forEach((record) => {
+      const empId =
+        record.employee?.user_id ||
+        record.employee?.id ||
+        record.employee_id ||
+        record.user_id ||
+        "unknown";
+
+      if (!map.has(empId)) {
+        map.set(empId, {
+          id: empId,
+          employee: record.employee || {
+            name: record.employee_name || "Unknown",
+            avatar: record.employee_avatar || null,
+            user_id: empId,
+          },
+          approver: record.approver,
+          totalHours: 0,
+          pendingRecords: [],
+          approvedRecords: [],
+          rejectedRecords: [],
+          records: [],
+        });
+      }
+
+      const group = map.get(empId);
+      const hrs = parseFloat(record.hours || record.total_hours || 0) || 0;
+      group.totalHours += hrs;
+
+      const status = (record.status || "Pending").toLowerCase();
+      if (status === "pending") {
+        group.pendingRecords.push(record);
+      } else if (status === "approved") {
+        group.approvedRecords.push(record);
+      } else if (status === "rejected") {
+        group.rejectedRecords.push(record);
+      }
+
+      group.records.push(record);
+    });
+
+    return Array.from(map.values()).map((g) => {
+      let statusType = "approved";
+      let statusLabel = "Approved";
+
+      if (g.pendingRecords.length > 0) {
+        statusType = "pending";
+        statusLabel = "Pending";
+      } else if (g.records.some((r) => (r.status || "").toLowerCase() === "rejected")) {
+        statusType = "rejected";
+        statusLabel = "Rejected";
+      }
+
+      return {
+        ...g,
+        statusType,
+        statusLabel,
+        totalHoursFormatted: `${Math.round(g.totalHours * 10) / 10}h`,
+      };
+    });
   }, [safeRecords]);
 
   const resolveRange = useCallback(() => {
@@ -122,6 +193,14 @@ const Timesheets = () => {
   const handleClosePanel = () => {
     setIsPanelOpen(false);
     dispatch(clearSelectedTimesheet());
+    setSelectedGroup(null);
+  };
+
+  const handleEmployeeCardClick = (group) => {
+    setSelectedGroup(group);
+    if (group.records && group.records.length > 0) {
+      handleOpenPanel(group.records[0]);
+    }
   };
 
   const handleOpenCreate = () => {
@@ -271,46 +350,57 @@ const Timesheets = () => {
         </div>
       </div>
 
-      {/* Stats Cards */}
-      <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
-        <div className="bg-white dark:bg-gray-800 rounded-xl p-4 border border-gray-200 dark:border-gray-700 flex items-center gap-4">
-          <div className="w-12 h-12 rounded-full bg-blue-100 dark:bg-blue-900/30 flex items-center justify-center text-blue-600 dark:text-blue-400">
+      {/* Stats Cards - Redesigned matching reference style */}
+      <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
+        {/* Card 1: Total Logged Hours */}
+        <div className="bg-blue-50/60 dark:bg-blue-950/20 border border-blue-100 dark:border-blue-900/40 rounded-2xl p-4 flex items-center gap-4 transition-all hover:shadow-soft">
+          <div className="w-12 h-12 rounded-xl bg-white dark:bg-gray-800 border border-blue-100 dark:border-blue-900/50 shadow-xs flex items-center justify-center text-blue-600 dark:text-blue-400 shrink-0">
             <i className="fas fa-clock text-xl"></i>
           </div>
-          <div>
-            <p className="text-xs text-gray-500 font-semibold uppercase">Total Logged Hours</p>
-            <p className="text-2xl font-bold text-gray-800 dark:text-gray-200">
+          <div className="min-w-0 flex-1">
+            <p className="text-2xl lg:text-3xl font-extrabold text-gray-800 dark:text-gray-100 tracking-tight leading-none">
               {stats?.total_logged_hours_formatted || `${stats?.total_logged_hours || 0}h`}
             </p>
-          </div>
-        </div>
-        <div className="bg-white dark:bg-gray-800 rounded-xl p-4 border border-gray-200 dark:border-gray-700 flex items-center gap-4">
-          <div className="w-12 h-12 rounded-full bg-amber-100 dark:bg-amber-900/30 flex items-center justify-center text-amber-600 dark:text-amber-400">
-            <i className="fas fa-hourglass-half text-xl"></i>
-          </div>
-          <div>
-            <p className="text-xs text-gray-500 font-semibold uppercase">Pending Approvals</p>
-            <p className="text-2xl font-bold text-gray-800 dark:text-gray-200">
-              {stats?.pending_approvals_count || 0}
+            <p className="text-xs font-medium text-gray-500 dark:text-gray-400 mt-1 truncate">
+              Total Logged Hours
             </p>
           </div>
         </div>
-        <div className="bg-white dark:bg-gray-800 rounded-xl p-4 border border-gray-200 dark:border-gray-700 flex items-center gap-4">
-          <div className="w-12 h-12 rounded-full bg-green-100 dark:bg-green-900/30 flex items-center justify-center text-green-600 dark:text-green-400">
+
+        {/* Card 2: Pending Approvals */}
+        <div className="bg-amber-50/60 dark:bg-amber-950/20 border border-amber-100 dark:border-amber-900/40 rounded-2xl p-4 flex items-center gap-4 transition-all hover:shadow-soft">
+          <div className="w-12 h-12 rounded-xl bg-white dark:bg-gray-800 border border-amber-100 dark:border-amber-900/50 shadow-xs flex items-center justify-center text-amber-600 dark:text-amber-400 shrink-0">
+            <i className="fas fa-hourglass-half text-xl"></i>
+          </div>
+          <div className="min-w-0 flex-1">
+            <p className="text-2xl lg:text-3xl font-extrabold text-gray-800 dark:text-gray-100 tracking-tight leading-none">
+              {stats?.pending_approvals_count || 0}
+            </p>
+            <p className="text-xs font-medium text-gray-500 dark:text-gray-400 mt-1 truncate">
+              Pending Approvals
+            </p>
+          </div>
+        </div>
+
+        {/* Card 3: Approved Hours */}
+        <div className="bg-emerald-50/60 dark:bg-emerald-950/20 border border-emerald-100 dark:border-emerald-900/40 rounded-2xl p-4 flex items-center gap-4 transition-all hover:shadow-soft">
+          <div className="w-12 h-12 rounded-xl bg-white dark:bg-gray-800 border border-emerald-100 dark:border-emerald-900/50 shadow-xs flex items-center justify-center text-green-600 dark:text-green-400 shrink-0">
             <i className="fas fa-check-circle text-xl"></i>
           </div>
-          <div>
-            <p className="text-xs text-gray-500 font-semibold uppercase">Approved Hours</p>
-            <p className="text-2xl font-bold text-gray-800 dark:text-gray-200">
+          <div className="min-w-0 flex-1">
+            <p className="text-2xl lg:text-3xl font-extrabold text-gray-800 dark:text-gray-100 tracking-tight leading-none">
               {stats?.approved_hours_formatted || `${stats?.approved_hours || 0}h`}
+            </p>
+            <p className="text-xs font-medium text-gray-500 dark:text-gray-400 mt-1 truncate">
+              Approved Hours
             </p>
           </div>
         </div>
       </div>
 
-            {/* Filters Row */}
-      <div className="flex flex-col lg:flex-row gap-4 items-stretch">
-        <div className="flex-1">
+      {/* Unified Filters Bar */}
+      <div className="bg-white dark:bg-gray-800 border border-gray-200 dark:border-gray-700 rounded-2xl p-3 md:p-4 shadow-soft flex flex-col lg:flex-row lg:items-center justify-between gap-4">
+        <div className="flex-1 min-w-0">
           <PeriodSelector 
             period={period} 
             setPeriod={setPeriod} 
@@ -318,161 +408,260 @@ const Timesheets = () => {
             setCustomStart={setCustomStart} 
             customEnd={customEnd} 
             setCustomEnd={setCustomEnd} 
+            className="mb-0 p-0 border-0 shadow-none bg-transparent dark:bg-transparent"
           />
         </div>
         
-        {/* Employee Filter Dropdown - matched to PeriodSelector height */}
-        <div className="w-full lg:w-72 bg-white dark:bg-gray-800 border border-gray-200 dark:border-gray-700 rounded-xl px-4 py-3 shadow-sm flex flex-col justify-center">
-          <SearchableSelect
-            label="Filter by Employee"
-            placeholder="All Employees"
-            options={employeeOptions}
-            value={selectedEmployee}
-            onChange={(val) => {
-              setSelectedEmployee(val);
-              setSelectedIds([]); 
-            }}
-            clearable={true}
-          />
+        {/* Right Controls: Employee Filter + View Mode Toggle */}
+        <div className="flex items-center gap-3 shrink-0">
+          <div className="w-full sm:w-64">
+            <SearchableSelect
+              placeholder="Filter by Employee..."
+              options={employeeOptions}
+              value={selectedEmployee}
+              onChange={(val) => {
+                setSelectedEmployee(val);
+                setSelectedIds([]); 
+              }}
+              clearable={true}
+            />
+          </div>
+
+          {/* Grid / List View Toggle */}
+          <div className="flex items-center bg-gray-100 dark:bg-gray-700/60 p-1 rounded-xl border border-gray-200 dark:border-gray-700 shrink-0">
+            <button
+              type="button"
+              onClick={() => setViewMode("grid")}
+              className={`p-2 rounded-lg text-xs font-semibold transition-all flex items-center justify-center ${
+                viewMode === "grid"
+                  ? "bg-white dark:bg-gray-800 text-green-600 dark:text-green-400 shadow-xs"
+                  : "text-gray-400 hover:text-gray-700 dark:hover:text-gray-200"
+              }`}
+              title="Grid View"
+            >
+              <i className="fas fa-th-large text-sm"></i>
+            </button>
+            <button
+              type="button"
+              onClick={() => setViewMode("list")}
+              className={`p-2 rounded-lg text-xs font-semibold transition-all flex items-center justify-center ${
+                viewMode === "list"
+                  ? "bg-white dark:bg-gray-800 text-green-600 dark:text-green-400 shadow-xs"
+                  : "text-gray-400 hover:text-gray-700 dark:hover:text-gray-200"
+              }`}
+              title="List View"
+            >
+              <i className="fas fa-list text-sm"></i>
+            </button>
+          </div>
         </div>
       </div>
 
-      {/* Bulk Actions Bar */}
-      {selectedIds.length > 0 && (
-        <div className="bg-green-50 dark:bg-green-900/20 border border-green-200 dark:border-green-800 rounded-xl p-3 flex items-center justify-between animate-fadeIn">
-          <div className="text-sm font-semibold text-green-800 dark:text-green-300">
-            {selectedIds.length} timesheet(s) selected
-          </div>
-          <div className="flex gap-2">
-            <button onClick={() => handleBulkAction("Approved")} className="px-4 py-1.5 text-xs font-bold text-white bg-green-500 rounded-lg hover:bg-green-600">
-              Approve Selected
-            </button>
-            <button onClick={() => handleBulkAction("Rejected")} className="px-4 py-1.5 text-xs font-bold text-white bg-red-500 rounded-lg hover:bg-red-600">
-              Reject Selected
-            </button>
-            <button onClick={() => setSelectedIds([])} className="px-4 py-1.5 text-xs font-bold text-gray-600 bg-gray-200 dark:bg-gray-700 dark:text-gray-300 rounded-lg hover:bg-gray-300 dark:hover:bg-gray-600">
-              Clear
-            </button>
-          </div>
+      {/* Employee List or Grid View */}
+      {loading ? (
+        <div className="bg-white dark:bg-gray-800 rounded-2xl border border-gray-200 dark:border-gray-700 p-12 text-center text-gray-500 shadow-soft">
+          <i className="fas fa-spinner fa-spin mr-2 text-green-500 text-lg"></i> Loading employees...
         </div>
-      )}
+      ) : employeeGroups.length === 0 ? (
+        <div className="bg-white dark:bg-gray-800 rounded-2xl border border-gray-200 dark:border-gray-700 p-12 text-center text-gray-500 shadow-soft">
+          No employees with timesheet records found for this period.
+        </div>
+      ) : viewMode === "grid" ? (
+        <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-4 animate-fadeIn">
+          {employeeGroups.map((group) => {
+            const avatarUrl = group.employee?.avatar || group.employee?.employee_avatar || null;
+            const empName = group.employee?.name || group.employee?.employee_name || "Unknown";
+            const approverName = group.approver?.name || group.records[0]?.approver?.name || null;
 
-      {/* Table */}
-      <div className="bg-white dark:bg-gray-800 rounded-xl border border-gray-200 dark:border-gray-700 overflow-hidden shadow-soft">
-        <div className="overflow-x-auto">
-          <div className="min-w-[900px]">
-            <table className="w-full border-collapse">
+            const isApproved = group.statusType === "approved";
+            const isPending = group.statusType === "pending";
+
+            return (
+              <div
+                key={group.id}
+                onClick={() => handleEmployeeCardClick(group)}
+                className="bg-white dark:bg-gray-800 rounded-2xl border border-gray-200 dark:border-gray-700 p-4 shadow-soft hover:shadow-soft-lg hover:border-green-500 dark:hover:border-green-500 transition-all cursor-pointer flex flex-col justify-between group relative overflow-hidden"
+              >
+                <div>
+                  {/* Top Row: Employee Name & Total Hours badge */}
+                  <div className="flex items-start justify-between gap-2">
+                    <p
+                      className="text-sm font-bold text-gray-800 dark:text-gray-100 group-hover:text-green-600 dark:group-hover:text-green-400 transition-colors truncate"
+                      title={empName}
+                    >
+                      {empName}
+                    </p>
+                    <span className="text-xs font-extrabold text-gray-800 dark:text-gray-200 bg-gray-100 dark:bg-gray-700/70 px-2 py-0.5 rounded-md shrink-0">
+                      {group.totalHoursFormatted}
+                    </span>
+                  </div>
+
+                  {/* Middle Row: Avatar + Approver + Status Pill */}
+                  <div className="mt-3 flex items-center justify-between gap-2">
+                    <div className="flex items-center gap-2.5 min-w-0">
+                      <div className="w-8 h-8 rounded-full bg-gray-200 dark:bg-gray-700 overflow-hidden flex-shrink-0 border border-gray-100 dark:border-gray-700">
+                        {avatarUrl ? (
+                          <img src={avatarUrl} alt={empName} className="w-full h-full object-cover" />
+                        ) : (
+                          <div className="w-full h-full flex items-center justify-center bg-green-100 dark:bg-green-900/40 text-green-700 dark:text-green-400 font-bold text-xs">
+                            {empName.charAt(0).toUpperCase()}
+                          </div>
+                        )}
+                      </div>
+                      <div className="min-w-0">
+                        {approverName ? (
+                          <p className="text-[11px] text-gray-500 dark:text-gray-400 truncate">
+                            Approved by: {approverName}
+                          </p>
+                        ) : (
+                          <p className="text-[11px] text-gray-400 truncate">ID: #{group.id}</p>
+                        )}
+                      </div>
+                    </div>
+
+                    {/* Status Pill Badge */}
+                    <div className="shrink-0">
+                      {isPending ? (
+                        <span className="inline-flex items-center gap-1 text-[10px] font-bold text-amber-700 dark:text-amber-300 bg-amber-50 dark:bg-amber-900/30 border border-amber-200 dark:border-amber-800/60 px-2 py-0.5 rounded-full">
+                          <i className="fas fa-clock text-[9px]"></i> Pending
+                        </span>
+                      ) : isApproved ? (
+                        <span className="inline-flex items-center gap-1 text-[10px] font-bold text-green-700 dark:text-green-300 bg-green-50 dark:bg-green-900/30 border border-green-200 dark:border-green-800/60 px-2 py-0.5 rounded-full">
+                          <i className="fas fa-check text-[9px]"></i> Approved
+                        </span>
+                      ) : (
+                        <span className="inline-flex items-center gap-1 text-[10px] font-bold text-red-700 dark:text-red-300 bg-red-50 dark:bg-red-900/30 border border-red-200 dark:border-red-800/60 px-2 py-0.5 rounded-full">
+                          <i className="fas fa-times text-[9px]"></i> Rejected
+                        </span>
+                      )}
+                    </div>
+                  </div>
+                </div>
+
+                {/* Footer Row: Log count & View action */}
+                <div className="mt-3.5 pt-2.5 border-t border-gray-100 dark:border-gray-700/60 flex items-center justify-between">
+                  <span className="text-[11px] text-gray-400 font-medium">
+                    {group.records.length} log{group.records.length === 1 ? "" : "s"}
+                  </span>
+                  <span className="inline-flex items-center gap-1 text-xs font-semibold text-green-600 dark:text-green-400 group-hover:translate-x-0.5 transition-transform">
+                    <span>View Timesheets</span>
+                    <i className="fas fa-chevron-right text-[10px]"></i>
+                  </span>
+                </div>
+
+                {/* Colored Accent Line at the Bottom (matching reference image) */}
+                <div
+                  className={`h-1 w-full rounded-full mt-2.5 transition-all ${
+                    isPending
+                      ? "bg-amber-400"
+                      : isApproved
+                      ? "bg-green-500"
+                      : "bg-red-400"
+                  }`}
+                />
+              </div>
+            );
+          })}
+        </div>
+      ) : (
+        /* List View */
+        <div className="bg-white dark:bg-gray-800 rounded-2xl border border-gray-200 dark:border-gray-700 overflow-hidden shadow-soft animate-fadeIn">
+          <div className="overflow-x-auto">
+            <table className="w-full border-collapse text-left">
               <thead>
-                <tr className="bg-gray-50 dark:bg-gray-700/50 border-b border-gray-200 dark:border-gray-700">
-                  <th className="px-4 py-3 text-left w-10">
-                    <input 
-                      type="checkbox" 
-                      checked={isAllSelected}
-                      onChange={handleSelectAll}
-                      className="w-4 h-4 text-green-500 rounded border-gray-300 focus:ring-green-500 cursor-pointer"
-                    />
-                  </th>
-                  <th className="px-4 py-3 text-left text-xs font-semibold text-gray-500 dark:text-gray-400 uppercase">Employee</th>
-                  <th className="px-4 py-3 text-left text-xs font-semibold text-gray-500 dark:text-gray-400 uppercase">Project</th>
-                  <th className="px-4 py-3 text-left text-xs font-semibold text-gray-500 dark:text-gray-400 uppercase">Date</th>
-                  <th className="px-4 py-3 text-right text-xs font-semibold text-gray-500 dark:text-gray-400 uppercase">Hours</th>
-                  <th className="px-4 py-3 text-center text-xs font-semibold text-gray-500 dark:text-gray-400 uppercase">Status</th>
-                  <th className="px-4 py-3 text-right text-xs font-semibold text-gray-500 dark:text-gray-400 uppercase">Actions</th>
+                <tr className="bg-gray-50/80 dark:bg-gray-700/50 border-b border-gray-200 dark:border-gray-700 text-[11px] font-bold text-gray-400 dark:text-gray-400 uppercase tracking-wider">
+                  <th className="py-3.5 px-6">Employee</th>
+                  <th className="py-3.5 px-5">Total Hours</th>
+                  <th className="py-3.5 px-5">Logs</th>
+                  <th className="py-3.5 px-5">Status</th>
+                  <th className="py-3.5 px-6 text-right">Action</th>
                 </tr>
               </thead>
-              <tbody>
-                {loading ? (
-                  <tr>
-                    <td colSpan="7" className="px-4 py-10 text-center text-gray-500">
-                      <i className="fas fa-spinner fa-spin mr-2 text-green-500"></i> Loading timesheets...
-                    </td>
-                  </tr>
-                ) : safeRecords.length === 0 ? (
-                  <tr>
-                    <td colSpan="7" className="px-4 py-10 text-center text-gray-500">
-                      No timesheet records found for this period.
-                    </td>
-                  </tr>
-                ) : (
-                  safeRecords.map((r) => {
-                    const status = (r.status || "Pending").toLowerCase();
-                    const isPending = status === "pending";
-                    
-                    const avatarUrl = r.employee?.avatar || r.employee_avatar || null;
-                    const empName = r.employee?.name || r.employee_name || "Unknown";
+              <tbody className="divide-y divide-gray-100 dark:divide-gray-700/60 text-sm">
+                {employeeGroups.map((group) => {
+                  const avatarUrl = group.employee?.avatar || group.employee?.employee_avatar || null;
+                  const empName = group.employee?.name || group.employee?.employee_name || "Unknown";
+                  const approverName = group.approver?.name || group.records[0]?.approver?.name || null;
+                  const isApproved = group.statusType === "approved";
+                  const isPending = group.statusType === "pending";
 
-                    return (
-                      <tr 
-                        key={r.id} 
-                        onClick={() => handleOpenPanel(r)}
-                        className={`border-b border-gray-200 dark:border-gray-700 hover:bg-gray-50 dark:hover:bg-gray-700/50 transition-colors cursor-pointer ${
-                          selectedIds.includes(r.id) ? "bg-green-50/50 dark:bg-green-900/10" : ""
-                        }`}
-                      >
-                        <td className="px-4 py-3 text-center" onClick={(e) => e.stopPropagation()}>
-                           {isPending && (
-                             <input 
-                               type="checkbox" 
-                               checked={selectedIds.includes(r.id)}
-                               onChange={() => handleSelectRow(r.id)}
-                               className="w-4 h-4 text-green-500 rounded border-gray-300 focus:ring-green-500 cursor-pointer"
-                             />
-                           )}
-                        </td>
-                        <td className="px-4 py-3">
-                          <div className="flex items-center gap-3">
-                            <div className="w-8 h-8 rounded-full bg-gray-200 overflow-hidden flex-shrink-0">
-                              {avatarUrl ? (
-                                <img src={avatarUrl} alt={empName} className="w-full h-full object-cover" />
-                              ) : (
-                                <div className="w-full h-full flex items-center justify-center bg-indigo-100 text-indigo-600 font-bold text-xs">
-                                  {empName.charAt(0).toUpperCase()}
-                                </div>
-                              )}
-                            </div>
-                            <div>
-                              <p className="text-sm font-semibold text-gray-800 dark:text-gray-200">{empName}</p>
-                              {r.approver?.name && (
-                                <p className="text-[11px] text-gray-500">Approved by: {r.approver?.name}</p>
-                              )}
-                            </div>
+                  return (
+                    <tr
+                      key={group.id}
+                      onClick={() => handleEmployeeCardClick(group)}
+                      className="hover:bg-gray-50/80 dark:hover:bg-gray-700/40 cursor-pointer transition-colors group"
+                    >
+                      {/* Employee */}
+                      <td className="py-4 px-6">
+                        <div className="flex items-center gap-3">
+                          <div className="w-9 h-9 rounded-full bg-gray-200 dark:bg-gray-700 overflow-hidden flex-shrink-0 border border-gray-100 dark:border-gray-700">
+                            {avatarUrl ? (
+                              <img src={avatarUrl} alt={empName} className="w-full h-full object-cover" />
+                            ) : (
+                              <div className="w-full h-full flex items-center justify-center bg-green-100 dark:bg-green-900/40 text-green-700 dark:text-green-400 font-bold text-xs">
+                                {empName.charAt(0).toUpperCase()}
+                              </div>
+                            )}
                           </div>
-                        </td>
-                        <td className="px-4 py-3 text-sm text-gray-700 dark:text-gray-300">{r.project?.name || r.project_name || "Unknown"}</td>
-                        <td className="px-4 py-3 text-sm text-gray-700 dark:text-gray-300">{r.date || r.log_date || "-"}</td>
-                        <td className="px-4 py-3 text-sm text-right font-mono font-semibold text-gray-800 dark:text-gray-200">{r.hours_formatted || `${r.hours || r.total_hours || 0}h`}</td>
-                        <td className="px-4 py-3 text-center">
-                          <span className={`px-2.5 py-1 rounded-full text-xs font-semibold uppercase tracking-wider ${
-                            status === "approved" ? "bg-green-100 text-green-700 dark:bg-green-900/30 dark:text-green-400" :
-                            status === "rejected" ? "bg-red-100 text-red-700 dark:bg-red-900/30 dark:text-red-400" :
-                            "bg-amber-100 text-amber-700 dark:bg-amber-900/30 dark:text-amber-400"
-                          }`}>
-                            {r.status_label || r.status || "Pending"}
+                          <div className="min-w-0">
+                            <p className="font-bold text-gray-800 dark:text-gray-100 group-hover:text-green-600 dark:group-hover:text-green-400 transition-colors truncate">
+                              {empName}
+                            </p>
+                            {approverName ? (
+                              <p className="text-[11px] text-gray-500 dark:text-gray-400 truncate">
+                                Approved by: {approverName}
+                              </p>
+                            ) : (
+                              <p className="text-[11px] text-gray-400 truncate">ID: #{group.id}</p>
+                            )}
+                          </div>
+                        </div>
+                      </td>
+
+                      {/* Total Logged Hours */}
+                      <td className="py-4 px-5">
+                        <span className="font-extrabold text-xs text-gray-800 dark:text-gray-200 bg-gray-100 dark:bg-gray-700/70 px-2.5 py-1 rounded-md">
+                          {group.totalHoursFormatted}
+                        </span>
+                      </td>
+
+                      {/* Logs count */}
+                      <td className="py-4 px-5 text-xs text-gray-500 dark:text-gray-400 font-medium">
+                        {group.records.length} log{group.records.length === 1 ? "" : "s"}
+                      </td>
+
+                      {/* Status */}
+                      <td className="py-4 px-5">
+                        {isPending ? (
+                          <span className="inline-flex items-center gap-1 text-[10px] font-bold text-amber-700 dark:text-amber-300 bg-amber-50 dark:bg-amber-900/30 border border-amber-200 dark:border-amber-800/60 px-2.5 py-0.5 rounded-full">
+                            <i className="fas fa-clock text-[9px]"></i> Pending
                           </span>
-                        </td>
-                        <td className="px-4 py-3 text-right">
-                          {isPending ? (
-                            <div className="flex items-center justify-end gap-2" onClick={(e) => e.stopPropagation()}>
-                              <button onClick={() => handleUpdateStatus(r.id, "Approved")} className="w-8 h-8 rounded-full bg-green-50 text-green-600 hover:bg-green-100 dark:bg-green-900/30 dark:text-green-400 transition-colors" title="Approve">
-                                <i className="fas fa-check"></i>
-                              </button>
-                              <button onClick={() => handleUpdateStatus(r.id, "Rejected")} className="w-8 h-8 rounded-full bg-red-50 text-red-600 hover:bg-red-100 dark:bg-red-900/30 dark:text-red-400 transition-colors" title="Reject">
-                                <i className="fas fa-times"></i>
-                              </button>
-                            </div>
-                          ) : (
-                            <span className="text-xs text-gray-400 italic">No actions needed</span>
-                          )}
-                        </td>
-                      </tr>
-                    );
-                  })
-                )}
+                        ) : isApproved ? (
+                          <span className="inline-flex items-center gap-1 text-[10px] font-bold text-green-700 dark:text-green-300 bg-green-50 dark:bg-green-900/30 border border-green-200 dark:border-green-800/60 px-2.5 py-0.5 rounded-full">
+                            <i className="fas fa-check text-[9px]"></i> Approved
+                          </span>
+                        ) : (
+                          <span className="inline-flex items-center gap-1 text-[10px] font-bold text-red-700 dark:text-red-300 bg-red-50 dark:bg-red-900/30 border border-red-200 dark:border-red-800/60 px-2.5 py-0.5 rounded-full">
+                            <i className="fas fa-times text-[9px]"></i> Rejected
+                          </span>
+                        )}
+                      </td>
+
+                      {/* Action */}
+                      <td className="py-4 px-6 text-right">
+                        <span className="inline-flex items-center gap-1 text-xs font-semibold text-green-600 dark:text-green-400 group-hover:translate-x-0.5 transition-transform">
+                          <span>View Timesheets</span>
+                          <i className="fas fa-chevron-right text-[10px]"></i>
+                        </span>
+                      </td>
+                    </tr>
+                  );
+                })}
               </tbody>
             </table>
           </div>
         </div>
-      </div>
+      )}
 
       {/* Pagination */}
       {pagination && pagination.total > 0 && (
@@ -499,6 +688,8 @@ const Timesheets = () => {
       <TimesheetDetailsPanel
         isOpen={isPanelOpen}
         data={selectedTimesheet}
+        records={selectedGroup?.records || []}
+        onSelectRecord={(rec) => handleOpenPanel(rec)}
         loading={actionLoading && !selectedTimesheet}
         onClose={handleClosePanel}
         onEdit={handleOpenEdit}
