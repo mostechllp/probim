@@ -886,11 +886,12 @@ const MissedPunchModal = ({ isOpen, onClose, selectedDate, onSuccess }) => {
   };
 
   return (
-    <div className="fixed inset-0 bg-black/70 flex items-center justify-center z-[60] p-4 animate-fade-in">
-      <div className="bg-[var(--surface)] rounded-xl max-w-3xl w-full max-h-[90vh] overflow-y-auto p-6 shadow-2xl animate-slide-up">
-        <div className="flex justify-between items-center mb-4 sticky top-0 bg-[var(--surface)] z-10 pb-2 border-b border-[var(--border)]">
-          <h3 className="text-lg font-bold text-[var(--text)] flex items-center gap-2">
-            <i className="fas fa-clock text-orange-500"></i>
+   <div className="fixed inset-0 bg-black/70 flex items-center justify-center z-[60] p-4 animate-fade-in">
+  <div className="bg-[var(--surface)] rounded-xl max-w-3xl w-full max-h-[90vh] shadow-2xl animate-slide-up flex flex-col">
+    
+    <div className="flex justify-between items-center p-6 pb-4 border-b border-[var(--border)] flex-shrink-0">
+      <h3 className="text-lg font-bold text-[var(--text)] flex items-center gap-2">
+        <i className="fas fa-clock text-orange-500"></i>
             Missed Punch Request
           </h3>
           <button
@@ -901,7 +902,8 @@ const MissedPunchModal = ({ isOpen, onClose, selectedDate, onSuccess }) => {
           </button>
         </div>
 
-        <div className="space-y-4 mt-4">
+ <div className="overflow-y-auto flex-1 p-6">
+      <div className="space-y-4">
           {/* Request Type - Disabled and prefilled */}
           <div>
             <label className="block text-sm font-medium text-[var(--text)] mb-1">
@@ -1265,6 +1267,7 @@ const MissedPunchModal = ({ isOpen, onClose, selectedDate, onSuccess }) => {
               )}
             </button>
           </div>
+        </div>
         </div>
       </div>
 
